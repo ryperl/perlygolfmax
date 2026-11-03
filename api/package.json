@@ -1,0 +1,20 @@
+{
+  "name": "@perly-golf-max/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/api/src/functions.js",
+  "engines": { "node": ">=22.12.0 <23" },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.config.ts",
+    "dev": "npm run build && func start"
+  },
+  "dependencies": {
+    "@azure/data-tables": "13.3.2",
+    "@azure/functions": "4.17.0",
+    "@azure/identity": "4.14.1",
+    "jose": "6.2.13"
+  }
+}

@@ -27,6 +27,7 @@ jobs:
       - name: Verify public package sources
         run: npm run check:lockfile
       - run: npm ci
+      - run: npm run check:dependencies
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run lint:docs

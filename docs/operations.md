@@ -1,0 +1,251 @@
+# Operational architecture and recovery
+
+## Status and approval boundary
+
+The approved design is Static Web Apps (SWA) Free, Entra External ID hosted
+email-code sign-in, a standalone Functions API and Table Storage. The production
+planning allowance is roughly USD 15/month, not a quote or spending cap.
+
+The repository now contains an initial implementation, not a provisioned system:
+customer sign-in, token acquisition, API handlers, bounded event discovery and
+idempotent event creation with atomic owner membership. Real OTP delivery,
+Functions hosting, Azure identity/RBAC and storage behavior still need approved
+non-production verification. No invitations, owner appointment UI, rounds,
+score-entry endpoints, scoring engine, audit exports or backup job are shipped.
+An unconfigured Events page says so explicitly, without fictional saved events.
+
+Tenant creation, app registrations/consent, role assignments, Azure resources,
+IaC scaffolding, pushes and deployment each require the relevant separate
+approval. The existing frontend deployment workflow is unchanged. It deploys
+only `dist/`; it does not deploy the API or create identity/storage resources.
+
+## Identity and application authority
+
+React uses MSAL authorization code with PKCE against a dedicated customer
+tenant's hosted email one-time-passcode flow. No Microsoft account is required
+for golfers. Configure OTP from the start; changing a password flow later does
+not automatically migrate existing users. Use the default `ciamlogin.com`
+login host initially; no custom mail relay/domain is implied.
+
+The frontend calls a separate HTTPS API with an explicit bearer access token,
+without cookies. It does not rely on SWA custom OIDC, `/.auth/me`, principal
+headers or Functions keys. Server validation checks signature, allowed
+algorithm, fixed issuer/JWKS, API audience, lifetime, tenant, delegated scope,
+SPA client and user object ID. User identity is `(tid, oid)`, never display name,
+email, an ID token or a client-supplied owner ID. CORS is not authentication.
+
+Only the explicitly bootstrapped creator initially creates events. The creator
+can later appoint owners of specific events; those appointments must not grant
+global creation or directory administration. Event membership is authoritative
+for every private object operation, not a stale listing index or hidden button.
+No public roster/score access is authorized. Invitation admission mechanics and
+owner-appointment lifecycle remain pending; do not infer them from sign-in.
+
+The score policy for a later increment is per-hole gross strokes, blank
+unplayed holes, explicit picked-up/did-not-finish status, self-entry and a
+round/foursome-assigned scorekeeper. Owners retain correction rights with
+history. Scorekeeper assignment is not event administration. Pickup points,
+Stableford, purse and financial rules are undefined; no missing value becomes
+zero and no points are implied. These payloads/endpoints are not implemented.
+
+MSAL manages tab-scoped sessionStorage. The callback and logout reply URI is
+`https://<frontend-host>/?event-auth=1`; local development uses the exact local
+origin instead. Register each approved origin explicitly. A callback goes to
+Events before MSAL consumes its authorization response. Sign-out clears private
+UI and invokes provider logout; interrupted provider logout is reported. It
+does not guarantee instant bearer-token revocation or all-device sign-out.
+Provider cookies/Stay signed in influence future code prompts; session policy
+still needs approval.
+
+## Local configuration
+
+The frontend demo and unconfigured Events screen work without an account or
+environment values. For an approved test identity/API, copy `.env.example` to
+an ignored `.env.local` and supply the four values. `VITE_ENTRA_API_SCOPE` is
+the fully qualified `api://<API-client-ID>/Events.Access` scope, not the SPA ID.
+`VITE_API_URL` includes the `/api` path. HTTPS is required except loopback HTTP.
+Vite embeds these public application settings at build time; never put a
+secret, private roster or storage credential in a `VITE_` variable.
+
+The API uses Functions Core Tools v4, installed separately through an approved
+source. Run `npm run dev:api` after configuration. Missing Core Tools is an
+explicit prerequisite failure, not a working local API. The production bundle
+is `api/dist/`; its entry point is declared in `api/package.json`.
+
+Create ignored `api/local.settings.json` locally with `IsEncrypted: false`,
+`Values.FUNCTIONS_WORKER_RUNTIME: "node"` and these environment values:
+
+| API setting | Meaning |
+|-------------|---------|
+| `ENTRA_TENANT_ID` | Approved customer directory ID |
+| `ENTRA_ISSUER` | Exact issuer from that tenant's trusted discovery document |
+| `ENTRA_JWKS_URL` | Trusted HTTPS signing-key URL from the same document |
+| `ENTRA_API_CLIENT_ID` | API audience/client ID, using v2 tokens |
+| `ENTRA_SPA_CLIENT_ID` | Only permitted browser client |
+| `ENTRA_API_SCOPE` | Delegated scope claim value, e.g. `Events.Access` |
+| `EVENT_CREATOR_OBJECT_ID` | Verified initial creator's customer object ID |
+| `EVENTS_TABLE_ENDPOINT` | HTTPS application storage endpoint |
+| `EVENTS_TABLE_NAME` | Precreated application table name |
+
+Functions host storage settings depend on the approved hosting plan and local
+host setup. The current data adapter requires HTTPS plus DefaultAzureCredential
+and does not accept a browser token or a storage connection string. A local
+developer needs separately approved data access; configuration does not create
+a table or grant access. Azurite integration is not yet provided or verified.
+Never use an emulated/local identity bypass in a production build.
+
+## Threat model and enforced controls
+
+Treat callers, browser state, token contents before verification, body fields,
+pagination cursors and client ownership claims as untrusted. Protect private
+event data, owner/creator grants, future scores/audit, identity sessions and the
+cloud bill. A directory administrator, application creator and event owner
+are separate trust boundaries.
+
+| Threat | Current control |
+|--------|-----------------|
+| Forged/wrong API token | Fixed JWT metadata/claims; negative tests |
+| Cross-event read/escalation | Authoritative membership; creator-only POST |
+| Lost response/replay | UUID idempotency; atomic metadata/owner writes |
+| Oversized writes/reads | Streaming body cap; bounded discovery pages |
+| Authenticated floods | Shared ETag-based quotas; bounded conflict retries |
+| Quota-store outage | Fail closed, no unlimited in-memory fallback |
+| Secret/private-data leakage | Managed identity; safe diagnostic fields |
+| Stale/logout UI | Abort reads; session expiry; provider logout; no-store |
+
+JSON writes are limited to 4 KiB, event names to 100 characters and authorization
+headers to 8 KiB. Discovery scans at most 50 metadata rows/page and rechecks
+membership before returning each event. Quotas are 20 identity reads, 60 event
+reads and 10 creates per user/minute. Reusing an idempotency key with changed
+content or identity conflicts rather than overwriting. Real key rotation,
+provider outages and storage transaction behavior still need integration tests.
+
+Fixed-minute quotas allow bursts across minute boundaries. Counters are one
+reused row per identity/endpoint, not an unbounded row per minute, and remain
+application data subject to the eventual deletion policy. A valid but uninvited
+directory identity can still consume authentication, quota/storage operations
+and bounded event-discovery work; it cannot read event data.
+
+These are application limits, NOT a global ingress or volumetric DDoS defense.
+Requests with bad tokens can reach Functions before authentication; request
+bytes may reach the platform before the handler's streaming cap. Multi-account
+signup, OTP email abuse, signature-verification load, cold starts, storage/JWKS
+availability and invocation/logging costs remain material. Configure platform
+body/concurrency/scale limits, narrow CORS, provider abuse controls and bounded
+telemetry during the approved deployment design. Confirm actual multi-instance
+behavior, rather than relying solely on mock counter tests.
+
+An enforceable pre-authentication edge limit/WAF/APIM would change resources
+and costs and is not included or approved. Accept that residual risk explicitly
+or approve a scoped edge proposal before exposing production APIs. Do not call
+direct Functions exposure fully abuse-proof. Budget alerts are not hard caps.
+
+Provider-managed OTP delivery needs mailbox/spam/quarantine, resend/throttling
+and expired-code verification. Core External ID has a shared first-50,000-MAU
+free tier; default OTP email is not separately priced in the reviewed table,
+which is not a promise of unlimited sending or guaranteed delivery. Branded
+mail needs a provider extension and ACS/another relay with separate cost and
+permissions. Automated invitation email is separate scope.
+
+Run `npm run check:dependencies` for high/critical production dependency
+advisories and `npm audit` for the whole toolchain. A production-only audit
+does not clear development-tool advisories. Do not expose Vite/Vitest/test
+servers publicly. CI runs all named tests; a clean type/lint run is not proof
+of secure deployed identity or storage configuration.
+
+Before production, review implemented auth/data flows and deployed settings.
+Exercise missing/expired/forged/wrong-audience tokens, membership revocation,
+cross-event requests, owner-vs-creator separation, idempotency races, actual
+quota conflicts across instances and storage/JWKS failures. Add score-specific
+bounds, object permission tests, concurrent edits and audit transactions before
+shipping score endpoints.
+
+Create operational alerts for authentication failures, authorization denials,
+throttles, service failures, anomalous writes and cost. Current structured
+diagnostics contain only code/status/invocation ID; dashboards, alert rules,
+sampling/retention and diagnostic costs are not yet provisioned. Do not log
+JWTs, OTPs, request bodies, emails or full exceptions containing private data.
+
+## Reproducible infrastructure proposal, not generated
+
+Propose version-controlled Bicep modules and blank environment parameter
+templates after resource scope/tool approval. Bicep is a recommendation, not
+an already selected tool. Separate stateful retained resources from replaceable
+compute/configuration, pin API/runtime versions and record non-secret outputs.
+Never export credentials/account identifiers into this public repo.
+
+The scoped design should cover standalone Functions/hosting/host storage,
+application Table Storage, table-scoped managed-identity data roles, required
+host-storage roles, minimal telemetry, CORS/settings and approved scale/cost
+controls. Deployment identity needs narrowly scoped deployment and role-
+assignment permissions; runtime identity must not grant roles or administer
+the directory. Required host-storage roles depend on the selected plan.
+No wildcard Owner/Contributor data-runtime grant.
+
+Inventory/adopt the existing SWA and DNS explicitly as existing/retained
+resources; do not redeclare them as disposable defaults. Review a what-if before
+any future deployment. Never use complete-mode resource-group deletion to
+reconcile this app. Existing domain bindings, registrar records and the
+frontend workflow remain intact until an approved replacement is ready.
+
+### Provisioning and bootstrap approval checklist
+
+1. Approve deployment subscription/resource scope, region/hosting plan,
+   non-production isolation, scale limits, telemetry costs and residual edge
+   risk. Recheck availability/pricing; no always-ready instances by default.
+2. Approve a dedicated customer tenant's country/region (immutable), domain,
+   billing link and directory admin/recovery ownership. Do not repurpose the
+   corporate tenant or move the existing hosting subscription into this tenant.
+3. Approve separate SPA/API registrations per environment, exact callback/
+   logout origins, v2 API audience, OTP user flow and delegated API-only scope
+   consent. Do not grant Graph directory-wide access or customer admin roles.
+4. Approve the resource IaC scaffold, then review what-if before execution.
+   Create application/host storage and narrowly scoped API managed identity;
+   verify actual identity permissions and denied access outside its table.
+5. After verified customer sign-in, independently verify the intended creator's
+   tenant/object ID and set the one-time creator configuration. Record the
+   private operational evidence outside source control. No first-user bootstrap.
+6. Approve API deployment identity/workflow and environment settings separately;
+   keep the existing frontend workflow. No browser/deployment secret in commits.
+7. Prove real OTP, token/API isolation, Azure Table transactions/quotas and
+   restore checks on the approved test target before production cutover.
+
+### Recreation is not restoration
+
+- **Code/compute:** rebuild pinned source/lockfile and approved IaC; verify
+  artifacts and configuration.
+- **Event/score/audit data:** restore a separately protected consistent backup,
+  not an empty recreated table.
+- **External ID:** retain tenant and customer object identities. A new tenant
+  needs an approved identity remapping/migration, not just redeployed code.
+- **Creator/owner grants:** restore trusted private mappings or repeat verified
+  bootstrap. Never infer ownership from email.
+- **DNS/domains/registrar/SWA:** retain/adopt existing assets and validate
+  rebinding without losing domain control.
+- **Secrets:** recreate/rotate privately and update the appropriate secret store.
+  IaC output is not secret recovery.
+- **GitHub:** restore approved environments/permissions and verify exact artifact
+  deployment. Source files do not restore secret values or external trust.
+
+Retention, deletion obligations, RPO (acceptable data loss) and RTO (time to
+recover) remain user decisions. Do not invent a backup frequency or claim
+Table Storage has built-in point-in-time recovery. Before real scores, approve
+a consistent, encrypted export/backup with a schema version, snapshot boundary,
+checksums, access separation, retention and deletion handling. The backup must
+cover event/membership/round/score/revision relationships as implemented, not
+just current totals. An audit log or LRS replication alone is not a backup.
+
+Rehearse restore into isolated storage with a frozen write boundary or a
+documented snapshot/change sequence. Verify counts/checksums, relationship
+integrity, immutable audit ordering, identity mapping, memberships, revoked
+access, idempotent retry behavior, required new ETags and real authorized/
+unauthorized API calls. Do not restore old ETags as active concurrency tokens.
+Keep backup data out of public CI artifacts, fixtures and this repository.
+
+Any future teardown needs an explicit reviewed resource list and user approval.
+Retain the external tenant/users, protected application data/backups, DNS/
+registrar/domain ownership and GitHub recovery configuration by default.
+First verify an independent usable backup, stop writes, document last-good
+revision/configuration and confirm a tested restore path. Removing compute
+does not authorize deleting data, identities, DNS, roles or the resource group.
+Teardown scripts and restore automation are not implemented.

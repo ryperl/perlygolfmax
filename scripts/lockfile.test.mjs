@@ -15,7 +15,7 @@ function withLock(dependency, run) {
   const directory = mkdtempSync(join(tmpdir(), 'perly-lock-test-'));
   try {
     mkdirSync(join(directory, 'scripts'));
-    for (const script of ['check-lockfile.mjs', 'public-lockfile.mjs']) {
+    for (const script of ['check-lockfile.mjs', 'public-lockfile.mjs', 'lockfile-workspace.mjs']) {
       copyFileSync(new URL(script, import.meta.url), join(directory, 'scripts', script));
     }
     const file = join(directory, 'package-lock.json');
@@ -72,5 +72,25 @@ test('normalizer rejects non-registry package identities and missing integrity',
     withLock({ ...publicDependency, ...patch }, ({ execute }) => {
       assert.notEqual(execute('public-lockfile.mjs').status, 0);
     });
+
   }
+});
+
+test('only the known in-repository API workspace is exempt from tarball integrity', () => {
+  withLock(publicDependency, ({ execute, file }) => {
+    const lock = JSON.parse(readFileSync(file, 'utf8'));
+    lock.packages.api = { name: '@perly-golf-max/api', version: '0.1.0' };
+    lock.packages['node_modules/@perly-golf-max/api'] = { resolved: 'api', link: true };
+    writeFileSync(file, JSON.stringify(lock));
+    for (const script of ['check-lockfile.mjs', 'public-lockfile.mjs']) {
+      assert.equal(execute(script).status, 0);
+    }
+    for (const target of ['../elsewhere', 'https://private.example.test/api', 'other']) {
+      lock.packages['node_modules/@perly-golf-max/api'].resolved = target;
+      writeFileSync(file, JSON.stringify(lock));
+      for (const script of ['check-lockfile.mjs', 'public-lockfile.mjs']) {
+        assert.notEqual(execute(script).status, 0);
+      }
+    }
+  });
 });

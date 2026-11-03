@@ -15,6 +15,9 @@ test('production shell supports navigation, history, and keyboard access', async
   await expect(page.getByRole('listitem')).toHaveCount(12);
   await page.goBack();
   await expect(page.getByRole('link', { name: 'Rounds', exact: true })).toHaveAttribute('aria-current', 'page');
+  await page.getByRole('link', { name: 'Events', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Event services are not configured' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toHaveCount(0);
   await page.goto('/#unknown');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('The Coastal Classic');
   expect(errors).toEqual([]);
@@ -22,7 +25,7 @@ test('production shell supports navigation, history, and keyboard access', async
 
 test('every page fits a narrow viewport and enlarged text', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 740 });
-  for (const hash of ['overview', 'rounds', 'group']) {
+  for (const hash of ['events', 'overview', 'rounds', 'group']) {
     await page.goto(`/#${hash}`);
     await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();

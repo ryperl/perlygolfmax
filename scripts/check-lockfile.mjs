@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { isLocalApiWorkspace } from './lockfile-workspace.mjs';
 
 const lock = JSON.parse(readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8'));
 let packages = 0;
 for (const [path, dependency] of Object.entries(lock.packages)) {
-  if (!path) continue;
+  if (!path || isLocalApiWorkspace(path, dependency)) continue;
   assert.ok(dependency.resolved, `Missing resolved source: ${path}`);
   const source = new URL(dependency.resolved);
   assert.equal(source.origin, 'https://registry.npmjs.org', `Non-public package source: ${path}`);

@@ -2,25 +2,29 @@
   "name": "perly-golf-max",
   "version": "0.1.0",
   "private": true,
+  "workspaces": ["api"],
   "type": "module",
   "engines": {
     "node": ">=22.12.0 <23"
   },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && npm run build --workspace api",
     "preview": "vite preview --host 127.0.0.1",
-    "typecheck": "tsc -b",
+    "typecheck": "tsc -b && npm run typecheck --workspace api",
+    "dev:api": "npm run dev --workspace api",
     "lint": "eslint . --max-warnings 0",
-    "lint:docs": "markdownlint README.md .github/copilot-instructions.md",
+    "lint:docs": "markdownlint README.md .github/copilot-instructions.md docs/*.md",
+    "check:dependencies": "npm audit --omit=dev --audit-level=high",
     "check:lockfile": "node scripts/check-lockfile.mjs",
     "lockfile:public": "node scripts/public-lockfile.mjs && npm run check:lockfile",
     "icons": "node scripts/generate-icons.mjs",
-    "test": "vitest run && node --test scripts/lockfile.test.mjs",
+    "test": "vitest run && npm test --workspace api && node --test scripts/lockfile.test.mjs",
     "test:watch": "vitest",
     "test:smoke": "playwright test"
   },
   "dependencies": {
+    "@azure/msal-browser": "5.27.0",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },
@@ -30,7 +34,7 @@
     }
   },
   "devDependencies": {
-    "@eslint/js": "9.39.0",
+    "@eslint/js": "9.39.5",
     "@playwright/test": "1.56.0",
     "@testing-library/dom": "10.4.1",
     "@testing-library/jest-dom": "6.9.1",
@@ -40,7 +44,7 @@
     "@types/react": "19.2.0",
     "@types/react-dom": "19.2.0",
     "@vitejs/plugin-react": "5.1.0",
-    "eslint": "9.39.0",
+    "eslint": "9.39.5",
     "eslint-plugin-react-hooks": "7.0.1",
     "eslint-plugin-react-refresh": "0.4.24",
     "globals": "16.5.0",

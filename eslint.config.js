@@ -6,7 +6,7 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default defineConfig([
-  globalIgnores(['dist/**', 'coverage/**', 'playwright-report/**', 'test-results/**']),
+  globalIgnores(['dist/**', 'api/dist/**', 'coverage/**', 'playwright-report/**', 'test-results/**']),
   {
     files: ['**/*.{js,mjs}'],
     extends: [js.configs.recommended],
@@ -33,7 +33,7 @@ export default defineConfig([
     files: ['src/domain/**/*.ts'],
     rules: {
       'no-restricted-imports': ['error', { patterns: [
-        { group: ['react', 'react-dom', '**/app/**', '**/features/**', '**/demo/**'], message: 'Domain models cannot depend on UI or fixtures.' },
+        { group: ['react', 'react-dom', '@azure/**', 'jose', '**/app/**', '**/features/**', '**/demo/**', '**/client/**', '**/api/**'], message: 'Domain models cannot depend on UI, infrastructure or fixtures.' },
       ] }],
     },
   },
@@ -43,6 +43,15 @@ export default defineConfig([
     rules: {
       'no-restricted-imports': ['error', { patterns: [
         { group: ['**/app/**', '**/demo/**'], message: 'Feature views receive data through props; app owns composition.' },
+      ] }],
+    },
+  },
+  {
+    files: ['api/src/**/*.ts', 'src/contracts/**/*.ts', 'src/client/**/*.ts'],
+    ignores: ['**/*.test.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [
+        { group: ['react', 'react-dom', '**/app/**', '**/features/**', '**/demo/**'], message: 'API, contracts and client adapters cannot depend on UI or fixtures.' },
       ] }],
     },
   },

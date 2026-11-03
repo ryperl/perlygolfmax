@@ -1,7 +1,11 @@
-import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { lazy, Suspense, useEffect, useRef, useSyncExternalStore } from 'react';
 import { demoTrip } from '../demo/trip';
 import { GroupView, RoundsView, TripOverview } from '../features/trip';
 import { navigation, readPage } from './navigation';
+const EventsPage = lazy(async () => {
+  const module = await import('./EventsPage');
+  return { default: module.ConfiguredEventsPage };
+});
 
 function subscribeToNavigation(onChange: () => void) {
   window.addEventListener('hashchange', onChange);
@@ -9,7 +13,7 @@ function subscribeToNavigation(onChange: () => void) {
 }
 
 function getPage() {
-  return readPage(window.location.hash);
+  return readPage(window.location.hash, window.location.search);
 }
 
 export function App() {
@@ -39,7 +43,7 @@ export function App() {
         </a>
         <span className="edition">The trip companion</span>
       </header>
-      <div className="demo-banner"><span className="demo-dot" aria-hidden="true" /><strong>Demo clubhouse</strong><span>Fictional data. Nothing here is saved or synced.</span></div>
+      {page !== 'events' && <div className="demo-banner"><span className="demo-dot" aria-hidden="true" /><strong>Demo clubhouse</strong><span>Fictional data. Nothing here is saved or synced.</span></div>}
       <nav className="navigation" aria-label="Main navigation">
         {navigation.map((item) => (
           <a href={`#${item.id}`} key={item.id} aria-current={page === item.id ? 'page' : undefined}>{item.label}</a>
@@ -47,6 +51,7 @@ export function App() {
         <span className="navigation-note">12 golfers / 5 rounds</span>
       </nav>
       <main id="main-content" ref={mainRef} tabIndex={-1}>
+        {page === 'events' && <Suspense fallback={<p role="status">Loading event screen...</p>}><EventsPage /></Suspense>}
         {page === 'overview' && <TripOverview trip={demoTrip} />}
         {page === 'rounds' && <RoundsView rounds={demoTrip.rounds} />}
         {page === 'group' && <GroupView golfers={demoTrip.golfers} />}

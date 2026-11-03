@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { isLocalApiWorkspace } from './lockfile-workspace.mjs';
 
 const file = new URL('../package-lock.json', import.meta.url);
 const lock = JSON.parse(readFileSync(file, 'utf8'));
 
 for (const [path, dependency] of Object.entries(lock.packages)) {
-  if (!path) continue;
+  if (!path || isLocalApiWorkspace(path, dependency)) continue;
   const name = dependency.name ?? path.split('node_modules/').at(-1);
   assert.match(name ?? '', /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+$/i, `Unexpected npm package name: ${path}`);
   assert.match(dependency.version ?? '', /^\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?$/i, `Expected a published package version: ${path}`);

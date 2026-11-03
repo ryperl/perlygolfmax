@@ -47,6 +47,15 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: 'The Coastal Classic' })).toBeVisible();
   });
 
+  it('separates unconfigured private Events from the fictional preview', async () => {
+    navigate('#events');
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Events' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Event services are not configured' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Sign in' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Fictional data. Nothing here is saved or synced.')).not.toBeInTheDocument();
+  });
+
   it('provides a skip link without changing the current view', async () => {
     navigate('#group');
     const user = userEvent.setup();

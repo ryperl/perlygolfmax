@@ -1,8 +1,9 @@
 # Perly Golf Max
 
 A mobile-first golf-trip companion for a planned group of 12 golfers and five
-rounds. This repository currently contains a **read-only foundation demo**, not
-a live scoreboard.
+rounds. It includes a **read-only fictional preview** and an initial private
+Events/API implementation. Identity and storage are not provisioned or connected
+by default; this is not yet an operational scoreboard.
 
 ## Local setup
 
@@ -25,6 +26,7 @@ outside version control. Never bypass organizational network restrictions.
 | Command | Purpose |
 |---------|---------|
 | `npm run dev` | Local development server, bound to loopback |
+| `npm run dev:api` | Build/start configured API; requires Core Tools |
 | `npm run typecheck` | Strict TypeScript checks for source, tests, and config |
 | `npm run lint` | Type-aware ESLint with zero warnings |
 | `npm run lint:docs` | Check README and contributor Markdown |
@@ -34,6 +36,7 @@ outside version control. Never bypass organizational network restrictions.
 | `npm run preview` | Serve the production build locally |
 | `npm run test:smoke` | Chromium desktop/mobile smoke tests against `dist/` |
 | `npm run check:lockfile` | Verify public package URLs and integrity |
+| `npm run check:dependencies` | Audit high/critical production advisories |
 | `npm run lockfile:public` | Normalize public-package lockfile URLs, offline |
 | `npm run icons` | Regenerate PNG icons with Node.js only |
 
@@ -60,6 +63,17 @@ from npm installation and must also comply with your machine's policies.
 - Web app manifest, SVG favicon, Apple touch icon, standard PNG icons, and a
   dedicated maskable icon with inset artwork.
 - Strict checks, component/module tests, production-browser smoke tests, and CI.
+- Separate Events navigation with explicit unconfigured/signed-out/loading/
+  empty/error states, email-code MSAL integration and authorized event creation.
+- An independent TypeScript Functions workspace with strict JWT validation,
+  Table event/membership transactions, idempotent create requests, bounded
+  pagination/body sizes and shared ETag-based per-user request limits.
+
+The Events screen is deliberately unavailable until an approved identity tenant
+and API are configured. Its API/storage adapters have automated tests, not
+live-provider verification. The existing fictional preview remains available
+without configuration. See [architecture, security and recovery](docs/operations.md)
+for setup requirements, controls, residual risks and separate approval gates.
 
 All names, locations, courses, and tee times are **fictional sample content**.
 There are no real bookings, invitations, scores, handicap indexes, or identities.
@@ -78,10 +92,12 @@ Production PWA capabilities require HTTPS and platform-specific verification.
 
 ### Future work, not implemented
 
-Gross-score entry, server-calculated net Stableford/team results, permissions,
-private invitations, score-edit history, offline score storage/synchronization,
-and leaderboards are later milestones. Detailed scoring, betting, payouts,
-reporting, overall-trip rules, identity provider, and database remain undecided.
+Gross-score entry, calculated Stableford/team results, invitation admission,
+owner appointment UI, score-edit history, offline synchronization and
+leaderboards remain later increments. The selected design is Entra External ID
+email codes, a standalone Functions API and Table Storage, with SWA staying Free.
+Provisioning/deployment is separately approval-gated. Detailed scoring, betting,
+payouts, reporting, overall-trip rules, admission and retention remain unsettled.
 No scoring or handicap formulas are implied by this demo.
 
 ## Structure and dependency direction
@@ -90,13 +106,18 @@ No scoring or handicap formulas are implied by this demo.
 src/
   app/             Composition, hash navigation, global styles, co-located tests
   domain/          Readonly, framework-independent trip models
+  contracts/       Runtime-validated network contracts, no provider SDKs
+  client/          Browser identity and typed API adapters
   demo/            Fictional fixtures and fixture-invariant tests
   features/trip/   Overview, rounds, group views and their own tests
+  features/events/ Private Events presentation and co-located tests
   test/            Shared test environment setup
 tests/smoke/       Production-browser smoke tests
 public/           Manifest and static icons
 scripts/          Dependency-source checks and deterministic icon generation
 .github/          CI and contributor instructions
+api/              Independent Functions workspace, handlers/adapters/own tests
+docs/             Architecture, security, provisioning and recovery boundaries
 ```
 
 Dependencies flow from `app` into feature public exports and demo fixtures,
@@ -104,7 +125,9 @@ and from features/fixtures into `domain`. Features receive typed data through
 props rather than importing demo data or fetching it themselves. Domain models
 do not depend on React, the browser, fixtures, or backend technology. Tests live
 beside the code they exercise; only end-to-end checks live in `tests/`.
-No empty future layers or generalized service frameworks are included.
+The API imports only shared domain/contracts, never UI/demo/client code.
+Provider SDKs stay in concrete adapters; the browser never imports storage or
+server credentials. No empty future layers or generic service framework exists.
 
 ## Local feeds versus public CI
 
@@ -156,8 +179,8 @@ the frontend at `https://perlygolf.com` and `https://www.perlygolf.com`.
 The pipeline uses the repository Actions secret
 `AZURE_STATIC_WEB_APPS_API_TOKEN`. Configure it using Azure's supported deployment
 token flow; never print the token or put it in tracked configuration.
-No new Azure resources, pricing-tier changes, DNS changes, backend, or identity
-services are included.
+No new Azure resources, pricing-tier changes, DNS changes or identity services
+have been provisioned. API code is not deployed by this frontend pipeline.
 
 The previous source repository is retained, but its deployment workflow must
 remain disabled after cutover to prevent it overwriting this app. To roll back,
@@ -165,6 +188,8 @@ explicitly approve redeploying a known-good earlier commit through the same
 checks; if reverting to the old repository, first stop this deployment pipeline
 and coordinate re-enabling the old one. Never leave both writers active.
 
-A later approved milestone can select backend and identity services and start
-with near-real-time polling rather than requiring SignalR. Cloud architecture,
-resources, and spending changes require separate approval.
+The approved next design uses near-real-time polling rather than SignalR.
+The [operations guide](docs/operations.md) separates reproducible stateless
+infrastructure from data restore, retained identity/DNS, secret rotation and
+explicit creator bootstrap. IaC generation, cloud resources, permissions,
+spending and deployment changes require separate approval.
