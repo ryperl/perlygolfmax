@@ -1,0 +1,50 @@
+name: Production deployment
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download verified production assets
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist
+      - name: Verify deployment prerequisites
+        env:
+          DEPLOYMENT_TOKEN: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+        run: |
+          test -f dist/index.html
+          test -f dist/manifest.webmanifest
+          if [ -z "$DEPLOYMENT_TOKEN" ]; then
+            echo "::error::The Static Web Apps deployment secret is missing."
+            exit 1
+          fi
+      - name: Deploy verified assets
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: upload
+          app_location: dist
+          api_location: ""
+          output_location: ""
+          skip_app_build: true
+          skip_api_build: true
+          production_branch: main

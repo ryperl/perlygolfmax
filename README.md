@@ -132,20 +132,36 @@ feed credentials. A clean public-registry installation still needs verification
 on the GitHub runner; a local cache-backed run is not proof of network access
 or registry availability there.
 
-## Continuous integration
+## Continuous integration and deployment
 
-Pull requests and pushes to any branch run locked installation, public-lockfile
+Pull requests and branch pushes run locked installation, public-lockfile
 checks, strict type checking, lint, named unit/component suites, production
 build, and Chromium desktop/mobile smoke tests. CI has read-only repository
-permissions, uses no production secrets, and does not deploy. The workflow
-uses ordinary `pull_request`, not privileged `pull_request_target`.
+permissions and uses no production secrets. The workflow uses ordinary
+`pull_request`, not privileged `pull_request_target`.
 
-## Intended Azure deployment
+Production deployment on `main` calls that same validation workflow and only
+uploads the resulting verified `dist/` artifact after every check passes.
+There is no second platform build or dependency installation during upload.
+Feature branches and pull requests never receive deployment credentials and do
+not deploy. Manual production runs are also restricted to `main`.
 
-The intended frontend host is Azure Static Web Apps, serving Vite's `dist/`
-output. A later approved milestone can connect this repository, select backend
-and identity services, and start with near-real-time polling rather than requiring
-SignalR. There is no infrastructure code, deployment workflow, or Azure runtime
-dependency here. The existing site and its source repository, DNS, domain
-bindings, permissions, and Azure resources are intentionally unchanged.
-Cloud architecture and spending require separate approval.
+## Azure hosting
+
+The approved production target is the existing Azure Static Web App, serving
+the frontend at `https://perlygolf.com` and `https://www.perlygolf.com`.
+The pipeline uses the repository Actions secret
+`AZURE_STATIC_WEB_APPS_API_TOKEN`. Configure it using Azure's supported deployment
+token flow; never print the token or put it in tracked configuration.
+No new Azure resources, pricing-tier changes, DNS changes, backend, or identity
+services are included.
+
+The previous source repository is retained, but its deployment workflow must
+remain disabled after cutover to prevent it overwriting this app. To roll back,
+explicitly approve redeploying a known-good earlier commit through the same
+checks; if reverting to the old repository, first stop this deployment pipeline
+and coordinate re-enabling the old one. Never leave both writers active.
+
+A later approved milestone can select backend and identity services and start
+with near-real-time polling rather than requiring SignalR. Cloud architecture,
+resources, and spending changes require separate approval.
