@@ -166,13 +166,13 @@ diagnostics contain only code/status/invocation ID; dashboards, alert rules,
 sampling/retention and diagnostic costs are not yet provisioned. Do not log
 JWTs, OTPs, request bodies, emails or full exceptions containing private data.
 
-## Reproducible infrastructure proposal, not generated
+## Reproducible infrastructure scaffold
 
-Propose version-controlled Bicep modules and blank environment parameter
-templates after resource scope/tool approval. Bicep is a recommendation, not
-an already selected tool. Separate stateful retained resources from replaceable
-compute/configuration, pin API/runtime versions and record non-secret outputs.
-Never export credentials/account identifiers into this public repo.
+The separately approved [test-only Bicep scaffold](../infra/README.md) contains
+pinned modules and an unconfigured environment parameter template. It has not
+been deployed. Stateful retained application storage is separated from
+replaceable compute/host storage, with deterministic names and no real
+credentials/account identifiers in this public repo.
 
 The scoped design should cover standalone Functions/hosting/host storage,
 application Table Storage, table-scoped managed-identity data roles, required

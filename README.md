@@ -37,6 +37,7 @@ outside version control. Never bypass organizational network restrictions.
 | `npm run test:smoke` | Chromium desktop/mobile smoke tests against `dist/` |
 | `npm run check:lockfile` | Verify public package URLs and integrity |
 | `npm run check:dependencies` | Audit high/critical production advisories |
+| `npm run check:infra` | Compile/check test IaC from restored Bicep modules |
 | `npm run lockfile:public` | Normalize public-package lockfile URLs, offline |
 | `npm run icons` | Regenerate PNG icons with Node.js only |
 
@@ -100,6 +101,13 @@ Provisioning/deployment is separately approval-gated. Detailed scoring, betting,
 payouts, reporting, overall-trip rules, admission and retention remain unsettled.
 No scoring or handicap formulas are implied by this demo.
 
+A later UI migration is planned to **Fluent UI v9 and Griffel**, using
+component-owned classes and named slots instead of generic tag selectors or
+inline styling. Preserve semantic HTML, keyboard/focus behavior, themes and
+mobile layouts. A related readability pass will simplify deep shared imports
+and dense component/handler code without breaking NodeNext ESM resolution.
+These follow-ups are tracked; no Fluent/Griffel dependencies are installed yet.
+
 ## Structure and dependency direction
 
 ```text
@@ -118,6 +126,7 @@ scripts/          Dependency-source checks and deterministic icon generation
 .github/          CI and contributor instructions
 api/              Independent Functions workspace, handlers/adapters/own tests
 docs/             Architecture, security, provisioning and recovery boundaries
+infra/            Test-only Bicep, parameter template and compiled-ARM checks
 ```
 
 Dependencies flow from `app` into feature public exports and demo fixtures,
@@ -193,3 +202,9 @@ The [operations guide](docs/operations.md) separates reproducible stateless
 infrastructure from data restore, retained identity/DNS, secret rotation and
 explicit creator bootstrap. IaC generation, cloud resources, permissions,
 spending and deployment changes require separate approval.
+
+The [test infrastructure scaffold](infra/README.md) defines a separate Free
+frontend, disabled-by-default Flex API, keyless runtime/application storage,
+bounded monitoring and narrow runtime permissions using Azure-generated URLs.
+It is versioned infrastructure code, **not provisioned resources**. Production
+SWA/DNS and the existing deployment workflow are unchanged.

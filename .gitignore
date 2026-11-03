@@ -10,4 +10,5 @@ test-results/
 .npmrc
 .azure/
 local.settings.json
+infra/*.local.parameters.json
 .DS_Store
