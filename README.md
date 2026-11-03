@@ -144,7 +144,10 @@ Production deployment on `main` calls that same validation workflow and only
 uploads the resulting verified `dist/` artifact after every check passes.
 There is no second platform build or dependency installation during upload.
 Feature branches and pull requests never receive deployment credentials and do
-not deploy. Manual production runs are also restricted to `main`.
+not deploy. Manual production runs are also restricted to `main`. After upload,
+the workflow verifies HTTPS responses from both custom domains, matching their
+published JS/CSS bytes against that run's verified artifact and checking the
+manifest. Failed verification fails the run; it does not automatically roll back.
 
 ## Azure hosting
 

@@ -46,5 +46,51 @@ jobs:
           api_location: ""
           output_location: ""
           skip_app_build: true
-          skip_api_build: true
-          production_branch: main
+      - name: Verify published production build
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+
+          const expected = readFileSync('dist/index.html', 'utf8');
+          const assets = [...expected.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)]
+            .map((match) => match[1]);
+          assert.ok(assets.length > 0, 'No production assets found in the verified build.');
+
+          async function verify(base) {
+            const response = await fetch(base, { signal: AbortSignal.timeout(20000) });
+            assert.equal(response.status, 200, `${base}: homepage failed`);
+            const html = await response.text();
+            for (const asset of assets) {
+              assert.ok(html.includes(asset), `${base}: expected asset is not published`);
+              const published = await fetch(base + asset, {
+                signal: AbortSignal.timeout(20000),
+              });
+              assert.equal(published.status, 200, `${base}: asset failed`);
+              assert.deepEqual(
+                Buffer.from(await published.arrayBuffer()),
+                readFileSync('dist' + asset),
+                `${base}: published asset differs from the verified artifact`,
+              );
+            }
+            const manifest = await fetch(base + '/manifest.webmanifest', {
+              signal: AbortSignal.timeout(20000),
+            });
+            assert.equal(manifest.status, 200, `${base}: manifest failed`);
+            assert.equal((await manifest.json()).name, 'Perly Golf Max');
+          }
+
+          for (const base of ['https://perlygolf.com', 'https://www.perlygolf.com']) {
+            for (let attempt = 1; attempt <= 6; attempt++) {
+              try {
+                await verify(base);
+                console.log(`${base}: published build verified.`);
+                break;
+              } catch (error) {
+                if (attempt === 6) throw error;
+                console.warn(`${base}: verification attempt ${attempt} failed; retrying.`, error.message);
+                await new Promise((resolve) => setTimeout(resolve, 5000));
+              }
+            }
+          }
+          NODE
