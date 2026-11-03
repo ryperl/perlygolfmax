@@ -1,0 +1,68 @@
+import { expect, test } from '@playwright/test';
+
+test('production shell supports navigation, history, and keyboard access', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => { errors.push(error.message); });
+  await page.goto('/');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('The Coastal Classic');
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('link', { name: 'Skip to content' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('main')).toBeFocused();
+  await page.getByRole('link', { name: 'Explore the rounds' }).click();
+  await expect(page.getByRole('listitem')).toHaveCount(5);
+  await page.getByRole('link', { name: 'The group' }).click();
+  await expect(page.getByRole('listitem')).toHaveCount(12);
+  await page.goBack();
+  await expect(page.getByRole('link', { name: 'Rounds', exact: true })).toHaveAttribute('aria-current', 'page');
+  await page.goto('/#unknown');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('The Coastal Classic');
+  expect(errors).toEqual([]);
+});
+
+test('every page fits a narrow viewport and enlarged text', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 740 });
+  for (const hash of ['overview', 'rounds', 'group']) {
+    await page.goto(`/#${hash}`);
+    await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
+});
+
+test('manifest and correctly sized icons are served without service-worker claims', async ({ page, request }) => {
+  await page.goto('/');
+  await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', '/manifest.webmanifest');
+  const response = await request.get('/manifest.webmanifest');
+  expect(response.ok()).toBe(true);
+  const manifest: unknown = await response.json();
+  expect(manifest).toMatchObject({
+    name: 'Perly Golf Max',
+    start_url: '/',
+    display: 'standalone',
+    icons: expect.arrayContaining([
+      expect.objectContaining({ src: '/icons/icon-192.png', sizes: '192x192' }),
+      expect.objectContaining({ src: '/icons/icon-maskable-512.png', purpose: 'maskable' }),
+    ]),
+  });
+  for (const [file, size] of [['icon-192.png', 192], ['icon-512.png', 512], ['icon-maskable-512.png', 512], ['apple-touch-icon.png', 180]] as const) {
+    const icon = await request.get(`/icons/${file}`);
+    expect(icon.ok()).toBe(true);
+    expect(icon.headers()['content-type']).toContain('image/png');
+    const bytes = await icon.body();
+    expect(bytes.readUInt32BE(16)).toBe(size);
+    expect(bytes.readUInt32BE(20)).toBe(size);
+  }
+  expect(await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length)).toBe(0);
+});
+
+test('theme supports system preference and explicit preview overrides', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.goto('/?clawpilotTheme=light');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto('/?clawpilotTheme=invalid');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+});
