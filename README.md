@@ -134,7 +134,7 @@ or registry availability there.
 
 ## Continuous integration
 
-Pull requests and pushes to `main` run locked installation, public-lockfile
+Pull requests and pushes to any branch run locked installation, public-lockfile
 checks, strict type checking, lint, named unit/component suites, production
 build, and Chromium desktop/mobile smoke tests. CI has read-only repository
 permissions, uses no production secrets, and does not deploy. The workflow
