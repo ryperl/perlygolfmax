@@ -2,12 +2,88 @@ import { describe, expect, it } from 'vitest';
 import type { HoleScore } from '../../../src/domain/scoring.js';
 import { isRoundScores, isScoreWriteResult } from '../../../src/contracts/scoring.js';
 import { scoringFixture } from '../../test/scoring-fixtures.js';
-import { identifier } from '../../test/catalog-fixtures.js';
+import { identifier, manifest, tee } from '../../test/catalog-fixtures.js';
 import { creator, event, member } from '../../test/fixtures.js';
 import { canonical } from '../catalog/entities.js';
 import { TableEventStore } from '../events/store.js';
 
 describe('owner-only saved-round gross scorecards', () => {
+  it('projects exact saved selected-tee ratings, never mixing in later global catalog ratings', async () => {
+    const f = await scoringFixture();
+    const catalog = (await f.courses.list(creator)).courses[0];
+    const saved = f.saved.rounds[0];
+    if (!catalog || !saved) throw new Error('Missing fictional course or saved round');
+    const newerTee = {
+      ...tee, ratings: tee.ratings.map((rating) => ({
+        ...rating, course: rating.course + 1, slope: rating.slope + 1, bogey: rating.bogey + 1,
+      })),
+    };
+    await f.publish(identifier(101), manifest, [newerTee], catalog.etag);
+    f.get.mockClear();
+    const round = await f.scores.get(creator, event.id, f.roundId);
+    expect(round.teeRatings).toEqual(saved.teeProfile.ratings);
+    expect(round.teeRatings).not.toEqual(newerTee.ratings);
+    expect(isRoundScores(round)).toBe(true);
+    expect(f.get.mock.calls.every(([partition]) => partition === event.id)).toBe(true);
+  });
+
+  it('persists and exactly replays reported pickup strokes, preserving their distinct audited correction to completed strokes', async () => {
+    const f = await scoringFixture();
+    const pickup: HoleScore = { kind: 'picked-up', reportedStrokes: 7 };
+    const write = (score: HoleScore, etag: string | null = null, operation = 600) =>
+      f.scores.write(creator, event.id, f.roundId, f.playerId, 1, score, etag, identifier(operation));
+    f.submit.mockImplementationOnce((actions) => {
+      f.apply(actions);
+      return Promise.reject(new Error('Fictional lost reported-pickup response'));
+    });
+    const first = await write(pickup);
+    expect(first.change.before).toEqual({ kind: 'unplayed' });
+    expect(first.change.after).toEqual(pickup);
+    expect(first.round.cards[0]?.holes[0]?.score).toEqual(pickup);
+    expect(f.rows.get(`${event.id}|score-card:${f.roundId}:${f.playerId}`)?.content).toContain('"reportedStrokes":7');
+    expect((await f.scores.get(creator, event.id, f.roundId)).cards[0]?.holes[0]?.score).toEqual(pickup);
+    expect(await write(pickup)).toEqual(first);
+    await expect(write({ kind: 'picked-up', reportedStrokes: 8 })).rejects.toMatchObject({ code: 'SCORE_REQUEST_CONFLICT' });
+    await expect(write({ kind: 'picked-up' })).rejects.toMatchObject({ code: 'SCORE_REQUEST_CONFLICT' });
+    await expect(write({ kind: 'strokes', strokes: 7 })).rejects.toMatchObject({ code: 'SCORE_REQUEST_CONFLICT' });
+    const completed = await write({ kind: 'strokes', strokes: 7 }, first.round.cards[0]?.etag ?? null, 601);
+    expect(completed.change.before).toEqual(pickup);
+    expect(completed.change.after).toEqual({ kind: 'strokes', strokes: 7 });
+    expect(completed.round.cards[0]?.holes[0]?.score).toEqual({ kind: 'strokes', strokes: 7 });
+    const replay = await write(pickup);
+    expect(replay.change).toEqual(first.change);
+    expect(replay.round).toEqual(completed.round);
+    expect((await f.scores.history(creator, event.id, f.roundId, f.playerId)).changes).toEqual([first.change, completed.change]);
+    expect(f.submit).toHaveBeenCalledTimes(2);
+  });
+
+  it('retains the optional pickup number in both sides of successive pickup audits and still reads legacy pickups without it', async () => {
+    const f = await scoringFixture();
+    const write = (score: HoleScore, etag: string | null, operation: number) =>
+      f.scores.write(creator, event.id, f.roundId, f.playerId, 1, score, etag, identifier(operation));
+    const legacy = await write({ kind: 'picked-up' }, null, 600);
+    expect((await f.scores.get(creator, event.id, f.roundId)).cards[0]?.holes[0]?.score).toEqual({ kind: 'picked-up' });
+    expect(legacy.change.after).not.toHaveProperty('reportedStrokes');
+    const seven = await write({ kind: 'picked-up', reportedStrokes: 7 }, legacy.round.cards[0]?.etag ?? null, 601);
+    const eight = await write({ kind: 'picked-up', reportedStrokes: 8 }, seven.round.cards[0]?.etag ?? null, 602);
+    expect(seven.change.before).toEqual({ kind: 'picked-up' });
+    expect(seven.change.after).toEqual({ kind: 'picked-up', reportedStrokes: 7 });
+    expect(eight.change.before).toEqual({ kind: 'picked-up', reportedStrokes: 7 });
+    expect(eight.change.after).toEqual({ kind: 'picked-up', reportedStrokes: 8 });
+    expect((await f.scores.history(creator, event.id, f.roundId, f.playerId)).changes).toEqual([legacy.change, seven.change, eight.change]);
+    expect((await write({ kind: 'picked-up' }, null, 600)).change).toEqual(legacy.change);
+  });
+
+  it.each([0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER])('rejects invalid reported pickup strokes %s before touching persistence', async (reportedStrokes) => {
+    const f = await scoringFixture();
+    f.get.mockClear();
+    await expect(f.scores.write(creator, event.id, f.roundId, f.playerId, 1, {
+      kind: 'picked-up', reportedStrokes,
+    }, null, identifier(600))).rejects.toMatchObject({ status: 400, code: 'INVALID_SCORE_WRITE' });
+    expect(f.get).not.toHaveBeenCalled();
+    expect(f.submit).not.toHaveBeenCalled();
+  });
+
   it('initializes virtual unplayed cards using only captured tee holes, then atomically writes card, audit, lock and conditional authority', async () => {
     const f = await scoringFixture();
     const initial = await f.scores.get(creator, event.id, f.roundId);

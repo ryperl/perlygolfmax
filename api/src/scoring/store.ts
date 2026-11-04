@@ -95,6 +95,9 @@ export class TableScoreStore {
       eventId: workspace.event.id, eventName: workspace.event.name, eventStatus: workspace.event.status,
       roundId: round.id, roundName: round.name, courseName: round.course.name,
       teeName: round.teeProfile.name, teeCategory: round.teeProfile.category, layout: round.teeProfile.holes,
+      teeRatings: round.teeProfile.ratings.map((rating) => ({
+        type: rating.type, course: rating.course, slope: rating.slope, bogey: rating.bogey,
+      })),
       groups: round.groups, cards, setupLocked: round.scoringStarted === true,
       lastUpdatedAt: timestamps.at(-1) ?? null,
     };

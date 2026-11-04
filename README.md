@@ -121,10 +121,23 @@ No handicap, Stableford, team or financial formulas are implied by this demo.
 
 An event owner can open scorecards for a saved round and enter each player's
 per-hole gross strokes. Unplayed, picked-up and did-not-finish are distinct
-states, never automatic zero/penalty strokes. A numeric recorded-stroke sum is
-labelled incomplete unless every hole has numeric strokes; cards are not ranked
+states, never automatic zero/penalty strokes. The normal entry flow is one hole
+for one selected group: blank means unplayed, a number means strokes, and `X`
+or `X7` means picked up. The number in `X7` contributes seven to the recorded
+total but the hole remains picked up, not a completed seven-stroke hole.
+A recorded total is labelled incomplete unless every hole has a completed
+numeric stroke entry; cards are not ranked
 by incomplete totals. Positive whole strokes are bounded only for exact numeric
 arithmetic, not by an invented golf scoring cap.
+
+Use the group **Save & Next Hole** action for normal entry. Each player's
+acknowledgement is tracked separately: on partial failure, saved values stay
+saved, pending drafts remain and the screen does not advance. Full scorecards,
+source layout and closable per-player audit history are secondary views.
+Each individual recap presents front/back nines with source yardage, par and
+stroke index, exact hole shorthand, Out/In subtotals and the recorded total.
+Pickup or missing values keep subtotals/results marked incomplete. The recap
+is available without finalizing a round; no Net or Stableford row is fabricated.
 
 Each saved operation has an idempotency ID, conditional card revision and
 immutable before/after/actor/time history. Conflicting edits require explicit

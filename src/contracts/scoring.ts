@@ -14,7 +14,33 @@ export function isHoleScore(value: unknown): value is HoleScore {
   if (value.kind === 'strokes') {
     return Object.keys(value).length === 2 && positiveInteger(value.strokes, maximumExactHoleStrokes);
   }
-  return Object.keys(value).length === 1 && (value.kind === 'unplayed' || value.kind === 'picked-up' || value.kind === 'did-not-finish');
+  if (value.kind === 'picked-up') {
+    return Object.keys(value).length === 1
+      || Object.keys(value).length === 2 && positiveInteger(value.reportedStrokes, maximumExactHoleStrokes);
+  }
+  return Object.keys(value).length === 1 && (value.kind === 'unplayed' || value.kind === 'did-not-finish');
+}
+
+export function parseScoreEntry(text: string): HoleScore | null {
+  const value = text.trim();
+  if (!value) return { kind: 'unplayed' };
+  if (/^DNF$/i.test(value)) return { kind: 'did-not-finish' };
+  if (/^X$/i.test(value)) return { kind: 'picked-up' };
+  const pickup = /^X(\d+)$/i.exec(value);
+  const digits = pickup?.[1] ?? (/^\d+$/.test(value) ? value : null);
+  if (digits === null) return null;
+  const strokes = Number(digits);
+  if (!positiveInteger(strokes, maximumExactHoleStrokes)) return null;
+  return pickup ? { kind: 'picked-up', reportedStrokes: strokes } : { kind: 'strokes', strokes };
+}
+
+export function scoreEntryText(score: HoleScore): string {
+  switch (score.kind) {
+    case 'unplayed': return '';
+    case 'strokes': return String(score.strokes);
+    case 'picked-up': return score.reportedStrokes === undefined ? 'X' : `X${String(score.reportedStrokes)}`;
+    case 'did-not-finish': return 'DNF';
+  }
 }
 
 export function isScorecard(value: unknown): value is Scorecard {
@@ -39,6 +65,15 @@ export function isRoundScores(value: unknown): value is RoundScores {
     || !Array.isArray(value.layout) || ![9, 18].includes(value.layout.length)
     || !Array.isArray(value.cards) || value.cards.length < 4 || value.cards.length > 8 || !value.cards.every(isScorecard)
     || !Array.isArray(value.groups) || value.groups.length < 1 || value.groups.length > 4) return false;
+  if (value.teeRatings !== undefined) {
+    if (!Array.isArray(value.teeRatings) || value.teeRatings.length !== 3
+      || !value.teeRatings.every((rating: unknown) => isRecord(rating)
+        && (rating.type === 'Total' || rating.type === 'Front' || rating.type === 'Back')
+        && typeof rating.course === 'number' && Number.isFinite(rating.course) && rating.course > 0 && rating.course <= 150
+        && positiveInteger(rating.slope, 300) && typeof rating.bogey === 'number'
+        && Number.isFinite(rating.bogey) && rating.bogey > 0 && rating.bogey <= 200)
+      || new Set(value.teeRatings.map((rating: { readonly type: string }) => rating.type)).size !== 3) return false;
+  }
   const count = value.layout.length;
   if (!value.layout.every((hole: unknown) => isRecord(hole) && positiveInteger(hole.number, count)
     && positiveInteger(hole.sourceId) && positiveInteger(hole.length, 2_000)

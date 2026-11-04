@@ -75,7 +75,11 @@ these lifecycle rules independently of discovery.
 
 The current scoring slice is an online owner-operated simulation: per-hole
 gross strokes, unplayed holes and explicit pickup/DNF dispositions with audited
-corrections. Self-entry, invitation/account mapping and a round/foursome-assigned
+corrections. Pickup may include an organizer-entered reported stroke value:
+`X7` records a pickup and contributes seven to the recorded total, while the
+round remains incomplete. This is not a completed seven-stroke hole, automatic
+maximum/penalty, handicap posting rule or invented Stableford treatment.
+Self-entry, invitation/account mapping and a round/foursome-assigned
 scorekeeper remain a later increment. Scorekeeper assignment is not event
 administration. Pickup points, Stableford, purse and financial rules are
 undefined; no missing value becomes zero and no points are implied.
@@ -117,6 +121,16 @@ connection is required to save, background execution is not promised, and
 reload/close may lose unsaved page drafts. This is not the offline-capable
 Arizona pilot; private caching/logout/retention/update/sync design is still
 pending, and paper backup remains necessary.
+
+The primary interaction is one selected group/hole with shorthand input, not a
+status dropdown and save form for every player/hole. Blank input is unplayed;
+unchanged blanks need no fabricated write. Group save serializes the existing
+per-player write contract; it is not an all-or-nothing group transaction.
+Partial acknowledgements stay saved, pending/unattempted drafts retain their
+intent/revision/request identity and a failure never advances the hole. A later
+owner projection must not silently rebase another player's draft or be reported
+as matching the user's intended value. Audit visibility is separate from cached
+history, so closing it stays closed when a pending read completes.
 
 MSAL manages tab-scoped sessionStorage. The callback and logout reply URI is
 `https://<frontend-host>/?event-auth=1`; local development uses the exact local

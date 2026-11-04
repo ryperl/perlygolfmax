@@ -1,180 +1,220 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ScoresClient } from '../../client/scoring';
-import { EventChangedError } from '../../client/events';
-import type { HoleScore, ScoreChange, Scorecard } from '../../domain/scoring';
-import { maximumExactHoleStrokes } from '../../domain/scoring';
+import type { RoundScores, ScoreChange } from '../../domain/scoring';
+import { sameHoleScore } from '../../domain/scoring';
 import { useOwnerScores } from './useOwnerScores';
-import { SavedScoreLayout, ScorecardSummary } from './ScorecardSummary';
+import { SavedScoreLayout } from './ScorecardSummary';
+import { GroupHoleEntry } from './GroupHoleEntry';
+import { SavedScorecards } from './SavedScorecards';
+import type { PlayerHistory } from './SavedScorecards';
+import { cardFor, conflictedDraft, editedDraft, entryKey, entryScore, savedHole, scoreLabel } from './entry-state';
+import type { HoleDraft } from './entry-state';
+import { planGroup, saveGroupEntries } from './save-group';
 import './scoring.css';
 
-interface Draft {
-  readonly kind: HoleScore['kind'];
-  readonly text: string;
-  readonly attempt?: { readonly id: string; readonly etag: string | null };
-  readonly conflict?: boolean;
-  readonly reviewed?: boolean;
-  readonly reviewedEtag?: string | null;
-}
-interface History {
-  readonly changes: readonly ScoreChange[];
-  readonly cursor?: string;
-  readonly loaded: boolean;
-}
-function label(score: HoleScore): string {
-  switch (score.kind) {
-    case 'strokes': return `${String(score.strokes)} strokes`;
-    case 'unplayed': return 'Unplayed';
-    case 'picked-up': return 'Picked up';
-    case 'did-not-finish': return 'DNF (hole)';
-  }
-}
-function scoreFrom(draft: Draft): HoleScore | null {
-  if (draft.kind !== 'strokes') return { kind: draft.kind };
-  if (!/^[1-9]\d*$/.test(draft.text)) return null;
-  const strokes = Number(draft.text);
-  return Number.isSafeInteger(strokes) && strokes <= maximumExactHoleStrokes ? { kind: 'strokes', strokes } : null;
-}
-function draftFrom(score: HoleScore): Draft {
-  return { kind: score.kind, text: score.kind === 'strokes' ? String(score.strokes) : '' };
-}
-
-export function OwnerScoresView({ client, eventId, roundId, onSessionExpired }: {
+interface OwnerScoresViewProps {
   readonly client: ScoresClient;
   readonly eventId: string;
   readonly roundId: string;
   readonly onSessionExpired: (message: string) => void;
-}) {
-  const [drafts, setDrafts] = useState<ReadonlyMap<string, Draft>>(new Map());
+}
+
+export function OwnerScoresView(props: OwnerScoresViewProps) {
+  return <OwnerScoresController key={`${props.eventId}:${props.roundId}`} {...props} />;
+}
+
+function OwnerScoresController({ client, eventId, roundId, onSessionExpired }: OwnerScoresViewProps) {
+  const [drafts, setDrafts] = useState<ReadonlyMap<string, HoleDraft>>(new Map());
   const currentDrafts = useRef(drafts);
-  const [histories, setHistories] = useState<ReadonlyMap<string, History>>(new Map());
+  const [groupNumber, setGroupNumber] = useState<number | null>(null);
+  const [holeNumber, setHoleNumber] = useState<number | null>(null);
+  const [screen, setScreen] = useState<'entry' | 'cards'>('entry');
+  const [histories, setHistories] = useState<ReadonlyMap<string, PlayerHistory>>(new Map());
+  const [openHistories, setOpenHistories] = useState<ReadonlySet<string>>(new Set());
+  const openHistoryRef = useRef(openHistories);
+  const [loadingHistory, setLoadingHistory] = useState<string | null>(null);
+  const historyRequest = useRef(false);
+  const [acknowledgements, setAcknowledgements] = useState<ReadonlyMap<string, ScoreChange>>(new Map());
   const [notice, setNotice] = useState('');
-  const [reviewedRefresh, setReviewedRefresh] = useState(false);
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const saving = useRef(false);
+  const alive = useRef(false);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const { round, busy, error, stale, refreshedAt, run, refresh, accept } = useOwnerScores(
     client, eventId, roundId, drafts.size > 0, onSessionExpired,
   );
-  function update(key: string, draft: Draft | null) {
+  const group = round?.groups.find((item) => item.number === groupNumber) ?? round?.groups[0];
+  const hole = round?.layout.find((item) => item.number === holeNumber) ?? round?.layout[0];
+
+  function update(key: string, draft: HoleDraft | null) {
     const next = new Map(currentDrafts.current);
     if (draft) next.set(key, draft); else next.delete(key);
     currentDrafts.current = next;
     setDrafts(next);
   }
-  async function save(card: Scorecard, holeNumber: number, draft: Draft, key: string) {
-    const score = scoreFrom(draft);
-    if (!score || busy || saving.current || draft.conflict && (!draft.reviewed || !draft.attempt && draft.reviewedEtag !== card.etag)) return;
-    saving.current = true;
-    const attempt = draft.attempt ?? { id: crypto.randomUUID(), etag: card.etag };
-    update(key, { ...draft, attempt });
+  function edit(playerId: string, text: string) {
+    if (!round || !hole || busy || saving.current || round.eventStatus !== 'active') return;
+    const key = entryKey(playerId, hole.number);
+    update(key, editedDraft(text, cardFor(round, playerId), currentDrafts.current.get(key)));
     setNotice('');
-    try {
-      const result = await run((signal) => client.save(eventId, roundId, card.playerId, holeNumber, score, attempt.etag, attempt.id, signal));
-      if (!result) return;
-      accept(result.round);
-      update(key, null);
-      setHistories((previous) => {
-        const next = new Map(previous);
-        next.delete(card.playerId);
-        return next;
-      });
-      setNotice(`Save acknowledged for ${card.displayName}, hole ${String(holeNumber)}: ${label(result.change.before)} → ${label(result.change.after)} at ${result.change.recordedAt}. Request ${result.change.id}. The saved projection may include later owner edits; review it below.`);
-    } catch (failure) {
-      if (failure instanceof EventChangedError) {
-        update(key, { ...draft, attempt, conflict: true, reviewed: false });
-        setReviewedRefresh(false);
+  }
+  function review(playerId: string) {
+    if (!round || !hole || busy || round.eventStatus !== 'active') return;
+    const key = entryKey(playerId, hole.number);
+    const local = currentDrafts.current.get(key);
+    if (!local || local.status !== 'conflict' || local.conflictAt === undefined || refreshVersion <= local.conflictAt) return;
+    update(key, { text: local.text, baseEtag: cardFor(round, playerId).etag, status: 'draft', mustWrite: true });
+    setNotice('Reviewed against the refreshed saved card. Your value is a new unsaved intent; save the group to apply it.');
+  }
+  function acknowledge(change: ScoreChange) {
+    setAcknowledgements((previous) => new Map(previous).set(entryKey(change.playerId, change.holeNumber), change));
+    setHistories((previous) => {
+      const next = new Map(previous);
+      next.delete(change.playerId);
+      return next;
+    });
+  }
+  async function save(advance: boolean) {
+    if (!round || !group || !hole || busy || saving.current || round.eventStatus !== 'active') return;
+    const plan = planGroup(round, group.playerIds, hole.number, currentDrafts.current);
+    if (plan.invalid.length > 0) {
+      setNotice('Nothing sent. Check every intended entry: use a positive number, X / X7, DNF, or blank for unplayed.');
+      return;
+    }
+    if (plan.conflicts.length > 0) {
+      for (const playerId of plan.conflicts) {
+        const key = entryKey(playerId, hole.number);
+        const local = currentDrafts.current.get(key);
+        const score = local && entryScore(local.text);
+        if (local && score && local.status !== 'conflict') update(key, conflictedDraft(score, cardFor(round, playerId), refreshVersion, local));
       }
+      setNotice('Nothing sent. Refresh saved round and review each conflict before saving this group.');
+      return;
+    }
+    for (const key of plan.unchanged) update(key, null);
+    const currentHole = hole.number;
+    const index = round.layout.findIndex((item) => item.number === currentHole);
+    const next = round.layout[index + 1];
+    const unplayed = [...plan.targets.values()].filter((score) => score.kind === 'unplayed').length;
+    function complete(writes: number) {
+      const movement = advance ? next ? ` Viewing hole ${String(next.number)}.` : ' Scorecards opened for review; the round is not finalized.' : ' Stayed on this hole.';
+      setNotice(`${writes === 0 ? 'No changes sent' : `${String(writes)} player changes acknowledged`}; ${String(unplayed)} unplayed.${movement}`);
+      if (advance && next) setHoleNumber(next.number);
+      if (advance && !next) setScreen('cards');
+    }
+    if (plan.writes.length === 0) { complete(0); return; }
+    saving.current = true;
+    setNotice('Saving one player at a time…');
+    let latest: RoundScores = round;
+    let operationSignal: AbortSignal | undefined;
+    try {
+      const result = await run(async (signal) => {
+        operationSignal = signal;
+        return saveGroupEntries({
+          client, round, holeNumber: currentHole, plan, signal, refreshVersion, onDraft: update,
+          onProjection: (value) => { latest = value; accept(value); }, onAcknowledged: acknowledge,
+        });
+      });
+      if (result && alive.current) complete(plan.writes.length);
+      else if (alive.current) setNotice('No new requests sent. Wait for the active operation or service retry delay, then retry; entries and request IDs are retained.');
+    } catch {
+      if (!alive.current || operationSignal?.aborted) return;
+      const confirmed = [...plan.targets].filter(([playerId, score]) =>
+        !currentDrafts.current.has(entryKey(playerId, currentHole))
+          && sameHoleScore(savedHole(cardFor(latest, playerId), currentHole), score)
+          && (score.kind !== 'unplayed' || plan.writes.some((write) => write.playerId === playerId))).length;
+      const remaining = group.playerIds.filter((playerId) => currentDrafts.current.has(entryKey(playerId, currentHole))).length;
+      setNotice(`${String(confirmed)} saved / ${String(remaining)} remaining not confirmed or need review. Stayed on hole ${String(currentHole)}. Retry only the remaining values; acknowledged changes are not sent again.`);
     } finally {
       saving.current = false;
     }
   }
-  async function loadHistory(playerId: string, more: boolean) {
+  async function loadHistory(playerId: string, more = false) {
+    if (busy || historyRequest.current) return;
+    historyRequest.current = true;
+    const previous = histories.get(playerId);
     try {
-      const previous = histories.get(playerId);
-      const page = await run((signal) => client.history(eventId, roundId, playerId, signal, more ? previous?.cursor : undefined));
-      if (!page) return;
+      const page = await run((signal) => {
+        setLoadingHistory(playerId);
+        return client.history(eventId, roundId, playerId, signal, more ? previous?.cursor : undefined);
+      });
+      if (!page || !alive.current) return;
+      const changes = more ? [...(previous?.changes ?? []), ...page.changes] : page.changes;
       setHistories((old) => new Map(old).set(playerId, {
-        changes: more ? [...(previous?.changes ?? []), ...page.changes] : page.changes,
-        ...(page.continuationToken ? { cursor: page.continuationToken } : {}), loaded: true,
+        changes: [...new Map(changes.map((change) => [change.id, change])).values()],
+        ...(page.continuationToken ? { cursor: page.continuationToken } : {}),
       }));
-    } catch { /* The connection error remains visible; existing history is retained. */ }
+    } catch { /* The shared request state exposes failures without reopening history. */ }
+    finally {
+      historyRequest.current = false;
+      if (alive.current) setLoadingHistory(null);
+    }
+  }
+  function historyOpen(playerId: string, open: boolean) {
+    const next = new Set(openHistoryRef.current);
+    if (open) next.add(playerId); else next.delete(playerId);
+    openHistoryRef.current = next;
+    setOpenHistories(next);
+    if (open && !histories.has(playerId)) void loadHistory(playerId);
   }
   return <section className="owner-scores">
     <a href={`#events?event=${eventId}`}>Back to saved event</a>
     <h1>Online owner scorecards</h1>
-    <p className="panel">ONLINE OWNER SIMULATION — not golfer admission. Scores require a connection. Unsaved drafts live only in this page; there is no offline persistence or synchronization. Keep a paper backup. Foreground polling is not guaranteed background execution.</p>
-    <p className="panel"><strong>Finish setup before saving the first score.</strong> The first accepted score locks this saved round's course, tee, players, groups and captured Handicap Index inputs. Clearing scores does not unlock these inputs.</p>
-    <button disabled={busy} onClick={() => {
-      void refresh().then((value) => {
-        if (value) { setReviewedRefresh(true); setNotice('Saved round refreshed. Local drafts are preserved. Compare saved values before reviewing a conflict.'); }
-      }).catch(() => undefined);
-    }}>Refresh saved round</button>
-    <p role="status">{busy ? 'Contacting score service…' : stale ? 'Stale / not yet verified. Retry a manual refresh.' : 'Saved server projection loaded.'}
-      {' '}Last server response: {refreshedAt ?? 'not yet loaded'}.
-      {drafts.size > 0 ? ' Automatic polling paused while local drafts exist; refresh manually without losing drafts.' : ' Checks for persisted owner activity every 15 seconds while this page is visible; failures back off.'}</p>
-    {error && <p role="alert">{error} Failed inputs and request IDs are retained; a network failure does not prove a save failed.</p>}
-    {notice && <p role="status">{notice}</p>}
+    <p className="score-warning"><strong>Owner simulation · online only.</strong> Unsaved drafts live only in this page. Keep a paper backup.</p>
+    <p className="score-warning"><strong>Finish setup first.</strong> The first accepted score locks course, tee, roster, groups and captured indices. Clearing scores does not unlock setup.</p>
+    <div className="score-toolbar">
+      <button disabled={busy} onClick={() => { setScreen('entry'); }} aria-pressed={screen === 'entry'}>Enter scores</button>
+      <button disabled={busy} onClick={() => { setScreen('cards'); }} aria-pressed={screen === 'cards'}>Scorecards</button>
+      <button aria-label="Refresh saved round" disabled={busy} onClick={() => {
+        void refresh().then((value) => {
+          if (value) {
+            for (const [key, local] of currentDrafts.current) {
+              const playerId = key.slice(0, key.lastIndexOf(':'));
+              const score = entryScore(local.text);
+              const card = cardFor(value, playerId);
+              if (score && local.status !== 'conflict' && !local.attempt?.sent && card.etag !== local.baseEtag) {
+                update(key, conflictedDraft(score, card, refreshVersion, local));
+              }
+            }
+            setRefreshVersion((previous) => previous + 1);
+            setNotice('Saved round refreshed. Local values are preserved; compare saved vs intended before reviewing a conflict.');
+          }
+        }).catch(() => undefined);
+      }}>Refresh</button>
+    </div>
+    <p className="score-connection" role="status">{busy ? 'Contacting score service…' : stale ? 'Saved data may be stale — refresh to review.' : 'Saved scores loaded.'}
+      {drafts.size > 0 ? ' Auto-check paused for local edits.' : ' Auto-checks while visible.'}</p>
+    {error && <p role="alert">{error} Unconfirmed entries and request IDs are retained.</p>}
+    {notice && <p className="score-notice" role="status">{notice}</p>}
     {!round && !error && <p>Loading owner-only scorecards…</p>}
     {round && <>
-      <h2>{round.eventName} — {round.roundName}</h2>
-      <SavedScoreLayout round={round} />
-      {round.eventStatus === 'archived' && <p>Archived event: owner read-only. Drafts cannot be saved.</p>}
-      {round.setupLocked && <p>Scoring has started: saved course, tee, roster, groups and captured indices are locked. Clearing scores cannot unlock setup.</p>}
-      <p>Roster/group order only — not a leaderboard. Gross totals are complete only when every hole has numeric strokes. Picked-up and DNF are hole dispositions, not zero or invented penalties.</p>
-      {round.groups.map((group) => <section key={group.number}><h2>Group {group.number}</h2>
-        {group.playerIds.map((id) => {
-          const card = round.cards.find((item) => item.playerId === id);
-          if (!card) return null;
-          const history = histories.get(id);
-          return <article className="panel" key={id} aria-label={`${card.displayName} scorecard`}>
-            <h3>{card.displayName}</h3>
-            <ScorecardSummary card={card} />
-            <div className="score-holes">{card.holes.map((hole) => {
-              const key = `${id}:${String(hole.number)}`;
-              const local = drafts.get(key);
-              const draft = local ?? draftFrom(hole.score);
-              const draftScore = scoreFrom(draft);
-              const disabled = busy || round.eventStatus === 'archived';
-              const reviewed = local?.reviewed === true && (local.attempt !== undefined || local.reviewedEtag === card.etag);
-              const prefix = `${card.displayName} hole ${String(hole.number)}`;
-              return <form className="score-hole" aria-label={prefix} key={hole.number} onSubmit={(event) => {
-                event.preventDefault();
-                if (local) void save(card, hole.number, local, key);
-              }}>
-                <h4>Hole {hole.number}</h4>
-                <p>Saved: {label(hole.score)}</p>
-                <label>{prefix} disposition<select disabled={disabled} value={draft.kind} onChange={(event) => {
-                  const kind = event.target.value;
-                  if (kind === 'unplayed' || kind === 'strokes' || kind === 'picked-up' || kind === 'did-not-finish') {
-                    update(key, { kind, text: kind === 'strokes' ? draft.text : '', ...(draft.conflict ? { conflict: true, reviewed: false } : {}) });
-                  }
-                }}>
-                  <option value="unplayed">Unplayed / clear</option><option value="strokes">Strokes</option>
-                  <option value="picked-up">Picked up</option><option value="did-not-finish">DNF (hole)</option>
-                </select></label>
-                {draft.kind === 'strokes' && <label>{prefix} strokes<input disabled={disabled} inputMode="numeric" value={draft.text} onChange={(event) => {
-                  update(key, { kind: 'strokes', text: event.target.value, ...(draft.conflict ? { conflict: true, reviewed: false } : {}) });
-                }} /></label>}
-                {local && <p>Local draft: {draftScore ? label(draftScore) : 'Enter a positive whole exact-safe stroke count; blank is not zero.'} — not confirmed saved.</p>}
-                {local?.attempt && <p>Request ID: {local.attempt.id}</p>}
-                {local?.conflict && <div role="alert"><p>Another owner changed this card. Draft preserved. Refresh the saved round, compare saved vs draft, then explicitly review before retrying.</p>
-                  <button type="button" disabled={disabled || !reviewedRefresh || reviewed} onClick={() => {
-                    update(key, { kind: local.kind, text: local.text, conflict: true, reviewed: true, reviewedEtag: card.etag });
-                  }}>I reviewed saved vs draft for hole {hole.number}</button>
-                </div>}
-                <button disabled={disabled || !local || !draftScore || local.conflict && !reviewed}>Save hole {hole.number}</button>
-                {local && <button type="button" disabled={disabled} onClick={() => { update(key, null); }}>Discard local draft for hole {hole.number}</button>}
-              </form>;
-            })}</div>
-            <button disabled={busy} onClick={() => { void loadHistory(id, false); }}>Load audit history for {card.displayName}</button>
-            {history?.loaded && <section aria-label={`${card.displayName} audit history`}>
-              {history.changes.length === 0 ? <p>No recorded changes.</p> : <ol>{history.changes.map((change) => <li key={change.id}>
-                Hole {change.holeNumber}: {label(change.before)} → {label(change.after)}; actor {change.recordedBy.tenantId}/{change.recordedBy.objectId};
-                {' '}<time dateTime={change.recordedAt}>{change.recordedAt}</time>; request {change.id}
-              </li>)}</ol>}
-              {history.cursor && <button disabled={busy} onClick={() => { void loadHistory(id, true); }}>More history for {card.displayName}</button>}
-            </section>}
-          </article>;
-        })}
-      </section>)}
+      <p className="score-context">{round.roundName} · {round.courseName} / {round.teeName}</p>
+      {round.eventStatus === 'archived' && <p role="status">Archived event: owner read-only. Drafts cannot be saved.</p>}
+      {screen === 'entry' && group && hole && <GroupHoleEntry groups={round.groups} groupNumber={group.number} layout={round.layout} hole={hole}
+        rows={group.playerIds.map((playerId) => {
+          const card = cardFor(round, playerId);
+          const local = drafts.get(entryKey(playerId, hole.number));
+          return {
+            playerId, displayName: card.displayName, saved: savedHole(card, hole.number),
+            ...(local ? { draft: local } : {}),
+            canReview: local?.conflictAt !== undefined && refreshVersion > local.conflictAt,
+          };
+        })} busy={busy} readOnly={round.eventStatus === 'archived'} unsavedCount={drafts.size}
+        onGroupChange={setGroupNumber} onHoleChange={setHoleNumber} onEdit={edit} onReview={review}
+        onDiscard={(playerId) => { update(entryKey(playerId, hole.number), null); }}
+        onSave={(advance) => { void save(advance); }} />}
+      {screen === 'cards' && <SavedScorecards round={round} histories={histories} openHistories={openHistories}
+        loadingHistory={loadingHistory} busy={busy}
+        onToggle={(playerId) => { historyOpen(playerId, !openHistoryRef.current.has(playerId)); }}
+        onClose={(playerId) => { historyOpen(playerId, false); }}
+        onLoad={(playerId) => { void loadHistory(playerId); }} onMore={(playerId) => { void loadHistory(playerId, true); }} />}
+      <details className="score-secondary"><summary>Saved course & source layout</summary><SavedScoreLayout round={round} /></details>
     </>}
+    <details className="score-secondary"><summary>Connection & save details</summary>
+      <p>Last server response: {refreshedAt ?? 'not yet loaded'}. One foreground check every 15 seconds; hidden pages and local drafts pause checks. Errors back off, and background execution is not guaranteed. Identity sign-in and view selection do not grant scoring access.</p>
+      <p>Only authoritative event owners can score. There is no private offline caching, durable draft storage, golfer admission or finalization. Pickup/DNF are per-hole dispositions, not invented penalties.</p>
+      <ul>{round && [...acknowledgements.values()].map((change) => <li key={change.id}>Hole {change.holeNumber}: {scoreLabel(change.before)} → {scoreLabel(change.after)};
+        {' '}acknowledged {change.recordedAt}; request {change.id}. Later saved values may differ.</li>)}</ul>
+    </details>
   </section>;
 }

@@ -23,6 +23,33 @@ async function fixture() {
 }
 
 describe('JWT-first owner-only bounded scoring HTTP routes', () => {
+  it('round-trips X7 JSON exactly through reads/history/retries and audits correction to completed seven separately', async () => {
+    const f = await fixture();
+    const pickup = { kind: 'picked-up', reportedStrokes: 7 };
+    const first = await f.call('score-hole', { 'If-None-Match': '*' }, { score: pickup });
+    expect(first).toMatchObject({
+      status: 200, jsonBody: {
+        change: { before: { kind: 'unplayed' }, after: pickup },
+        round: { cards: [{ holes: [{ number: 1, score: pickup }, ...Array.from({ length: 17 }, () => ({}))] }, {}, {}, {}] },
+      },
+    });
+    expect(await f.call('score-hole', { 'If-None-Match': '*' }, { score: pickup })).toEqual(first);
+    expect(await f.call('score-hole', { 'If-None-Match': '*' }, { score: { kind: 'picked-up', reportedStrokes: 8 } }))
+      .toMatchObject({ status: 409, jsonBody: { code: 'SCORE_REQUEST_CONFLICT' } });
+    const read = await f.scores.get(creator, event.id, f.roundId);
+    const headers = { 'If-Match': read.cards[0]?.etag ?? 'missing', 'Idempotency-Key': identifier(601) };
+    expect(await f.call('score-hole', headers, { score: { kind: 'strokes', strokes: 7 } })).toMatchObject({
+      status: 200, jsonBody: { change: { before: pickup, after: { kind: 'strokes', strokes: 7 } } },
+    });
+    expect(await f.call('score-history')).toMatchObject({
+      status: 200, jsonBody: { changes: [
+        { before: { kind: 'unplayed' }, after: pickup },
+        { before: pickup, after: { kind: 'strokes', strokes: 7 } },
+      ] },
+    });
+    expect(f.submit).toHaveBeenCalledTimes(2);
+  });
+
   it('implements round, write and history with no-store and dedicated read/write quotas', async () => {
     const f = await fixture();
     expect(await f.call('scores')).toMatchObject({ status: 200, jsonBody: { setupLocked: false, cards: [{ etag: null }, {}, {}, {}] }, headers: { 'Cache-Control': 'no-store' } });
@@ -53,6 +80,9 @@ describe('JWT-first owner-only bounded scoring HTTP routes', () => {
     { score: { kind: 'strokes', strokes: 0 } }, { score: { kind: 'strokes', strokes: -1 } },
     { score: { kind: 'strokes', strokes: 1.1 } }, { score: { kind: 'strokes', strokes: Number.MAX_SAFE_INTEGER } },
     { score: { kind: 'picked-up', strokes: 0 } }, { score: { kind: 'net', strokes: 3 } },
+    ...[0, -1, 1.5, Number.MAX_SAFE_INTEGER, null, '7', true, {}, []].map((reportedStrokes) => ({
+      score: { kind: 'picked-up', reportedStrokes },
+    })),
     { score: { kind: 'unplayed' }, role: 'owner' }, { strokes: 3 }, null, 'invalid json',
   ])('rejects malformed or excess score input %j', async (body) => {
     const f = await fixture();

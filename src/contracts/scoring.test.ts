@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RoundScores, Scorecard, ScoreChange } from '../domain/scoring';
 import { maximumExactHoleStrokes } from '../domain/scoring';
-import { isHoleScore, isRoundScores, isScorecard, isScoreChange, isScoreHistoryPage, isScoreWriteResult } from './scoring';
+import { isHoleScore, isRoundScores, isScorecard, isScoreChange, isScoreHistoryPage, isScoreWriteResult, parseScoreEntry, scoreEntryText } from './scoring';
 
 const id = (number: number) => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
 function round(): RoundScores {
@@ -34,6 +34,24 @@ describe('owner gross scoring network contracts', () => {
     { kind: 'unplayed', strokes: 0 }, { kind: 'picked-up', strokes: 5 },
     { kind: 'strokes', strokes: maximumExactHoleStrokes + 1 }, { kind: 'strokes', strokes: Number.NaN },
   ])('rejects ambiguous/unsafe score %j', (score) => { expect(isHoleScore(score)).toBe(false); });
+
+  it('parses the organizer score shorthand without a separate disposition selector', () => {
+    expect(parseScoreEntry('')).toEqual({ kind: 'unplayed' });
+    expect(parseScoreEntry('   ')).toEqual({ kind: 'unplayed' });
+    expect(parseScoreEntry('7')).toEqual({ kind: 'strokes', strokes: 7 });
+    expect(parseScoreEntry('X')).toEqual({ kind: 'picked-up' });
+    expect(parseScoreEntry(' x7 ')).toEqual({ kind: 'picked-up', reportedStrokes: 7 });
+    expect(parseScoreEntry('DNF')).toEqual({ kind: 'did-not-finish' });
+    for (const text of ['0', 'X0', '-1', '4.5', 'X4.5', '7X', 'NaN', 'Xfoo']) expect(parseScoreEntry(text)).toBeNull();
+    expect(scoreEntryText({ kind: 'picked-up', reportedStrokes: 7 })).toBe('X7');
+    expect(scoreEntryText({ kind: 'picked-up' })).toBe('X');
+    expect(scoreEntryText({ kind: 'unplayed' })).toBe('');
+    expect(scoreEntryText({ kind: 'strokes', strokes: 7 })).toBe('7');
+    expect(isHoleScore({ kind: 'picked-up', reportedStrokes: 7 })).toBe(true);
+    expect(isHoleScore({ kind: 'picked-up', reportedStrokes: 0 })).toBe(false);
+    expect(isHoleScore({ kind: 'picked-up', reportedStrokes: 1.5 })).toBe(false);
+    expect(isHoleScore({ kind: 'picked-up', reportedStrokes: '7' })).toBe(false);
+  });
 
   it('accepts an unsaved virtual round but never calls numeric data an unversioned card', () => {
     const value = round();

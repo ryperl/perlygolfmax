@@ -5,9 +5,10 @@ import './scoring.css';
 export function ScorecardSummary({ card }: { readonly card: Scorecard }) {
   const summary = summarizeGross(card.holes);
   return <div>
-    <p>Saved numeric strokes: {summary.recordedStrokes} across {summary.numericHoles}/{summary.totalHoles} holes.
+    <p>Recorded strokes: {summary.recordedHoles === 0 ? '—' : summary.recordedStrokes} across {summary.recordedHoles}/{summary.totalHoles} recorded holes; {summary.numericHoles} completed with strokes.
       {' '}Unplayed: {summary.unplayedHoles}; picked up: {summary.pickedUpHoles}; DNF: {summary.didNotFinishHoles}.
-      {' '}{summary.completeGross === null ? 'Incomplete — no final gross total.' : `Complete gross: ${String(summary.completeGross)}.`}</p>
+      {' '}{summary.completeGross === null ? 'Incomplete — no final gross total.' : `Complete gross: ${String(summary.completeGross)}.`}
+      {' '}Pickup reported strokes are included in recorded strokes, not completed holes.</p>
     <p>{card.etag === null ? 'No saved card yet.' : `Saved card updated ${card.updatedAt ?? ''}.`}</p>
   </div>;
 }

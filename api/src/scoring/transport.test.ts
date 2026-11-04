@@ -1,14 +1,15 @@
 import { createServer } from 'node:http';
 import { TableClient } from '@azure/data-tables';
 import { describe, expect, it } from 'vitest';
+import type { HoleScore } from '../../../src/domain/scoring.js';
 import { isRecord } from '../../../src/contracts/events.js';
-import { isScoreWriteResult } from '../../../src/contracts/scoring.js';
+import { isScoreChange, isScoreWriteResult } from '../../../src/contracts/scoring.js';
 import { scoringFixture } from '../../test/scoring-fixtures.js';
 import { identifier } from '../../test/catalog-fixtures.js';
 import { creator, event } from '../../test/fixtures.js';
 import { TableCourseCatalog } from '../catalog/courses.js';
 import { TablePlayerCatalog } from '../catalog/players.js';
-import { optionalRow } from '../catalog/entities.js';
+import { decode, optionalRow } from '../catalog/entities.js';
 import { TableWorkspaceStore } from '../setup/store.js';
 import { TableScoreStore } from './store.js';
 import { scoringLock } from './lock.js';
@@ -28,7 +29,7 @@ function batchResponse(statuses: readonly { readonly status: number; readonly et
 }
 
 describe('scoring real installed Table SDK loopback transport', () => {
-  it('creates/updates via atomic conditional batches, reads real revisions without Location, and decodes missing rows and conditional failures', async () => {
+  it('preserves reported pickups/replays/audits through conditional SDK batches and decodes missing rows and conditional failures', async () => {
     const f = await scoringFixture();
     const rows = new Map<string, Record<string, unknown>>();
     for (const [key, row] of f.rows) {
@@ -148,6 +149,37 @@ describe('scoring real installed Table SDK loopback transport', () => {
       expect(await scoringLock(table, event.id, f.roundId)).toMatchObject({
         writtenPlayerIds: [f.playerId, identifier(201)], requestId: identifier(600), etag: 'W/"batch-5"',
       });
+      const pickup: HoleScore = { kind: 'picked-up', reportedStrokes: 7 };
+      const seven = await scores.write(creator, event.id, f.roundId, f.playerId, 2, pickup, corrected.round.cards[0]?.etag ?? null, identifier(606));
+      expect(seven.change.before).toEqual({ kind: 'unplayed' });
+      expect(seven.change.after).toEqual(pickup);
+      expect(seven.round.cards[0]?.holes[1]?.score).toEqual(pickup);
+      expect(seven.round.cards[0]?.etag).toBe('W/"batch-6"');
+      expect(batches[5]?.match(/if-match: W\/"batch-5"/gi)).toHaveLength(2);
+      expect(batches[5]).toMatch(/if-match: W\/"batch-2"/i);
+      const persisted: unknown = JSON.parse(String(rows.get(`${event.id}|score-card:${f.roundId}:${f.playerId}`)?.content));
+      expect(persisted).toMatchObject({
+        holes: [{ number: 1, score: { kind: 'picked-up' } }, { number: 2, score: pickup }, ...Array.from({ length: 16 }, () => ({}))],
+      });
+      expect(decode(rows.get(`${event.id}|score-change:${identifier(606)}`)?.content, isScoreChange)).toEqual(seven.change);
+      expect(await scores.write(creator, event.id, f.roundId, f.playerId, 2, pickup, corrected.round.cards[0]?.etag ?? null, identifier(606))).toEqual(seven);
+      await expect(scores.write(creator, event.id, f.roundId, f.playerId, 2, {
+        kind: 'picked-up', reportedStrokes: 8,
+      }, corrected.round.cards[0]?.etag ?? null, identifier(606))).rejects.toMatchObject({ status: 409, code: 'SCORE_REQUEST_CONFLICT' });
+      expect(batches).toHaveLength(6);
+      const finished = await scores.write(creator, event.id, f.roundId, f.playerId, 2, {
+        kind: 'strokes', strokes: 7,
+      }, seven.round.cards[0]?.etag ?? null, identifier(607));
+      expect(finished.change.before).toEqual(pickup);
+      expect(finished.change.after).toEqual({ kind: 'strokes', strokes: 7 });
+      expect(finished.round.cards[0]?.holes[0]?.score).toEqual({ kind: 'picked-up' });
+      expect(finished.round.cards[0]?.holes[1]?.score).toEqual({ kind: 'strokes', strokes: 7 });
+      expect(batches[6]?.match(/if-match: W\/"batch-6"/gi)).toHaveLength(3);
+      expect(decode(rows.get(`${event.id}|score-change:${identifier(607)}`)?.content, isScoreChange)).toEqual(finished.change);
+      const replay = await scores.write(creator, event.id, f.roundId, f.playerId, 2, pickup, corrected.round.cards[0]?.etag ?? null, identifier(606));
+      expect(replay.change).toEqual(seven.change);
+      expect(replay.round).toEqual(finished.round);
+      expect(batches).toHaveLength(7);
       const current = await workspace.get(creator, event.id);
       const lockKey = `${event.id}|score-lock:${f.roundId}`;
       const storedLock = rows.get(lockKey);

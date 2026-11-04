@@ -1,11 +1,11 @@
-import type { CourseHole } from './catalog.js';
+import type { CourseHole, CourseRating } from './catalog.js';
 import type { AccountIdentity, EventStatus } from './events.js';
 import type { RoundGroup } from './setup.js';
 
 export type HoleScore =
   | { readonly kind: 'unplayed' }
   | { readonly kind: 'strokes'; readonly strokes: number }
-  | { readonly kind: 'picked-up' }
+  | { readonly kind: 'picked-up'; readonly reportedStrokes?: number }
   | { readonly kind: 'did-not-finish' };
 
 export interface ScoredHole {
@@ -30,6 +30,7 @@ export interface RoundScores {
   readonly courseName: string;
   readonly teeName: string;
   readonly teeCategory: string;
+  readonly teeRatings?: readonly CourseRating[];
   readonly layout: readonly CourseHole[];
   readonly groups: readonly RoundGroup[];
   readonly cards: readonly Scorecard[];
@@ -63,6 +64,7 @@ export interface ScoreHistoryPage {
 export interface GrossScoreSummary {
   readonly recordedStrokes: number;
   readonly numericHoles: number;
+  readonly recordedHoles: number;
   readonly totalHoles: number;
   readonly unplayedHoles: number;
   readonly pickedUpHoles: number;
@@ -74,25 +76,31 @@ export interface GrossScoreSummary {
 export const maximumExactHoleStrokes = Math.floor(Number.MAX_SAFE_INTEGER / 18);
 
 export function sameHoleScore(left: HoleScore, right: HoleScore): boolean {
-  return left.kind === right.kind && (left.kind !== 'strokes' || right.kind === 'strokes' && left.strokes === right.strokes);
+  return left.kind === right.kind
+    && (left.kind !== 'strokes' || right.kind === 'strokes' && left.strokes === right.strokes)
+    && (left.kind !== 'picked-up' || right.kind === 'picked-up' && left.reportedStrokes === right.reportedStrokes);
 }
 
 export function summarizeGross(holes: readonly ScoredHole[]): GrossScoreSummary {
   let recordedStrokes = 0;
   let numericHoles = 0;
+  let recordedHoles = 0;
   let unplayedHoles = 0;
   let pickedUpHoles = 0;
   let didNotFinishHoles = 0;
   for (const hole of holes) {
     switch (hole.score.kind) {
-      case 'strokes': recordedStrokes += hole.score.strokes; numericHoles++; break;
+      case 'strokes': recordedStrokes += hole.score.strokes; numericHoles++; recordedHoles++; break;
       case 'unplayed': unplayedHoles++; break;
-      case 'picked-up': pickedUpHoles++; break;
+      case 'picked-up':
+        pickedUpHoles++;
+        if (hole.score.reportedStrokes !== undefined) { recordedStrokes += hole.score.reportedStrokes; recordedHoles++; }
+        break;
       case 'did-not-finish': didNotFinishHoles++; break;
     }
   }
   return {
-    recordedStrokes, numericHoles, totalHoles: holes.length, unplayedHoles, pickedUpHoles, didNotFinishHoles,
+    recordedStrokes, numericHoles, recordedHoles, totalHoles: holes.length, unplayedHoles, pickedUpHoles, didNotFinishHoles,
     completeGross: holes.length > 0 && numericHoles === holes.length ? recordedStrokes : null,
   };
 }

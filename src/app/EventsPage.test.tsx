@@ -58,10 +58,10 @@ describe('EventsPage composition', () => {
     }));
     window.history.replaceState(null, '', `#events?event=${fictionalRoundScores.eventId}&round=${fictionalRoundScores.roundId}`);
     render(<EventsPage services={services} />);
-    const form = within(await screen.findByRole('form', { name: 'Fictional Player 1 hole 1' }));
+    const form = within(await screen.findByRole('form', { name: 'Group 1 hole 1 entry' }));
     const user = userEvent.setup();
-    await user.selectOptions(form.getByRole('combobox'), 'picked-up');
-    await user.click(form.getByRole('button', { name: 'Save hole 1' }));
+    await user.type(form.getByRole('textbox', { name: 'Fictional Player 1 score' }), 'X7');
+    await user.click(form.getByRole('button', { name: 'Save changes' }));
     expect(services.scores.save).toHaveBeenCalledOnce();
     act(() => {
       window.history.replaceState(null, '', '#events');
@@ -69,6 +69,7 @@ describe('EventsPage composition', () => {
     });
     expect(vi.mocked(services.scores.save).mock.calls[0]?.[7].aborted).toBe(true);
     await act(async () => { finish?.(); await Promise.resolve(); });
+    expect(services.scores.save).toHaveBeenCalledOnce();
     expect(screen.queryByRole('heading', { name: 'Online owner scorecards' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Save acknowledged/)).not.toBeInTheDocument();
   });

@@ -1,5 +1,5 @@
 import { createServer as createHttpServer } from 'node:http';
-import { isValidElement } from 'react';
+import { createElement, isValidElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer } from 'vite';
 import { isRecord } from '../../src/contracts/events';
@@ -14,9 +14,12 @@ export async function renderComponentFixture(path: string, name: string, props: 
   try {
     const module: unknown = await renderer.ssrLoadModule(path);
     if (!isRecord(module) || typeof module[name] !== 'function') throw new Error('Fixture component export is missing.');
-    const element: unknown = Reflect.apply(module[name], undefined, [props]);
-    if (!isValidElement(element)) throw new Error('Fixture did not render a React element.');
-    markup = renderToStaticMarkup(element);
+    const component = module[name];
+    markup = renderToStaticMarkup(createElement(function Fixture() {
+      const element: unknown = Reflect.apply(component, undefined, [props]);
+      if (!isValidElement(element)) throw new Error('Fixture did not render a React element.');
+      return element;
+    }));
   } finally {
     await renderer.close();
   }

@@ -12,7 +12,7 @@ describe('gross score summaries', () => {
       { kind: 'strokes', strokes: 4 }, { kind: 'strokes', strokes: 5 }, { kind: 'unplayed' },
       { kind: 'picked-up' }, { kind: 'did-not-finish' },
     ]))).toEqual({
-      recordedStrokes: 9, numericHoles: 2, totalHoles: 5,
+      recordedStrokes: 9, numericHoles: 2, recordedHoles: 2, totalHoles: 5,
       unplayedHoles: 1, pickedUpHoles: 1, didNotFinishHoles: 1, completeGross: null,
     });
   });
@@ -43,5 +43,19 @@ describe('gross score summaries', () => {
     expect(sameHoleScore({ kind: 'unplayed' }, { kind: 'picked-up' })).toBe(false);
     expect(sameHoleScore({ kind: 'picked-up' }, { kind: 'did-not-finish' })).toBe(false);
     expect(sameHoleScore({ kind: 'unplayed' }, { kind: 'unplayed' })).toBe(true);
+    expect(sameHoleScore({ kind: 'picked-up', reportedStrokes: 7 }, { kind: 'picked-up', reportedStrokes: 8 })).toBe(false);
+    expect(sameHoleScore({ kind: 'picked-up', reportedStrokes: 7 }, { kind: 'strokes', strokes: 7 })).toBe(false);
+    expect(sameHoleScore({ kind: 'picked-up' }, { kind: 'picked-up', reportedStrokes: 7 })).toBe(false);
+  });
+
+  it('includes X7 in recorded totals but never treats it as a completed numeric hole', () => {
+    const result = summarizeGross(holes([
+      ...Array.from({ length: 17 }, (): HoleScore => ({ kind: 'strokes', strokes: 4 })),
+      { kind: 'picked-up', reportedStrokes: 7 },
+    ]));
+    expect(result).toMatchObject({
+      recordedStrokes: 75, numericHoles: 17, recordedHoles: 18, pickedUpHoles: 1, completeGross: null,
+    });
+    expect(summarizeGross(holes([{ kind: 'picked-up' }]))).toMatchObject({ recordedStrokes: 0, recordedHoles: 0, completeGross: null });
   });
 });

@@ -1,0 +1,17 @@
+.player-scorecard-recap { display: grid; gap: 16px; min-width: 0; overflow-wrap: anywhere; }
+.recap-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; align-items: start; }
+.recap-heading h3, .recap-heading p { margin: 0; }
+.recap-total { display: grid; gap: 4px; padding: 12px 16px; background: var(--cp-bg-elevated); border: 1px solid var(--cp-border); border-radius: 8px; }
+.recap-total strong { font-size: 2rem; line-height: 1.1; }
+.recap-total span, .recap-legend { color: var(--cp-text-muted); font-size: .85rem; }
+.recap-sections { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 32rem), 1fr)); gap: 16px; min-width: 0; }
+.recap-nine { min-width: 0; }
+.recap-nine h4 { margin: 0 0 8px; }
+.recap-scroll { overflow-x: auto; max-width: 100%; }
+.recap-scroll:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
+.recap-table { border-collapse: collapse; width: 100%; min-width: 28rem; font-variant-numeric: tabular-nums; }
+.recap-table caption { text-align: left; padding-bottom: 8px; font-size: .85rem; }
+.recap-table th, .recap-table td { text-align: center; padding: 9px 5px; border-bottom: 1px solid var(--cp-border); }
+.recap-table th:first-child { text-align: left; min-width: 5rem; }
+.recap-table thead, .recap-table td:last-child, .recap-table th:last-child { background: var(--cp-bg-elevated); font-weight: 650; }
+.recap-score-row { font-weight: 650; }
