@@ -1,0 +1,8 @@
+.setup-view, .setup-form, .setup-form fieldset { display: grid; gap: 16px; min-width: 0; }
+.setup-form fieldset { border: 1px solid var(--cp-border); padding: 16px; border-radius: 8px; }
+.setup-form label { display: grid; gap: 6px; min-width: 0; }
+.setup-form input, .setup-form select { width: 100%; min-width: 0; padding: 10px; font: inherit; color: var(--cp-text); background: var(--cp-bg); border: 1px solid var(--cp-border); border-radius: 6px; }
+.setup-form .setup-check { display: flex; align-items: center; gap: 10px; }
+.setup-check input { width: auto; }
+.setup-version { overflow-wrap: anywhere; }
+.setup-form button { justify-self: start; max-width: 100%; white-space: normal; }

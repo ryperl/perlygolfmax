@@ -32,6 +32,7 @@ export function EventsView({ state, busy, notice, view, onSignIn, onSignOut, onR
     {state.kind === 'error' && <div className="panel"><p role="alert">{state.message}</p><button disabled={busy} onClick={onReload}>Try again</button><button disabled={busy} onClick={onSignOut}>Sign out</button></div>}
     {state.kind === 'ready' && <>
       <div className="event-actions"><button disabled={busy} onClick={onReload}>Refresh events</button><button disabled={busy} onClick={onSignOut}>Sign out</button></div>
+      {state.capabilities.canManageCatalog && <nav className="event-actions" aria-label="Catalog navigation"><a href="#events?catalog=courses">Course catalog</a><a href="#events?catalog=players">Player catalog</a></nav>}
       <div className="event-actions" role="group" aria-label="Event lists">
         <button disabled={busy} aria-pressed={view === 'active'} onClick={() => { onViewChange('active'); }}>Active events</button>
         <button disabled={busy} aria-pressed={view === 'archived'} onClick={() => { onViewChange('archived'); }}>Archived events</button>
@@ -40,6 +41,7 @@ export function EventsView({ state, busy, notice, view, onSignIn, onSignOut, onR
       {state.page.events.length === 0 ? <p>{view === 'archived' ? 'No archived events you own on this page.' : 'No events on this page. Signing in alone does not add you to an event.'}</p>
         : <ul className="round-list" aria-label="Your events">{state.page.events.map((event) => <li className="panel" key={event.id}>
           <h2>{event.name}</h2><p>{event.role === 'owner' ? 'Event owner' : 'Event member'} / Private</p>
+          <a href={`#events?event=${encodeURIComponent(event.id)}`}>Open {event.name} workspace</a>
           {event.role === 'owner' && <button disabled={busy} onClick={() => {
             onStatusChange(event, event.status === 'active' ? 'archived' : 'active');
           }} aria-label={`${event.status === 'active' ? 'Archive' : 'Restore'} ${event.name}`}>{event.status === 'active' ? 'Archive event' : 'Restore event'}</button>}
@@ -58,7 +60,7 @@ export function EventsView({ state, busy, notice, view, onSignIn, onSignOut, onR
         <input id="event-name" name="name" required maxLength={100} disabled={busy} />
         <button disabled={busy} type="submit">Create event</button>
       </form>}
-      <p className="boundary-note">Event details, invitations and score entry are not available in this increment. Ownership does not grant permission to create other events.</p>
+      <p className="boundary-note">Saved setup is separate from the fictional Rounds and Group previews. Invitations and score entry are not available. Ownership does not grant permission to create other events or manage the catalog.</p>
     </>}
     <p role="status">{busy ? 'Working...' : notice}</p>
   </section>;

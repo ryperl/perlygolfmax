@@ -1,0 +1,9 @@
+.catalog-view { display: grid; gap: 20px; }
+.catalog-form { display: grid; gap: 16px; }
+.catalog-form fieldset { display: grid; gap: 16px; min-width: 0; border: 1px solid var(--cp-border); padding: 16px; border-radius: 8px; }
+.catalog-form label { display: grid; gap: 6px; min-width: 0; }
+.catalog-form input, .catalog-form select { width: 100%; min-width: 0; color: var(--cp-text); background: var(--cp-bg); border: 1px solid var(--cp-border); border-radius: 6px; padding: 10px; font: inherit; }
+.catalog-form .catalog-check { display: flex; align-items: center; gap: 10px; }
+.catalog-check input { width: auto; }
+.catalog-version { overflow-wrap: anywhere; font-size: .8rem; }
+.catalog-form button { justify-self: start; max-width: 100%; white-space: normal; }

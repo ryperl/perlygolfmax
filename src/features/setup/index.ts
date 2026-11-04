@@ -1,0 +1,1 @@
+export { EventWorkspaceView } from './EventWorkspaceView';

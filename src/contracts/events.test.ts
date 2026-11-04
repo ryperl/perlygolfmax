@@ -17,7 +17,9 @@ describe('event contracts', () => {
     expect(isEventSummary({ ...event, createdAt: 'tomorrow' })).toBe(false);
     expect(isEventSummary({ ...event, status: 'deleted' })).toBe(false);
     expect(isEventSummary({ ...event, etag: '*' })).toBe(false);
-    expect(isEventCapabilities({ canCreateEvents: true })).toBe(true);
+    expect(isEventCapabilities({ canCreateEvents: true, canManageCatalog: false })).toBe(true);
+    expect(isEventCapabilities({ canCreateEvents: true })).toBe(false);
+    expect(isEventCapabilities({ canCreateEvents: false, canManageCatalog: true })).toBe(true);
     expect(isEventCapabilities({ canCreateEvents: 'true' })).toBe(false);
   });
 

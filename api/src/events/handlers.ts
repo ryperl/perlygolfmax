@@ -6,51 +6,14 @@ import type { VerifyIdentity } from '../identity.js';
 import type { EventStore } from './store.js';
 import type { RequestLimiter } from '../limits.js';
 import { failureDiagnostics } from '../diagnostics.js';
+import { readJson, response } from '../http.js';
 
 export interface EventApi {
   readonly verify: VerifyIdentity;
   readonly store: EventStore;
   readonly canCreate: (identity: AccountIdentity) => boolean;
+  readonly canManageCatalog: (identity: AccountIdentity) => boolean;
   readonly limiter: RequestLimiter;
-}
-
-function response(status: number, jsonBody: unknown): HttpResponseInit {
-  return { status, jsonBody, headers: {
-    'Cache-Control': 'no-store', 'Content-Type': 'application/json',
-    ...(status === 429 ? { 'Retry-After': '60' } : {}),
-    ...(status === 401 ? { 'WWW-Authenticate': 'Bearer' } : {}),
-  } };
-}
-
-async function readJson(request: HttpRequest): Promise<unknown> {
-  const maximum = 4096;
-  const declared = request.headers.get('content-length');
-  if (declared !== null && (!/^\d+$/.test(declared) || Number(declared) > maximum)) throw new ApiError(413, 'REQUEST_TOO_LARGE');
-  const reader = request.body?.getReader();
-  if (!reader) throw new ApiError(400, 'INVALID_JSON');
-  const decoder = new TextDecoder('utf-8', { fatal: true });
-  let bytes = 0;
-  let text = '';
-  try {
-    for (;;) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      const value: unknown = chunk.value;
-      if (!(value instanceof Uint8Array)) throw new ApiError(400, 'INVALID_JSON');
-      bytes += value.byteLength;
-      if (bytes > maximum) {
-        await reader.cancel();
-        throw new ApiError(413, 'REQUEST_TOO_LARGE');
-      }
-      text += decoder.decode(value, { stream: true });
-    }
-    text += decoder.decode();
-    const result: unknown = JSON.parse(text);
-    return result;
-  } catch (error) {
-    if (error instanceof ApiError) throw error;
-    throw new ApiError(400, 'INVALID_JSON');
-  } finally { reader.releaseLock(); }
 }
 
 export function createHandler(resolveApi: () => EventApi, action: 'me' | 'events' | 'event-status') {
@@ -59,7 +22,7 @@ export function createHandler(resolveApi: () => EventApi, action: 'me' | 'events
       const api = resolveApi();
       const identity = await api.verify(request.headers.get('authorization'));
       await api.limiter.check(identity, action === 'me' ? 'identity-read' : action === 'event-status' ? 'events-manage' : request.method === 'POST' ? 'events-create' : 'events-read');
-      if (action === 'me') return response(200, { canCreateEvents: api.canCreate(identity) });
+      if (action === 'me') return response(200, { canCreateEvents: api.canCreate(identity), canManageCatalog: api.canManageCatalog(identity) });
       if (action === 'event-status') {
         if (request.method !== 'PATCH') return response(405, { code: 'METHOD_NOT_ALLOWED' });
         const id = request.params.id;

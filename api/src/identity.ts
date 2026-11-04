@@ -41,3 +41,7 @@ export function createIdentityVerifier(settings: ApiSettings, keys: JWTVerifyGet
 export function canCreateEvents(identity: AccountIdentity, settings: ApiSettings): boolean {
   return identity.tenantId === settings.tenantId && identity.objectId === settings.creatorObjectId;
 }
+
+export function canManageCatalog(identity: AccountIdentity, settings: ApiSettings): boolean {
+  return identity.tenantId === settings.tenantId && identity.objectId === settings.creatorObjectId;
+}

@@ -20,7 +20,7 @@ describe('EventsView', () => {
     if (state.kind === 'error') expect(screen.getByRole('alert')).toHaveTextContent(state.message);
   });
   it('shows empty membership without treating it as invitation or creation authority', () => {
-    render(<EventsView {...actions} state={{ kind: 'ready', page: { events: [] }, capabilities: { canCreateEvents: false } }} busy={false} notice="" />);
+    render(<EventsView {...actions} state={{ kind: 'ready', page: { events: [] }, capabilities: { canCreateEvents: false, canManageCatalog: false } }} busy={false} notice="" />);
     expect(screen.getByText(/No events on this page/)).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Create event' })).not.toBeInTheDocument();
   });
@@ -28,7 +28,7 @@ describe('EventsView', () => {
     const user = userEvent.setup();
     render(<EventsView {...actions} state={{
       kind: 'ready', page: { events: [{ id: 'fictional', name: 'Fictional Open', createdAt: '2026-01-01', role: 'owner', status: 'active', etag: 'fictional-v1' }] },
-      capabilities: { canCreateEvents: true },
+      capabilities: { canCreateEvents: true, canManageCatalog: false },
     }} busy={false} notice="" />);
     expect(screen.getByRole('heading', { name: 'Fictional Open' })).toBeVisible();
     await user.type(screen.getByLabelText('Event name'), 'Another fictional event');
@@ -41,7 +41,7 @@ describe('EventsView', () => {
     const user = userEvent.setup();
     const onCreate = vi.fn().mockResolvedValue(true);
     render(<EventsView {...actions} onCreate={onCreate} state={{
-      kind: 'ready', page: { events: [] }, capabilities: { canCreateEvents: true },
+      kind: 'ready', page: { events: [] }, capabilities: { canCreateEvents: true, canManageCatalog: false },
     }} busy={false} notice="" />);
     const name = screen.getByLabelText('Event name');
     await user.type(name, 'Fictional Practice');
@@ -54,14 +54,14 @@ describe('EventsView', () => {
     const user = userEvent.setup();
     const owned = { id: 'fictional', name: 'Fictional Open', createdAt: '2026-01-01', role: 'owner', status: 'active', etag: 'event-v1' } as const;
     const { rerender } = render(<EventsView {...actions} state={{
-      kind: 'ready', page: { events: [owned, { ...owned, id: 'member', name: 'Member Trip', role: 'member' }] }, capabilities: { canCreateEvents: false },
+      kind: 'ready', page: { events: [owned, { ...owned, id: 'member', name: 'Member Trip', role: 'member' }] }, capabilities: { canCreateEvents: false, canManageCatalog: false },
     }} busy={false} notice="" />);
     await user.click(screen.getByRole('button', { name: 'Archive Fictional Open' }));
     expect(actions.onStatusChange).toHaveBeenCalledWith(owned, 'archived');
     expect(screen.queryByRole('button', { name: 'Archive Member Trip' })).not.toBeInTheDocument();
     const archived = { ...owned, status: 'archived' } as const;
     rerender(<EventsView {...actions} view="archived" state={{
-      kind: 'ready', page: { events: [archived] }, capabilities: { canCreateEvents: true },
+      kind: 'ready', page: { events: [archived] }, capabilities: { canCreateEvents: true, canManageCatalog: false },
     }} busy={false} notice="" />);
     expect(screen.queryByLabelText('Event name')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Archived events' })).toHaveAttribute('aria-pressed', 'true');

@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { readPage } from './navigation';
+import { readEventRoute, readPage } from './navigation';
 
 describe('readPage', () => {
+  it('keeps saved workspace and catalog deep links on Events without changing demo routes or callbacks', () => {
+    expect(readPage('#events?catalog=courses')).toBe('events');
+    expect(readPage('#events?event=fictional')).toBe('events');
+    expect(readEventRoute('#events?catalog=courses')).toBe('courses');
+    expect(readEventRoute('#events?catalog=players')).toBe('players');
+    expect(readEventRoute('#events?event=fictional')).toBe('event:fictional');
+    expect(readEventRoute('#events?catalog=unknown')).toBe('');
+    expect(readEventRoute('#rounds?event=fictional')).toBe('');
+  });
   it.each(['events', 'overview', 'rounds', 'group'] as const)('recognizes #%s', (page) => {
     expect(readPage(`#${page}`)).toBe(page);
   });

@@ -73,6 +73,11 @@ from npm installation and must also comply with your machine's policies.
 - An independent TypeScript Functions workspace with strict JWT validation,
   Table event/membership transactions, idempotent create requests, bounded
   pagination/body sizes and shared ETag-based per-user request limits.
+- Local catalog/setup slice (separate release approval required): organizer-only
+  reusable course versions and tee profiles, staged validated JSON import,
+  reusable players with dated manual Handicap Index history, and saved-event
+  owner setup with explicit course/tee selection, roster and manual foursomes.
+  Real source exports are never bundled or committed.
 
 The Events screen is deliberately unavailable until an approved identity tenant
 and API are configured. Customer sign-in and event creation/reload have been
@@ -108,6 +113,37 @@ Provisioning/deployment is separately approval-gated. Detailed scoring, betting,
 payouts, reporting, overall-trip rules, admission and retention remain unsettled.
 No scoring or handicap formulas are implied by this demo.
 
+### Local catalog and round setup
+
+The explicitly bootstrapped organizer manages the private reusable course and
+player catalogs. Being an event owner or signing in does not grant catalog
+search/import/edit rights. Participants receive only authorized event-local
+course and roster projections, never the global player directory or its index
+history.
+
+Course import validates the supplied export and stages metadata plus each
+independently identified tee-rating profile before publishing an immutable
+version. Matching names/colors do not merge source categories, hole definitions
+or ratings. Repeating an import is idempotent; an authorized changed import
+creates a new version, not an overwrite of an existing round. Saved courses are
+reusable without the original file or a live provider. Source attribution and
+an unknown export date are not a claim that ratings were freshly verified.
+
+Players are independent of sign-in accounts and event membership. Manual index
+observations have effective dates, source labels and audit history. Unknown is
+not zero, and plus-index notation is preserved without calculating handicaps.
+Backdated observations remain in history rather than replacing a newer current
+observation. Round-captured inputs do not automatically change on catalog edits.
+The eventual event/per-round handicap policy is not implemented.
+
+Owner setup selects saved players and an explicit course version/tee for one
+or more rounds, with manual groups numbered 1–4 and at most four players per
+group. Every selected player must be assigned once per round. Stale edits
+require refresh rather than silently overwrite another update. Setup does not
+bind a player to an account, invite anyone, save scores or provide offline sync.
+The local implementation and validation are not authorization for a deployment
+or an actual private-source seed. Those remain separate release/import steps.
+
 A later UI migration is planned to **Fluent UI v9 and Griffel**, using
 component-owned classes and named slots instead of generic tag selectors or
 inline styling. Preserve semantic HTML, keyboard/focus behavior, themes and
@@ -137,8 +173,13 @@ infra/            Test-only Bicep, parameter template and compiled-ARM checks
 ```
 
 Dependencies flow from `app` into feature public exports and demo fixtures,
-and from features/fixtures into `domain`. Features receive typed data through
-props rather than importing demo data or fetching it themselves. Domain models
+and from features/fixtures into `domain`. Presentation receives typed data through
+props rather than importing demo data. Stateful catalog/setup controllers own
+their cohesive workflow state and receive injected typed client interfaces;
+`app` alone constructs the browser adapters. Controllers never construct
+identity providers or fetch through a global service. This keeps these workflows
+co-located instead of expanding the Events composition page with every form.
+Domain models
 do not depend on React, the browser, fixtures, or backend technology. Tests live
 beside the code they exercise; only end-to-end checks live in `tests/`.
 The API imports only shared domain/contracts, never UI/demo/client code.

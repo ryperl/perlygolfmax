@@ -4,6 +4,22 @@ import { creator } from '../test/fixtures.js';
 import { TableRequestLimiter } from './limits.js';
 
 describe('shared identity request limits', () => {
+  it.each([
+    ['catalog-read', 60], ['catalog-write', 60], ['setup-read', 60], ['setup-write', 30],
+  ] as const)('enforces a separate bounded %s bucket without fallback', async (action, limit) => {
+    const table = new TableClient('https://fictional.table.core.windows.net', 'Events');
+    let count = 0;
+    vi.spyOn(table, 'getEntity').mockImplementation(() => Promise.resolve({ etag: String(count), window: 0, count }));
+    const update = vi.spyOn(table, 'updateEntity').mockImplementation(() => {
+      count++;
+      return Promise.resolve({ etag: String(count) });
+    });
+    const limiter = new TableRequestLimiter(table, () => 1);
+    for (let index = 0; index < limit; index++) await limiter.check(creator, action);
+    await expect(limiter.check(creator, action)).rejects.toMatchObject({ status: 429 });
+    expect(update).toHaveBeenCalledTimes(limit);
+    expect(update.mock.calls[0]?.[0]).toMatchObject({ rowKey: action });
+  });
   it('creates the first counter from an SDK-mapped missing entity and rejects other 404s', async () => {
     const table = new TableClient('https://fictional.table.core.windows.net', 'Events');
     const get = vi.spyOn(table, 'getEntity').mockRejectedValue({

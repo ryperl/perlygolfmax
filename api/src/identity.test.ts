@@ -1,6 +1,6 @@
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { canCreateEvents, createIdentityVerifier } from './identity.js';
+import { canCreateEvents, canManageCatalog, createIdentityVerifier } from './identity.js';
 import type { VerifyIdentity } from './identity.js';
 import { creator, member, settings } from '../test/fixtures.js';
 
@@ -41,5 +41,10 @@ describe('access-token verification', () => {
     expect(canCreateEvents(creator, settings)).toBe(true);
     expect(canCreateEvents(member, settings)).toBe(false);
     expect(canCreateEvents({ ...creator, tenantId: member.objectId }, settings)).toBe(false);
+  });
+  it('grants the distinct catalog capability only to the explicitly configured tenant and organizer', () => {
+    expect(canManageCatalog(creator, settings)).toBe(true);
+    expect(canManageCatalog(member, settings)).toBe(false);
+    expect(canManageCatalog({ ...creator, tenantId: member.objectId }, settings)).toBe(false);
   });
 });

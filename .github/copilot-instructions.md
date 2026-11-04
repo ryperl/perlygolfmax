@@ -25,6 +25,8 @@
   and request limits. Import shared domain/contracts, never UI or fixtures.
 - `src/features/<feature>/`: cohesive UI and co-located tests. Receive data via
   typed props; import another feature only through its public `index.ts`.
+  Stateful workflow controllers may receive injected typed client interfaces;
+  app constructs adapters, and features never construct identity/browser SDKs.
 - `src/app/`: composition root, navigation, global presentation. This layer
   wires fixtures into feature views, never the reverse.
 - `src/test/`: test setup only. Browser smoke tests belong in `tests/smoke/`.
@@ -44,6 +46,10 @@
   and storage/synchronization semantics explicitly before adding a service worker.
 - Identity sign-in is not event admission. Verify access tokens, authoritative
   object permissions and owner-versus-global-creator grants on every operation.
+- Only the bootstrapped organizer manages global course/player catalogs.
+  Event ownership is not catalog authority. Use allowlisted member projections,
+  immutable course versions and captured round inputs; never silently refresh
+  rounds from catalog or Handicap Index changes.
 - Keep archived events owner-only. Archive/restore must conditionally check
   both event and owner-grant revisions. Deletion or retention rules require
   a separate scope decision.

@@ -12,23 +12,22 @@ function subscribeToNavigation(onChange: () => void) {
   return () => { window.removeEventListener('hashchange', onChange); };
 }
 
-function getPage() {
-  return readPage(window.location.hash, window.location.search);
-}
+function getHash() { return window.location.hash; }
 
 export function App() {
-  const page = useSyncExternalStore(subscribeToNavigation, getPage);
+  const hash = useSyncExternalStore(subscribeToNavigation, getHash);
+  const page = readPage(hash, window.location.search);
   const mainRef = useRef<HTMLElement>(null);
-  const previousPage = useRef(page);
+  const previousPage = useRef(hash);
 
   useEffect(() => {
     const label = navigation.find((item) => item.id === page)?.label ?? 'Overview';
     document.title = `${label} | Perly Golf Max`;
-    if (previousPage.current !== page) {
+    if (previousPage.current !== hash) {
       mainRef.current?.focus();
-      previousPage.current = page;
+      previousPage.current = hash;
     }
-  }, [page]);
+  }, [hash, page]);
 
   return (
     <div className="app">

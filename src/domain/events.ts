@@ -26,6 +26,7 @@ export interface EventMembership {
 
 export interface EventCapabilities {
   readonly canCreateEvents: boolean;
+  readonly canManageCatalog: boolean;
 }
 
 export interface EventPage {

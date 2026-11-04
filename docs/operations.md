@@ -104,6 +104,59 @@ establishes those outcomes.
 
 ## Local configuration
 
+### Local catalog/setup implementation and seed boundary
+
+The next local slice reuses the existing application table and runtime identity;
+it creates no storage resources, operator data-plane grants or directory roles.
+Catalog partitions are distinct from event partitions and metadata row names.
+Only the exact configured organizer `(tid, oid)` may use catalog APIs, via an
+explicit `canManageCatalog` capability, not a browser-supplied role or inferred
+event ownership. Event-local reads still check authoritative membership and
+archived-state rules. Owner setup writes additionally require catalog authority
+for selecting global data; other owners remain default-denied for that access.
+
+Import accepts validated course metadata and complete per-profile records in
+separate requests under the existing 4 KiB body limit. Incomplete staging is not
+a selectable course. Publication creates a content-addressed immutable version
+and conditionally advances the reusable catalog entry. Requests and publication
+are retryable without duplicating courses or silently replacing newer data.
+Source category, every profile's own holes and Total/Front/Back ratings, units,
+season and source identifiers are preserved. Missing source numbers stay null;
+they are not invented. Source provenance records the organizer's attribution
+and optional known export date; import time is not source freshness.
+
+Player profiles, login identities, event roster membership and round entries
+are separate. Dated, source-attributed manual index observations are audited.
+An older effective date may add history without replacing the newer current
+projection; a same-date correction requires the current revision. There is no
+official GHIN fetch/post or automatic index calculation. Unknown remains null.
+Only owner workspace data contains captured index observations; participant
+projections omit them and their audit identities.
+
+Round setup stores explicit course-version/tee and player input snapshots.
+Later catalog/index changes do not silently update configured rounds. New
+rounds/players capture selected/current inputs; changing a saved round's
+handicap treatment is outside this increment. Existing configured rounds cannot
+be silently removed by a whole-workspace save. Setup remains 4–8 players with
+manual group numbers 1–4, at most four per group and one assignment per round.
+
+No live source seed is performed by implementing or testing this workflow.
+After a separately approved release/review, the organizer may select the
+authorized private JSON in the import UI and publish through authenticated,
+validated endpoints. Do not write to Azure Tables as a subscription Owner,
+grant temporary data rights, submit Graph consent or embed exports in a
+deployment package to bypass that workflow. Test fixtures must be fictional.
+Local dry-run validation reads only the individually authorized file and
+prints validation/payload summaries, never uploads it. Scoring, admission,
+offline synchronization and production changes require later approval.
+
+The local adapter uses separate durable quotas: catalog reads/writes are
+60 per user/minute, workspace reads 60 and workspace writes 30. The original
+event/identity quotas and 4 KiB request cap are unchanged. Course profiles are
+staged individually rather than raising the global body limit. Staged imports,
+immutable course versions and index history have no automatic purge/expiry
+in this increment; retention and cleanup are separate policy work.
+
 The frontend demo and unconfigured Events screen work without an account or
 environment values. For an approved test identity/API, copy `.env.example` to
 an ignored `.env.local` and supply the five values. `VITE_ENTRA_API_SCOPE` is

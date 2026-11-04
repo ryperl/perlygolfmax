@@ -1,19 +1,59 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventsPage } from './EventsPage';
 import type { EventServices } from './EventsPage';
 import type { EventPage, EventSummary } from '../domain/events';
 import { EventChangedError, SessionExpiredError } from '../client/events';
+import { fakeCatalog, fakeSetup, fictionalEvent } from '../client/catalog.test-support';
 
 const saved: EventSummary = { id: '00000000-0000-4000-8000-000000000001', name: 'Fictional Open', createdAt: '2026-01-01', role: 'owner', status: 'active', etag: 'fictional-v1' };
 function service(): EventServices {
   return {
+    catalog: fakeCatalog(), setup: fakeSetup(),
     session: { initialize: vi.fn().mockResolvedValue(true), signIn: vi.fn().mockResolvedValue(undefined), signOut: vi.fn().mockResolvedValue(undefined), token: vi.fn().mockResolvedValue('fictional') },
-    events: { capabilities: vi.fn().mockResolvedValue({ canCreateEvents: true }), list: vi.fn().mockResolvedValue({ events: [] }), create: vi.fn().mockResolvedValue(saved), setStatus: vi.fn().mockResolvedValue({ ...saved, status: 'archived', etag: 'fictional-v2' }) },
+    events: { capabilities: vi.fn().mockResolvedValue({ canCreateEvents: true, canManageCatalog: false }), list: vi.fn().mockResolvedValue({ events: [] }), create: vi.fn().mockResolvedValue(saved), setStatus: vi.fn().mockResolvedValue({ ...saved, status: 'archived', etag: 'fictional-v2' }) },
   };
 }
+beforeEach(() => { window.history.replaceState(null, '', '/'); });
 describe('EventsPage composition', () => {
+  it('shows catalog navigation only for managers, not for event creators/owners without catalog permission', async () => {
+    const services = service();
+    const { unmount } = render(<EventsPage services={services} />);
+    await screen.findByLabelText('Event name');
+    expect(screen.queryByRole('link', { name: 'Course catalog' })).not.toBeInTheDocument();
+    unmount();
+    vi.mocked(services.events.capabilities).mockResolvedValue({ canCreateEvents: true, canManageCatalog: true });
+    render(<EventsPage services={services} />);
+    expect(await screen.findByRole('link', { name: 'Course catalog' })).toHaveAttribute('href', '#events?catalog=courses');
+    expect(screen.getByRole('link', { name: 'Player catalog' })).toHaveAttribute('href', '#events?catalog=players');
+  });
+  it('restores a manager catalog deep link and updates routes within Events without returning to fictional views', async () => {
+    const services = service();
+    vi.mocked(services.events.capabilities).mockResolvedValue({ canCreateEvents: true, canManageCatalog: true });
+    window.history.replaceState(null, '', '#events?catalog=courses');
+    render(<EventsPage services={services} />);
+    expect(await screen.findByRole('heading', { name: 'Saved course catalog' })).toBeVisible();
+    act(() => {
+      window.history.replaceState(null, '', '#events?catalog=players');
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    });
+    expect(await screen.findByRole('heading', { name: 'Saved player catalog' })).toBeVisible();
+    act(() => {
+      window.history.replaceState(null, '', `#events?event=${fictionalEvent.id}`);
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    });
+    expect(await screen.findByRole('heading', { name: 'Saved event workspace' })).toBeVisible();
+    expect(services.setup.load).toHaveBeenCalledWith(fictionalEvent.id, expect.any(AbortSignal));
+  });
+  it('blocks direct catalog URLs independently of event creation permission', async () => {
+    const services = service();
+    window.history.replaceState(null, '', '#events?catalog=players');
+    render(<EventsPage services={services} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Catalog access is restricted');
+    expect(services.catalog.players).not.toHaveBeenCalled();
+    expect(screen.queryByRole('link', { name: 'Player catalog' })).not.toBeInTheDocument();
+  });
   it('waits for capabilities and data before enabling creation; retries an uncertain save idempotently', async () => {
     const services = service();
     let finish: ((page: EventPage) => void) | undefined;
@@ -90,7 +130,7 @@ describe('EventsPage composition', () => {
   it('archives and restores through separate lists without granting global creation to an owner', async () => {
     const services = service();
     const archived = { ...saved, status: 'archived', etag: 'event-v2' } as const;
-    vi.mocked(services.events.capabilities).mockResolvedValue({ canCreateEvents: false });
+    vi.mocked(services.events.capabilities).mockResolvedValue({ canCreateEvents: false, canManageCatalog: false });
     vi.mocked(services.events.list).mockResolvedValueOnce({ events: [saved] }).mockResolvedValueOnce({ events: [archived] }).mockResolvedValueOnce({ events: [saved] });
     vi.mocked(services.events.setStatus).mockResolvedValueOnce(archived).mockResolvedValueOnce({ ...saved, etag: 'event-v3' });
     const user = userEvent.setup();

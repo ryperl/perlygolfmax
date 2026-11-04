@@ -198,6 +198,9 @@ jobs:
               for (const [route, method] of [
                 ['me', 'GET'], ['events', 'GET'],
                 ['events/00000000-0000-4000-8000-000000000001/status', 'PATCH'],
+                ['catalog/courses', 'GET'], ['catalog/players', 'GET'],
+                ['events/00000000-0000-4000-8000-000000000001/workspace', 'GET'],
+                ['events/00000000-0000-4000-8000-000000000001/workspace', 'PUT'],
               ]) {
                 const response = await fetch(`${process.env.API_URL}/${route}`, { method, signal: AbortSignal.timeout(10000) });
                 assert.equal(response.status, expectedStatus);

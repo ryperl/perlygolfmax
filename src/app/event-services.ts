@@ -1,5 +1,7 @@
 import { readClientSettings } from '../client/config';
 import { createEventsClient } from '../client/events';
+import { createCatalogClient } from '../client/catalog';
+import { createSetupClient } from '../client/setup';
 import { createEventSession } from '../client/identity';
 import type { EventServices } from './EventsPage';
 
@@ -8,7 +10,9 @@ export function configureEventServices(env: Record<string, unknown>): { readonly
     const settings = readClientSettings(env);
     if (!settings) return { services: undefined };
     const session = createEventSession(settings);
-    return { services: { session, events: createEventsClient(settings.apiUrl, () => session.token()) } };
+    const token = () => session.token();
+    return { services: { session, events: createEventsClient(settings.apiUrl, token),
+      catalog: createCatalogClient(settings.apiUrl, token), setup: createSetupClient(settings.apiUrl, token) } };
   } catch {
     return { services: undefined, configurationError: 'Identity/API configuration is invalid. No event connection was started.' };
   }

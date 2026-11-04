@@ -8,6 +8,7 @@ function fixture(allowed = true) {
   const api = {
     verify: vi.fn().mockResolvedValue(allowed ? creator : member),
     canCreate: vi.fn().mockReturnValue(allowed),
+    canManageCatalog: vi.fn().mockReturnValue(allowed),
     store: { list: vi.fn().mockResolvedValue({ events: [] }), create: vi.fn().mockResolvedValue({ ...event, role: 'owner', status: 'active', etag: 'fictional-v1' }), setStatus: vi.fn().mockResolvedValue({ ...event, role: 'owner', status: 'archived', etag: 'fictional-v2' }) },
     limiter: { check: vi.fn().mockResolvedValue(undefined) },
   };
@@ -19,6 +20,13 @@ function fixture(allowed = true) {
 }
 
 describe('event API handlers', () => {
+  it('returns both distinct explicit capabilities without deriving them from membership', async () => {
+    const { api, context } = fixture();
+    api.canManageCatalog.mockReturnValue(false);
+    expect(await createHandler(() => api, 'me')(new HttpRequest({
+      url: 'https://fictional.example.test/api/me', method: 'GET',
+    }), context)).toMatchObject({ status: 200, jsonBody: { canCreateEvents: true, canManageCatalog: false } });
+  });
   it('uses only verified server identity, never client-supplied owner or principal headers', async () => {
     const { api, request, context } = fixture();
     const result = await createHandler(() => api, 'events')(request(JSON.stringify({ name: event.name, owner: member.objectId }), { 'x-ms-client-principal': 'forged' }), context);

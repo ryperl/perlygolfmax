@@ -32,7 +32,7 @@ export function isEventSummary(value: unknown): value is EventSummary {
 }
 
 export function isEventCapabilities(value: unknown): value is EventCapabilities {
-  return isRecord(value) && typeof value.canCreateEvents === 'boolean';
+  return isRecord(value) && typeof value.canCreateEvents === 'boolean' && typeof value.canManageCatalog === 'boolean';
 }
 
 export function isEventPage(value: unknown): value is EventPage {

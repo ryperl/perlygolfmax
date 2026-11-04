@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { EventsView } from '../features/events';
 import type { EventsState } from '../features/events';
 import type { EventsClient } from '../client/events';
@@ -6,6 +6,11 @@ import { EventChangedError, SessionExpiredError } from '../client/events';
 import type { EventStatus } from '../domain/events';
 import type { EventSession } from '../client/identity';
 import { configureEventServices } from './event-services';
+import type { CatalogClient } from '../client/catalog';
+import type { SetupClient } from '../client/setup';
+import { CoursesCatalog, PlayersCatalog } from '../features/catalog';
+import { EventWorkspaceView } from '../features/setup';
+import { readEventRoute } from './navigation';
 
 const configuredServices = configureEventServices(import.meta.env);
 
@@ -16,9 +21,18 @@ export function ConfiguredEventsPage() {
 export interface EventServices {
   readonly session: EventSession;
   readonly events: EventsClient;
+  readonly catalog: CatalogClient;
+  readonly setup: SetupClient;
 }
 
+function subscribe(onChange: () => void) {
+  window.addEventListener('hashchange', onChange);
+  return () => { window.removeEventListener('hashchange', onChange); };
+}
+function getRoute() { return readEventRoute(window.location.hash); }
+
 export function EventsPage({ services, configurationError }: { readonly services: EventServices | undefined; readonly configurationError?: string }) {
+  const route = useSyncExternalStore(subscribe, getRoute);
   const [state, setState] = useState<EventsState>({ kind: 'loading' });
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
@@ -76,6 +90,25 @@ export function EventsPage({ services, configurationError }: { readonly services
       running.current = false;
       if (mounted.current && !controller.signal.aborted) setBusy(false);
     }
+  }
+
+  if (services && state.kind === 'ready' && route) {
+    return <section>
+      <nav className="event-actions" aria-label="Saved event navigation"><a href="#events">Events</a>
+        {state.capabilities.canManageCatalog && <><a href="#events?catalog=courses">Course catalog</a><a href="#events?catalog=players">Player catalog</a></>}
+      </nav>
+      <button disabled={busy} onClick={() => { void run(async ({ session }) => {
+        setState({ kind: 'signed-out' });
+        try { await session.signOut(); }
+        catch { setNotice('Sign-out did not complete. The identity-provider session may still be active.'); }
+      }); }}>Sign out</button>
+      {route.startsWith('event:') ? <EventWorkspaceView key={route} eventId={route.slice(6)}
+        canManageCatalog={state.capabilities.canManageCatalog} setup={services.setup} catalog={services.catalog} />
+        : state.capabilities.canManageCatalog
+          ? route === 'courses' ? <CoursesCatalog client={services.catalog} /> : <PlayersCatalog client={services.catalog} />
+          : <p role="alert">Catalog access is restricted to the bootstrapped organizer. Event ownership does not grant catalog access.</p>}
+      <p role="status">{notice}</p>
+    </section>;
   }
 
   return <EventsView
