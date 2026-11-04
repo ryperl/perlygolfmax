@@ -101,7 +101,7 @@ describe('EventsPage composition', () => {
       window.history.replaceState(null, '', `#events?event=${fictionalEvent.id}`);
       window.dispatchEvent(new HashChangeEvent('hashchange'));
     });
-    expect(await screen.findByRole('heading', { name: 'Saved event workspace' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Event setup' })).toBeVisible();
     expect(services.setup.load).toHaveBeenCalledWith(fictionalEvent.id, expect.any(AbortSignal));
   });
   it('blocks direct catalog URLs independently of event creation permission', async () => {

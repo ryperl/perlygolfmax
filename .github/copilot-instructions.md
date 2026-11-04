@@ -70,6 +70,11 @@
 - Main trip tabs use the explicitly selected saved event, never demo fallback.
   Keep fictional views under Preview, clear private selection on sign-out and
   preserve server access checks independently of navigation or catalog rights.
+- Setup saves the entire event draft, not just the visible round. Keep round
+  drafts and pending version reads mounted when switching; search must retain
+  selected inputs and must not implicitly save. Distinguish saved-input review
+  from editable selections, and preserve scored-round locks and explicit index
+  refresh confirmation independently of collapsed sections.
 - Keep limits effective across instances; fail closed on missing configuration
   or limit-store failure. CORS and Functions keys are not user authentication.
 - Read `docs/operations.md` before identity, infrastructure, deployment or

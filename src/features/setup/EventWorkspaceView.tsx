@@ -3,38 +3,17 @@ import type { CatalogClient } from '../../client/catalog';
 import { EventChangedError } from '../../client/events';
 import type { SetupClient } from '../../client/setup';
 import { isEventSetupInput } from '../../contracts/setup';
-import type { CourseCatalogEntry, CourseVersion, IndexObservation, PlayerProfile, TeeProfile } from '../../domain/catalog';
-import type { EventSetupInput, EventWorkspace, RoundSetupInput, RoundSnapshot } from '../../domain/setup';
+import type { CourseCatalogEntry, IndexObservation, PlayerProfile } from '../../domain/catalog';
+import type { EventSetupInput, EventWorkspace, RoundSetupInput } from '../../domain/setup';
+import { RoundEditor } from './RoundEditor';
+import { SetupRoster } from './SetupRoster';
+import { inputFrom, roundInput, sameIds, sameRoundInput, sameSetupInput, setupProblems } from './setup-draft';
 import './setup.css';
-
-function inputFrom(workspace: EventWorkspace): EventSetupInput {
-  return {
-    name: workspace.event.name, location: workspace.location,
-    playerIds: workspace.roster.map((player) => player.playerId),
-    rounds: workspace.rounds.map(roundInput),
-  };
-}
-function roundInput(round: RoundSnapshot): RoundSetupInput {
-  return { id: round.id, name: round.name, courseId: round.courseId, courseVersionId: round.courseVersionId,
-    teeProfileId: round.teeProfile.id, groups: round.groups };
-}
 
 interface SupersededSetupEdits {
   readonly roster: EventWorkspace['roster'] | null;
   readonly rounds: readonly RoundSetupInput[];
 }
-function sameIds(left: readonly string[], right: readonly string[]): boolean {
-  return left.length === right.length && left.every((id, index) => id === right[index]);
-}
-function sameRoundInput(left: RoundSetupInput, right: RoundSetupInput): boolean {
-  return left.id === right.id && left.name === right.name && left.courseId === right.courseId
-    && left.courseVersionId === right.courseVersionId && left.teeProfileId === right.teeProfileId
-    && left.groups.length === right.groups.length && left.groups.every((group, index) => {
-      const other = right.groups[index];
-      return other !== undefined && group.number === other.number && sameIds(group.playerIds, other.playerIds);
-    });
-}
-
 async function readSetupCatalog(catalog: CatalogClient, signal: AbortSignal) {
   const courses: CourseCatalogEntry[] = [];
   const players: PlayerProfile[] = [];
@@ -83,9 +62,14 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
   const [refreshConfirmed, setRefreshConfirmed] = useState<ReadonlySet<string>>(new Set());
   const refreshRequests = useRef(new Map<string, { readonly id: string; readonly etag: string }>());
   const [versionPending, setVersionPending] = useState<ReadonlySet<string>>(new Set());
+  const [selectedRoundId, setSelectedRoundId] = useState('');
   const active = useRef<AbortController | null>(null);
   const editing = workspace?.event.role === 'owner' && workspace.event.status === 'active' && canManageCatalog;
   const rosterLocked = workspace?.rounds.some((round) => round.scoringStarted === true) ?? false;
+  const roundChoices = editing && draft ? draft.rounds : workspace?.rounds ?? [];
+  const selectedRound = roundChoices.find((round) => round.id === selectedRoundId) ?? roundChoices[0];
+  const changed = workspace !== null && draft !== null && !sameSetupInput(draft, inputFrom(workspace));
+  const problems = draft ? setupProblems(draft) : [];
 
   useEffect(() => {
     const controller = new AbortController();
@@ -130,8 +114,13 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
       if (!controller.signal.aborted) setBusy(false);
     }
   }
+  function editDraft(value: EventSetupInput) {
+    setDraft(value);
+    if (!conflict) setNotice('');
+  }
   function changeRound(updated: RoundSetupInput) {
     setDraft((previous) => previous ? { ...previous, rounds: previous.rounds.map((round) => round.id === updated.id ? updated : round) } : previous);
+    if (!conflict) setNotice('');
   }
   function preserveDraft(value: EventWorkspace) {
     if (!draft) { setDraft(inputFrom(value)); return false; }
@@ -172,7 +161,7 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
 
   return <section className="setup-view">
     <a href="#events">Back to events</a>
-    <h1>Saved event workspace</h1>
+    <h1>Event setup</h1>
     <button disabled={busy || initialPending || editing && catalogPending || versionPending.size > 0} onClick={() => { void run(async (signal) => {
       const value = await setup.load(eventId, signal);
       signal.throwIfAborted();
@@ -203,14 +192,31 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
     {!workspace && !error && <p role="status">Loading workspace...</p>}
     {workspace && <>
       <h2>{workspace.event.name}</h2><p>{workspace.location || 'General location not supplied'}</p>
+      <a href={`#overview?event=${eventId}`}>View event overview</a>
       {!editing && <p>{workspace.event.status === 'archived' ? 'Archived event: read-only owner workspace.' : 'Read-only event projection. Catalog setup requires both catalog-manager and active event-owner permission.'}</p>}
-      <p>Saved roster: {workspace.roster.length ? workspace.roster.map((player) => player.displayName).join(', ') : 'Not configured'}</p>
+      <div className="setup-overview">
+        <span>{workspace.roster.length} saved players</span><span>{workspace.rounds.length} saved rounds</span>
+        {rosterLocked && <span>Roster locked after scoring</span>}
+      </div>
       {workspace.rounds.length === 0 && <p>No saved rounds.</p>}
-      <ol className="round-list">{workspace.rounds.map((round) => <li className="panel" key={round.id}>
+      {roundChoices.length > 0 && <label className="setup-round-picker">Selected round<select value={selectedRound?.id ?? ''}
+        disabled={busy || initialPending} onChange={(event) => { setSelectedRoundId(event.target.value); }}>
+        {roundChoices.map((round, index) => {
+          const saved = workspace.rounds.find((item) => item.id === round.id);
+          const state = saved?.scoringStarted ? 'Locked' : !saved ? 'Not saved'
+            : editing && !sameRoundInput(roundInput(saved), draft?.rounds.find((item) => item.id === round.id) ?? roundInput(saved)) ? 'Unsaved changes' : 'Saved';
+          return <option key={round.id} value={round.id}>Round {index + 1}: {round.name || 'Unnamed round'} — {state}</option>;
+        })}
+      </select></label>}
+      {workspace.rounds.length > 0 && <details className="panel setup-saved-review" open={!editing}>
+        <summary>Saved round inputs and handicap review</summary>
+        <p>Saved inputs only. Unsaved selections below are not reflected here.</p>
+        {!workspace.rounds.some((round) => round.id === selectedRound?.id) && <p>This new round has no saved inputs yet.</p>}
+      <ol className="round-list">{workspace.rounds.map((round) => <li hidden={round.id !== selectedRound?.id} key={round.id}>
         <h3>{round.name} — {round.course.name}</h3>
         {workspace.event.role === 'owner' && <a href={`#events?event=${eventId}&round=${round.id}`}>Open owner scorecards for {round.name}</a>}
         {round.scoringStarted && <p>Scoring started: course, tee, players, groups and captured indices are locked. Clearing scores cannot unlock setup. Event name/location and unstarted new rounds remain editable.</p>}
-        <p className="setup-version">Saved course version: {round.courseVersionId}</p>
+        <details><summary>Course version details</summary><p className="setup-version">Saved course version: {round.courseVersionId}</p></details>
         <p>Tee: {round.teeProfile.name} / {round.teeProfile.category} / {round.teeProfile.holeCount} holes</p>
         <ul>{round.groups.map((group) => <li key={group.number}>Group {group.number}: {group.playerIds.map((id) => round.players.find((player) => player.playerId === id)?.displayName ?? 'Unavailable').join(', ')}</li>)}</ul>
         {workspace.event.role === 'owner' && <div>
@@ -263,6 +269,7 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
           </fieldset>}
         </div>}
       </li>)}</ol>
+      </details>}
     </>}
     {supersededEdits.length > 0 && <section className="panel" aria-label="Superseded locked setup edits">
       <h2>Read-only review of superseded setup edits</h2>
@@ -283,119 +290,57 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
       void run(async (signal) => {
         const saved = await setup.save(eventId, workspace.etag, draft, signal);
         if (!signal.aborted) {
-          setWorkspace(saved); setDraft(inputFrom(saved)); setNotice('Event workspace saved. Course and handicap inputs were captured by the server.');
+          setWorkspace(saved); setDraft(inputFrom(saved)); setNotice('Event workspace saved.');
         }
       });
     }}>
       <h2>Configure event setup</h2>
-      <p>Choose 4–8 saved players and 1–8 rounds. Explicitly choose a saved course version and tee; assign each player once to groups 1–4, at most four players per group. Existing rounds cannot be deleted. No scores or handicap calculations are performed.</p>
+      <p>Set event details, choose players, then configure each round. Changes across all rounds are saved together. Existing rounds cannot be deleted.</p>
+      <p className="setup-save-state" data-state={changed ? 'draft' : 'saved'}>{changed ? 'Unsaved changes' : 'Matches saved setup'}. {changed ? 'Save the event setup to apply your selections.' : 'Catalog edits do not replace captured round inputs.'}</p>
       {catalogError && <div><p role="alert">{catalogError} Your setup draft is preserved.</p>
         <button type="button" disabled={busy || catalogPending} onClick={() => {
           setCatalogAttempt((previous) => previous + 1);
         }}>Retry catalog selections</button>
       </div>}
       {catalogPending && <p role="status">Loading saved catalog selections...</p>}
-      <fieldset disabled={busy || initialPending || catalogPending || catalogError !== '' || versionPending.size > 0 || courses === null || players === null}>
-        <label>Workspace name<input required maxLength={100} value={draft.name} onChange={(event) => { setDraft({ ...draft, name: event.target.value }); }} /></label>
-        <label>General location<input maxLength={200} value={draft.location} onChange={(event) => { setDraft({ ...draft, location: event.target.value }); }} /></label>
-        <fieldset disabled={rosterLocked}><legend>Saved player roster ({draft.playerIds.length}/8)</legend>
-          {rosterLocked && <p>Roster locked because scoring has started in a saved round.</p>}
-          {players?.length === 0 && <p>No saved players. Create players in the manager catalog first.</p>}
-          {players?.map((player) => <label className="setup-check" key={player.id}>
-            <input type="checkbox" checked={draft.playerIds.includes(player.id)}
-              disabled={!draft.playerIds.includes(player.id) && draft.playerIds.length >= 8}
-              onChange={(event) => {
-                const ids = event.target.checked ? [...draft.playerIds, player.id] : draft.playerIds.filter((id) => id !== player.id);
-                setDraft({ ...draft, playerIds: ids, rounds: draft.rounds.map((round) => ({
+      <fieldset className="setup-fields" disabled={busy || initialPending || catalogPending || catalogError !== '' || versionPending.size > 0 || courses === null || players === null}>
+        <details className="setup-section" open={workspace.rounds.length === 0}><summary>1. Event details</summary>
+          <label>Workspace name<input required maxLength={100} value={draft.name} onChange={(event) => { editDraft({ ...draft, name: event.target.value }); }} /></label>
+          <label>General location<input maxLength={200} value={draft.location} onChange={(event) => { editDraft({ ...draft, location: event.target.value }); }} /></label>
+        </details>
+        <details className="setup-section" open={workspace.roster.length === 0}><summary>2. Players ({draft.playerIds.length} selected)</summary>
+          <SetupRoster players={players ?? []} selectedIds={draft.playerIds} savedRoster={workspace.roster} locked={rosterLocked}
+            onChange={(ids) => {
+              editDraft({ ...draft, playerIds: ids, rounds: draft.rounds.map((round) => ({
                   ...round, groups: round.groups.map((group) => ({ ...group, playerIds: group.playerIds.filter((id) => ids.includes(id)) })).filter((group) => group.playerIds.length > 0),
-                })) });
-              }} />{player.displayName} — HI {player.currentIndex?.value ?? 'Unknown'}
-          </label>)}
-          {draft.playerIds.filter((id) => !players?.some((player) => player.id === id)).map((id) => <p key={id}>Saved roster player unavailable in catalog: {workspace.roster.find((player) => player.playerId === id)?.displayName ?? id}</p>)}
-        </fieldset>
-        {draft.rounds.map((round, index) => <RoundEditor key={round.id} round={round} number={index + 1}
+              })) });
+            }} />
+        </details>
+        <h3>3. Round setup</h3>
+        <p>Use Selected round above to switch rounds. Round drafts stay in this page until you save.</p>
+        {draft.rounds.map((round, index) => <div key={round.id} hidden={round.id !== selectedRound?.id}><RoundEditor round={round} number={index + 1}
           saved={workspace.rounds.find((item) => item.id === round.id)} courses={courses ?? []}
           players={(players ?? []).filter((player) => draft.playerIds.includes(player.id))}
-          rosterIds={draft.playerIds} client={catalog} onChange={changeRound} onPending={onVersionPending} />)}
+          rosterIds={draft.playerIds} client={catalog} onChange={changeRound} onPending={onVersionPending} /></div>)}
         <button type="button" disabled={draft.rounds.length >= 8} onClick={() => {
-          setDraft({ ...draft, rounds: [...draft.rounds, { id: crypto.randomUUID(), name: '', courseId: '', courseVersionId: '', teeProfileId: 0, groups: [] }] });
+          const id = crypto.randomUUID();
+          editDraft({ ...draft, rounds: [...draft.rounds, { id, name: '', courseId: '', courseVersionId: '', teeProfileId: 0, groups: [] }] });
+          setSelectedRoundId(id);
         }}>Add Round</button>
       </fieldset>
-      {!isEventSetupInput(draft) && <p>Setup is incomplete: require 4–8 players, 1–8 named rounds, explicit course versions/tees and complete valid group assignments.</p>}
-      <button disabled={busy || conflict || initialPending || catalogPending || catalogError !== '' || versionPending.size > 0 || courses === null || players === null || !isEventSetupInput(draft)}>Save event workspace</button>
+      {problems.length > 0 && <aside className="setup-problems" aria-label="Setup needs attention"><h3>Before saving</h3>
+        <ul>{problems.map((problem) => <li key={problem}>{problem}</li>)}</ul>
+      </aside>}
+      <div className="setup-save-bar">
+        <p role={conflict ? 'alert' : 'status'}>{busy ? 'Working...' : notice || (changed ? 'Unsaved changes across this event' : 'Selections match saved setup')}</p>
+        <button disabled={busy || conflict || initialPending || catalogPending || catalogError !== '' || versionPending.size > 0 || courses === null || players === null || !isEventSetupInput(draft)}>Save event workspace</button>
+      </div>
     </form>}
-    <p role={conflict ? 'alert' : 'status'}>{busy ? 'Working...' : notice}</p>
-    <p>Catalog edits do not automatically change captured handicap inputs in saved rounds. Current catalog values are the latest loaded observations; Refresh workspace fetches updates. An eligible owner must explicitly confirm a setup-input refresh for an unstarted round. Owner-only online gross scorecards are separate. Invitations, net scoring, randomization and offline synchronization are not included.</p>
+    {!editing && <p role={conflict ? 'alert' : 'status'}>{busy ? 'Working...' : notice}</p>}
+    <p>Catalog edits do not automatically change captured handicap inputs. Review saved round inputs to confirm an eligible unstarted round's index refresh. Stroke scorecards and configured Stableford games are separate. Invitations, team formats, randomization and offline synchronization are not included.</p>
   </section>;
 }
 
 function indexLabel(observation: IndexObservation | null | undefined): string {
   return observation ? `${observation.value} — effective ${observation.effectiveDate}; ${observation.source}` : 'Unknown — no handicap observation';
-}
-
-function RoundEditor({ round, number, saved, courses, players, rosterIds, client, onChange, onPending }: {
-  readonly round: RoundSetupInput;
-  readonly number: number;
-  readonly saved: RoundSnapshot | undefined;
-  readonly courses: readonly CourseCatalogEntry[];
-  readonly players: readonly PlayerProfile[];
-  readonly rosterIds: readonly string[];
-  readonly client: CatalogClient;
-  readonly onChange: (round: RoundSetupInput) => void;
-  readonly onPending: (id: string, pending: boolean) => void;
-}) {
-  const [loaded, setLoaded] = useState<CourseVersion | null>(null);
-  const [error, setError] = useState('');
-  const [attempt, setAttempt] = useState(0);
-  const current = courses.find((course) => course.id === round.courseId);
-  const savedMatches = saved?.courseId === round.courseId && saved.courseVersionId === round.courseVersionId;
-  const versionId = round.courseVersionId;
-  useEffect(() => {
-    if (!versionId) return;
-    const controller = new AbortController();
-    onPending(round.id, true);
-    void client.version(round.courseId, versionId, controller.signal).then((value) => {
-      if (!controller.signal.aborted) { setLoaded(value); setError(''); }
-    }).catch((failure: unknown) => {
-      if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : 'Could not load the selected version.');
-    }).finally(() => { if (!controller.signal.aborted) onPending(round.id, false); });
-    return () => { controller.abort(); onPending(round.id, false); };
-  }, [attempt, client, onPending, round.courseId, round.id, versionId]);
-  const profiles: readonly TeeProfile[] = loaded?.id === versionId && loaded.courseId === round.courseId ? loaded.data.teeProfiles
-    : savedMatches ? [saved.teeProfile] : [];
-  return <fieldset className="setup-round" disabled={saved?.scoringStarted === true}>
-    <legend>Round {number}{saved ? ' (saved; retained)' : ''}</legend>
-    <label>Round {number} name<input required maxLength={100} value={round.name} onChange={(event) => { onChange({ ...round, name: event.target.value }); }} /></label>
-    <label>Round {number} course<select required value={round.courseId} onChange={(event) => {
-      onChange({ ...round, courseId: event.target.value, courseVersionId: '', teeProfileId: 0 });
-    }}><option value="">Choose a saved course</option>
-      {saved && !courses.some((course) => course.id === saved.courseId) && <option value={saved.courseId}>{saved.course.name} (saved course)</option>}
-      {courses.map((course) => <option value={course.id} key={course.id}>{course.name} — {course.location}</option>)}
-    </select></label>
-    <label>Round {number} course version<select required value={versionId} disabled={!round.courseId} onChange={(event) => {
-      onChange({ ...round, courseVersionId: event.target.value, teeProfileId: 0 });
-    }}><option value="">Choose an explicit version</option>
-      {saved?.courseId === round.courseId && saved.courseVersionId !== current?.currentVersionId && <option value={saved.courseVersionId}>Saved version {saved.courseVersionId}</option>}
-      {current && <option value={current.currentVersionId}>Current published version {current.currentVersionId}</option>}
-    </select></label>
-    <label>Round {number} tee profile<select required value={round.teeProfileId || ''} disabled={profiles.length === 0} onChange={(event) => {
-      onChange({ ...round, teeProfileId: Number(event.target.value) });
-    }}><option value="">Choose a tee and category</option>{profiles.map((profile) => <option key={profile.id} value={profile.id}>
-      {profile.name} / {profile.category} / {profile.holeCount} holes / profile {profile.id}
-    </option>)}</select></label>
-    {error && <div><p role="alert">{error} No new tee was selected.</p>
-      <button type="button" onClick={() => { setAttempt((previous) => previous + 1); }}>Retry round {number} version</button>
-    </div>}
-    {rosterIds.map((id) => <label key={id}>{players.find((player) => player.id === id)?.displayName ?? 'Saved player'} — round {number} group
-      <select required value={round.groups.find((group) => group.playerIds.includes(id))?.number ?? ''} onChange={(event) => {
-        const number = Number(event.target.value);
-        const groups = round.groups.map((group) => ({ ...group, playerIds: group.playerIds.filter((playerId) => playerId !== id) })).filter((group) => group.playerIds.length > 0);
-        if (number) {
-          const existing = groups.find((group) => group.number === number);
-          if (existing) onChange({ ...round, groups: groups.map((group) => group.number === number ? { ...group, playerIds: [...group.playerIds, id] } : group) });
-          else onChange({ ...round, groups: [...groups, { number, playerIds: [id] }] });
-        } else onChange({ ...round, groups });
-      }}><option value="">Assign manually</option>{[1, 2, 3, 4].map((number) => <option key={number} value={number}>Group {number}</option>)}</select>
-    </label>)}
-  </fieldset>;
 }

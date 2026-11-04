@@ -281,6 +281,16 @@ or more rounds, with manual groups numbered 1–4 and at most four players per
 group. Every selected player must be assigned once per round. Stale edits
 require refresh rather than silently overwrite another update. Setup does not
 bind a player to an account, invite anyone, save scores or provide offline sync.
+The setup screen separates collapsible event details and player selection from
+the selected round's editor. Player search keeps selected players visible;
+course search retains the current choice without selecting a new version or tee.
+Each round keeps its draft and version-load state when switching rounds. Adding
+a round selects its new draft. The save bar applies the whole event draft, not
+only the visible round; incomplete hidden rounds still prevent saving and are
+identified in the checklist. Saved inputs and captured/current index comparison
+are in a separate expandable review, never a preview of unsaved choices.
+Saved, unsaved and scoring-locked round labels do not imply offline persistence.
+The current pilot remains limited to eight players and eight rounds.
 The local implementation and validation are not authorization for a deployment
 or an actual private-source seed. Those remain separate release/import steps.
 

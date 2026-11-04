@@ -15,3 +15,32 @@
 .setup-index-refresh { display: grid; gap: 16px; border-top: 1px solid var(--cp-border); padding-top: 16px; }
 .setup-index-confirm { display: flex; align-items: flex-start; gap: 10px; }
 .setup-index-confirm input { margin-top: 5px; flex-shrink: 0; }
+.setup-overview { display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--cp-text-muted); }
+.setup-round-picker { display: grid; gap: 8px; min-width: 0; font-weight: 600; }
+.setup-round-picker select { width: 100%; min-width: 0; min-height: 44px; padding: 10px; font: inherit; color: var(--cp-text); background: var(--cp-surface); border: 1px solid var(--cp-border-strong); border-radius: 0.625rem; }
+.setup-view select:focus-visible, .setup-view summary:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
+.setup-view summary { min-height: 44px; padding: 10px 0; cursor: pointer; font-weight: 600; overflow-wrap: anywhere; }
+.setup-saved-review .round-list { margin-top: 16px; }
+.setup-saved-review li { min-width: 0; overflow-wrap: anywhere; }
+.setup-form .setup-fields { border: 0; padding: 0; margin: 0; }
+.setup-form input:not([type="checkbox"]), .setup-form select { min-height: 44px; }
+.setup-form .setup-check { min-height: 44px; padding: 8px 0; overflow-wrap: anywhere; }
+.setup-section { min-width: 0; border-bottom: 1px solid var(--cp-border); padding-bottom: 12px; }
+.setup-section[open] > :not(summary) { margin-top: 16px; }
+.setup-player-list { display: grid; gap: 4px; }
+.setup-player-list:empty { display: none; }
+.setup-form .setup-save-state { margin: 0; padding: 12px; border-left: 4px solid var(--cp-border-strong); background: var(--cp-surface-soft); color: var(--cp-text); }
+.setup-form .setup-save-state[data-state="draft"] { border-color: var(--cp-accent); background: var(--cp-accent-soft); }
+.setup-tee-summary { color: var(--cp-text-muted); }
+.setup-problems { padding: 12px; background: var(--cp-surface-soft); border-radius: 0.625rem; }
+.setup-problems h3 { margin: 0; }
+.setup-problems ul { margin: 8px 0 0; padding-left: 20px; }
+.setup-save-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 12px; border: 1px solid var(--cp-border-strong); border-radius: 0.625rem; background: var(--cp-surface); }
+.setup-save-bar p { font-size: .85rem; color: var(--cp-text-muted); }
+.setup-save-bar button { margin: 0; }
+@media (max-width: 600px) {
+  .setup-form, .setup-saved-review { padding: 16px; }
+  .setup-form fieldset { padding: 12px; }
+  .setup-save-bar { padding: 8px; }
+  .setup-save-bar button { width: 100%; }
+}

@@ -58,7 +58,100 @@ async function configureRound(user: ReturnType<typeof userEvent.setup>, number: 
   }
 }
 
+async function openSetupSections(user = userEvent.setup()) {
+  await screen.findByRole('heading', { name: 'Configure event setup' });
+  for (const name of ['1. Event details', /2. Players \(/, 'Saved round inputs and handicap review']) {
+    const summary = screen.queryByText(name);
+    if (summary?.closest('details')?.open === false) await user.click(summary);
+  }
+}
+
 describe('saved event workspace', () => {
+  it('focuses one round, distinguishes unsaved changes and retains drafts when switching or adding rounds', async () => {
+    const setup = fakeSetup();
+    vi.mocked(setup.load).mockResolvedValue(fictionalWorkspace);
+    const user = userEvent.setup();
+    render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={fakeCatalog()} />);
+    const first = await screen.findByLabelText('Round 1 name');
+    await waitFor(() => { expect(first).toBeEnabled(); });
+    expect(first).toBeVisible();
+    expect(screen.getByLabelText('Workspace name')).not.toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Fictional Player 1', level: 4 })).not.toBeVisible();
+    expect(screen.getByText(/^Matches saved setup\./)).toBeVisible();
+    expect(screen.getByRole('link', { name: 'View event overview' })).toHaveAttribute('href', `#overview?event=${fictionalEvent.id}`);
+    await user.clear(first);
+    await user.type(first, 'Fictional changed first round');
+    expect(screen.getByText(/^Unsaved changes\./)).toBeVisible();
+    expect(screen.getByRole('option', { selected: true, name: /Fictional changed first round — Unsaved changes/ })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Add Round' }));
+    const second = screen.getByLabelText('Round 2 name');
+    expect(second).toBeVisible();
+    expect(first).not.toBeVisible();
+    await user.type(second, 'Fictional second round draft');
+    const picker = screen.getByLabelText('Selected round');
+    if (!(picker instanceof HTMLSelectElement)) throw new Error('Missing round selector.');
+    const secondId = picker.value;
+    await user.selectOptions(picker, fictionalId(70));
+    expect(first).toBeVisible();
+    expect(first).toHaveValue('Fictional changed first round');
+    expect(second).not.toBeVisible();
+    expect(screen.getByRole('complementary', { name: 'Setup needs attention' })).toHaveTextContent('Round 2: choose a saved course.');
+    expect(screen.getByRole('button', { name: 'Save event workspace' })).toBeDisabled();
+    await user.selectOptions(picker, secondId);
+    expect(second).toHaveValue('Fictional second round draft');
+    expect(second).toBeVisible();
+    expect(setup.save).not.toHaveBeenCalled();
+  });
+
+  it.each(['first', 'second'] as const)('keeps hidden-round version requests alive and saves all drafts (%s finishes first)', async (earlier) => {
+    const setup = fakeSetup();
+    const workspace: EventWorkspace = { ...fictionalWorkspace, rounds: [
+      ...fictionalWorkspace.rounds,
+      ...fictionalWorkspace.rounds.map((round) => ({ ...round, id: fictionalId(71), name: 'Fictional second round' })),
+    ] };
+    vi.mocked(setup.load).mockResolvedValue(workspace);
+    vi.mocked(setup.save).mockImplementation((_id, _etag, input) => Promise.resolve(savedInput(input)));
+    const catalog = fakeCatalog();
+    let finishFirst: ((version: CourseVersion) => void) | undefined;
+    let finishSecond: ((version: CourseVersion) => void) | undefined;
+    const first = new Promise<CourseVersion>((resolve) => { finishFirst = resolve; });
+    const second = new Promise<CourseVersion>((resolve) => { finishSecond = resolve; });
+    vi.mocked(catalog.version).mockReturnValueOnce(first).mockReturnValueOnce(second);
+    const user = userEvent.setup();
+    render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={catalog} />);
+    const picker = await screen.findByLabelText('Selected round');
+    await waitFor(() => { expect(catalog.version).toHaveBeenCalledTimes(2); });
+    await user.selectOptions(picker, fictionalId(71));
+    expect(screen.getByLabelText('Round 2 name')).toBeDisabled();
+    expect(vi.mocked(catalog.version).mock.calls.every((call) => !call[2].aborted)).toBe(true);
+    await act(async () => {
+      if (earlier === 'first') { finishFirst?.(fictionalVersion); await first; }
+      else { finishSecond?.(fictionalVersion); await second; }
+    });
+    expect(screen.getByRole('button', { name: 'Save event workspace' })).toBeDisabled();
+    await act(async () => {
+      if (earlier === 'first') { finishSecond?.(fictionalVersion); await second; }
+      else { finishFirst?.(fictionalVersion); await first; }
+    });
+    await waitFor(() => { expect(screen.getByLabelText('Round 2 name')).toBeEnabled(); });
+    await user.type(screen.getByLabelText('Round 2 name'), ' updated');
+    await user.type(screen.getByLabelText('Find courses for round 2'), 'unmatched search');
+    await user.selectOptions(picker, fictionalId(70));
+    await user.type(screen.getByLabelText('Round 1 name'), ' updated');
+    await user.selectOptions(picker, fictionalId(71));
+    expect(screen.getByLabelText('Find courses for round 2')).toHaveValue('unmatched search');
+    expect(catalog.version).toHaveBeenCalledTimes(2);
+    await user.click(screen.getByRole('button', { name: 'Save event workspace' }));
+    await screen.findByText(/Event workspace saved/);
+    expect(screen.getByText(/^Matches saved setup\./)).toBeVisible();
+    expect(vi.mocked(setup.save).mock.calls[0]?.[2].rounds.map((round) => round.name)).toEqual([
+      'Fictional opening round updated', 'Fictional second round updated',
+    ]);
+    await user.type(screen.getByLabelText('Round 2 name'), ' new draft');
+    expect(screen.getByRole('status')).toHaveTextContent('Unsaved changes across this event');
+    expect(screen.queryByText('Event workspace saved.')).not.toBeInTheDocument();
+  });
+
   it('offers owner-only score links without catalog grants and keeps members out of scoring discovery', async () => {
     const setup = fakeSetup();
     vi.mocked(setup.load).mockResolvedValue(fictionalWorkspace);
@@ -78,6 +171,7 @@ describe('saved event workspace', () => {
     vi.mocked(setup.load).mockResolvedValue({ ...fictionalWorkspace, rounds: fictionalWorkspace.rounds.map((round) => ({ ...round, scoringStarted: true })) });
     const user = userEvent.setup();
     render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={fakeCatalog()} />);
+    await openSetupSections(user);
     await screen.findByLabelText('Round 1 name');
     await waitFor(() => { expect(screen.getByRole('button', { name: 'Add Round' })).toBeEnabled(); });
     expect(screen.getByLabelText('Workspace name')).toBeEnabled();
@@ -90,6 +184,8 @@ describe('saved event workspace', () => {
     expect(screen.getByRole('group', { name: /Saved player roster/ })).toBeDisabled();
     await user.click(screen.getByRole('button', { name: 'Add Round' }));
     expect(screen.getByLabelText('Round 2 name')).toBeEnabled();
+    expect(screen.getByText('This new round has no saved inputs yet.')).toBeVisible();
+    await user.selectOptions(screen.getByLabelText('Selected round'), fictionalId(70));
     expect(screen.getByText(/Clearing scores cannot unlock setup/)).toBeVisible();
     expect(setup.refreshIndices).not.toHaveBeenCalled();
   });
@@ -105,6 +201,7 @@ describe('saved event workspace', () => {
     }));
     const user = userEvent.setup();
     render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={fakeCatalog()} />);
+    await openSetupSections(user);
     await screen.findByLabelText('Round 1 name');
     await waitFor(() => { expect(screen.getByLabelText('Workspace name')).toBeEnabled(); });
     await user.clear(screen.getByLabelText('Workspace name'));
@@ -148,6 +245,7 @@ describe('saved event workspace', () => {
     const catalog = fakeCatalog();
     vi.mocked(catalog.players).mockRejectedValueOnce(new Error('Current player catalog failed.'));
     render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={catalog} />);
+    await openSetupSections();
     expect(await screen.findAllByText('Unavailable — catalog loading failed.')).toHaveLength(4);
     expect(indexRow('Fictional Player 1').getByText('10.2 — effective 2026-01-01; Fictional manual report')).toBeVisible();
     expect(screen.getByRole('checkbox', { name: /I confirm replacing captured setup HI/ })).toBeDisabled();
@@ -165,6 +263,7 @@ describe('saved event workspace', () => {
     vi.mocked(catalog.players).mockResolvedValue({ players: currentPlayers });
     const user = userEvent.setup();
     const { unmount } = render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={catalog} />);
+    await openSetupSections(user);
     const confirmation = await screen.findByRole('checkbox', { name: /I confirm replacing captured setup HI/ });
     await waitFor(() => { expect(confirmation).toBeEnabled(); });
     await user.click(confirmation);
@@ -184,6 +283,7 @@ describe('saved event workspace', () => {
     const load = new Promise<PlayerCatalogPage>((resolve) => { finish = resolve; });
     vi.mocked(catalog.players).mockReturnValueOnce(load);
     render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={catalog} />);
+    await openSetupSections();
     await screen.findByText('10.2 — effective 2026-01-01; Fictional manual report');
     expect(screen.getAllByText('Loading current catalog HI...')).toHaveLength(4);
     expect(screen.getByRole('button', { name: /Refresh captured setup HI for/ })).toBeDisabled();
@@ -205,6 +305,7 @@ describe('saved event workspace', () => {
     vi.mocked(catalog.players).mockResolvedValueOnce({ players: fictionalPlayers.map((player, index) => ({ ...player, currentIndex: index === 0 ? oldIndex : null })) });
     const user = userEvent.setup();
     render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={catalog} />);
+    await openSetupSections(user);
     const name = await screen.findByLabelText('Workspace name');
     await waitFor(() => { expect(name).toBeEnabled(); });
     await user.clear(name);
@@ -242,6 +343,7 @@ describe('saved event workspace', () => {
     vi.mocked(catalog.players).mockResolvedValue({ players: currentPlayers });
     const user = userEvent.setup();
     render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={catalog} />);
+    await openSetupSections(user);
     const name = await screen.findByLabelText('Workspace name');
     await waitFor(() => { expect(name).toBeEnabled(); });
     await user.clear(name);
@@ -286,6 +388,7 @@ describe('saved event workspace', () => {
     vi.mocked(catalog.players).mockResolvedValue({ players: currentPlayers });
     const user = userEvent.setup();
     render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={catalog} />);
+    await openSetupSections(user);
     const name = await screen.findByLabelText('Workspace name');
     await waitFor(() => { expect(name).toBeEnabled(); });
     await user.clear(name);
@@ -343,6 +446,7 @@ describe('saved event workspace', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Initial workspace unavailable');
     expect(screen.getByRole('button', { name: 'Refresh workspace' })).toBeEnabled();
     await user.click(screen.getByRole('button', { name: 'Refresh workspace' }));
+    await openSetupSections(user);
     expect(await screen.findByLabelText('Workspace name')).toBeVisible();
     expect(setup.load).toHaveBeenCalledTimes(2);
   });
@@ -357,6 +461,7 @@ describe('saved event workspace', () => {
     vi.mocked(replacement.courses).mockRejectedValueOnce(new Error('Catalog selections unavailable.')).mockReturnValueOnce(retry);
     const user = userEvent.setup();
     const { rerender } = render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={original} />);
+    await openSetupSections(user);
     const name = await screen.findByLabelText('Workspace name');
     await waitFor(() => { expect(name).toBeEnabled(); });
     await user.clear(name);
@@ -493,6 +598,7 @@ describe('saved event workspace', () => {
     vi.mocked(setup.save).mockRejectedValueOnce(new EventChangedError('Workspace changed. Refresh first.'));
     const user = userEvent.setup();
     render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={catalog} />);
+    await openSetupSections(user);
     const name = await screen.findByLabelText('Workspace name');
     await waitFor(() => { expect(name).toBeEnabled(); });
     await user.clear(name);
@@ -500,6 +606,8 @@ describe('saved event workspace', () => {
     await user.click(screen.getByRole('button', { name: 'Save event workspace' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Refresh first');
     expect(name).toHaveValue('Fictional revised title');
+    await user.type(screen.getByLabelText('General location'), ' updated');
+    expect(screen.getByRole('alert')).toHaveTextContent('Refresh first');
     expect(screen.getByRole('button', { name: 'Save event workspace' })).toBeDisabled();
     vi.mocked(setup.load).mockResolvedValue({ ...fictionalWorkspace, event: { ...fictionalEvent, etag: 'workspace-v2' }, etag: 'workspace-v2' });
     await user.click(screen.getByRole('button', { name: 'Refresh workspace' }));
@@ -520,6 +628,7 @@ describe('saved event workspace', () => {
     vi.mocked(setup.save).mockReturnValueOnce(response);
     const user = userEvent.setup();
     render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={catalog} />);
+    await openSetupSections(user);
     const name = await screen.findByLabelText('Workspace name');
     await waitFor(() => { expect(name).toBeEnabled(); });
     await user.dblClick(screen.getByRole('button', { name: 'Save event workspace' }));
@@ -540,6 +649,7 @@ describe('saved event workspace', () => {
     vi.mocked(catalog.version).mockReturnValue(response);
     const user = userEvent.setup();
     const { unmount } = render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={catalog} />);
+    await openSetupSections(user);
     await screen.findByLabelText('Workspace name');
     await waitFor(() => { expect(screen.getByRole('button', { name: 'Add Round' })).toBeEnabled(); });
     await user.click(screen.getByRole('button', { name: 'Add Round' }));
