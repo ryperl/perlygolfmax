@@ -28,11 +28,37 @@ describe('EventsPage composition', () => {
     await user.type(await screen.findByLabelText('Event name'), saved.name);
     await user.click(screen.getByRole('button', { name: 'Create event' }));
     await screen.findByText(/operation failed/);
+    expect(screen.getByLabelText('Event name')).toHaveValue(saved.name);
     await user.click(screen.getByRole('button', { name: 'Create event' }));
     await screen.findByText('Event saved.');
     const calls = vi.mocked(services.events.create).mock.calls;
     expect(calls[0]?.[1]).toBe(calls[1]?.[1]);
     expect(screen.getByRole('heading', { name: saved.name })).toBeVisible();
+    expect(screen.getByLabelText('Event name')).toHaveValue('');
+  });
+
+  it('preserves a pending name until confirmation and starts the next event with a fresh request ID', async () => {
+    const services = service();
+    let finish: ((event: EventSummary) => void) | undefined;
+    const response = new Promise<EventSummary>((resolve) => { finish = resolve; });
+    vi.mocked(services.events.create).mockReturnValueOnce(response);
+    const user = userEvent.setup();
+    render(<EventsPage services={services} />);
+    const name = await screen.findByLabelText('Event name');
+    await user.type(name, saved.name);
+    await user.click(screen.getByRole('button', { name: 'Create event' }));
+    expect(name).toHaveValue(saved.name);
+    expect(name).toBeDisabled();
+    await act(async () => { finish?.(saved); await response; });
+    expect(name).toHaveValue('');
+    expect(name).toBeEnabled();
+    await user.type(name, saved.name);
+    await user.click(screen.getByRole('button', { name: 'Create event' }));
+    await screen.findByText('Event saved.');
+    const calls = vi.mocked(services.events.create).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.[1]).not.toBe(calls[0]?.[1]);
+    expect(name).toHaveValue('');
   });
   it('does not present a service failure as no events or allow stale work to restore signed-in UI', async () => {
     const services = service();

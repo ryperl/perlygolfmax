@@ -47,19 +47,23 @@ export function EventsPage({ services, configurationError }: { readonly services
   }, [services]);
 
   async function run(operation: (service: EventServices, signal: AbortSignal) => Promise<void>) {
-    if (!services || running.current) return;
+    if (!services || running.current) return false;
     running.current = true;
     request.current?.abort();
     const controller = new AbortController();
     request.current = controller;
     setBusy(true);
     setNotice('');
-    try { await operation(services, controller.signal); }
+    try {
+      await operation(services, controller.signal);
+      return mounted.current && !controller.signal.aborted;
+    }
     catch (error) {
       if (mounted.current && !controller.signal.aborted) {
         if (error instanceof SessionExpiredError) setState({ kind: 'signed-out', message: error.message });
         else setNotice('The operation failed. Nothing was confirmed saved. Try again; an event retry uses the same request ID.');
       }
+      return false;
     } finally {
       running.current = false;
       if (mounted.current && !controller.signal.aborted) setBusy(false);
@@ -91,15 +95,17 @@ export function EventsPage({ services, configurationError }: { readonly services
       const page = await service.events.list(signal, state.page.continuationToken);
       if (!signal.aborted) setState({ ...state, page });
     }); }}
-    onCreate={(name) => { void run(async (service, signal) => {
-      if (state.kind !== 'ready') return;
-      if (pendingCreate.current?.name !== name) pendingCreate.current = { name, id: crypto.randomUUID() };
-      const saved = await service.events.create(name, pendingCreate.current.id, signal);
-      if (!signal.aborted) {
-        pendingCreate.current = null;
-        setState({ ...state, page: { events: [saved, ...state.page.events.filter((event) => event.id !== saved.id)] } });
-        setNotice('Event saved.');
-      }
-    }); }}
+    onCreate={(name) => {
+      if (state.kind !== 'ready') return Promise.resolve(false);
+      return run(async (service, signal) => {
+        if (pendingCreate.current?.name !== name) pendingCreate.current = { name, id: crypto.randomUUID() };
+        const saved = await service.events.create(name, pendingCreate.current.id, signal);
+        if (!signal.aborted) {
+          pendingCreate.current = null;
+          setState({ ...state, page: { events: [saved, ...state.page.events.filter((event) => event.id !== saved.id)] } });
+          setNotice('Event saved.');
+        }
+      });
+    }}
   />;
 }

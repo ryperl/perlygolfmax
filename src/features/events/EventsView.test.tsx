@@ -5,7 +5,7 @@ import { EventsView } from './EventsView';
 import type { EventsState } from './EventsView';
 
 const actions = {
-  onSignIn: vi.fn(), onSignOut: vi.fn(), onReload: vi.fn(), onNextPage: vi.fn(), onCreate: vi.fn(),
+  onSignIn: vi.fn(), onSignOut: vi.fn(), onReload: vi.fn(), onNextPage: vi.fn(), onCreate: vi.fn().mockResolvedValue(false),
 };
 describe('EventsView', () => {
   it.each([
@@ -33,5 +33,19 @@ describe('EventsView', () => {
     await user.type(screen.getByLabelText('Event name'), 'Another fictional event');
     await user.click(screen.getByRole('button', { name: 'Create event' }));
     expect(actions.onCreate).toHaveBeenCalledWith('Another fictional event');
+    expect(screen.getByLabelText('Event name')).toHaveValue('Another fictional event');
+  });
+
+  it('clears the submitted name only after the callback confirms a saved event', async () => {
+    const user = userEvent.setup();
+    const onCreate = vi.fn().mockResolvedValue(true);
+    render(<EventsView {...actions} onCreate={onCreate} state={{
+      kind: 'ready', page: { events: [] }, capabilities: { canCreateEvents: true },
+    }} busy={false} notice="" />);
+    const name = screen.getByLabelText('Event name');
+    await user.type(name, 'Fictional Practice');
+    await user.click(screen.getByRole('button', { name: 'Create event' }));
+    expect(onCreate).toHaveBeenCalledWith('Fictional Practice');
+    expect(name).toHaveValue('');
   });
 });

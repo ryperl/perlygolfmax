@@ -9,11 +9,11 @@ planning allowance is roughly USD 15/month, not a quote or spending cap.
 The repository contains an initial implementation with a provisioned test
 foundation, not a connected operational scoreboard:
 customer sign-in, token acquisition, API handlers, bounded event discovery and
-idempotent event creation with atomic owner membership. Hosted customer
-sign-in has been exercised in test; signed-in event loading and durable
-creation still need non-production verification. Runtime resource settings
-and narrow role scopes have been read
-back after foundation creation; that does not prove a signed-in data flow.
+idempotent event creation with atomic owner membership. Manual test verification
+has exercised hosted customer sign-in, signed-in event loading and event
+creation followed by a page reload. Runtime resource settings and narrow
+role scopes have been read back after foundation creation. Those checks do not
+prove all authorization, concurrency or recovery boundaries.
 No invitations, owner appointment UI, rounds,
 score-entry endpoints, scoring engine, audit exports or backup job are shipped.
 An unconfigured Events page says so explicitly, without fictional saved events.

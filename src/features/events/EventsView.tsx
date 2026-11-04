@@ -15,7 +15,7 @@ interface EventsViewProps {
   readonly onSignOut: () => void;
   readonly onReload: () => void;
   readonly onNextPage: () => void;
-  readonly onCreate: (name: string) => void;
+  readonly onCreate: (name: string) => Promise<boolean>;
 }
 
 export function EventsView({ state, busy, notice, onSignIn, onSignOut, onReload, onNextPage, onCreate }: EventsViewProps) {
@@ -34,8 +34,11 @@ export function EventsView({ state, busy, notice, onSignIn, onSignOut, onReload,
       {state.page.continuationToken && <button disabled={busy} onClick={onNextPage}>Next page</button>}
       {state.capabilities.canCreateEvents && <form className="panel event-form" onSubmit={(event) => {
         event.preventDefault();
-        const value = new FormData(event.currentTarget).get('name');
-        if (typeof value === 'string') onCreate(value);
+        const form = event.currentTarget;
+        const value = new FormData(form).get('name');
+        if (typeof value === 'string') {
+          void onCreate(value).then((saved) => { if (saved) form.reset(); });
+        }
       }}>
         <h2>Create an event</h2>
         <label htmlFor="event-name">Event name</label>
