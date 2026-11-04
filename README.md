@@ -85,7 +85,7 @@ from npm installation and must also comply with your machine's policies.
   explicit hole dispositions, conditional saved scores, correction history
   and complete-versus-incomplete gross summaries.
 - Configurable individual Stableford games derived server-side from the same
-  stroke cards: gross/net, Standard/GolfLink Modified presets, editable scoring
+  stroke cards: gross/net, Standard/Modified Stableford presets, editable scoring
   bands and per-game handicap allowance. Multiple games can share one round.
   This is not golfer admission, team scoring, offline recording or a finished
   tournament scoreboard.
@@ -190,11 +190,11 @@ The scorecard automatically shows the first saved game's per-hole points below
 the strokes, including Out/In/Total points. Its **Game** selector switches
 between saved games or a strokes-only view, for both group and individual cards.
 These are the existing server-derived results, not a second client calculation.
-Standard and GolfLink Modified presets can each use gross or net scoring, and
+Standard and Modified Stableford presets can each use gross or net scoring, and
 multiple games can use the same round. Net allowance defaults to 95% and is
 configurable per game.
 
-| Result relative to par | Standard preset | GolfLink Modified preset |
+| Result relative to par | Standard preset | Modified Stableford preset |
 |------------------------|----------------:|-------------------------:|
 | Four under | 6 | Configured better-score value |
 | Albatross, three under | 5 | 8 |

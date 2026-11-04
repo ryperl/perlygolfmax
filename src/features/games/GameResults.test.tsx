@@ -30,6 +30,8 @@ describe('GameResults', () => {
     expect(rows[1]).toHaveTextContent('-1 (partial)');
     expect(rows[1]).toHaveTextContent('2/18 holes · In progress');
     expect(screen.getByText('Net · 95% allowance')).toBeVisible();
+    expect(screen.getByText('Modified Stableford')).toBeVisible();
+    expect(screen.queryByText('GolfLink Modified')).not.toBeInTheDocument();
     fireEvent.click(screen.getByText('Fictional Golfer A · Hole points'));
     const holes = screen.getByRole('region', { name: `${game.name}, ${player.displayName}, hole points` });
     expect(within(holes).getByRole('cell', { name: '0' })).toBeVisible();

@@ -14,6 +14,8 @@ function SettingsHarness() {
 describe('GameSettings', () => {
   it('edits name, gross/net, preset, points, and explicit tails using native controls', () => {
     render(<SettingsHarness />);
+    expect(screen.getByRole('option', { name: 'Modified Stableford' })).toHaveValue('modified');
+    expect(screen.queryByRole('option', { name: /GolfLink/ })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Handicap allowance (%)')).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Score basis'), { target: { value: 'net' } });
     expect(screen.getByLabelText('Handicap allowance (%)')).toHaveValue('95');

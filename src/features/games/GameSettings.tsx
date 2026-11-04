@@ -47,7 +47,7 @@ export function GameSettings({
             }
           }}>
             <option value="standard">Standard</option>
-            <option value="modified">GolfLink Modified</option>
+            <option value="modified">Modified Stableford</option>
           </select>
         </label>
         <label>Score basis

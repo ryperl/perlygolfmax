@@ -34,7 +34,7 @@ export function GameResults({ game, result }: {
     <section className="game-results" aria-label={`${game.name} results`}>
       <h3>{game.name}</h3>
       <p><span>{game.basis === 'gross' ? 'Gross' : `Net · ${String(game.handicapAllowancePercent)}% allowance`}</span>
-        {' · '}<span>{custom ? 'Custom points' : game.preset === 'standard' ? 'Standard Stableford' : 'GolfLink Modified'}</span></p>
+        {' · '}<span>{custom ? 'Custom points' : game.preset === 'standard' ? 'Standard Stableford' : 'Modified Stableford'}</span></p>
       {!result || result.players.length === 0 ? <p>Results are unavailable.</p> : <>
         <div className="game-scroll" role="region" aria-label={`${game.name} points totals`} tabIndex={0}>
           <table>
