@@ -6,18 +6,21 @@ The approved design is Static Web Apps (SWA) Free, Entra External ID hosted
 email-code sign-in, a standalone Functions API and Table Storage. The production
 planning allowance is roughly USD 15/month, not a quote or spending cap.
 
-The repository now contains an initial implementation, not a provisioned system:
+The repository contains an initial implementation with a provisioned test
+foundation, not a connected operational scoreboard:
 customer sign-in, token acquisition, API handlers, bounded event discovery and
 idempotent event creation with atomic owner membership. Real OTP delivery,
-Functions hosting, Azure identity/RBAC and storage behavior still need approved
-non-production verification. No invitations, owner appointment UI, rounds,
+customer identity and storage data-plane behavior still need non-production
+verification. Runtime resource settings and narrow role scopes have been read
+back after foundation creation; that does not prove a signed-in data flow.
+No invitations, owner appointment UI, rounds,
 score-entry endpoints, scoring engine, audit exports or backup job are shipped.
 An unconfigured Events page says so explicitly, without fictional saved events.
 
-Tenant creation, app registrations/consent, role assignments, Azure resources,
-IaC scaffolding, pushes and deployment each require the relevant separate
-approval. The existing frontend deployment workflow is unchanged. It deploys
-only `dist/`; it does not deploy the API or create identity/storage resources.
+Further tenant, consent, role, resource, push and deployment changes require the
+relevant scope approval. The production frontend deployment workflow is
+unchanged. The separate test workflow publishes validated frontend/API
+artifacts, never infrastructure or production, and does not enable the API.
 
 ## Identity and application authority
 
@@ -168,18 +171,19 @@ JWTs, OTPs, request bodies, emails or full exceptions containing private data.
 
 ## Reproducible infrastructure scaffold
 
-The separately approved [test-only Bicep scaffold](../infra/README.md) contains
-pinned modules and an unconfigured environment parameter template. It has not
-been deployed. Stateful retained application storage is separated from
-replaceable compute/host storage, with deterministic names and no real
+The separately approved [test-only Bicep definitions](../infra/README.md) contain
+pinned modules and an unconfigured environment parameter template. These were
+used to provision the test foundation. Stateful retained storage is separated
+from replaceable compute/host storage, with deterministic names and no real
 credentials/account identifiers in this public repo.
 
 The scoped design should cover standalone Functions/hosting/host storage,
 application Table Storage, table-scoped managed-identity data roles, required
 host-storage roles, minimal telemetry, CORS/settings and approved scale/cost
-controls. Deployment identity needs narrowly scoped deployment and role-
-assignment permissions; runtime identity must not grant roles or administer
-the directory. Required host-storage roles depend on the selected plan.
+controls. An infrastructure operator needs reviewed provisioning/role-assignment
+permissions. The application pipeline identity has only Website Contributor on
+the test API; neither that identity nor runtime identity may grant roles or
+administer the customer directory. Host-storage roles depend on the plan.
 No wildcard Owner/Contributor data-runtime grant.
 
 Inventory/adopt the existing SWA and DNS explicitly as existing/retained

@@ -11,4 +11,7 @@ test-results/
 .azure/
 local.settings.json
 infra/*.local.parameters.json
+infra/main.json
+infra/pipeline-access.json
+infra/customer-tenant.json
 .DS_Store

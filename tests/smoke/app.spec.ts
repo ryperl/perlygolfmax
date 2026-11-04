@@ -16,8 +16,12 @@ test('production shell supports navigation, history, and keyboard access', async
   await page.goBack();
   await expect(page.getByRole('link', { name: 'Rounds', exact: true })).toHaveAttribute('aria-current', 'page');
   await page.getByRole('link', { name: 'Events', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Event services are not configured' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toHaveCount(0);
+  if (process.env.EXPECT_EVENT_SERVICES_CONFIGURED === 'true') {
+    await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
+  } else {
+    await expect(page.getByRole('heading', { name: 'Event services are not configured' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toHaveCount(0);
+  }
   await page.goto('/#unknown');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('The Coastal Classic');
   expect(errors).toEqual([]);

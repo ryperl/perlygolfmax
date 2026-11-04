@@ -2,8 +2,9 @@
 
 A mobile-first golf-trip companion for a planned group of 12 golfers and five
 rounds. It includes a **read-only fictional preview** and an initial private
-Events/API implementation. Identity and storage are not provisioned or connected
-by default; this is not yet an operational scoreboard.
+Events/API implementation. The isolated test foundation is provisioned, but
+customer identity and saved events are not connected by default; this is not
+yet an operational scoreboard.
 
 ## Local setup
 
@@ -206,5 +207,13 @@ spending and deployment changes require separate approval.
 The [test infrastructure scaffold](infra/README.md) defines a separate Free
 frontend, disabled-by-default Flex API, keyless runtime/application storage,
 bounded monitoring and narrow runtime permissions using Azure-generated URLs.
-It is versioned infrastructure code, **not provisioned resources**. Production
-SWA/DNS and the existing deployment workflow are unchanged.
+That test foundation has been provisioned under separate approval; customer
+sign-in/bootstrap remains an explicit gate before enabling the API.
+Production SWA/DNS and its deployment workflow are unchanged.
+
+The test deployment workflow runs only on the approved feature branch (or an
+authorized manual invocation), behind full CI. It uses a branch-restricted
+GitHub environment, a separate test frontend token and secretless OIDC with
+Website Contributor on the test API only. It packages compiled API code and
+locked production dependencies, not local configuration/credentials, and
+uploads prebuilt artifacts without a platform dependency rebuild.

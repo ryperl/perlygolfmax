@@ -1,0 +1,166 @@
+name: Test deployment
+
+on:
+  push:
+    branches: [ryperl-microsoft-perly-golf-foundation]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: perlygolfmax-test
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    uses: ./.github/workflows/ci.yml
+
+  package:
+    if: github.ref == 'refs/heads/ryperl-microsoft-perly-golf-foundation'
+    needs: validate
+    environment: perlygolfmax-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm run check:dependencies
+      - name: Validate frontend configuration
+        env:
+          CLIENT_ID: ${{ vars.VITE_ENTRA_SPA_CLIENT_ID }}
+          SUBDOMAIN: ${{ vars.VITE_ENTRA_SUBDOMAIN }}
+          API_SCOPE: ${{ vars.VITE_ENTRA_API_SCOPE }}
+          API_URL: ${{ vars.AZURE_TEST_API_URL }}
+        run: |
+          node --input-type=module <<'JS'
+          import { appendFileSync } from 'node:fs';
+          const identity = ['CLIENT_ID', 'SUBDOMAIN', 'API_SCOPE'];
+          const configured = identity.filter((key) => Boolean(process.env[key])).length;
+          if (configured !== 0 && configured !== identity.length) {
+            throw new Error('Partial customer identity configuration; deployment refused.');
+          }
+          if (configured) {
+            if (!process.env.API_URL) throw new Error('Missing test API URL.');
+            const mapping = {
+              VITE_ENTRA_SPA_CLIENT_ID: process.env.CLIENT_ID,
+              VITE_ENTRA_SUBDOMAIN: process.env.SUBDOMAIN,
+              VITE_ENTRA_API_SCOPE: process.env.API_SCOPE,
+              VITE_API_URL: process.env.API_URL,
+              EXPECT_EVENT_SERVICES_CONFIGURED: 'true',
+            };
+            for (const [key, value] of Object.entries(mapping)) {
+              if (!value || /[\r\n]/.test(value)) throw new Error(`Invalid ${key}.`);
+              appendFileSync(process.env.GITHUB_ENV, `${key}=${value}\n`);
+            }
+          } else {
+            console.log('Deploying foundation with customer identity explicitly unconfigured.');
+          }
+          JS
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:smoke
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test-frontend-dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Install only locked API production dependencies
+        run: npm ci --omit=dev --workspace api --include-workspace-root=false
+      - name: Package the compiled API
+        run: |
+          node scripts/package-api.mjs .azure/test-api-package
+          cd .azure/test-api-package
+          node --input-type=module -e "import('./dist/api/src/functions.js')"
+          zip -qr ../test-api.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test-api-package
+          path: .azure/test-api.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  frontend:
+    needs: package
+    environment: perlygolfmax-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-frontend-dist
+          path: test-dist
+      - name: Require test deployment token
+        env:
+          TEST_TOKEN: ${{ secrets.AZURE_STATIC_WEB_APPS_TEST_API_TOKEN }}
+        run: test -n "$TEST_TOKEN"
+      - uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_TEST_API_TOKEN }}
+          action: upload
+          app_location: test-dist
+          api_location: ''
+          output_location: ''
+          skip_app_build: true
+      - name: Verify the exact deployed frontend artifact
+        env:
+          TEST_URL: ${{ vars.AZURE_TEST_FRONTEND_URL }}
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { readFileSync, readdirSync } from 'node:fs';
+          assert.ok(process.env.TEST_URL?.startsWith('https://'), 'Missing test HTTPS URL');
+          const assets = readdirSync('test-dist/assets').filter((name) => /\.(js|css)$/.test(name));
+          assert.ok(assets.length > 0, 'No built assets');
+          let failure;
+          for (let attempt = 0; attempt < 18; attempt++) {
+            try {
+              const home = await fetch(process.env.TEST_URL, { cache: 'no-store', signal: AbortSignal.timeout(10000) });
+              assert.equal(home.status, 200);
+              assert.equal(await home.text(), readFileSync('test-dist/index.html', 'utf8'));
+              for (const name of assets) {
+                const response = await fetch(`${process.env.TEST_URL}/assets/${name}`, { cache: 'no-store', signal: AbortSignal.timeout(10000) });
+                assert.equal(response.status, 200);
+                assert.deepEqual(Buffer.from(await response.arrayBuffer()), readFileSync(`test-dist/assets/${name}`));
+              }
+              console.log('Verified test HTTPS and exact frontend artifact bytes.');
+              failure = undefined;
+              break;
+            } catch (error) {
+              failure = error;
+              await new Promise((resolve) => setTimeout(resolve, 10000));
+            }
+          }
+          if (failure) throw failure;
+          JS
+
+  api:
+    needs: package
+    environment: perlygolfmax-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-api-package
+          path: api-artifact
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906
+        with:
+          client-id: ${{ vars.AZURE_TEST_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TEST_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_TEST_SUBSCRIPTION_ID }}
+      - uses: Azure/functions-action@c5060b3b8bb1ebbcb531abd00c822ecbaa8ea656
+        with:
+          app-name: ${{ vars.AZURE_TEST_API_NAME }}
+          package: api-artifact/test-api.zip
+          sku: flexconsumption
+          remote-build: false

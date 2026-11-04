@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url';
 
 let template;
 let stack;
+let pipeline;
+let customer;
 
 function resources(document) {
   return Array.isArray(document.resources)
@@ -30,11 +32,16 @@ function parameters(document, name) {
 before(() => {
   const binary = process.env.BICEP_CLI
     ?? join(homedir(), '.azure', 'bin', process.platform === 'win32' ? 'bicep.exe' : 'bicep');
-  const compiled = execFileSync(binary, [
-    'build', '--no-restore',
-    fileURLToPath(new URL('./main.bicep', import.meta.url)), '--stdout',
-  ], { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 });
-  template = JSON.parse(compiled);
+  function compile(file) {
+    const compiled = execFileSync(binary, [
+      'build', '--no-restore',
+      fileURLToPath(new URL(file, import.meta.url)), '--stdout',
+    ], { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 });
+    return JSON.parse(compiled);
+  }
+  template = compile('./main.bicep');
+  pipeline = compile('./pipeline-access.bicep');
+  customer = compile('./customer-tenant.bicep');
   stack = deployment(template, 'perlygolfmax-test-stack').properties.template;
 });
 
@@ -148,4 +155,34 @@ test('monitoring is bounded and example parameters contain no real identity conf
   assert.deepEqual(example.parameters.identityConfiguration.value, { state: 'unconfigured' });
   assert.equal(example.parameters.enableApi.value, false);
   assert.equal(example.parameters.location.value, 'westus2');
+});
+
+test('pipeline federation is test-environment-only and deployment access is scoped to the test API', () => {
+  const federation = resources(pipeline).find((item) => item.type.endsWith('/federatedIdentityCredentials'));
+  assert.ok(federation);
+  assert.equal(federation.properties.issuer, 'https://token.actions.githubusercontent.com');
+  assert.equal(federation.properties.subject, 'repo:ryperl/perlygolfmax:environment:perlygolfmax-test');
+  assert.deepEqual(federation.properties.audiences, ['api://AzureADTokenExchange']);
+  const access = deployment(pipeline, 'test-pipeline-website-access').properties.template;
+  assert.equal(resources(access).length, 1);
+  const assignment = resources(access)[0];
+  assert.equal(assignment.type, 'Microsoft.Authorization/roleAssignments');
+  assert.match(assignment.scope, /Microsoft.Web\/sites/);
+  assert.match(JSON.stringify(access.variables), /de139f84-1756-47ae-9be6-808fbbe84772/);
+  assert.equal(assignment.properties.principalType, 'ServicePrincipal');
+});
+
+test('customer directory creation uses only the approved US test geography and retained Standard tier', () => {
+  const directory = resources(customer).find((item) => item.type === 'Microsoft.AzureActiveDirectory/ciamDirectories');
+  assert.ok(directory);
+  assert.equal(directory.location, 'United States');
+  assert.deepEqual(directory.sku, { name: 'Standard', tier: 'A0' });
+  assert.deepEqual(directory.properties.createTenantProperties, {
+    countryCode: 'US', displayName: 'Perly Golf Max Test',
+  });
+  const lock = resources(customer).find((item) => item.type === 'Microsoft.Authorization/locks');
+  assert.ok(lock);
+  assert.equal(lock.properties.level, 'CanNotDelete');
+  assert.equal(resources(customer).length, 2);
+  assert.deepEqual(Object.keys(customer.outputs).sort(), ['customerTenantId', 'customerTenantSubdomain']);
 });

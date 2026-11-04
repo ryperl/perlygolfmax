@@ -1,10 +1,13 @@
 # Isolated test infrastructure
 
-These are **reviewable Bicep files, not a deployed environment**. The user
-approved generating this test scaffold, not creating resources, assigning
-roles, creating customer identities, pushing code or deploying applications.
-The only separately approved Azure change so far was registering the
-`Microsoft.Quota` provider for capacity inspection.
+These are **versioned test-only Bicep definitions**. The foundation has now been
+provisioned under separate user approval; that is not permission for arbitrary
+redeployment, deletion, production changes or access expansion.
+
+The user also approved a test-only deployment identity/environment and a
+dedicated US customer test tenant. The API remains disabled until verified
+identity configuration/bootstrap. Customer flow setup is not implied by the
+mere existence of an Azure directory resource.
 
 ## Scope and proposed defaults
 
@@ -40,9 +43,21 @@ backup/export job or paid SWA upgrade. Direct Functions ingress/OTP abuse
 risks remain as described in [operations](../docs/operations.md).
 
 Production SWA/DNS/domain resources are deliberately outside this template.
-There are no linked SWA APIs or custom domains, repository tokens, generated
-GitHub workflows, customer tenant registrations, provider registration actions,
-or teardown commands.
+The foundation has no linked SWA API, custom domains, repository tokens,
+generated workflows, provider registration actions or teardown commands.
+Additional approved identity/access lifecycles have separate entry points:
+
+- `pipeline-access.bicep`: user-assigned deployment identity, one environment-
+  bound GitHub federation and Website Contributor on the test Function App.
+  Use `pipeline.parameters.example.json` for the confirmed Azure region.
+- `customer-tenant.bicep`: the explicitly approved US Standard/A0 customer test
+  directory and a retention lock. Treat identity creation as a separately
+  reviewed operation; retain the resulting directory and do not assume that
+  replaying creation is a migration/restore mechanism.
+
+These are not part of routine application releases. Runtime identity and
+deployment identity are distinct; the deployment identity has no direct
+storage grants or customer-directory administration role.
 
 ## Source and reproducibility
 
@@ -165,6 +180,43 @@ output includes `/api`. Local development uses a distinct development SPA
 registration and exact `http://localhost:5173/?event-auth=1` callback. The test
 API permits the generated test origin and `http://localhost:5173`, not
 production origins or a wildcard. Production must not inherit local CORS.
+
+## Test application pipeline
+
+`deploy-test.yml` runs CI first, then builds a test-specific frontend and a
+precompiled API package. Package installation/auditing occurs on the public
+GitHub runner, not through the blocked local npm connection. The archive
+whitelists compiled API code, `host.json`, its manifest and installed production
+dependencies; it excludes local settings/environment/feed files and the
+workspace symlink. An import check exercises the emitted shared-contract paths.
+
+Deployments consume those exact artifacts without remote Oryx/npm rebuilds.
+Frontend verification compares the served HTML and every JS/CSS asset with the
+uploaded bytes. API upload uses the pinned official Functions action's Flex
+OneDeploy path and OIDC. Uploading code does not enable a disabled API.
+
+The `perlygolfmax-test` GitHub environment must restrict deployment to
+`ryperl-microsoft-perly-golf-foundation`. Azure federation trusts exactly
+`repo:ryperl/perlygolfmax:environment:perlygolfmax-test`. The workflow never runs
+on pull-request events, and only its API deployment job has `id-token: write`.
+Production's token/environment/workflow are not reused.
+
+Environment variables are `AZURE_TEST_CLIENT_ID`, `AZURE_TEST_TENANT_ID`,
+`AZURE_TEST_SUBSCRIPTION_ID`, `AZURE_TEST_RESOURCE_GROUP`, `AZURE_TEST_API_NAME`,
+`AZURE_TEST_API_URL` and `AZURE_TEST_FRONTEND_URL`. The separate encrypted secret
+is `AZURE_STATIC_WEB_APPS_TEST_API_TOKEN`.
+
+Leave all customer identity `VITE_ENTRA_*` variables absent for a clearly
+unconfigured foundation deployment. When ready, supply the development SPA
+client ID, customer subdomain and fully qualified API scope together. Partial
+identity configuration fails deployment. The build injects the API URL only
+with complete identity configuration; configured browser smoke checks require
+the sign-in UI but do not attempt to retrieve/send real email codes.
+
+New workflow-dispatch files may not be dispatchable until present on the
+default branch. The approved feature-branch push trigger starts testing without
+requiring a main merge. Changing the allowed branch or widening federation
+requires explicit approval.
 
 ## Retained assets and recovery gates
 
