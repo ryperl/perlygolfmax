@@ -84,6 +84,24 @@ does not guarantee instant bearer-token revocation or all-device sign-out.
 Provider cookies/Stay signed in influence future code prompts; session policy
 still needs approval.
 
+### Test custom domain
+
+The approved `https://dev.perlygolf.com` alias uses the existing test SWA,
+customer registration, API and data, not production. Keep the generated test
+URL working. Register the exact additional SPA callback/logout return
+`https://dev.perlygolf.com/?event-auth=1` and allow only the exact additional
+HTTPS API origin. No new credentials, Graph grants or event permissions are
+needed. Origin-derived MSAL settings require no rebuild, but sessions do not
+transfer between origins.
+
+Follow the [domain setup and rollback sequence](../infra/README.md#optional-dev-alias-for-the-existing-test-environment).
+Preserve `enableDevDomain: true` in approved private redeployment parameters
+after setup, or a later infrastructure deployment would remove dev from CORS.
+The shared production DNS zone stays outside the test stack's ownership.
+Actual dev email-code completion, authorized event read/create/reload and
+logout remain manual verification boundaries; no automated form check
+establishes those outcomes.
+
 ## Local configuration
 
 The frontend demo and unconfigured Events screen work without an account or

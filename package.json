@@ -20,7 +20,7 @@
     "check:lockfile": "node scripts/check-lockfile.mjs",
     "lockfile:public": "node scripts/public-lockfile.mjs && npm run check:lockfile",
     "icons": "node scripts/generate-icons.mjs",
-    "test": "vitest run && npm test --workspace api && node --test scripts/lockfile.test.mjs scripts/package-api.test.mjs scripts/configure-test-apps.test.mjs scripts/verify-test-signin.test.mjs",
+    "test": "vitest run && npm test --workspace api && node --test scripts/lockfile.test.mjs scripts/package-api.test.mjs scripts/configure-test-apps.test.mjs scripts/test-origins.test.mjs scripts/verify-test-signin.test.mjs",
     "test:watch": "vitest",
     "test:smoke": "playwright test"
   },

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { testRedirectUris } from './test-origins.mjs';
 
 if (!process.argv.includes('--apply')) {
   console.log('Plan only: create secretless test API/SPA registrations and consent to Events.Access.');
@@ -14,6 +15,7 @@ const foundation = JSON.parse(readFileSync('.azure/test-foundation-outputs.json'
 const tenantId = directory.customerTenantId.value;
 const subdomain = directory.customerTenantSubdomain.value;
 const frontend = foundation.frontendUrl.value;
+const redirectUris = testRedirectUris(frontend);
 const token = JSON.parse(execFileSync('az', [
   'account', 'get-access-token', '--tenant', tenantId,
   '--resource-type', 'ms-graph', '--output', 'json',
@@ -91,16 +93,15 @@ async function principal(key, appId) {
 
 const apiPrincipal = await principal('apiPrincipalId', api.appId);
 const spa = await createApp('spa', 'Perly Golf Max Test Web', {
-  spa: { redirectUris: [`${frontend}/?event-auth=1`, 'http://localhost:5173/?event-auth=1'] },
+  spa: { redirectUris },
   requiredResourceAccess: [{
     resourceAppId: api.appId, resourceAccess: [{ id: state.scopeId, type: 'Scope' }],
   }],
   api: { requestedAccessTokenVersion: 2 },
 });
 assert.equal(spa.signInAudience, 'AzureADMyOrg');
-assert.deepEqual([...spa.spa.redirectUris].sort(), [
-  `${frontend}/?event-auth=1`, 'http://localhost:5173/?event-auth=1',
-].sort());
+assert.deepEqual([...spa.spa.redirectUris].sort(), [...redirectUris].sort(),
+  'Expected generated, localhost and approved dev callbacks. Add a missing dev callback in the customer portal; do not remove or overwrite existing callbacks.');
 const spaPrincipal = await principal('spaPrincipalId', spa.appId);
 const existingGrants = await graph(`oauth2PermissionGrants?$filter=${encodeURIComponent(
   `clientId eq '${spaPrincipal.id}' and resourceId eq '${apiPrincipal.id}'`,

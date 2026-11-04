@@ -3,6 +3,7 @@ targetScope = 'resourceGroup'
 param location string
 param tags object
 param enableApi bool
+param enableDevDomain bool
 param maximumInstanceCount int
 @secure()
 param identitySettings object
@@ -30,7 +31,9 @@ module frontend 'br/public:avm/res/web/static-site:0.9.6' = {
     stagingEnvironmentPolicy: 'Disabled'
     enterpriseGradeCdnStatus: 'Disabled'
     publicNetworkAccess: 'Enabled'
-    customDomains: []
+    customDomains: enableDevDomain ? [
+      { name: 'dev.perlygolf.com', validationMethod: 'cname-delegation' }
+    ] : []
     linkedBackend: {}
     enableTelemetry: false
   }
@@ -102,7 +105,10 @@ module api './modules/api.bicep' = {
     insightsName: names.insights
     enabled: enableApi
     maximumInstanceCount: maximumInstanceCount
-    allowedOrigins: ['https://${frontend.outputs.defaultHostname}', 'http://localhost:5173']
+    allowedOrigins: concat(
+      ['https://${frontend.outputs.defaultHostname}', 'http://localhost:5173'],
+      enableDevDomain ? ['https://dev.perlygolf.com'] : []
+    )
     identitySettings: identitySettings
     dataEndpoint: data.outputs.tableEndpoint
     tableName: data.outputs.tableName

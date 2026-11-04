@@ -29,6 +29,9 @@ param identityConfiguration IdentityConfiguration = { state: 'unconfigured' }
 @description('Controls host startup only. Unconfigured identity still makes application endpoints fail closed.')
 param enableApi bool = false
 
+@description('Enable only after dev.perlygolf.com CNAME validation and the exact customer SPA callback are configured. Preserve true in approved deployed-test parameters.')
+param enableDevDomain bool = false
+
 @allowed([1, 2, 3, 4, 5])
 param maximumInstanceCount int = 2
 
@@ -51,6 +54,7 @@ module stack './test-stack.bicep' = {
     location: location
     tags: tags
     enableApi: enableApi
+    enableDevDomain: enableDevDomain
     maximumInstanceCount: maximumInstanceCount
     identitySettings: identityConfiguration.state == 'configured'
       ? {

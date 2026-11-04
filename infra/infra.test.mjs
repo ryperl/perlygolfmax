@@ -55,10 +55,21 @@ test('entry point is restricted to the test group/region and never binds product
   const frontend = parameters(stack, 'test-frontend');
   assert.equal(frontend.sku.value, 'Free');
   assert.equal(frontend.buildProperties.value.skipGithubActionWorkflowGeneration, true);
-  assert.deepEqual(frontend.customDomains.value, []);
+  assert.equal(template.parameters.enableDevDomain.defaultValue, false);
+  assert.equal(parameters(template, 'perlygolfmax-test-stack').enableDevDomain.value, "[parameters('enableDevDomain')]");
+  assert.equal(frontend.customDomains, "[if(parameters('enableDevDomain'), createObject('value', createArray(createObject('name', 'dev.perlygolf.com', 'validationMethod', 'cname-delegation'))), createObject('value', createArray()))]");
   assert.deepEqual(frontend.linkedBackend.value, {});
   assert.equal(frontend.repositoryUrl, undefined);
   assert.equal(frontend.repositoryToken, undefined);
+});
+
+test('dev-domain opt-in binds only the test alias and retains generated/local API origins', () => {
+  const origins = parameters(stack, 'test-api').allowedOrigins.value;
+  assert.match(origins, /concat\(createArray\(format\('https:\/\/\{0\}'/);
+  assert.match(origins, /'http:\/\/localhost:5173'/);
+  assert.match(origins, /if\(parameters\('enableDevDomain'\), createArray\('https:\/\/dev\.perlygolf\.com'\), createArray\(\)\)/);
+  assert.doesNotMatch(JSON.stringify(template), /Microsoft\.Network\/dnsZones/i);
+  assert.doesNotMatch(origins, /https:\/\/(?:www\.)?perlygolf\.com'/);
 });
 
 test('runtime and retained application storage use LRS without keys or anonymous blobs', () => {

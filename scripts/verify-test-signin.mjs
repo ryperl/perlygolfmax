@@ -2,13 +2,15 @@ import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
+import { testCustomOrigin } from './test-origins.mjs';
 
 export function readSigninTarget(env) {
   assert.ok(env.TEST_FRONTEND_URL, 'Missing test frontend URL');
   const url = new URL(env.TEST_FRONTEND_URL);
   assert.equal(url.protocol, 'https:', 'Test frontend must use HTTPS');
-  assert.ok(url.hostname.endsWith('.azurestaticapps.net'), 'Expected the isolated Azure test frontend');
-  assert.ok(!url.username && !url.password && !url.search && !url.hash && url.pathname === '/', 'Expected a plain test origin');
+  assert.ok(url.hostname.endsWith('.azurestaticapps.net') || url.origin === testCustomOrigin,
+    'Expected the isolated Azure test frontend or exact approved dev origin');
+  assert.ok(!url.username && !url.password && !url.port && !url.search && !url.hash && url.pathname === '/', 'Expected a plain test origin');
   assert.match(env.TEST_ENTRA_SUBDOMAIN ?? '', /^[a-z0-9-]+$/, 'Missing or invalid test customer subdomain');
   return {
     frontendOrigin: url.origin,

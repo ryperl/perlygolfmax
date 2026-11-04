@@ -184,11 +184,76 @@ Stopped-app deployment behavior, the precise package/deployment workflow and
 any provider-specific validation need testing before this sequence is treated
 as executable production automation.
 
-The generated frontend URL plus `/?event-auth=1` is the test callback. The API
-output includes `/api`. Local development uses a distinct development SPA
-registration and exact `http://localhost:5173/?event-auth=1` callback. The test
-API permits the generated test origin and `http://localhost:5173`, not
-production origins or a wildcard. Production must not inherit local CORS.
+The generated frontend URL plus `/?event-auth=1` remains a test callback. The
+API output includes `/api`. The existing test SPA also retains the exact
+`http://localhost:5173/?event-auth=1` callback. The API permits those generated
+test/local origins and, with the approved domain opt-in below, the exact dev
+HTTPS origin. Production must not inherit local CORS.
+
+## Optional dev alias for the existing test environment
+
+`dev.perlygolf.com` is an alias of the existing test SWA, API and datastore,
+not another environment. It uses one of the Free SWA's two custom-domain
+slots and its managed HTTPS certificate. No tier upgrade is needed.
+
+The DNS zone is retained in a different resource group. The test stack does
+**not** declare, adopt or deploy that zone or its records. The separate,
+approved DNS step must happen before enabling the custom-domain binding:
+
+1. Read the current test stack's `frontendUrl` output and the authoritative
+   `perlygolf.com` DNS zone. Check every record type at `dev` and any existing
+   SWA hostname binding. Stop for approval if a conflicting record/binding
+   exists; never replace it automatically.
+2. In the retained Azure DNS zone, add only a `dev` CNAME to the generated
+   test SWA hostname, with TTL 300. Do not change apex, `www`, mail, registrar
+   or nameservers. With REST automation, use `If-None-Match: *` when creating
+   the record to reject concurrent replacements.
+3. Wait until the authoritative nameserver and a public resolver return that
+   CNAME. Add `dev.perlygolf.com` on the existing test SWA using CNAME
+   validation (`cname-delegation`). If Azure still reports an invalid CNAME,
+   wait for propagation and retry; do not overwrite DNS or bypass validation.
+   Wait for binding status `Ready` and check HTTPS without bypassing TLS.
+4. In the existing customer test directory, open the test Web app registration's
+   **Authentication > Single-page application** platform. Add exactly
+   `https://dev.perlygolf.com/?event-auth=1` and preserve both existing callbacks.
+   MSAL uses this URI for both sign-in and post-logout return. Do not change
+   the user flow, permissions, consent, credentials or implicit-flow settings.
+5. Add exactly `https://dev.perlygolf.com` to test API CORS. Preserve the generated
+   test and localhost origins and `supportCredentials: false`.
+6. Preserve `enableDevDomain: true` in the ignored, approved **deployed-test**
+   Bicep parameters before any later infrastructure deployment. The parameter
+   defaults false for initial provisioning before DNS/callback setup; the
+   unconfigured example is not a safe redeployment file for the live test app.
+   True declares only the test SWA binding and extra CORS origin. False omits
+   that binding from incremental deployment but removes dev from API CORS;
+   it is not a domain rollback/teardown command. Review a what-if and retain
+   all private identity/creator settings and the approved `enableApi` value.
+7. Keep `AZURE_TEST_FRONTEND_URL` at the generated hostname and set the protected
+   test environment's optional `AZURE_TEST_CUSTOM_FRONTEND_URL` to exactly
+   `https://dev.perlygolf.com` for future artifact and hosted-sign-in checks on
+   both URLs. Existing origin-derived redirects need no frontend rebuild.
+   Workflow changes still require an approved push through the existing
+   deployment branch; do not widen branch restrictions or federation.
+
+The setup script expects the three exact approved callbacks for new/existing
+test registrations. It does not patch existing callback lists: if dev is
+missing, add it through the supported portal path. Do not rerun this broader
+registration/consent script merely to add a domain or request new Graph grants.
+No populated IDs, private operational records or credentials belong in source.
+
+Verify DNS, Ready binding, TLS, identical HTML/assets on both origins, exact
+API preflight allow-origin and anonymous API rejection. Actual email-code
+completion, event read/create/reload and logout on each origin need manual
+user verification; reaching the hosted form alone does not prove them.
+Browser sessionStorage/local storage does not transfer between origins, so
+expect a fresh dev sign-in.
+
+Rollback requires separate approval before removals. Retain the generated
+test URL and all data/identity memberships; remove only the dev callback,
+dev CORS origin, test dev binding and dev CNAME if explicitly approved.
+Clear the optional custom verification variable and disable the domain
+parameter in the private configuration as part of that coordinated rollback.
+Never delete production records, the DNS zone, directories, storage or apps.
 
 ## Test application pipeline
 
@@ -214,7 +279,8 @@ Production's token/environment/workflow are not reused.
 
 Environment variables are `AZURE_TEST_CLIENT_ID`, `AZURE_TEST_TENANT_ID`,
 `AZURE_TEST_SUBSCRIPTION_ID`, `AZURE_TEST_RESOURCE_GROUP`, `AZURE_TEST_API_NAME`,
-`AZURE_TEST_API_URL` and `AZURE_TEST_FRONTEND_URL`. The separate encrypted secret
+`AZURE_TEST_API_URL` and `AZURE_TEST_FRONTEND_URL`, plus optional
+`AZURE_TEST_CUSTOM_FRONTEND_URL` for the approved alias. The separate encrypted secret
 is `AZURE_STATIC_WEB_APPS_TEST_API_TOKEN`.
 
 Leave all customer identity `VITE_ENTRA_*` variables absent for a clearly

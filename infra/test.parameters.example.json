@@ -6,6 +6,7 @@
     "location": { "value": "westus2" },
     "identityConfiguration": { "value": { "state": "unconfigured" } },
     "enableApi": { "value": false },
+    "enableDevDomain": { "value": false },
     "maximumInstanceCount": { "value": 2 }
   }
 }
