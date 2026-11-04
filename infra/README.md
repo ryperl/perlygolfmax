@@ -30,10 +30,12 @@ It composes the following resources:
   Contributor on the single application table, and Metrics Publisher on the
   Application Insights component. No human grants or deployment identity.
 
-The API is disabled by default. `enableApi` is effective only when the typed
-identity configuration is also marked `configured`. This is a safe foundation
-phase, not a functioning sign-in environment. The frontend is initially empty
-until its separately approved application deployment.
+The host is disabled by default. `enableApi` controls host startup independently
+of identity configuration because OneDeploy rejects a disabled host. The user
+separately approved enabling the test host for deployment while identity stays
+unconfigured. In that state, actual application endpoints must return an
+explicit unavailable response without touching stored event data. Host startup
+is not permission to bypass authentication or bootstrap.
 
 These are proposed TEST defaults for review, not approved production retention,
 an SLA or a hard spending cap. Daily log caps can overshoot and cause missing
@@ -50,7 +52,7 @@ Additional approved identity/access lifecycles have separate entry points:
 - `pipeline-access.bicep`: user-assigned deployment identity, one environment-
   bound GitHub federation and Website Contributor on the test Function App.
   Use `pipeline.parameters.example.json` for the confirmed Azure region.
-- `customer-tenant.bicep`: the explicitly approved US Standard/A0 customer test
+- `customer-tenant.bicep`: the explicitly approved US Base/A0 customer test
   directory and a retention lock. Treat identity creation as a separately
   reviewed operation; retain the resulting directory and do not assume that
   replaying creation is a migration/restore mechanism.
@@ -58,6 +60,11 @@ Additional approved identity/access lifecycles have separate entry points:
 These are not part of routine application releases. Runtime identity and
 deployment identity are distinct; the deployment identity has no direct
 storage grants or customer-directory administration role.
+
+The live customer-directory provider requires `Base/A0` and a fully qualified
+`onmicrosoft.com` resource name. Its published 2023 schema documentation lists
+different SKU/name constraints; provider preflight, not that stale description,
+is the validation authority. The output subdomain remains the bare prefix.
 
 ## Source and reproducibility
 
@@ -145,8 +152,10 @@ The configuration states are:
    `jwksUrl`, `apiClientId`, `spaClientId`, `scope` and verified
    `creatorObjectId`. A malformed configuration still fails the API's runtime
    checks; setting this label is not evidence that identity has been verified.
-3. `enableApi: true` only after approved identity, code deployment, RBAC
-   propagation, quota checks and access validation.
+3. `enableApi: true` after host-startup approval, code deployment and RBAC
+   checks. Until verified identity/bootstrap is supplied, require the deployed
+   application endpoints to fail closed. Do not equate host readiness with
+   a functioning sign-in/data flow.
 
 The future execution sequence, requiring separate approvals, is:
 
@@ -197,7 +206,9 @@ OneDeploy path and OIDC. Uploading code does not enable a disabled API.
 
 The `perlygolfmax-test` GitHub environment must restrict deployment to
 `ryperl-microsoft-perly-golf-foundation`. Azure federation trusts exactly
-`repo:ryperl/perlygolfmax:environment:perlygolfmax-test`. The workflow never runs
+`repo:ryperl@<owner-id>/perlygolfmax@<repo-id>:environment:perlygolfmax-test`.
+Supply immutable IDs privately from current GitHub repository metadata; do
+not deploy the example zero placeholders. The workflow never runs
 on pull-request events, and only its API deployment job has `id-token: write`.
 Production's token/environment/workflow are not reused.
 

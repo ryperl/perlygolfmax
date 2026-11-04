@@ -3,6 +3,16 @@ targetScope = 'resourceGroup'
 @allowed(['westus2'])
 param location string = 'westus2'
 
+@minLength(1)
+@maxLength(20)
+@description('Immutable GitHub owner ID from repository metadata; supply privately.')
+param repositoryOwnerId string
+
+@minLength(1)
+@maxLength(20)
+@description('Immutable GitHub repository ID from repository metadata; supply privately.')
+param repositoryId string
+
 var token = uniqueString(resourceGroup().id, 'perlygolfmax-test')
 
 resource api 'Microsoft.Web/sites@2024-04-01' existing = {
@@ -32,7 +42,7 @@ resource federation 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedI
   name: 'github-test-environment'
   properties: {
     issuer: 'https://token.actions.githubusercontent.com'
-    subject: 'repo:ryperl/perlygolfmax:environment:perlygolfmax-test'
+    subject: 'repo:ryperl@${repositoryOwnerId}/perlygolfmax@${repositoryId}:environment:perlygolfmax-test'
     audiences: ['api://AzureADTokenExchange']
   }
   dependsOn: [deploymentIdentity]

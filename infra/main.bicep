@@ -26,7 +26,7 @@ type IdentityConfiguration =
 @description('Private environment configuration; never commit populated identity parameters.')
 param identityConfiguration IdentityConfiguration = { state: 'unconfigured' }
 
-@description('Leave false until identity, code deployment and access checks are approved.')
+@description('Controls host startup only. Unconfigured identity still makes application endpoints fail closed.')
 param enableApi bool = false
 
 @allowed([1, 2, 3, 4, 5])
@@ -50,7 +50,7 @@ module stack './test-stack.bicep' = {
   params: {
     location: location
     tags: tags
-    enableApi: enableApi && identityConfiguration.state == 'configured'
+    enableApi: enableApi
     maximumInstanceCount: maximumInstanceCount
     identitySettings: identityConfiguration.state == 'configured'
       ? {

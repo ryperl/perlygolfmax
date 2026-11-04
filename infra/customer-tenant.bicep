@@ -1,12 +1,12 @@
 targetScope = 'resourceGroup'
 
-var directoryName = 'pgmtest${uniqueString(resourceGroup().id, 'customer-identities')}'
+var directoryName = 'pgm${take(uniqueString(resourceGroup().id, 'customer-identities'), 7)}'
 
 resource directory 'Microsoft.AzureActiveDirectory/ciamDirectories@2023-05-17-preview' = {
-  name: directoryName
+  name: '${directoryName}.onmicrosoft.com'
   location: 'United States'
   sku: {
-    name: 'Standard'
+    name: 'Base'
     tier: 'A0'
   }
   tags: {
@@ -32,4 +32,4 @@ resource retentionLock 'Microsoft.Authorization/locks@2020-05-01' = {
 }
 
 output customerTenantId string = directory.properties.tenantId
-output customerTenantSubdomain string = directory.name
+output customerTenantSubdomain string = directoryName

@@ -80,14 +80,13 @@ test('runtime and retained application storage use LRS without keys or anonymous
   ]);
 });
 
-test('API defaults disabled, requires configured identity and has bounded on-demand scaling', () => {
+test('API host defaults disabled, identity defaults unconfigured and on-demand scaling is bounded', () => {
   assert.equal(template.parameters.enableApi.defaultValue, false);
   assert.equal(template.parameters.identityConfiguration.defaultValue.state, 'unconfigured');
   assert.equal(template.parameters.maximumInstanceCount.defaultValue, 2);
   assert.deepEqual(template.parameters.maximumInstanceCount.allowedValues, [1, 2, 3, 4, 5]);
   const wiring = parameters(template, 'perlygolfmax-test-stack');
-  assert.match(wiring.enableApi.value, /and\(parameters\('enableApi'\)/);
-  assert.match(wiring.enableApi.value, /configured/);
+  assert.equal(wiring.enableApi.value, "[parameters('enableApi')]");
   const api = deployment(stack, 'test-api').properties.template;
   const settings = parameters(api, 'test-functions-host');
   assert.deepEqual(settings.managedIdentities.value, { systemAssigned: true });
@@ -161,7 +160,8 @@ test('pipeline federation is test-environment-only and deployment access is scop
   const federation = resources(pipeline).find((item) => item.type.endsWith('/federatedIdentityCredentials'));
   assert.ok(federation);
   assert.equal(federation.properties.issuer, 'https://token.actions.githubusercontent.com');
-  assert.equal(federation.properties.subject, 'repo:ryperl/perlygolfmax:environment:perlygolfmax-test');
+  assert.equal(federation.properties.subject,
+    "[format('repo:ryperl@{0}/perlygolfmax@{1}:environment:perlygolfmax-test', parameters('repositoryOwnerId'), parameters('repositoryId'))]");
   assert.deepEqual(federation.properties.audiences, ['api://AzureADTokenExchange']);
   const access = deployment(pipeline, 'test-pipeline-website-access').properties.template;
   assert.equal(resources(access).length, 1);
@@ -172,11 +172,12 @@ test('pipeline federation is test-environment-only and deployment access is scop
   assert.equal(assignment.properties.principalType, 'ServicePrincipal');
 });
 
-test('customer directory creation uses only the approved US test geography and retained Standard tier', () => {
+test('customer directory creation uses only the approved US test geography and retained Base tier', () => {
   const directory = resources(customer).find((item) => item.type === 'Microsoft.AzureActiveDirectory/ciamDirectories');
   assert.ok(directory);
   assert.equal(directory.location, 'United States');
-  assert.deepEqual(directory.sku, { name: 'Standard', tier: 'A0' });
+  assert.match(directory.name, /onmicrosoft\.com/);
+  assert.deepEqual(directory.sku, { name: 'Base', tier: 'A0' });
   assert.deepEqual(directory.properties.createTenantProperties, {
     countryCode: 'US', displayName: 'Perly Golf Max Test',
   });
