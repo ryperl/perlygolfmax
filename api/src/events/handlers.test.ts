@@ -64,4 +64,17 @@ describe('event API handlers', () => {
     api.limiter.check.mockRejectedValue(new ApiError(429, 'REQUEST_LIMIT_EXCEEDED'));
     expect(await createHandler(() => api, 'events')(request(), context)).toMatchObject({ status: 429, headers: { 'Retry-After': '60' } });
   });
+
+  it('logs safe SDK classifications without exposing private exception messages', async () => {
+    const { api, request, context } = fixture();
+    const log = vi.spyOn(context, 'error').mockImplementation(() => undefined);
+    api.store.create.mockRejectedValue(Object.assign(new Error('fixture-private-details'), {
+      name: 'RestError', code: 'AuthorizationPermissionMismatch', statusCode: 403,
+    }));
+    expect(await createHandler(() => api, 'events')(request(), context)).toMatchObject({
+      status: 503, jsonBody: { code: 'SERVICE_UNAVAILABLE' },
+    });
+    expect(JSON.stringify(log.mock.calls)).toContain('AuthorizationPermissionMismatch');
+    expect(JSON.stringify(log.mock.calls)).not.toContain('fixture-private-details');
+  });
 });

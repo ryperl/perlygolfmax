@@ -5,6 +5,7 @@ import { ApiError } from '../errors.js';
 import type { VerifyIdentity } from '../identity.js';
 import type { EventStore } from './store.js';
 import type { RequestLimiter } from '../limits.js';
+import { failureDiagnostics } from '../diagnostics.js';
 
 export interface EventApi {
   readonly verify: VerifyIdentity;
@@ -87,7 +88,9 @@ export function createHandler(resolveApi: () => EventApi, action: 'me' | 'events
     } catch (error) {
       const status = error instanceof ApiError ? error.status : 503;
       const code = error instanceof ApiError ? error.code : 'SERVICE_UNAVAILABLE';
-      if (status >= 500) context.error('Event API request failed', { code, invocationId: context.invocationId });
+      if (status >= 500) context.error('Event API request failed', {
+        code, invocationId: context.invocationId, ...failureDiagnostics(error),
+      });
       else context.warn('Event API request rejected', { code, status, invocationId: context.invocationId });
       return response(status, { code });
     }
