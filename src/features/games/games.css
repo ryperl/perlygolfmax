@@ -1,8 +1,8 @@
 .round-games, .round-game, .game-results, .game-settings { display: grid; gap: 1rem; min-width: 0; }
 .round-game { padding: 1rem; border: 1px solid var(--cp-border); border-radius: .75rem; background: var(--cp-surface); }
+.game-round-heading { display: grid; gap: .25rem; min-width: 0; overflow-wrap: anywhere; }
 .game-results h3, .game-results p { margin: 0; overflow-wrap: anywhere; }
 .game-results { grid-template-columns: minmax(0, 1fr); }
-.game-results > details { min-width: 0; }
 .round-games button { min-height: 44px; padding: .5rem .75rem; color: var(--cp-text); background: var(--cp-surface); border: 1px solid var(--cp-border-strong); border-radius: .5rem; font: inherit; }
 .round-games button:disabled { color: var(--cp-text-muted); cursor: not-allowed; }
 .game-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
@@ -16,10 +16,16 @@
 .round-games th, .round-games td { padding: .6rem; text-align: left; border-bottom: 1px solid var(--cp-border); }
 .game-results table { min-width: 32rem; font-variant-numeric: tabular-nums; }
 .game-results th, .game-results td { white-space: nowrap; }
-.game-results summary { cursor: pointer; min-height: 44px; padding-block: .5rem; overflow-wrap: anywhere; }
+.game-card-nines { display: flex; flex-wrap: wrap; gap: .5rem; }
+.game-card-nines button { margin: 0; }
+.game-card-nines [aria-pressed="true"] { border-color: var(--cp-accent); background: var(--cp-accent-soft); }
+.game-card-scroll th:not(:first-child), .game-card-scroll td { min-width: 2.5rem; text-align: center; }
+.game-card-scroll th:first-child { position: sticky; left: 0; z-index: 1; width: 8rem; min-width: 8rem; max-width: 8rem; white-space: normal; overflow-wrap: anywhere; background: var(--cp-surface); border-right: 1px solid var(--cp-border); }
+.game-player-name, .game-player-meta { display: block; }
+.game-player-meta { font-size: .75rem; font-weight: 400; color: var(--cp-text-muted); }
 .game-notice, .game-review { padding: .75rem; border-left: 3px solid var(--cp-accent); background: var(--cp-accent-soft); overflow-wrap: anywhere; }
 .game-hint, .game-settings small { color: var(--cp-text-muted); font-size: .9rem; }
-.round-games :is(button, input, select, summary, a, .game-scroll):focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
+.round-games :is(button, input, select, a, .game-scroll):focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
 @media (max-width: 480px) {
   .round-game, .game-settings fieldset { padding: .75rem; }
   .game-actions > button { flex: 1 1 10rem; }

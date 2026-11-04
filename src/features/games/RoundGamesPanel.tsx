@@ -146,11 +146,16 @@ export function RoundGamesPanel({ round, busy, onDirtyChange, onSave, onRefresh 
 
   return (
     <section className="round-games" aria-label="Round games">
-      <h2>Games</h2>
+      <header className="game-round-heading">
+        <p className="game-hint">{round.eventName}</p>
+        <h2>Games · {round.roundName}</h2>
+        <p className="game-hint">{round.courseName} · {round.teeName} / {round.teeCategory}</p>
+      </header>
       {archived && <p>This trip is archived. Game settings are read-only.</p>}
       {games.length === 0 && <p>No games configured for this round.</p>}
       {games.map((game) => <div className="round-game" key={game.id}>
-        <GameResults game={game} result={round.games?.results.find((result) => result.gameId === game.id)} />
+        <GameResults game={game} result={round.games?.results.find((result) => result.gameId === game.id)}
+          holeNumbers={round.layout.map((hole) => hole.number)} />
         <button type="button" disabled={disabled || editor !== null} onClick={() => { open(game); }}>Edit {game.name}</button>
       </div>)}
       {!editor && !archived && <button type="button" disabled={disabled || games.length >= maximumGamesPerRound}

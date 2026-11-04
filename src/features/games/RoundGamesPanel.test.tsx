@@ -42,6 +42,9 @@ async function saved() {
 describe('RoundGamesPanel', () => {
   it('does not invent defaults for a legacy round and cancels an unsaved draft', () => {
     const { onSave, onDirtyChange } = setup();
+    expect(screen.getByRole('heading', { name: `Games · ${fictionalRoundScores.roundName}` })).toBeVisible();
+    expect(screen.getByText(fictionalRoundScores.eventName)).toBeVisible();
+    expect(screen.getByText(`${fictionalRoundScores.courseName} · ${fictionalRoundScores.teeName} / ${fictionalRoundScores.teeCategory}`)).toBeVisible();
     expect(screen.getByText('No games configured for this round.')).toBeVisible();
     expect(onSave).not.toHaveBeenCalled();
     click('Add game');

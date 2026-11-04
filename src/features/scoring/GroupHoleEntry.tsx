@@ -1,5 +1,5 @@
 import type { CourseHole } from '../../domain/catalog';
-import { useRef } from 'react';
+import { useCallback, useLayoutEffect, useRef } from 'react';
 import type { HoleScore } from '../../domain/scoring';
 import type { RoundGroup } from '../../domain/setup';
 import { parseScoreEntry, scoreEntryText } from '../../contracts/scoring';
@@ -7,6 +7,9 @@ import { maximumExactHoleStrokes } from '../../domain/scoring';
 import type { HoleDraft } from './entry-state';
 import { scoreLabel } from './entry-state';
 import './scoring.css';
+
+// Allow a pause between digits (including 10/12) before moving to another score.
+const scoreTypingPauseMs = 850;
 
 export interface GroupHoleEntryRow {
   readonly playerId: string;
@@ -40,6 +43,47 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
   const disabled = busy || readOnly;
   const scoreInputs = useRef<Array<HTMLInputElement | null>>([]);
   const primaryAction = useRef<HTMLButtonElement | null>(null);
+  const composing = useRef(false);
+  const context = JSON.stringify([groupNumber, hole.number, rows.slice(0, 4).map((row) => row.playerId)]);
+  const current = useRef({ rows, disabled, context });
+  const pending = useRef<{
+    timer: ReturnType<typeof setTimeout>;
+    playerId: string;
+    text: string;
+    context: string;
+  } | null>(null);
+  const cancelMovement = useCallback(() => {
+    if (pending.current) clearTimeout(pending.current.timer);
+    pending.current = null;
+  }, []);
+  useLayoutEffect(() => {
+    current.current = { rows, disabled, context };
+    const movement = pending.current;
+    if (!movement) return;
+    const source = rows.find((row) => row.playerId === movement.playerId);
+    if (disabled || context !== movement.context || !source || source.draft?.status === 'conflict'
+      || (source.draft?.text ?? scoreEntryText(source.saved)) !== movement.text) cancelMovement();
+  });
+  useLayoutEffect(() => {
+    composing.current = false;
+    return cancelMovement;
+  }, [cancelMovement, context, disabled]);
+
+  function focusNextBlank(rowIndex: number) {
+    const visible = current.current.rows.slice(0, 4);
+    for (let offset = 1; offset < visible.length; offset++) {
+      const targetIndex = (rowIndex + offset) % visible.length;
+      const target = visible[targetIndex];
+      const element = scoreInputs.current[targetIndex];
+      if (target && target.draft?.status !== 'conflict'
+        && parseScoreEntry(target.draft?.text ?? scoreEntryText(target.saved))?.kind === 'unplayed'
+        && element && !element.disabled) {
+        element.focus();
+        return;
+      }
+    }
+    primaryAction.current?.focus();
+  }
   const quickScores = [...new Set([hole.par - 1, hole.par, hole.par + 1, hole.par + 2])].filter((value) => value > 0);
   return <section className="group-hole-entry" aria-label="Group hole entry">
     <div className="score-selection">
@@ -62,6 +106,7 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
         const score = parseScoreEntry(text);
         const pickedUp = score?.kind === 'picked-up';
         const numeric = score?.kind === 'strokes' ? score.strokes : pickedUp ? score.reportedStrokes : undefined;
+        const blank = score?.kind === 'unplayed';
         const status = row.draft ? row.draft.status === 'conflict'
           ? row.draft.acknowledged ? 'Saved, then changed — review' : 'Conflict — review'
           : row.draft.status === 'saving' ? 'Saving…' : row.draft.status === 'failed' ? 'Failed — retry' : 'Unsaved'
@@ -69,29 +114,57 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
         return <article className="player-entry" key={row.playerId} aria-label={`${row.displayName} scorecard`}>
           <div className="entry-heading"><h3>{row.displayName}</h3><span className={`score-badge score-badge-${row.draft?.status ?? 'saved'}`}>{status}</span></div>
           <div className="entry-value">
-            <button type="button" aria-label={`Decrease score for ${row.displayName}`} disabled={disabled || numeric === undefined || numeric <= 1} onClick={() => {
-              if (numeric !== undefined && numeric > 1) onEdit(row.playerId, `${pickedUp ? 'X' : ''}${String(numeric - 1)}`);
+            <button type="button" aria-label={`Decrease score for ${row.displayName}`} disabled={disabled || (!blank && (numeric === undefined || numeric <= 1))} onClick={() => {
+              cancelMovement();
+              if (blank) onEdit(row.playerId, String(hole.par));
+              else if (numeric !== undefined && numeric > 1) onEdit(row.playerId, `${pickedUp ? 'X' : ''}${String(numeric - 1)}`);
             }}>−</button>
-            <input aria-label={`${row.displayName} score`} inputMode="numeric" autoComplete="off" spellCheck={false} aria-invalid={score === null}
+            <input aria-label={`${row.displayName} score`} inputMode="numeric" enterKeyHint="next" autoComplete="off" spellCheck={false} aria-invalid={score === null}
               placeholder="—" disabled={disabled} value={text} ref={(element) => { scoreInputs.current[rowIndex] = element; }}
-              onChange={(event) => { onEdit(row.playerId, event.target.value); }}
+              onChange={(event) => {
+                cancelMovement();
+                const element = event.currentTarget;
+                const value = element.value;
+                onEdit(row.playerId, value);
+                if (disabled || composing.current || parseScoreEntry(value)?.kind !== 'strokes'
+                  || row.draft?.status === 'conflict' || document.activeElement !== element) return;
+                pending.current = {
+                  playerId: row.playerId, text: value, context,
+                  timer: setTimeout(() => {
+                    pending.current = null;
+                    const latest = current.current;
+                    const source = latest.rows[rowIndex];
+                    if (latest.disabled || latest.context !== context || composing.current
+                      || document.activeElement !== element || element.value !== value
+                      || source?.playerId !== row.playerId || source.draft?.status === 'conflict'
+                      || (source.draft?.text ?? scoreEntryText(source.saved)) !== value) return;
+                    focusNextBlank(rowIndex);
+                  }, scoreTypingPauseMs),
+                };
+              }}
+              onBlur={cancelMovement}
+              onCompositionStart={() => { composing.current = true; cancelMovement(); }}
+              onCompositionEnd={() => { composing.current = false; cancelMovement(); }}
               onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                cancelMovement();
+                if (event.key === 'Enter' && !event.nativeEvent.isComposing && !composing.current) {
                   event.preventDefault();
-                  const nextInput = scoreInputs.current[rowIndex + 1];
-                  if (nextInput) nextInput.focus(); else primaryAction.current?.focus();
+                  if (score !== null && row.draft?.status !== 'conflict' && !disabled) focusNextBlank(rowIndex);
                 }
               }} />
-            <button type="button" aria-label={`Increase score for ${row.displayName}`} disabled={disabled || numeric === undefined || numeric >= maximumExactHoleStrokes} onClick={() => {
-              if (numeric !== undefined && numeric < maximumExactHoleStrokes) onEdit(row.playerId, `${pickedUp ? 'X' : ''}${String(numeric + 1)}`);
+            <button type="button" aria-label={`Increase score for ${row.displayName}`} disabled={disabled || (!blank && (numeric === undefined || numeric >= maximumExactHoleStrokes))} onClick={() => {
+              cancelMovement();
+              if (blank) onEdit(row.playerId, String(hole.par));
+              else if (numeric !== undefined && numeric < maximumExactHoleStrokes) onEdit(row.playerId, `${pickedUp ? 'X' : ''}${String(numeric + 1)}`);
             }}>+</button>
             <button className="pickup-button" type="button" aria-label={`Pickup X for ${row.displayName}`} aria-pressed={pickedUp} disabled={disabled} onClick={() => {
+              cancelMovement();
               onEdit(row.playerId, pickedUp ? numeric === undefined ? '' : String(numeric) : numeric === undefined ? 'X' : `X${String(numeric)}`);
             }}>X</button>
           </div>
           {rows.length === 1 && <div className="quick-scores" aria-label={`Quick scores for ${row.displayName}`}>{quickScores.map((value) => <button type="button" key={value}
             aria-label={`${pickedUp ? 'X' : ''}${String(value)} ${pickedUp ? 'pickup' : 'strokes'} for ${row.displayName}`}
-            disabled={disabled} onClick={() => { onEdit(row.playerId, `${pickedUp ? 'X' : ''}${String(value)}`); }}>
+            disabled={disabled} onClick={() => { cancelMovement(); onEdit(row.playerId, `${pickedUp ? 'X' : ''}${String(value)}`); }}>
             {pickedUp ? 'X' : ''}{value}{value === hole.par && <small>par</small>}
           </button>)}</div>}
           {!score && <p className="entry-error" role="alert">Enter a valid whole-number score above zero, X or X with a number, or leave this blank.</p>}

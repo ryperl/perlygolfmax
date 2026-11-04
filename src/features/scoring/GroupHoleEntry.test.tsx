@@ -1,7 +1,9 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { maximumExactHoleStrokes } from '../../domain/scoring';
 import { fictionalRoundScores } from '../../client/scoring.test-support';
 import { GroupHoleEntry } from './GroupHoleEntry';
 import type { GroupHoleEntryProps } from './GroupHoleEntry';
@@ -18,6 +20,26 @@ function props(): GroupHoleEntryProps {
     onGroupChange: vi.fn(), onHoleChange: vi.fn(), onEdit: vi.fn(), onReview: vi.fn(), onDiscard: vi.fn(), onSave: vi.fn(),
   };
 }
+function ControlledEntry(input: GroupHoleEntryProps) {
+  const [edits, setEdits] = useState<Readonly<Record<string, string>>>({});
+  return <GroupHoleEntry {...input} rows={input.rows.map((row) => {
+    const text = edits[row.playerId];
+    return text === undefined ? row : { ...row, draft: { ...row.draft, text, baseEtag: null, status: row.draft?.status ?? 'draft' } };
+  })} onEdit={(playerId, text) => {
+    input.onEdit(playerId, text);
+    setEdits((previous) => ({ ...previous, [playerId]: text }));
+  }} />;
+}
+function fields() { return screen.getAllByRole('textbox'); }
+function typeScore(index: number, value: string) {
+  const field = fields()[index];
+  if (!field) throw new Error('Missing fictional field');
+  field.focus();
+  fireEvent.change(field, { target: { value } });
+  return field;
+}
+function pause(ms = 900) { act(() => { vi.advanceTimersByTime(ms); }); }
+afterEach(() => { vi.useRealTimers(); });
 describe('pure mobile group hole entry', () => {
   it('supports SSR with blank boxes, one form and no more than four player rows, without auto-par', () => {
     const input = props();
@@ -30,7 +52,7 @@ describe('pure mobile group hole entry', () => {
     for (const field of screen.getAllByRole('textbox')) expect(field).toHaveValue('');
     expect(screen.getByRole('button', { name: 'Previous hole' })).toBeDisabled();
     expect(screen.getByText('Par 4 · 100 yards · Stroke index 1')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Decrease score for Fictional Player 1' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Decrease score for Fictional Player 1' })).toBeEnabled();
     expect(screen.queryByText(/Other options|Number = strokes|Clear to unplayed|DNF for|Request ID|Base revision/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /4 strokes for/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/Saved:/)).not.toBeInTheDocument();
@@ -56,15 +78,15 @@ describe('pure mobile group hole entry', () => {
   });
   it('moves Enter between score boxes without submitting, then focuses the explicit group action; buttons retain Enter/Space activation', async () => {
     const input = props();
-    render(<GroupHoleEntry {...input} />);
+    render(<ControlledEntry {...input} />);
     const user = userEvent.setup();
     const field = screen.getByRole('textbox', { name: 'Fictional Player 1 score' });
     await user.click(field);
     expect(field).toHaveFocus();
-    await user.keyboard('{Enter}');
+    await user.keyboard('4{Enter}');
     expect(screen.getByRole('textbox', { name: 'Fictional Player 2 score' })).toHaveFocus();
     expect(input.onSave).not.toHaveBeenCalled();
-    await user.keyboard('{Enter}{Enter}{Enter}');
+    await user.keyboard('4{Enter}4{Enter}4{Enter}');
     expect(screen.getByRole('button', { name: 'Save & Next Hole' })).toHaveFocus();
     expect(input.onSave).not.toHaveBeenCalled();
     await user.keyboard('{Enter}');
@@ -75,6 +97,187 @@ describe('pure mobile group hole entry', () => {
     screen.getByRole('button', { name: 'Save changes' }).focus();
     await user.keyboard(' ');
     expect(input.onSave).toHaveBeenLastCalledWith(false);
+  });
+  it.each([3, 4, 5])('seeds blank +/- at par %i only on the first explicit tap, then adjusts normally', (par) => {
+    const input = props();
+    render(<ControlledEntry {...input} hole={{ ...input.hole, par }} />);
+    expect(fields()[0]).toHaveValue('');
+    fireEvent.click(screen.getByRole('button', { name: 'Increase score for Fictional Player 1' }));
+    expect(fields()[0]).toHaveValue(String(par));
+    fireEvent.click(screen.getByRole('button', { name: 'Increase score for Fictional Player 1' }));
+    expect(fields()[0]).toHaveValue(String(par + 1));
+    fireEvent.click(screen.getByRole('button', { name: 'Decrease score for Fictional Player 2' }));
+    expect(fields()[1]).toHaveValue(String(par));
+    fireEvent.click(screen.getByRole('button', { name: 'Decrease score for Fictional Player 2' }));
+    expect(fields()[1]).toHaveValue(String(par - 1));
+    expect(input.onSave).not.toHaveBeenCalled();
+  });
+  it.each(['X', 'DNF', 'oops', '0', String(maximumExactHoleStrokes + 1)])('does not seed nonblank %s', (text) => {
+    const input = props();
+    render(<GroupHoleEntry {...input} rows={input.rows.map((row) => ({ ...row, draft: { text, baseEtag: null, status: 'draft' } }))} />);
+    expect(screen.getByRole('button', { name: 'Increase score for Fictional Player 1' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Decrease score for Fictional Player 1' })).toBeDisabled();
+    expect(input.onEdit).not.toHaveBeenCalled();
+  });
+  it.each(['', 'X'])('preserves exact numeric bounds for %s strokes', (prefix) => {
+    const input = props();
+    const first = input.rows[0];
+    if (!first) throw new Error('Missing fictional row');
+    const { rerender } = render(<GroupHoleEntry {...input} rows={[{ ...first, draft: { text: `${prefix}1`, baseEtag: null, status: 'draft' } }]} />);
+    expect(screen.getByRole('button', { name: /Decrease score/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: /Increase score/ }));
+    expect(input.onEdit).toHaveBeenLastCalledWith(first.playerId, `${prefix}2`);
+    rerender(<GroupHoleEntry {...input} rows={[{ ...first, draft: { text: `${prefix}${String(maximumExactHoleStrokes)}`, baseEtag: null, status: 'draft' } }]} />);
+    expect(screen.getByRole('button', { name: /Increase score/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: /Decrease score/ }));
+    expect(input.onEdit).toHaveBeenLastCalledWith(first.playerId, `${prefix}${String(maximumExactHoleStrokes - 1)}`);
+  });
+  it.each(['10', '12'])('waits after the last digit of %s, then focuses the next blank without saving', (text) => {
+    vi.useFakeTimers();
+    const input = props();
+    render(<ControlledEntry {...input} />);
+    const first = typeScore(0, text.slice(0, 1));
+    pause(600);
+    expect(first).toHaveFocus();
+    fireEvent.change(first, { target: { value: text } });
+    pause(600);
+    expect(first).toHaveFocus();
+    expect(first).toHaveValue(text);
+    pause(300);
+    expect(fields()[1]).toHaveFocus();
+    expect(input.onSave).not.toHaveBeenCalled();
+    expect(input.onHoleChange).not.toHaveBeenCalled();
+    expect(input.onEdit).toHaveBeenCalledTimes(2);
+  });
+  it('skips saved and draft entries including pickup/DNF, wrapping to earlier blanks', () => {
+    vi.useFakeTimers();
+    const input = props();
+    const { rerender } = render(<ControlledEntry {...input} rows={input.rows.map((row, index) => index === 1
+      ? { ...row, saved: { kind: 'strokes', strokes: 5 } } : index === 2
+        ? { ...row, draft: { text: 'X', baseEtag: null, status: 'draft' } } : row)} />);
+    typeScore(0, '4');
+    pause();
+    expect(fields()[3]).toHaveFocus();
+    rerender(<ControlledEntry {...input} rows={input.rows.map((row, index) => index === 0
+      ? { ...row, saved: { kind: 'strokes', strokes: 5 } } : index === 2
+        ? { ...row, draft: { text: 'DNF', baseEtag: null, status: 'draft' } } : row)} />);
+    typeScore(3, '6');
+    pause();
+    expect(fields()[1]).toHaveFocus();
+  });
+  it('focuses Save without activating when no blank remains, also for immediate Enter', () => {
+    vi.useFakeTimers();
+    const input = props();
+    render(<ControlledEntry {...input} rows={input.rows.map((row, index) => index === 0 ? row
+      : { ...row, saved: { kind: 'strokes', strokes: 5 } })} />);
+    const first = typeScore(0, '4');
+    pause();
+    expect(screen.getByRole('button', { name: 'Save & Next Hole' })).toHaveFocus();
+    first.focus();
+    fireEvent.keyDown(first, { key: 'Enter' });
+    expect(screen.getByRole('button', { name: 'Save & Next Hole' })).toHaveFocus();
+    expect(input.onSave).not.toHaveBeenCalled();
+  });
+  it.each(['blur', 'navigation', 'invalid', 'clear', 'composition', 'unmount', 'busy', 'readOnly', 'hole', 'group', 'conflict', 'external-value'])(
+    'cancels pending focus on %s and does not steal focus after the context returns', (reason) => {
+      vi.useFakeTimers();
+      const input = props();
+      const { rerender, unmount } = render(reason === 'external-value' ? <GroupHoleEntry {...input} /> : <ControlledEntry {...input} />);
+      const first = typeScore(0, '4');
+      if (reason === 'blur') { fields()[2]?.focus(); first.focus(); }
+      if (reason === 'navigation') fireEvent.keyDown(first, { key: 'ArrowLeft' });
+      if (reason === 'invalid' || reason === 'clear') fireEvent.change(first, { target: { value: reason === 'clear' ? '' : '0' } });
+      if (reason === 'composition') {
+        fireEvent.compositionStart(first);
+        fireEvent.change(first, { target: { value: '12' } });
+        fireEvent.keyDown(first, { key: 'Enter', isComposing: true });
+        fireEvent.compositionEnd(first);
+      }
+      if (reason === 'unmount') unmount();
+      if (reason === 'busy' || reason === 'readOnly') {
+        rerender(<ControlledEntry {...input} busy={reason === 'busy'} readOnly={reason === 'readOnly'} />);
+        rerender(<ControlledEntry {...input} />);
+      }
+      if (reason === 'hole' || reason === 'group') {
+        rerender(<ControlledEntry {...input} groupNumber={reason === 'group' ? 2 : 1}
+          hole={{ ...input.hole, number: reason === 'hole' ? 2 : 1 }} />);
+        rerender(<ControlledEntry {...input} />);
+      }
+      if (reason === 'conflict' || reason === 'external-value') {
+        const updated: GroupHoleEntryProps = { ...input, rows: input.rows.map((row, index) => index === 0
+          ? { ...row, draft: { text: reason === 'conflict' ? '4' : '5', baseEtag: null, status: reason === 'conflict' ? 'conflict' : 'draft' } } : row) };
+        rerender(reason === 'external-value' ? <GroupHoleEntry {...updated} /> : <ControlledEntry {...updated} />);
+      }
+      pause();
+      if (reason !== 'unmount') expect(first).toHaveFocus();
+      if (reason === 'conflict') {
+        fireEvent.keyDown(first, { key: 'Enter' });
+        expect(first).toHaveFocus();
+      }
+      expect(input.onSave).not.toHaveBeenCalled();
+    },
+  );
+  it('does not move for invalid/conflicting Enter or button edits, and preserves focus/caret on unchanged renders', () => {
+    vi.useFakeTimers();
+    const input = props();
+    const { rerender } = render(<ControlledEntry {...input} />);
+    const first = typeScore(0, '0');
+    fireEvent.keyDown(first, { key: 'Enter' });
+    pause();
+    expect(first).toHaveFocus();
+    expect(first).toHaveAttribute('aria-invalid', 'true');
+    fireEvent.change(first, { target: { value: '12' } });
+    fireEvent.keyDown(first, { key: 'ArrowLeft' });
+    if (!(first instanceof HTMLInputElement)) throw new Error('Missing input');
+    first.setSelectionRange(1, 1);
+    rerender(<ControlledEntry {...input} rows={[...input.rows]} />);
+    pause();
+    expect(first).toHaveFocus();
+    expect(first.selectionStart).toBe(1);
+    for (const name of ['Increase score', 'Decrease score', 'Pickup X']) {
+      const button = screen.getByRole('button', { name: `${name} for Fictional Player 1` });
+      button.focus();
+      fireEvent.click(button);
+      pause();
+      expect(button).toHaveFocus();
+    }
+    expect(input.onSave).not.toHaveBeenCalled();
+  });
+  it('uses current draft/saved values when selecting a blank and keeps unchanged polls from resetting the typing pause', () => {
+    vi.useFakeTimers();
+    const input = props();
+    const { rerender } = render(<ControlledEntry {...input} />);
+    typeScore(1, '8');
+    typeScore(0, '4');
+    pause(500);
+    rerender(<ControlledEntry {...input} rows={input.rows.map((row, index) => index === 2
+      ? { ...row, saved: { kind: 'picked-up', reportedStrokes: 7 } } : { ...row })} />);
+    pause(400);
+    expect(fields()[3]).toHaveFocus();
+    expect(fields()[1]).toHaveValue('8');
+    expect(fields()[2]).toHaveValue('X7');
+    expect(input.onEdit).toHaveBeenCalledTimes(2);
+  });
+  it('keeps quick scores and repeated blank-seeded button adjustments focused without scheduling movement', () => {
+    vi.useFakeTimers();
+    const input = props();
+    render(<ControlledEntry {...input} rows={input.rows.slice(0, 1)} />);
+    const increase = screen.getByRole('button', { name: /Increase score/ });
+    increase.focus();
+    fireEvent.click(increase);
+    pause();
+    expect(increase).toHaveFocus();
+    fireEvent.click(increase);
+    pause();
+    expect(increase).toHaveFocus();
+    expect(fields()[0]).toHaveValue('5');
+    const quick = screen.getByRole('button', { name: '4 strokes for Fictional Player 1' });
+    quick.focus();
+    fireEvent.click(quick);
+    pause();
+    expect(quick).toHaveFocus();
+    expect(fields()[0]).toHaveValue('4');
+    expect(input.onSave).not.toHaveBeenCalled();
   });
   it('makes archived data read-only while allowing view navigation and displays explicit review states', () => {
     const input = props();

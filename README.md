@@ -142,6 +142,12 @@ acknowledgement is tracked separately: on partial failure, saved values stay
 saved, pending drafts remain and the screen does not advance. A foursome uses
 one compact card with a row per golfer and one shared save footer; single-player
 entry can additionally offer explicit quick scores.
+Scores stay blank until entered. The first + or − tap on a blank score enters
+that hole's par; later taps adjust it. After an 850 ms pause in valid numeric
+typing, focus moves to the next empty golfer, allowing multi-digit scores.
+Next/Enter does the same immediately. If no empty fields remain, focus moves
+to Save without activating it. Navigation, blur, conflicts and busy/read-only
+states cancel pending movement; button adjustments do not trigger it.
 Opening a round shows a traditional group scorecard immediately: holes run
 left to right, with a row per golfer, front/back nines and Out/In/Total columns.
 Select a golfer for their individual card, or choose **Enter scores** for the
@@ -194,9 +200,12 @@ Standard and Modified Stableford presets can each use gross or net scoring, and
 multiple games can use the same round. Net allowance defaults to 95% and is
 configurable per game.
 
-In Games, expand a golfer to inspect hole points. Each expanded table scrolls
-horizontally within its own section without widening the page or moving other
-golfers' tables.
+Games shows one compact scorecard per configured game, with golfers in rows
+and hole points visible without expanding individual golfers. Front/Back
+controls choose the visible nine; Out/In/Total remain server-derived values.
+The table scrolls as one unit with fixed player labels. Playing handicaps,
+progress, partial totals and unavailable inputs remain explicit; this is not
+a ranked leaderboard or a second score calculation.
 
 | Result relative to par | Standard preset | Modified Stableford preset |
 |------------------------|----------------:|-------------------------:|

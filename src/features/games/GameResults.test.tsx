@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { fictionalId } from '../../client/catalog.test-support';
@@ -17,12 +17,14 @@ const player: GamePlayerResult = {
     number: index + 1, points: index === 0 ? 0 : index === 1 ? -1 : null, strokesReceived: 0,
   })),
 };
+const holeNumbers = player.holes.map((hole) => hole.number);
 
 describe('GameResults', () => {
   it('shows server totals, zero/negative points, plus handicap, partial progress and pending holes in provided order', () => {
     const second = { ...player, playerId: fictionalId(512), displayName: 'Fictional Golfer B', totalPoints: 8 };
-    const { container } = render(<GameResults game={game} result={{ gameId: game.id, players: [player, second] }} />);
-    const table = within(screen.getByRole('region', { name: `${game.name} points totals` })).getByRole('table');
+    const { container } = render(<GameResults game={game} holeNumbers={holeNumbers} result={{ gameId: game.id, players: [player, second] }} />);
+    const scroll = screen.getByRole('region', { name: `${game.name} points scorecard` });
+    const table = within(scroll).getByRole('table');
     const rows = within(table).getAllByRole('row');
     expect(rows[1]).toHaveTextContent('Fictional Golfer A');
     expect(rows[2]).toHaveTextContent('Fictional Golfer B');
@@ -32,20 +34,20 @@ describe('GameResults', () => {
     expect(screen.getByText('Net · 95% allowance')).toBeVisible();
     expect(screen.getByText('Modified Stableford')).toBeVisible();
     expect(screen.queryByText('GolfLink Modified')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText('Fictional Golfer A · Hole points'));
-    const holes = screen.getByRole('region', { name: `${game.name}, ${player.displayName}, hole points` });
-    expect(within(holes).getByRole('cell', { name: '0' })).toBeVisible();
-    expect(within(holes).getByRole('cell', { name: '-1' })).toBeVisible();
-    expect(within(holes).getAllByLabelText('Pending')).toHaveLength(16);
-    expect(holes).toHaveAttribute('tabindex', '0');
+    if (!rows[1]) throw new Error('Missing fictional player row.');
+    expect(within(rows[1]).getAllByRole('cell')[0]).toHaveTextContent('0');
+    expect(within(rows[1]).getAllByRole('cell')[1]).toHaveTextContent('-1');
+    expect(within(rows[1]).getAllByLabelText('Pending')).toHaveLength(7);
+    expect(scroll).toHaveAttribute('tabindex', '0');
     expect(container.textContent).not.toContain(game.id);
     expect(container.textContent).not.toContain(player.playerId);
     expect(container.textContent).not.toMatch(/rank|handicap index|recordedAt/i);
-    expect(within(table).getByRole('button', { name: player.displayName }).getAttribute('aria-controls')).not.toContain(player.playerId);
+    expect(container.querySelector('details')).toBeNull();
+    expect(within(table).queryByRole('button')).not.toBeInTheDocument();
     expect(within(table).queryByRole('link')).not.toBeInTheDocument();
   });
 
-  it.each(['click', 'Enter', 'Space'])('opens and focuses the correct golfer details on %s without changing the route hash', async (action) => {
+  it.each(['click', 'Enter', 'Space'])('switches visible nines on %s without hiding golfers or changing the route hash', async (action) => {
     const user = userEvent.setup();
     const previousUrl = window.location.href;
     const route = `#events?event=${fictionalId(520)}&round=${fictionalId(521)}`;
@@ -53,24 +55,29 @@ describe('GameResults', () => {
     try {
       const second = {
         ...player, playerId: fictionalId(512), displayName: 'Fictional Golfer B',
-        frontPoints: 8, totalPoints: 8,
-        holes: player.holes.map((hole) => ({ ...hole, points: hole.number === 1 ? 8 : hole.number === 2 ? 0 : null })),
+        frontPoints: 8, backPoints: 8, totalPoints: 16, holesScored: 3,
+        holes: player.holes.map((hole) => ({ ...hole, points: hole.number === 1 || hole.number === 18 ? 8 : hole.number === 2 ? 0 : null })),
       };
-      render(<GameResults game={game} result={{ gameId: game.id, players: [player, second] }} />);
-      const button = screen.getByRole('button', { name: second.displayName });
+      render(<GameResults game={game} holeNumbers={holeNumbers} result={{ gameId: game.id, players: [player, second] }} />);
+      const region = screen.getByRole('region', { name: `${game.name} points scorecard` });
+      region.scrollLeft = 80;
+      const button = screen.getByRole('button', { name: 'Back 9' });
       if (action === 'click') await user.click(button);
       else {
         button.focus();
         await user.keyboard(action === 'Enter' ? '{Enter}' : ' ');
       }
-      const summary = screen.getByText('Fictional Golfer B · Hole points');
-      expect(summary.closest('details')).toHaveAttribute('open');
-      expect(summary).toHaveFocus();
-      expect(screen.getByText('Fictional Golfer A · Hole points').closest('details')).not.toHaveAttribute('open');
-      const region = screen.getByRole('region', { name: `${game.name}, ${second.displayName}, hole points` });
-      expect(within(region).getByRole('cell', { name: '8' })).toBeVisible();
-      expect(within(region).getByRole('cell', { name: '0' })).toBeVisible();
-      expect(button).toHaveAttribute('aria-controls', summary.closest('details')?.id);
+      expect(button).toHaveAttribute('aria-pressed', 'true');
+      expect(region.scrollLeft).toBe(0);
+      expect(within(region).getByRole('columnheader', { name: '18' })).toBeVisible();
+      expect(within(region).queryByRole('columnheader', { name: '1' })).not.toBeInTheDocument();
+      const rows = within(region).getAllByRole('row');
+      if (!rows[2]) throw new Error('Missing second golfer.');
+      expect(within(rows[2]).getAllByRole('cell')[8]).toHaveTextContent('8');
+      expect(within(rows[2]).getAllByRole('cell')[11]).toHaveTextContent('16 (partial)');
+      expect(rows[1]).toHaveTextContent(player.displayName);
+      await user.click(screen.getByRole('button', { name: 'Front 9' }));
+      expect(within(region).getByRole('columnheader', { name: '1' })).toBeVisible();
       expect(window.location.hash).toBe(route);
     } finally {
       window.history.replaceState(null, '', previousUrl);
@@ -84,24 +91,39 @@ describe('GameResults', () => {
     ['missing-stroke-index', 'Hole stroke indexes are unavailable.'],
     ['missing-score-data', 'Score data is unavailable.'],
   ] as const)('shows a clear unavailable reason for %s without inventing results', (reason, copy) => {
-    render(<GameResults game={game} result={{ gameId: game.id, players: [{
+    render(<GameResults game={game} holeNumbers={holeNumbers} result={{ gameId: game.id, players: [{
       ...player, status: 'unavailable', unavailableReason: reason, playingHandicap: null,
       frontPoints: null, backPoints: null, totalPoints: null, holesScored: 0,
     }] }} />);
-    expect(within(screen.getByRole('region', { name: `${game.name} points totals` })).getByText(copy)).toBeVisible();
+    expect(screen.getByText(`${player.displayName}: ${copy}`)).toBeVisible();
+    expect(screen.getAllByLabelText('Unavailable')).toHaveLength(9);
+    expect(screen.queryByLabelText('Pending')).not.toBeInTheDocument();
     expect(screen.queryByText('(partial)', { exact: false })).not.toBeInTheDocument();
   });
 
   it('shows zero as a scored total, complete status, and missing results explicitly', () => {
-    const view = render(<GameResults game={{ ...game, basis: 'gross' }} result={{ gameId: game.id, players: [{
-      ...player, status: 'complete', totalPoints: 0, frontPoints: 0, backPoints: 0,
+    const view = render(<GameResults game={{ ...game, basis: 'gross' }} holeNumbers={holeNumbers} result={{ gameId: game.id, players: [{
+      ...player, status: 'complete', totalPoints: 0, frontPoints: 0, backPoints: 0, holesScored: 18,
+      holes: player.holes.map((hole) => ({ ...hole, points: 0 })),
     }] }} />);
     expect(screen.getByText('Gross')).toBeVisible();
     expect(screen.getByText('Complete')).toBeVisible();
-    expect(within(screen.getByRole('region', { name: `${game.name} points totals` }))
-      .getAllByRole('cell', { name: '0' })).toHaveLength(3);
-    expect(screen.queryByRole('columnheader', { name: 'Playing handicap' })).not.toBeInTheDocument();
-    view.rerender(<GameResults game={game} result={undefined} />);
+    expect(within(screen.getByRole('region', { name: `${game.name} points scorecard` }))
+      .getAllByRole('cell', { name: '0' })).toHaveLength(12);
+    expect(screen.queryByText(/Playing handicap/)).not.toBeInTheDocument();
+    view.rerender(<GameResults game={game} holeNumbers={holeNumbers} result={undefined} />);
     expect(screen.getByText('Results are unavailable.')).toBeVisible();
+  });
+
+  it.each([1, 10])('shows a standalone nine starting at hole %s without an unavailable side selector', (start) => {
+    const numbers = Array.from({ length: 9 }, (_, index) => start + index);
+    render(<GameResults game={game} holeNumbers={numbers} result={{ gameId: game.id, players: [{
+      ...player, status: 'complete', holesScored: 9, totalHoles: 9,
+      holes: numbers.map((number) => ({ number, points: 0, strokesReceived: 0 })),
+      frontPoints: start === 1 ? 0 : null, backPoints: start === 10 ? 0 : null, totalPoints: 0,
+    }] }} />);
+    expect(screen.queryByRole('button', { name: /Front 9|Back 9/ })).not.toBeInTheDocument();
+    for (const number of numbers) expect(screen.getByRole('columnheader', { name: String(number) })).toBeVisible();
+    expect(screen.getByText('Complete')).toBeVisible();
   });
 });

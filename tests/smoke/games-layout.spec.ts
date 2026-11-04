@@ -1,49 +1,10 @@
 import { expect, test } from '@playwright/test';
-import type { RoundGameDefinition } from '../../src/domain/games';
-import type { RoundScores } from '../../src/domain/scoring';
-import type { RoundSnapshot } from '../../src/domain/setup';
-import { calculateGameResults, stablefordPoints } from '../../src/domain/stableford';
+import { createServer } from 'vite';
+import { stablefordPoints } from '../../src/domain/stableford';
 import { renderComponentFixture } from './render-fixture';
+import { fictionalGamesRound as round } from './games-fixture-data';
 
 const id = (number: number) => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
-const layout = Array.from({ length: 18 }, (_, index) => ({ number: index + 1, sourceId: 300 + index, length: 350, par: 4, allocation: index + 1 }));
-const indices = ['18.9', '0', '+2.1'];
-const snapshot: RoundSnapshot = {
-  id: id(70), name: 'Fictional games round', courseId: 'ghin:301:302', courseVersionId: 'a'.repeat(64),
-  course: {
-    provider: 'usga-ghin', sourceId: 302, name: 'Fictional Dunes', status: 'Active', number: null, city: 'Fictional City', state: 'Fictional State',
-    facility: { id: 301, name: 'Fictional Club', status: 'Active', number: null, golfAssociationId: 303, address: 'Fictional address', longitude: 0, latitude: 0 },
-    season: { name: 'All year', start: '01/01', end: '12/31', allYear: true },
-  },
-  teeProfile: {
-    id: 901, name: 'Fictional Gold', category: 'Fictional category', holeCount: 18, totalYardage: 6300, totalMeters: 5760,
-    totalPar: 72, strokeAllocation: true, shorter: false, eligibleSides: 'All', holes: layout,
-    ratings: [{ type: 'Total', course: 72, slope: 113, bogey: 90 }, { type: 'Front', course: 36, slope: 113, bogey: 45 }, { type: 'Back', course: 36, slope: 113, bogey: 45 }],
-  },
-  players: Array.from({ length: 4 }, (_, index) => {
-    const value = indices[index];
-    return { playerId: id(index + 1), displayName: `Fictional golfer ${String(index + 1)}`,
-      handicapIndex: value === undefined ? null : {
-        id: id(500 + index), value, effectiveDate: '2026-01-01', source: 'Fictional capture',
-        recordedAt: '2026-01-01T00:00:00Z', recordedBy: { tenantId: id(200), objectId: id(201) }, previousObservationId: null,
-      } };
-  }),
-  groups: [{ number: 1, playerIds: [1, 2, 3, 4].map(id) }], scoringStarted: true,
-};
-const definitions: readonly RoundGameDefinition[] = [
-  { id: id(700), name: 'Fictional standard net', preset: 'standard', basis: 'net', handicapAllowancePercent: 95, points: stablefordPoints('standard') },
-  { id: id(701), name: 'Fictional modified gross', preset: 'modified', basis: 'gross', handicapAllowancePercent: 95, points: stablefordPoints('modified') },
-];
-const cards: RoundScores['cards'] = snapshot.players.map((player) => ({
-  playerId: player.playerId, displayName: player.displayName, etag: 'card-v1', updatedAt: '2026-01-01T00:00:00Z',
-  holes: layout.map((hole) => ({ number: hole.number, score: { kind: 'strokes', strokes: 4 } })),
-}));
-const round: RoundScores = {
-  eventId: id(50), eventName: 'Fictional event', eventStatus: 'active', roundId: snapshot.id, roundName: snapshot.name,
-  courseName: snapshot.course.name, teeName: snapshot.teeProfile.name, teeCategory: snapshot.teeProfile.category, layout, cards,
-  groups: snapshot.groups, setupLocked: true, lastUpdatedAt: '2026-01-01T00:00:00Z',
-  games: { configuration: { eventId: id(50), roundId: snapshot.id, etag: 'games-v1', games: definitions }, results: calculateGameResults(definitions, snapshot, cards) },
-};
 
 test('configured game points appear alongside strokes on group and individual scorecards', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 320, height: 740 });
@@ -101,8 +62,8 @@ test('configurable game results and points editor fit narrow and enlarged layout
   await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
   const net = page.getByRole('region', { name: 'Fictional standard net results', exact: true });
   await expect(net.getByText('54', { exact: true })).toBeVisible();
-  await expect(net.getByRole('cell', { name: 'No captured Handicap Index is available.', exact: true })).toBeVisible();
-  await expect(net.getByRole('cell', { name: '+2', exact: true })).toBeVisible();
+  await expect(net.getByText('Fictional golfer 4: No captured Handicap Index is available.', { exact: true })).toBeVisible();
+  await expect(net.getByText('Playing handicap +2', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Handicap allowance (%)')).toHaveValue('95');
   const editor = page.getByRole('region', { name: 'Editable points table', exact: true });
   await editor.focus();
@@ -113,62 +74,91 @@ test('configurable game results and points editor fit narrow and enlarged layout
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
-test('expanded hole-point disclosures scroll independently without widening the page', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/#events');
-  await expect(page.getByRole('heading', { name: 'Events', exact: true })).toBeVisible();
-  const stylesheets = await page.locator('link[rel="stylesheet"]').evaluateAll((links) =>
-    links.map((link) => link.getAttribute('href')).filter((href): href is string => href !== null));
-  const panel = await renderComponentFixture('/src/features/games/RoundGamesPanel.tsx', 'RoundGamesPanel', {
-    round, busy: false, onDirtyChange: () => undefined,
-    onSave: () => Promise.resolve(null), onRefresh: () => Promise.resolve(round),
+test('compact game cards keep golfers visible with shared scrolling and working nine controls', async ({ page }, testInfo) => {
+  const server = await createServer({
+    configFile: false, cacheDir: testInfo.outputPath('vite-cache'),
+    server: { host: '127.0.0.1', port: 0, hmr: false }, esbuild: { jsx: 'automatic' },
+    optimizeDeps: { noDiscovery: true, include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'] },
+    logLevel: 'error',
   });
-  await page.setContent(`<html><head><meta name="viewport" content="width=device-width, initial-scale=1">${stylesheets.map((href) => `<link rel="stylesheet" href="${href}">`).join('')}</head>
-    <body><div class="app"><main><section class="owner-scores"><div>${panel}</div></section></main></div></body></html>`);
-  const game = page.getByRole('region', { name: 'Fictional modified gross results', exact: true });
-  const firstDetails = game.locator('details').nth(0);
-  const secondDetails = game.locator('details').nth(1);
-  await firstDetails.locator('summary').click();
-  await secondDetails.locator('summary').click();
-  const first = game.getByRole('region', { name: 'Fictional modified gross, Fictional golfer 1, hole points', exact: true });
-  const second = game.getByRole('region', { name: 'Fictional modified gross, Fictional golfer 2, hole points', exact: true });
-  for (const [width, fontSize] of [[390, '100%'], [320, '125%']] as const) {
-    await page.setViewportSize({ width, height: 844 });
-    await page.evaluate((size) => { document.documentElement.style.fontSize = size; }, fontSize);
-    expect(await page.evaluate(() => window.innerWidth)).toBe(width);
+  try {
+    await server.listen();
+    const address = server.httpServer?.address();
+    if (!address || typeof address === 'string') throw new Error('Fictional Games server did not start.');
+    const origin = `http://127.0.0.1:${String(address.port)}`;
+    await page.route(`${origin}/__games-fixture`, (route) => route.fulfill({
+      contentType: 'text/html',
+      body: `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+        <script>(() => {
+          const param = new URLSearchParams(window.location.search).get("clawpilotTheme");
+          const theme = param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+          document.documentElement.setAttribute("data-theme", theme);
+        })();</script></head><body><div id="games-fixture"></div>
+        <script type="module" src="/tests/smoke/games-fixture.tsx"></script></body></html>`,
+    }));
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${origin}/__games-fixture`);
+    const game = page.getByRole('region', { name: 'Fictional modified gross results', exact: true });
+    const card = game.getByRole('region', { name: 'Fictional modified gross points scorecard', exact: true });
+    await expect(card).toBeVisible();
+    await expect(card.locator('tbody tr')).toHaveCount(4);
+    await expect(game.locator('details')).toHaveCount(0);
+    const route = page.url();
+    for (const [width, fontSize] of [[390, '100%'], [320, '125%']] as const) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.evaluate((size) => { document.documentElement.style.fontSize = size; }, fontSize);
+      expect(await page.evaluate(() => window.innerWidth)).toBe(width);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      expect(await card.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+      await card.focus();
+      await expect(card).toBeFocused();
+      await card.hover();
+      await page.mouse.wheel(250, 0);
+      await expect.poll(() => card.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+      const bounds = await card.boundingBox();
+      const player = await card.locator('tbody th').first().boundingBox();
+      if (!bounds || !player) throw new Error('Missing compact scorecard bounds.');
+      expect(Math.abs(player.x - bounds.x)).toBeLessThanOrEqual(1);
+      const lastFront = card.getByRole('columnheader', { name: '9', exact: true });
+      await lastFront.evaluate((element) => { element.scrollIntoView({ block: 'nearest', inline: 'end' }); });
+      const lastBox = await lastFront.boundingBox();
+      if (!lastBox) throw new Error('Missing ninth-hole bounds.');
+      expect(lastBox.x).toBeGreaterThanOrEqual(player.x + player.width - 1);
+      expect(lastBox.x + lastBox.width).toBeLessThanOrEqual(bounds.x + bounds.width + 1);
+      await game.getByRole('button', { name: 'Back 9', exact: true }).click();
+      await expect(card.getByRole('columnheader', { name: '18', exact: true })).toBeVisible();
+      expect(await card.evaluate((element) => element.scrollLeft)).toBe(0);
+      await expect(card.locator('tbody tr')).toHaveCount(4);
+      expect(page.url()).toBe(route);
+      expect(await page.evaluate(() => window.scrollX)).toBe(0);
+      await game.getByRole('button', { name: 'Front 9', exact: true }).click();
+      await expect(card.getByRole('columnheader', { name: '1', exact: true })).toBeVisible();
+    }
+    if (testInfo.project.name === 'desktop-chromium') {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.evaluate(() => { document.documentElement.style.fontSize = '100%'; });
+      await game.screenshot({ path: '.azure/games-scorecard-after.png' });
+    }
+    await page.setViewportSize({ width: 1280, height: 900 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    expect(await first.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
-    await first.focus();
-    await expect(first).toBeFocused();
-    await first.evaluate((element) => { element.scrollLeft = 0; });
-    await first.hover();
-    await page.mouse.wheel(300, 0);
-    await expect.poll(() => first.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
-    expect(await second.evaluate((element) => element.scrollLeft)).toBe(0);
-    await first.evaluate((element) => { element.scrollLeft = element.scrollWidth - element.clientWidth; });
-    const regionBox = await first.boundingBox();
-    const lastHoleBox = await first.getByRole('columnheader', { name: '18', exact: true }).boundingBox();
-    if (!regionBox || !lastHoleBox) throw new Error('Missing expanded hole-point table bounds.');
-    expect(lastHoleBox.x).toBeGreaterThanOrEqual(regionBox.x);
-    expect(lastHoleBox.x + lastHoleBox.width).toBeLessThanOrEqual(regionBox.x + regionBox.width + 1);
-    expect(await page.evaluate(() => window.scrollX)).toBe(0);
-    await first.evaluate((element) => { element.scrollLeft = 0; });
-    const firstHoleBox = await first.getByRole('columnheader', { name: '1', exact: true }).boundingBox();
-    if (!firstHoleBox) throw new Error('Missing first hole bounds.');
-    expect(firstHoleBox.x).toBeGreaterThanOrEqual(regionBox.x);
-    expect(firstHoleBox.x + firstHoleBox.width).toBeLessThanOrEqual(regionBox.x + regionBox.width + 1);
-    await second.evaluate((element) => { element.scrollLeft = element.scrollWidth - element.clientWidth; });
-    expect(await first.evaluate((element) => element.scrollLeft)).toBe(0);
-    expect(await second.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
-    await second.evaluate((element) => { element.scrollLeft = 0; });
+    const entry = page.getByRole('region', { name: 'Fictional entry preview', exact: true });
+    const first = entry.getByRole('textbox', { name: 'Fictional golfer 1 score', exact: true });
+    await expect(first).toHaveValue('');
+    await entry.getByRole('button', { name: 'Increase score for Fictional golfer 1', exact: true }).click();
+    await expect(first).toHaveValue('4');
+    await entry.getByRole('button', { name: 'Increase score for Fictional golfer 1', exact: true }).click();
+    await expect(first).toHaveValue('5');
+    await entry.getByRole('button', { name: 'Decrease score for Fictional golfer 2', exact: true }).click();
+    await expect(entry.getByRole('textbox', { name: 'Fictional golfer 2 score', exact: true })).toHaveValue('4');
+    await entry.getByRole('textbox', { name: 'Fictional golfer 3 score', exact: true }).fill('12');
+    const fourth = entry.getByRole('textbox', { name: 'Fictional golfer 4 score', exact: true });
+    await expect(fourth).toBeFocused();
+    await fourth.fill('6');
+    await expect(entry.getByRole('button', { name: 'Save & Next Hole', exact: true })).toBeFocused();
+    await expect(entry.getByLabel('Fictional save count', { exact: true })).toHaveText('0');
+    await entry.getByRole('combobox', { name: 'Jump to hole', exact: true }).selectOption('2');
+    await expect(first).toHaveValue('');
+  } finally {
+    await server.close();
   }
-  await firstDetails.locator('summary').click();
-  await expect(first).not.toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await firstDetails.locator('summary').click();
-  await expect(first).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.evaluate(() => { document.documentElement.style.fontSize = '100%'; });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
