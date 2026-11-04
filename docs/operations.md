@@ -64,11 +64,17 @@ still needs approval.
 
 The frontend demo and unconfigured Events screen work without an account or
 environment values. For an approved test identity/API, copy `.env.example` to
-an ignored `.env.local` and supply the four values. `VITE_ENTRA_API_SCOPE` is
+an ignored `.env.local` and supply the five values. `VITE_ENTRA_API_SCOPE` is
 the fully qualified `api://<API-client-ID>/Events.Access` scope, not the SPA ID.
 `VITE_API_URL` includes the `/api` path. HTTPS is required except loopback HTTP.
 Vite embeds these public application settings at build time; never put a
 secret, private roster or storage credential in a `VITE_` variable.
+
+`VITE_ENTRA_TENANT_ID` is the customer tenant GUID, not the hosting/deployment
+tenant. The authority includes that explicit tenant path: current MSAL
+validates CIAM discovery issuers strictly, and name-only discovery can return
+a GUID-based issuer that it rejects. Do not disable issuer validation or trust
+arbitrary authority hosts to work around that mismatch.
 
 The API uses Functions Core Tools v4, installed separately through an approved
 source. Run `npm run dev:api` after configuration. Missing Core Tools is an

@@ -22,6 +22,8 @@ jobs:
     environment: perlygolfmax-test
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      identity-configured: ${{ steps.frontend-config.outputs.configured }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,15 +34,17 @@ jobs:
       - run: npm ci
       - run: npm run check:dependencies
       - name: Validate frontend configuration
+        id: frontend-config
         env:
           CLIENT_ID: ${{ vars.VITE_ENTRA_SPA_CLIENT_ID }}
+          TENANT_ID: ${{ vars.VITE_ENTRA_TENANT_ID }}
           SUBDOMAIN: ${{ vars.VITE_ENTRA_SUBDOMAIN }}
           API_SCOPE: ${{ vars.VITE_ENTRA_API_SCOPE }}
           API_URL: ${{ vars.AZURE_TEST_API_URL }}
         run: |
           node --input-type=module <<'JS'
           import { appendFileSync } from 'node:fs';
-          const identity = ['CLIENT_ID', 'SUBDOMAIN', 'API_SCOPE'];
+          const identity = ['CLIENT_ID', 'TENANT_ID', 'SUBDOMAIN', 'API_SCOPE'];
           const configured = identity.filter((key) => Boolean(process.env[key])).length;
           if (configured !== 0 && configured !== identity.length) {
             throw new Error('Partial customer identity configuration; deployment refused.');
@@ -49,6 +53,7 @@ jobs:
             if (!process.env.API_URL) throw new Error('Missing test API URL.');
             const mapping = {
               VITE_ENTRA_SPA_CLIENT_ID: process.env.CLIENT_ID,
+              VITE_ENTRA_TENANT_ID: process.env.TENANT_ID,
               VITE_ENTRA_SUBDOMAIN: process.env.SUBDOMAIN,
               VITE_ENTRA_API_SCOPE: process.env.API_SCOPE,
               VITE_API_URL: process.env.API_URL,
@@ -61,6 +66,7 @@ jobs:
           } else {
             console.log('Deploying foundation with customer identity explicitly unconfigured.');
           }
+          appendFileSync(process.env.GITHUB_OUTPUT, `configured=${configured ? 'true' : 'false'}\n`);
           JS
       - run: npm run build
       - run: npx playwright install --with-deps chromium
@@ -197,3 +203,24 @@ jobs:
           }
           if (failure) throw failure;
           JS
+
+  verify-signin:
+    needs: [package, frontend]
+    if: needs.package.outputs.identity-configured == 'true'
+    environment: perlygolfmax-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Exercise deployed Sign in without requesting a code
+        env:
+          TEST_FRONTEND_URL: ${{ vars.AZURE_TEST_FRONTEND_URL }}
+          TEST_ENTRA_SUBDOMAIN: ${{ vars.VITE_ENTRA_SUBDOMAIN }}
+        run: node scripts/verify-test-signin.mjs

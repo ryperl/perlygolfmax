@@ -219,10 +219,17 @@ is `AZURE_STATIC_WEB_APPS_TEST_API_TOKEN`.
 
 Leave all customer identity `VITE_ENTRA_*` variables absent for a clearly
 unconfigured foundation deployment. When ready, supply the development SPA
-client ID, customer subdomain and fully qualified API scope together. Partial
+client ID, customer tenant GUID, subdomain and fully qualified API scope
+together. Partial
 identity configuration fails deployment. The build injects the API URL only
 with complete identity configuration; configured browser smoke checks require
 the sign-in UI but do not attempt to retrieve/send real email codes.
+
+The post-deployment `verify-signin` job then clicks the actual deployed button
+and waits for the real customer email form, without entering an address or
+requesting a code. This exercises SDK discovery/navigation, not just button
+visibility. Client discovery uses the explicit customer tenant path so the
+strict MSAL issuer check matches the provider's GUID-based issuer.
 
 `AZURE_TEST_API_READY` declares only the deployment check's expected state;
 it never authorizes a request. Absent/false requires actual no-store 503
