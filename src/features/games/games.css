@@ -1,6 +1,8 @@
 .round-games, .round-game, .game-results, .game-settings { display: grid; gap: 1rem; min-width: 0; }
 .round-game { padding: 1rem; border: 1px solid var(--cp-border); border-radius: .75rem; background: var(--cp-surface); }
 .game-results h3, .game-results p { margin: 0; overflow-wrap: anywhere; }
+.game-results { grid-template-columns: minmax(0, 1fr); }
+.game-results > details { min-width: 0; }
 .round-games button { min-height: 44px; padding: .5rem .75rem; color: var(--cp-text); background: var(--cp-surface); border: 1px solid var(--cp-border-strong); border-radius: .5rem; font: inherit; }
 .round-games button:disabled { color: var(--cp-text-muted); cursor: not-allowed; }
 .game-actions { display: flex; flex-wrap: wrap; gap: .75rem; }

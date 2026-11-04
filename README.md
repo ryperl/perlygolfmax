@@ -194,6 +194,10 @@ Standard and Modified Stableford presets can each use gross or net scoring, and
 multiple games can use the same round. Net allowance defaults to 95% and is
 configurable per game.
 
+In Games, expand a golfer to inspect hole points. Each expanded table scrolls
+horizontally within its own section without widening the page or moving other
+golfers' tables.
+
 | Result relative to par | Standard preset | Modified Stableford preset |
 |------------------------|----------------:|-------------------------:|
 | Four under | 6 | Configured better-score value |

@@ -58,7 +58,7 @@ test('configured game points appear alongside strokes on group and individual sc
   const card = round.cards[0];
   if (!card) throw new Error('Missing fictional player.');
   const individual = await renderComponentFixture('/src/features/scoring/PlayerScorecardRecap.tsx', 'PlayerScorecardRecap', { round, card });
-  await page.setContent(`<html><head>${stylesheets.map((href) => `<link rel="stylesheet" href="${href}">`).join('')}</head>
+  await page.setContent(`<html><head><meta name="viewport" content="width=device-width, initial-scale=1">${stylesheets.map((href) => `<link rel="stylesheet" href="${href}">`).join('')}</head>
     <body><div class="app"><main><section class="owner-scores">${group}${individual}</section></main></div></body></html>`);
   await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
   const scorecard = page.getByRole('region', { name: 'Round scorecards', exact: true });
@@ -96,8 +96,8 @@ test('configurable game results and points editor fit narrow and enlarged layout
       rows: points.rows.map((row) => ({ ...row, points: String(row.points) })), better: '12', worse: '-2' },
     disabled: false, saveDisabled: false, cancelDisabled: false, retry: false, onChange: noop, onSave: noop, onCancel: noop,
   });
-  await page.setContent(`<html><head>${stylesheets.map((href) => `<link rel="stylesheet" href="${href}">`).join('')}</head>
-    <body><div class="app"><main><section class="owner-scores">${panel}<section class="round-games">${settings}</section></section></main></div></body></html>`);
+  await page.setContent(`<html><head><meta name="viewport" content="width=device-width, initial-scale=1">${stylesheets.map((href) => `<link rel="stylesheet" href="${href}">`).join('')}</head>
+    <body><div class="app"><main><section class="owner-scores"><div>${panel}</div><section class="round-games">${settings}</section></section></main></div></body></html>`);
   await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
   const net = page.getByRole('region', { name: 'Fictional standard net results', exact: true });
   await expect(net.getByText('54', { exact: true })).toBeVisible();
@@ -110,5 +110,65 @@ test('configurable game results and points editor fit narrow and enlarged layout
   await expect(page.getByRole('rowheader', { name: 'Albatross · 3 under', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.setViewportSize({ width: 1280, height: 900 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test('expanded hole-point disclosures scroll independently without widening the page', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/#events');
+  await expect(page.getByRole('heading', { name: 'Events', exact: true })).toBeVisible();
+  const stylesheets = await page.locator('link[rel="stylesheet"]').evaluateAll((links) =>
+    links.map((link) => link.getAttribute('href')).filter((href): href is string => href !== null));
+  const panel = await renderComponentFixture('/src/features/games/RoundGamesPanel.tsx', 'RoundGamesPanel', {
+    round, busy: false, onDirtyChange: () => undefined,
+    onSave: () => Promise.resolve(null), onRefresh: () => Promise.resolve(round),
+  });
+  await page.setContent(`<html><head><meta name="viewport" content="width=device-width, initial-scale=1">${stylesheets.map((href) => `<link rel="stylesheet" href="${href}">`).join('')}</head>
+    <body><div class="app"><main><section class="owner-scores"><div>${panel}</div></section></main></div></body></html>`);
+  const game = page.getByRole('region', { name: 'Fictional modified gross results', exact: true });
+  const firstDetails = game.locator('details').nth(0);
+  const secondDetails = game.locator('details').nth(1);
+  await firstDetails.locator('summary').click();
+  await secondDetails.locator('summary').click();
+  const first = game.getByRole('region', { name: 'Fictional modified gross, Fictional golfer 1, hole points', exact: true });
+  const second = game.getByRole('region', { name: 'Fictional modified gross, Fictional golfer 2, hole points', exact: true });
+  for (const [width, fontSize] of [[390, '100%'], [320, '125%']] as const) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.evaluate((size) => { document.documentElement.style.fontSize = size; }, fontSize);
+    expect(await page.evaluate(() => window.innerWidth)).toBe(width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    expect(await first.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+    await first.focus();
+    await expect(first).toBeFocused();
+    await first.evaluate((element) => { element.scrollLeft = 0; });
+    await first.hover();
+    await page.mouse.wheel(300, 0);
+    await expect.poll(() => first.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+    expect(await second.evaluate((element) => element.scrollLeft)).toBe(0);
+    await first.evaluate((element) => { element.scrollLeft = element.scrollWidth - element.clientWidth; });
+    const regionBox = await first.boundingBox();
+    const lastHoleBox = await first.getByRole('columnheader', { name: '18', exact: true }).boundingBox();
+    if (!regionBox || !lastHoleBox) throw new Error('Missing expanded hole-point table bounds.');
+    expect(lastHoleBox.x).toBeGreaterThanOrEqual(regionBox.x);
+    expect(lastHoleBox.x + lastHoleBox.width).toBeLessThanOrEqual(regionBox.x + regionBox.width + 1);
+    expect(await page.evaluate(() => window.scrollX)).toBe(0);
+    await first.evaluate((element) => { element.scrollLeft = 0; });
+    const firstHoleBox = await first.getByRole('columnheader', { name: '1', exact: true }).boundingBox();
+    if (!firstHoleBox) throw new Error('Missing first hole bounds.');
+    expect(firstHoleBox.x).toBeGreaterThanOrEqual(regionBox.x);
+    expect(firstHoleBox.x + firstHoleBox.width).toBeLessThanOrEqual(regionBox.x + regionBox.width + 1);
+    await second.evaluate((element) => { element.scrollLeft = element.scrollWidth - element.clientWidth; });
+    expect(await first.evaluate((element) => element.scrollLeft)).toBe(0);
+    expect(await second.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+    await second.evaluate((element) => { element.scrollLeft = 0; });
+  }
+  await firstDetails.locator('summary').click();
+  await expect(first).not.toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await firstDetails.locator('summary').click();
+  await expect(first).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.evaluate(() => { document.documentElement.style.fontSize = '100%'; });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
