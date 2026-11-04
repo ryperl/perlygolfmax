@@ -229,6 +229,31 @@ default branch. The approved feature-branch push trigger starts testing without
 requiring a main merge. Changing the allowed branch or widening federation
 requires explicit approval.
 
+## Customer registrations and email-code flow
+
+`scripts/configure-test-apps.mjs` is plan-only unless explicitly given `--apply`.
+After approving customer registrations/API consent, it reads the private Azure
+deployment records, verifies the exact US CIAM test organization, and creates
+secretless test API/Web registrations plus Events.Access-only consent.
+It rejects untracked duplicate app names and preserves private IDs/state under
+`.azure/`; no real identities or client IDs are committed. Customer apps get
+no Microsoft Graph data permissions, credentials or directory roles.
+
+User-flow management is separate. Azure CLI's first-party client is not
+preauthorized for IdentityProvider/EventListener management scopes: tenant
+consent alone does not override Microsoft's API-owner restriction
+(`AADSTS65002`). An attempted administrator-only temporary setup grant was
+removed and its deletion verified. Do not retry by weakening policies or
+borrowing another first-party client identity.
+
+Use the supported Entra portal in the `Perly Golf Max Test` directory to create
+an email **one-time passcode** customer sign-up/sign-in flow and associate
+`Perly Golf Max Test Web`. Do not select password or corporate guest invitation
+flows. Signing in creates no event membership or creator permission.
+Portal completion is user-reported until actual hosted sign-in is verified;
+creator bootstrap still requires independent confirmation of the customer's
+identity. Keep frontend identity variables absent until the flow is ready.
+
 ## Retained assets and recovery gates
 
 Application data is separate from host/package storage and deletion-locked.
