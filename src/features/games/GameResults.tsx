@@ -1,8 +1,6 @@
 import { useRef, useState } from 'react';
 import type { GamePlayerResult, RoundGameDefinition, RoundGameResult } from '../../domain/games';
-import { sameGameDefinitions } from '../../domain/games';
-import { stablefordPoints } from '../../domain/stableford';
-import { gameUnavailableMessage } from './game-presentation';
+import { gameScoringLabel, gameUnavailableMessage } from './game-presentation';
 
 function progress(player: GamePlayerResult): string {
   return player.status === 'unavailable'
@@ -22,7 +20,6 @@ export function GameResults({ game, result, holeNumbers }: {
 }) {
   const [nine, setNine] = useState<'front' | 'back'>('front');
   const scroll = useRef<HTMLDivElement | null>(null);
-  const custom = !sameGameDefinitions([game], [{ ...game, points: stablefordPoints(game.preset) }]);
   const layout = [...holeNumbers].sort((left, right) => left - right);
   const front = layout.filter((number) => number <= 9);
   const back = layout.filter((number) => number > 9);
@@ -44,7 +41,7 @@ export function GameResults({ game, result, holeNumbers }: {
     <section className="game-results" aria-label={`${game.name} results`}>
       <h3>{game.name}</h3>
       <p><span>{game.basis === 'gross' ? 'Gross' : `Net · ${String(game.handicapAllowancePercent)}% allowance`}</span>
-        {' · '}<span>{custom ? 'Custom points' : game.preset === 'standard' ? 'Standard Stableford' : 'Modified Stableford'}</span></p>
+        {' · '}<span>{gameScoringLabel(game)}</span></p>
       {!result || result.players.length === 0 ? <p>Results are unavailable.</p> : <>
         {front.length > 0 && back.length > 0 && <div className="game-card-nines" role="group" aria-label={`${game.name} holes to display`}>
           <button type="button" aria-pressed={!showBack} onClick={() => { showNine('front'); }}>Front 9</button>

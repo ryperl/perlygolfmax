@@ -35,6 +35,10 @@
 .round-card-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; padding-block: 12px; }
 .round-card-heading h2 { font-size: clamp(1.5rem, 3vw, 2rem); margin-block: 4px; }
 .round-card-heading p { margin: 0; }
+.scorecard-game-summary { min-width: 0; }
+.scorecard-game-summary h3 { margin: 0 0 8px; font-size: .85rem; color: var(--cp-text-muted); }
+.scorecard-game-summary ul { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; margin: 0; }
+.scorecard-game-summary li { min-width: 0; overflow-wrap: anywhere; padding: 4px 8px; border: 1px solid var(--cp-border); border-radius: .5rem; background: var(--cp-surface); font-size: .85rem; }
 .scorecard-eyebrow { color: var(--cp-accent); font-size: .8rem; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
 .scorecard-course { color: var(--cp-text-muted); font-size: .85rem; }
 .scorecard-controls { display: flex; flex-wrap: wrap; gap: 16px; }

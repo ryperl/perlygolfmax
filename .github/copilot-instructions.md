@@ -64,6 +64,10 @@
   (default 95%); never rewrite strokes or silently use current global indices.
   Pickup/DNF award minimum configured points; unplayed remains pending.
   Missing net inputs are unavailable, never a zero handicap.
+- Leaderboards order saved server game points, not local drafts or projected
+  totals. Mixed progress is provisional with holes shown. Equal points share
+  positions without a tie-break; unplayed/unavailable golfers are not ranked
+  as zero-point scores. Do not imply round finalization or team/trip aggregation.
 - Present golfer scores as hole-ordered scorecards, not audit records. Keep
   operation IDs, actor GUIDs, revisions and raw timestamps out of player
   entry/view screens; preserve backend audit and conditional-save safeguards.

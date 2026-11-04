@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client';
 import { useState } from 'react';
 import { RoundGamesPanel } from '../../src/features/games';
+import { RoundLeaderboard } from '../../src/features/leaderboard';
 import { GroupHoleEntry } from '../../src/features/scoring/GroupHoleEntry';
 import type { GroupHoleEntryRow } from '../../src/features/scoring/GroupHoleEntry';
 import type { HoleDraft } from '../../src/features/scoring/entry-state';
@@ -33,4 +34,4 @@ export function EntryPreview() {
 createRoot(root).render(<div className="app"><main><section className="owner-scores"><div>
   <RoundGamesPanel round={fictionalGamesRound} busy={false} onDirtyChange={() => undefined}
     onSave={() => Promise.resolve(null)} onRefresh={() => Promise.resolve(fictionalGamesRound)} />
-</div><EntryPreview /></section></main></div>);
+</div><EntryPreview /><RoundLeaderboard round={fictionalGamesRound} busy={false} onManageGames={() => undefined} /></section></main></div>);

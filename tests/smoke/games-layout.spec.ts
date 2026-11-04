@@ -158,6 +158,24 @@ test('compact game cards keep golfers visible with shared scrolling and working 
     await expect(entry.getByLabel('Fictional save count', { exact: true })).toHaveText('0');
     await entry.getByRole('combobox', { name: 'Jump to hole', exact: true }).selectOption('2');
     await expect(first).toHaveValue('');
+    const board = page.getByRole('region', { name: 'Round leaderboard', exact: true });
+    await expect(board.getByRole('list', { name: 'Standings' }).getByRole('listitem')).toHaveCount(3);
+    await board.getByRole('combobox', { name: 'Leaderboard game' }).selectOption(id(701));
+    await expect(board.getByLabel('Tied position 1', { exact: true })).toHaveCount(4);
+    await expect(board.getByRole('list', { name: 'Standings' }).getByRole('listitem')).toHaveCount(4);
+    await expect(board.getByText('Saved points · All game cards complete. This is not round finalization.', { exact: true })).toBeVisible();
+    for (const [width, fontSize] of [[390, '100%'], [320, '125%']] as const) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.evaluate((size) => { document.documentElement.style.fontSize = size; }, fontSize);
+      expect(await page.evaluate(() => window.innerWidth)).toBe(width);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    }
+    if (testInfo.project.name === 'desktop-chromium') {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.evaluate(() => { document.documentElement.style.fontSize = '100%'; });
+      await board.getByRole('combobox', { name: 'Leaderboard game' }).selectOption(id(700));
+      await board.screenshot({ path: '.azure/round-leaderboard-mobile.png' });
+    }
   } finally {
     await server.close();
   }

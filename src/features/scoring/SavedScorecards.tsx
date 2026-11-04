@@ -33,6 +33,12 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
       </div>
       <button type="button" disabled={busy} onClick={onEnterScores}>{round.eventStatus === 'archived' ? 'View hole entry' : 'Enter scores'} · Group {group.number}</button>
     </header>
+    {games.length > 0 && <section className="scorecard-game-summary" aria-label="Round games">
+      <h3>Round games</h3>
+      <ul role="list">{games.map((entry) => <li key={entry.id}>
+        {entry.name} · {entry.basis === 'gross' ? 'Gross' : `Net ${String(entry.handicapAllowancePercent)}%`}
+      </li>)}</ul>
+    </section>}
     <div className="scorecard-controls">
       {round.groups.length > 1 && <label>Group<select value={group.number} disabled={busy} onChange={(event) => {
         onGroupChange(Number(event.target.value)); setPlayerId(null);

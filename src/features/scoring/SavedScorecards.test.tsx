@@ -14,7 +14,11 @@ describe('golfer-facing round scorecards', () => {
     const { round, games } = scorecardGamesFixture(9);
     const { rerender } = render(<SavedScorecards {...props()} />);
     expect(screen.queryByLabelText('Game')).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Round games' })).not.toBeInTheDocument();
     rerender(<SavedScorecards {...props()} round={round} />);
+    const roundGames = screen.getByRole('region', { name: 'Round games' });
+    expect(within(roundGames).getAllByRole('listitem')).toHaveLength(games.length);
+    for (const game of games) expect(roundGames).toHaveTextContent(`${game.name} · ${game.basis === 'gross' ? 'Gross' : `Net ${String(game.handicapAllowancePercent)}%`}`);
     expect(screen.getByLabelText('Game')).toHaveValue(games[0]?.id);
     expect(screen.getByRole('row', { name: 'Fictional Player 1 · Fictional standard points' })).toBeVisible();
     const user = userEvent.setup();

@@ -154,6 +154,9 @@ Select a golfer for their individual card, or choose **Enter scores** for the
 hole-first editor. Front/back controls and locally scrolling tables with fixed
 player labels support narrow screens. Circles/squares mark raw gross strokes
 relative to source par, not net or handicap-adjusted results.
+The round scorecard overview lists its configured games and Gross/Net allowance;
+the Game selector still chooses the points shown. The round's back link returns
+to that event's overview, not its setup editor.
 Cards include source yardage, par and stroke index, exact hole shorthand and
 recorded totals. Normal score entry has no extra disposition menu or format
 instruction paragraph; blank and X shorthand remain supported.
@@ -227,7 +230,8 @@ and [R&A Rule 21](https://www.randa.org/rog/the-rules-of-golf/rule-21).
 
 Pickup (`X`/`X7`) and per-hole DNF receive the minimum configured points
 (initially 0/-2). Unplayed holes remain pending, not automatic zero/negative
-points. Partial totals are identified and are not ranked as completed results.
+points. Partial totals are identified; live leaderboard positions are
+provisional rather than completed results.
 Missing captured Handicap Index, rating or stroke-allocation inputs make net
 results explicitly unavailable; gross results do not require a handicap.
 
@@ -249,6 +253,27 @@ the draft and require explicit refresh/review. Saved-game removal and a
 general administrative/history interface are not included. Technical budgets
 are 16 games and 32 points rows, also subject to the existing 4 KiB request
 limit; an oversized request is refused explicitly, not partially saved.
+
+### Round leaderboard
+
+Open **Leaderboard** beside Scorecards, Enter scores and Games. Select a saved
+individual Stableford game to rank all golfers in that round by server-derived
+points earned so far, highest first. Holes scored and complete/in-progress
+states stay visible; mixed-progress standings are explicitly provisional.
+No projected totals, raw-gross ranking or client-side handicap recalculation
+is used.
+
+Equal points share positions (`T1`, `T1`, `3`); roster order within a tie is
+not a tie-break. No countback or final winner is selected. Known zero and
+negative points remain valid scores. Golfers without scored holes wait outside
+the ranks, and unavailable results show their reason rather than a zero.
+Game selection survives view changes and refreshes. Unsaved strokes or game
+settings are not used in standings, and viewing never saves anything.
+
+The leaderboard uses the existing owner-only online score projection and its
+refresh/backoff/access checks. Archived rounds remain read-only. Participant
+sharing, team leaderboards, multi-round/day aggregation and event-wide results
+remain separate milestones.
 
 ### Local catalog and round setup
 

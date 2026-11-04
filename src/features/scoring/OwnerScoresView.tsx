@@ -4,6 +4,7 @@ import { EventChangedError } from '../../client/events';
 import type { GameWriteResult, RoundScores } from '../../domain/scoring';
 import type { RoundGameDefinition } from '../../domain/games';
 import { RoundGamesPanel } from '../games';
+import { RoundLeaderboard } from '../leaderboard';
 import { sameHoleScore } from '../../domain/scoring';
 import { useOwnerScores } from './useOwnerScores';
 import { GroupHoleEntry } from './GroupHoleEntry';
@@ -29,7 +30,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired }: O
   const currentDrafts = useRef(drafts);
   const [groupNumber, setGroupNumber] = useState<number | null>(null);
   const [holeNumber, setHoleNumber] = useState<number | null>(null);
-  const [screen, setScreen] = useState<'entry' | 'cards' | 'games'>('cards');
+  const [screen, setScreen] = useState<'entry' | 'cards' | 'games' | 'leaderboard'>('cards');
   const [gamesDirty, setGamesDirty] = useState(false);
   const [notice, setNotice] = useState('');
   const [refreshVersion, setRefreshVersion] = useState(0);
@@ -147,7 +148,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired }: O
     }
   }
   return <section className="owner-scores">
-    <a href={`#events?event=${eventId}`}>Back to saved event</a>
+    <a href={`#overview?event=${encodeURIComponent(eventId)}`}>Back to event overview</a>
     <h1>Round scores</h1>
     <p className="score-warning"><strong>Owner simulation · online only.</strong> Unsaved drafts live only in this page. Keep a paper backup.</p>
     {screen === 'entry' && round?.eventStatus === 'active' && !round.setupLocked && <p className="score-warning"><strong>Finish setup first.</strong> The first accepted score locks course, tee, roster, groups and captured indices. Clearing scores does not unlock setup.</p>}
@@ -155,6 +156,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired }: O
       <button disabled={busy} onClick={() => { setScreen('cards'); }} aria-pressed={screen === 'cards'}>Scorecards</button>
       <button disabled={busy} onClick={() => { setScreen('entry'); }} aria-pressed={screen === 'entry'}>Enter scores</button>
       <button disabled={busy} onClick={() => { setScreen('games'); }} aria-pressed={screen === 'games'}>Games</button>
+      <button disabled={busy} onClick={() => { setScreen('leaderboard'); }} aria-pressed={screen === 'leaderboard'}>Leaderboard</button>
       <button aria-label="Refresh saved round" disabled={busy} onClick={() => {
         void refreshSavedRound().catch(() => undefined);
       }}>Refresh</button>
@@ -166,6 +168,9 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired }: O
     {gamesDirty && screen !== 'games' && <p className="score-notice" role="status">Unsaved game settings. Open Games to save or cancel them.</p>}
     {screen === 'cards' && round && drafts.size > 0 && <p className="score-notice" role="status">
       {drafts.size} unsaved {drafts.size === 1 ? 'score is' : 'scores are'} not included in this card. Return to Enter scores to save or review them.
+    </p>}
+    {screen === 'leaderboard' && drafts.size > 0 && <p className="score-notice" role="status">
+      Unsaved score entries are not included in this leaderboard. Return to Enter scores to save or review them.
     </p>}
     {!round && !error && <p>Loading owner-only scorecards…</p>}
     {round && <>
@@ -191,6 +196,9 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired }: O
       <div hidden={screen !== 'games'}>
         <RoundGamesPanel round={round} busy={busy} onDirtyChange={gameDirtyChanged}
           onSave={saveGameSettings} onRefresh={refreshSavedRound} />
+      </div>
+      <div hidden={screen !== 'leaderboard'}>
+        <RoundLeaderboard round={round} busy={busy} onManageGames={() => { setScreen('games'); }} />
       </div>
     </>}
   </section>;
