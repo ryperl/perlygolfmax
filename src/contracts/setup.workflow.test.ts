@@ -26,7 +26,8 @@ describe('saved setup client/handler contract', () => {
       let action: CatalogAction;
       let params: Record<string, string> = {};
       if (parts[0] === 'events') {
-        action = 'workspace'; params = { id: parts[1] ?? '' };
+        action = parts[3] === 'rounds' ? 'round-indices-refresh' : 'workspace';
+        params = { id: parts[1] ?? '', roundId: parts[4] ?? '' };
       } else if (parts[1] === 'players') {
         action = parts[3] === 'indices' ? 'indices' : parts[2] ? 'player' : 'players';
         params = { playerId: parts[2] ?? '' };
@@ -55,10 +56,12 @@ describe('saved setup client/handler contract', () => {
     const version = await catalog.publish(importId, null, signal);
     expect((await catalog.courses(signal)).courses[0]?.currentVersionId).toBe(version.id);
     const players = await Promise.all([201, 202, 203, 204].map((id) =>
-      catalog.createPlayer(`Fictional golfer ${String(id)}`, identifier(id), signal)));
+      catalog.createPlayer(`Fictional golfer ${String(id)}`, identifier(id), signal,
+        id === 201 ? { value: '+2.4', effectiveDate: '2026-01-01', source: 'Fictional starting observation' } : undefined)));
     const first = players[0];
     if (!first) throw new Error('Missing fictional first golfer.');
-    await catalog.recordIndex(first, { value: '+2.4', effectiveDate: '2026-01-01', source: 'Fictional manual observation' }, identifier(301), signal);
+    expect(first.currentIndex?.value).toBe('+2.4');
+    expect((await catalog.history(first.id, signal)).observations[0]?.id).toBe(first.id);
     const empty = await setup.load(event.id, signal);
     const playerIds = players.map((player) => player.id);
     const input = {
@@ -74,6 +77,12 @@ describe('saved setup client/handler contract', () => {
     if (!currentPlayer) throw new Error('Missing saved fictional player.');
     await catalog.recordIndex(currentPlayer, { value: '12.3', effectiveDate: '2026-01-02', source: 'Fictional later observation' }, identifier(302), signal);
     expect((await setup.load(event.id, signal)).rounds).toEqual(saved.rounds);
+    const refreshed = await setup.refreshIndices(event.id, identifier(500), saved.etag, identifier(600), signal);
+    expect(refreshed.rounds[0]?.players[0]?.handicapIndex?.value).toBe('12.3');
+    expect(refreshed.rounds[0]?.teeProfile).toEqual(saved.rounds[0]?.teeProfile);
+    expect(refreshed.rounds[0]?.groups).toEqual(saved.rounds[0]?.groups);
+    expect((await setup.refreshIndices(event.id, identifier(500), saved.etag, identifier(600), signal)).etag).toBe(refreshed.etag);
+    expect((await catalog.history(first.id, signal)).observations).toHaveLength(2);
     await expect(setup.save(event.id, empty.etag, input, signal)).rejects.toBeInstanceOf(EventChangedError);
     const repeated = await catalog.publish(importId, null, signal);
     expect(repeated.id).toBe(version.id);

@@ -1,7 +1,7 @@
 import type {
   CourseCatalogEntry, CourseCatalogPage, CourseImportManifest, CourseImportSession,
   CourseMetadata, CourseProvenance, CourseVersion, IndexObservation,
-  PlayerCatalogPage, PlayerIndexHistory, PlayerProfile, TeeProfile,
+  ManualIndexInput, PlayerCatalogPage, PlayerIndexHistory, PlayerProfile, TeeProfile,
 } from '../domain/catalog.js';
 import { isEventRevision, isRecord, isUuid } from './events.js';
 
@@ -132,6 +132,10 @@ export function isCourseVersion(value: unknown): value is CourseVersion {
 
 export function isHandicapIndex(value: unknown): value is string {
   return typeof value === 'string' && /^\+?(?:0|[1-9]\d?)(?:\.\d)?$/.test(value);
+}
+
+export function isManualIndexInput(value: unknown): value is ManualIndexInput {
+  return isRecord(value) && isHandicapIndex(value.value) && isDateOnly(value.effectiveDate) && boundedText(value.source, 200);
 }
 
 export function isIndexObservation(value: unknown): value is IndexObservation {

@@ -93,5 +93,6 @@ export function fakeCatalog(): CatalogClient {
   };
 }
 export function fakeSetup(): SetupClient {
-  return { load: vi.fn().mockResolvedValue(emptyWorkspace), save: vi.fn().mockResolvedValue(fictionalWorkspace) };
+  return { load: vi.fn().mockResolvedValue(emptyWorkspace), save: vi.fn().mockResolvedValue(fictionalWorkspace),
+    refreshIndices: vi.fn().mockResolvedValue(fictionalWorkspace) };
 }

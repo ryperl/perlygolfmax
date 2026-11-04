@@ -114,6 +114,12 @@ export interface IndexObservation {
   readonly previousObservationId: string | null;
 }
 
+export interface ManualIndexInput {
+  readonly value: string;
+  readonly effectiveDate: string;
+  readonly source: string;
+}
+
 export interface PlayerProfile {
   readonly id: string;
   readonly displayName: string;

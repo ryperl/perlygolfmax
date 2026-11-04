@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { EventChangedError } from '../../client/events';
@@ -6,9 +6,31 @@ import {
   emptyWorkspace, fakeCatalog, fakeSetup, fictionalEvent, fictionalPlayers, fictionalManifest,
   fictionalProfile, fictionalVersion, fictionalWorkspace, fictionalId, fictionalEntry,
 } from '../../client/catalog.test-support';
-import type { CourseCatalogPage, CourseVersion } from '../../domain/catalog';
+import type { CourseCatalogPage, CourseVersion, IndexObservation, PlayerCatalogPage } from '../../domain/catalog';
 import type { EventSetupInput, EventWorkspace } from '../../domain/setup';
 import { EventWorkspaceView } from './EventWorkspaceView';
+
+const oldIndex: IndexObservation = {
+  id: fictionalId(301), value: '10.2', effectiveDate: '2026-01-01', source: 'Fictional manual report',
+  recordedAt: '2026-01-01T00:00:00Z', recordedBy: { tenantId: fictionalId(201), objectId: fictionalId(202) },
+  previousObservationId: null,
+};
+const latestIndex: IndexObservation = { ...oldIndex, id: fictionalId(302), value: '+1.2', effectiveDate: '2026-02-01', previousObservationId: oldIndex.id };
+const capturedWorkspace: EventWorkspace = { ...fictionalWorkspace, rounds: fictionalWorkspace.rounds.map((round) => ({
+  ...round, players: round.players.map((player, index) => ({ ...player, handicapIndex: index === 0 ? oldIndex : null })),
+})) };
+const currentPlayers = fictionalPlayers.map((player, index) => ({ ...player, currentIndex: index === 0 ? latestIndex : null }));
+const refreshedWorkspace: EventWorkspace = {
+  ...capturedWorkspace, event: { ...fictionalEvent, etag: 'workspace-v2' }, etag: 'workspace-v2',
+  rounds: capturedWorkspace.rounds.map((round) => ({ ...round, players: round.players.map((player, index) => ({
+    ...player, handicapIndex: index === 0 ? latestIndex : null,
+  })) })),
+};
+function indexRow(name: string) {
+  const row = screen.getByRole('heading', { name, level: 4 }).closest('li');
+  if (!row) throw new Error('Missing captured-index player row.');
+  return within(row);
+}
 
 function savedInput(input: EventSetupInput): EventWorkspace {
   return {
@@ -37,6 +59,173 @@ async function configureRound(user: ReturnType<typeof userEvent.setup>, number: 
 }
 
 describe('saved event workspace', () => {
+  it('marks current values unavailable after catalog failure and blocks capture replacement until catalog recovery', async () => {
+    const setup = fakeSetup();
+    vi.mocked(setup.load).mockResolvedValue(capturedWorkspace);
+    const catalog = fakeCatalog();
+    vi.mocked(catalog.players).mockRejectedValueOnce(new Error('Current player catalog failed.'));
+    render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={catalog} />);
+    expect(await screen.findAllByText('Unavailable — catalog loading failed.')).toHaveLength(4);
+    expect(indexRow('Fictional Player 1').getByText('10.2 — effective 2026-01-01; Fictional manual report')).toBeVisible();
+    expect(screen.getByRole('checkbox', { name: /I confirm replacing captured setup HI/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Refresh captured setup HI for/ })).toBeDisabled();
+    expect(setup.refreshIndices).not.toHaveBeenCalled();
+  });
+
+  it('aborts an in-flight setup-input refresh on unmount without applying a late success', async () => {
+    const setup = fakeSetup();
+    vi.mocked(setup.load).mockResolvedValue(capturedWorkspace);
+    let finish: ((workspace: EventWorkspace) => void) | undefined;
+    const response = new Promise<EventWorkspace>((resolve) => { finish = resolve; });
+    vi.mocked(setup.refreshIndices).mockReturnValueOnce(response);
+    const catalog = fakeCatalog();
+    vi.mocked(catalog.players).mockResolvedValue({ players: currentPlayers });
+    const user = userEvent.setup();
+    const { unmount } = render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={catalog} />);
+    const confirmation = await screen.findByRole('checkbox', { name: /I confirm replacing captured setup HI/ });
+    await waitFor(() => { expect(confirmation).toBeEnabled(); });
+    await user.click(confirmation);
+    await user.click(screen.getByRole('button', { name: /Refresh captured setup HI for/ }));
+    expect(setup.refreshIndices).toHaveBeenCalledTimes(1);
+    unmount();
+    expect(vi.mocked(setup.refreshIndices).mock.calls[0]?.[4].aborted).toBe(true);
+    await act(async () => { finish?.(refreshedWorkspace); await response; });
+    expect(setup.save).not.toHaveBeenCalled();
+    expect(setup.load).toHaveBeenCalledTimes(1);
+  });
+  it('distinguishes captured, current, loading, unknown and unavailable indices without silently changing captures', async () => {
+    const setup = fakeSetup();
+    vi.mocked(setup.load).mockResolvedValue(capturedWorkspace);
+    const catalog = fakeCatalog();
+    let finish: ((page: PlayerCatalogPage) => void) | undefined;
+    const load = new Promise<PlayerCatalogPage>((resolve) => { finish = resolve; });
+    vi.mocked(catalog.players).mockReturnValueOnce(load);
+    render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={catalog} />);
+    await screen.findByText('10.2 — effective 2026-01-01; Fictional manual report');
+    expect(screen.getAllByText('Loading current catalog HI...')).toHaveLength(4);
+    expect(screen.getByRole('button', { name: /Refresh captured setup HI for/ })).toBeDisabled();
+    await act(async () => { finish?.({ players: currentPlayers.slice(0, 3) }); await load; });
+    const first = indexRow('Fictional Player 1');
+    expect(first.getByText('10.2 — effective 2026-01-01; Fictional manual report')).toBeVisible();
+    expect(first.getByText('+1.2 — effective 2026-02-01; Fictional manual report')).toBeVisible();
+    expect(first.getByText(/Changed since capture/)).toBeVisible();
+    expect(indexRow('Fictional Player 2').getAllByText('Unknown — no handicap observation')).toHaveLength(2);
+    expect(indexRow('Fictional Player 4').getByText(/Unavailable — player not found/)).toBeVisible();
+    expect(screen.getByRole('checkbox', { name: /I confirm replacing captured setup HI/ })).toBeDisabled();
+    expect(setup.refreshIndices).not.toHaveBeenCalled();
+  });
+
+  it('reloads catalog values with scoped workspace refresh while preserving local name, course, tee and group drafts', async () => {
+    const setup = fakeSetup();
+    vi.mocked(setup.load).mockResolvedValue(capturedWorkspace);
+    const catalog = fakeCatalog();
+    vi.mocked(catalog.players).mockResolvedValueOnce({ players: fictionalPlayers.map((player, index) => ({ ...player, currentIndex: index === 0 ? oldIndex : null })) });
+    const user = userEvent.setup();
+    render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={catalog} />);
+    const name = await screen.findByLabelText('Workspace name');
+    await waitFor(() => { expect(name).toBeEnabled(); });
+    await user.clear(name);
+    await user.type(name, 'Fictional unsaved workspace title');
+    await user.selectOptions(screen.getByLabelText('Round 1 tee profile'), '905');
+    await user.selectOptions(screen.getByLabelText('Fictional Player 1 — round 1 group'), '2');
+    let finish: ((page: PlayerCatalogPage) => void) | undefined;
+    const load = new Promise<PlayerCatalogPage>((resolve) => { finish = resolve; });
+    vi.mocked(catalog.players).mockReturnValueOnce(load);
+    await user.dblClick(screen.getByRole('button', { name: 'Refresh workspace' }));
+    await waitFor(() => { expect(catalog.players).toHaveBeenCalledTimes(2); });
+    expect(name).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Refresh captured setup HI for/ })).toBeDisabled();
+    expect(setup.load).toHaveBeenCalledTimes(2);
+    await act(async () => { finish?.({ players: currentPlayers }); await load; });
+    await screen.findByText(/Workspace refreshed. Your local draft is preserved/);
+    expect(name).toHaveValue('Fictional unsaved workspace title');
+    expect(screen.getByLabelText('Round 1 course')).toHaveValue(fictionalVersion.courseId);
+    expect(screen.getByLabelText('Round 1 course version')).toHaveValue(fictionalVersion.id);
+    expect(screen.getByLabelText('Round 1 tee profile')).toHaveValue('905');
+    expect(screen.getByLabelText('Fictional Player 1 — round 1 group')).toHaveValue('2');
+    expect(indexRow('Fictional Player 1').getByText('10.2 — effective 2026-01-01; Fictional manual report')).toBeVisible();
+    expect(indexRow('Fictional Player 1').getByText('+1.2 — effective 2026-02-01; Fictional manual report')).toBeVisible();
+    expect(setup.save).not.toHaveBeenCalled();
+    expect(setup.refreshIndices).not.toHaveBeenCalled();
+  });
+
+  it('requires explicit capture replacement, retries an uncertain refresh with the original ID/revision, and preserves unsaved drafts', async () => {
+    const setup = fakeSetup();
+    vi.mocked(setup.load).mockResolvedValue(capturedWorkspace);
+    let finish: ((workspace: EventWorkspace) => void) | undefined;
+    const refresh = new Promise<EventWorkspace>((resolve) => { finish = resolve; });
+    vi.mocked(setup.refreshIndices).mockRejectedValueOnce(new Error('Setup refresh response lost.')).mockReturnValueOnce(refresh);
+    const catalog = fakeCatalog();
+    vi.mocked(catalog.players).mockResolvedValue({ players: currentPlayers });
+    const user = userEvent.setup();
+    render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={catalog} />);
+    const name = await screen.findByLabelText('Workspace name');
+    await waitFor(() => { expect(name).toBeEnabled(); });
+    await user.clear(name);
+    await user.type(name, 'Fictional draft title');
+    await user.selectOptions(screen.getByLabelText('Round 1 tee profile'), '905');
+    await user.selectOptions(screen.getByLabelText('Fictional Player 1 — round 1 group'), '2');
+    const button = screen.getByRole('button', { name: 'Refresh captured setup HI for Fictional opening round' });
+    const confirmation = screen.getByRole('checkbox', { name: /I confirm replacing captured setup HI/ });
+    expect(button).toBeDisabled();
+    await user.click(confirmation);
+    await user.click(button);
+    await screen.findByText('Setup refresh response lost.');
+    expect(confirmation).toBeChecked();
+    expect(name).toHaveValue('Fictional draft title');
+    await user.dblClick(button);
+    expect(setup.refreshIndices).toHaveBeenCalledTimes(2);
+    expect(name).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save event workspace' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Refresh workspace' })).toBeDisabled();
+    const calls = vi.mocked(setup.refreshIndices).mock.calls;
+    expect(calls[0]?.slice(0, 4)).toEqual(calls[1]?.slice(0, 4));
+    expect(calls[0]?.[2]).toBe(capturedWorkspace.etag);
+    await act(async () => { finish?.(refreshedWorkspace); await refresh; });
+    await screen.findByText('Captured setup HI refreshed for Fictional opening round. Saved course, tee and groups were preserved. No scores were recalculated.');
+    expect(confirmation).not.toBeChecked();
+    expect(button).toBeDisabled();
+    expect(name).toHaveValue('Fictional draft title');
+    expect(screen.getByLabelText('Round 1 tee profile')).toHaveValue('905');
+    expect(screen.getByLabelText('Fictional Player 1 — round 1 group')).toHaveValue('2');
+    expect(indexRow('Fictional Player 1').getAllByText('+1.2 — effective 2026-02-01; Fictional manual report')).toHaveLength(2);
+    expect(screen.getByText('Group 1: Fictional Player 1, Fictional Player 2, Fictional Player 3, Fictional Player 4')).toBeVisible();
+    expect(screen.getByText('Tee: Fictional Teal / Fictional A / 9 holes')).toBeVisible();
+    expect(setup.save).not.toHaveBeenCalled();
+  });
+
+  it('requires scoped refresh and renewed review after a capture-refresh conflict', async () => {
+    const setup = fakeSetup();
+    vi.mocked(setup.load).mockResolvedValue(capturedWorkspace);
+    vi.mocked(setup.refreshIndices).mockRejectedValueOnce(new EventChangedError('Workspace changed. Refresh and review captured inputs.'))
+      .mockResolvedValueOnce(refreshedWorkspace);
+    const catalog = fakeCatalog();
+    vi.mocked(catalog.players).mockResolvedValue({ players: currentPlayers });
+    const user = userEvent.setup();
+    render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={catalog} />);
+    const name = await screen.findByLabelText('Workspace name');
+    await waitFor(() => { expect(name).toBeEnabled(); });
+    await user.clear(name);
+    await user.type(name, 'Fictional conflict draft');
+    await user.click(screen.getByRole('checkbox', { name: /I confirm replacing captured setup HI/ }));
+    await user.click(screen.getByRole('button', { name: /Refresh captured setup HI for/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Workspace changed');
+    expect(screen.getByRole('checkbox', { name: /I confirm replacing captured setup HI/ })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /I confirm replacing captured setup HI/ })).toBeDisabled();
+    vi.mocked(setup.load).mockResolvedValue({ ...capturedWorkspace, event: { ...fictionalEvent, etag: 'workspace-v2' }, etag: 'workspace-v2' });
+    await user.click(screen.getByRole('button', { name: 'Refresh workspace' }));
+    await screen.findByText(/Workspace refreshed. Your local draft is preserved/);
+    expect(name).toHaveValue('Fictional conflict draft');
+    const confirmation = screen.getByRole('checkbox', { name: /I confirm replacing captured setup HI/ });
+    expect(confirmation).not.toBeChecked();
+    await user.click(confirmation);
+    await user.click(screen.getByRole('button', { name: /Refresh captured setup HI for/ }));
+    await screen.findByText(/Captured setup HI refreshed for/);
+    const calls = vi.mocked(setup.refreshIndices).mock.calls;
+    expect(calls[1]?.[2]).toBe('workspace-v2');
+    expect(calls[1]?.[3]).not.toBe(calls[0]?.[3]);
+    expect(name).toHaveValue('Fictional conflict draft');
+  });
   it('prevents refresh while the initial workspace is pending and never lets it overwrite a newer refresh', async () => {
     const catalog = fakeCatalog();
     const setup = fakeSetup();
@@ -209,6 +398,8 @@ describe('saved event workspace', () => {
     expect(catalog.players).not.toHaveBeenCalled();
     expect(catalog.version).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: 'Save event workspace' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Current catalog HI')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Refresh captured setup HI for/ })).not.toBeInTheDocument();
     if (role === 'member') expect(screen.queryByText(/captured HI/)).not.toBeInTheDocument();
   });
 

@@ -6,6 +6,8 @@ import { canonical } from './entities.js';
 import { TableCourseCatalog } from './courses.js';
 import { TablePlayerCatalog } from './players.js';
 import { TableWorkspaceStore } from '../setup/store.js';
+import { isIndexRefreshAudit } from '../setup/index-refresh.js';
+import { decode } from './entities.js';
 import { identifier, manifest, tee } from '../../test/catalog-fixtures.js';
 import { creator, event } from '../../test/fixtures.js';
 
@@ -42,20 +44,29 @@ describe('catalog and workspace SDK batch transport', () => {
       request.setEncoding('utf8');
       request.on('data', (chunk: string) => { body += chunk; });
       request.on('end', () => {
+        if (!request.url?.includes('$batch')) {
+          const entity: unknown = JSON.parse(body);
+          if (!isRecord(entity) || typeof entity.PartitionKey !== 'string' || typeof entity.RowKey !== 'string') throw new Error('Invalid fictional transport create');
+          store(entity.PartitionKey, entity.RowKey, entity);
+          response.writeHead(204, { ETag: 'W/"fixture-v1"' });
+          response.end();
+          return;
+        }
         batches.push(body);
+        const etag = `W/"fixture-v${String(batches.length + 1)}"`;
         const lines = body.split('\r\n').filter((line) => line.startsWith('{'));
         for (const line of lines) {
           const entity: unknown = JSON.parse(line);
           if (!isRecord(entity) || typeof entity.PartitionKey !== 'string' || typeof entity.RowKey !== 'string') throw new Error('Invalid fictional transport entity');
           const key = `${entity.PartitionKey}|${entity.RowKey}`;
-          stored.set(key, { ...stored.get(key), ...entity, 'odata.etag': 'W/"fixture-v2"' });
+          stored.set(key, { ...stored.get(key), ...entity, 'odata.etag': etag });
         }
         response.writeHead(202, { 'Content-Type': 'multipart/mixed; boundary=batchresponse_fixture' });
         response.end([
           '--batchresponse_fixture', 'Content-Type: multipart/mixed; boundary=changesetresponse_fixture', '',
           ...lines.flatMap(() => [
             '--changesetresponse_fixture', 'Content-Type: application/http', 'Content-Transfer-Encoding: binary', '',
-            'HTTP/1.1 204 No Content', 'ETag: W/"fixture-v2"', '',
+            'HTTP/1.1 204 No Content', `ETag: ${etag}`, '',
           ]),
           '--changesetresponse_fixture--', '--batchresponse_fixture--',
         ].join('\r\n'));
@@ -82,12 +93,35 @@ describe('catalog and workspace SDK batch transport', () => {
           teeProfileId: tee.id, groups: [{ number: 1, playerIds }],
         }],
       }, 'W/"fixture-v1"');
-      expect(saved).toMatchObject({ event: { name: 'Fictional Saved' }, etag: 'W/"fixture-v2"' });
+      expect(saved).toMatchObject({ event: { name: 'Fictional Saved' }, etag: 'W/"fixture-v3"' });
       expect(saved.rounds[0]?.teeProfile).toEqual(tee);
       expect(batches).toHaveLength(2);
       expect(batches[1]?.match(/if-match: W\/"fixture-v1"/gi)).toHaveLength(2);
       expect(batches[1]).toContain('"RowKey":"workspace"');
       expect(batches[1]).toContain(`"RowKey":"round:${identifier(500)}"`);
+      const initialIndex = { value: '+1.2', effectiveDate: '2026-03-01', source: 'Fictional initial manual source' };
+      const initial = await players.create(creator, identifier(204), 'Fictional Initially Known', initialIndex);
+      expect(initial.currentIndex).toMatchObject({
+        id: initial.id, ...initialIndex, recordedBy: creator, previousObservationId: null,
+      });
+      expect(batches[2]).toContain(`"RowKey":"player:${initial.id}"`);
+      expect(batches[2]).toContain(`"RowKey":"index:${initial.id}:${initial.id}"`);
+      expect(batches[2]?.match(/POST /g)).toHaveLength(2);
+      const unknown = await players.create(creator, identifier(205), 'Fictional Unknown');
+      expect(unknown.currentIndex).toBeNull();
+      const player = await players.get(creator, playerIds[0] ?? '');
+      const latest = await players.observe(creator, player.id, identifier(310), initialIndex, player.etag);
+      const refreshed = await workspace.refreshIndices(creator, event.id, identifier(500), identifier(600), saved.etag);
+      expect(refreshed.rounds[0]?.players[0]?.handicapIndex).toEqual(latest.currentIndex);
+      expect(refreshed.rounds[0]?.players[1]?.handicapIndex).toBeNull();
+      expect(refreshed.etag).not.toBe(saved.etag);
+      expect(batches[4]?.match(/if-match: W\/"fixture-v3"/gi)).toHaveLength(2);
+      expect(batches[4]).toContain(`"RowKey":"index-refresh:${identifier(600)}"`);
+      const audit = decode(stored.get(`${event.id}|index-refresh:${identifier(600)}`)?.content, isIndexRefreshAudit);
+      expect(audit.previous[0]?.handicapIndex).toBeNull();
+      expect(audit.updated[0]?.handicapIndex).toEqual(latest.currentIndex);
+      expect(await workspace.refreshIndices(creator, event.id, identifier(500), identifier(600), saved.etag)).toEqual(refreshed);
+      expect(batches).toHaveLength(5);
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => {
         if (error) reject(error); else resolve();

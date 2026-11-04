@@ -5,6 +5,36 @@ import { fictionalEvent, fictionalId, fictionalSetup, fictionalWorkspace } from 
 import type { EventSetupInput } from '../domain/setup';
 
 describe('event workspace client', () => {
+  it('explicitly refreshes a saved round with a stable request ID, exact workspace revision and empty body', async () => {
+    const send = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(fictionalWorkspace)));
+    const client = createSetupClient('https://fictional.example.test/api', () => Promise.resolve('fictional'), send);
+    const round = fictionalWorkspace.rounds[0];
+    if (!round) throw new Error('Missing fictional round.');
+    const requestId = fictionalId(250);
+    const signal = new AbortController().signal;
+    await expect(client.refreshIndices(fictionalEvent.id, round.id, fictionalWorkspace.etag, requestId, signal)).resolves.toEqual(fictionalWorkspace);
+    expect(send.mock.calls[0]?.[0]).toBe(`https://fictional.example.test/api/events/${fictionalEvent.id}/workspace/rounds/${round.id}/indices/refresh`);
+    expect(send.mock.calls[0]?.[1]).toMatchObject({
+      method: 'POST', body: '{}', signal, credentials: 'omit', cache: 'no-store',
+      headers: { 'If-Match': fictionalWorkspace.etag, 'Idempotency-Key': requestId },
+    });
+  });
+
+  it('rejects invalid refresh inputs, mismatched workspaces, missing rounds and stale revisions without confirming capture changes', async () => {
+    const send = vi.fn<typeof fetch>();
+    const client = createSetupClient('https://fictional.example.test/api', () => Promise.resolve('fictional'), send);
+    const signal = new AbortController().signal;
+    const round = fictionalWorkspace.rounds[0];
+    if (!round) throw new Error('Missing fictional round.');
+    await expect(client.refreshIndices(fictionalEvent.id, round.id, '*', fictionalId(250), signal)).rejects.toThrow('Invalid captured setup');
+    expect(send).not.toHaveBeenCalled();
+    send.mockResolvedValueOnce(new Response(JSON.stringify({ ...fictionalWorkspace, event: { ...fictionalEvent, id: fictionalId(99) } })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...fictionalWorkspace, rounds: [] })))
+      .mockResolvedValueOnce(new Response('{}', { status: 409 }));
+    await expect(client.refreshIndices(fictionalEvent.id, round.id, 'v1', fictionalId(250), signal)).rejects.toThrow('Invalid refreshed workspace');
+    await expect(client.refreshIndices(fictionalEvent.id, round.id, 'v1', fictionalId(250), signal)).rejects.toThrow('Invalid refreshed workspace');
+    await expect(client.refreshIndices(fictionalEvent.id, round.id, 'v1', fictionalId(250), signal)).rejects.toBeInstanceOf(EventChangedError);
+  });
   it('reports an oversized multi-round draft explicitly without sending or broadening the request limit', async () => {
     const send = vi.fn<typeof fetch>();
     const token = vi.fn().mockResolvedValue('fictional');

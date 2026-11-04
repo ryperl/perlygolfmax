@@ -6,3 +6,12 @@
 .setup-check input { width: auto; }
 .setup-version { overflow-wrap: anywhere; }
 .setup-form button { justify-self: start; max-width: 100%; white-space: normal; }
+.setup-index-list { display: grid; gap: 16px; list-style: none; padding: 16px 0; }
+.setup-index-list > li { border-top: 1px solid var(--cp-border); padding-top: 16px; }
+.setup-index-comparison { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; margin: 12px 0; }
+.setup-index-comparison > div { min-width: 0; padding: 12px; border: 1px solid var(--cp-border); border-radius: 8px; }
+.setup-index-comparison dt { color: var(--cp-text-muted); font-size: .85rem; }
+.setup-index-comparison dd { margin: 8px 0 0; overflow-wrap: anywhere; }
+.setup-index-refresh { display: grid; gap: 16px; border-top: 1px solid var(--cp-border); padding-top: 16px; }
+.setup-index-confirm { display: flex; align-items: flex-start; gap: 10px; }
+.setup-index-confirm input { margin-top: 5px; flex-shrink: 0; }

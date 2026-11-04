@@ -3,6 +3,8 @@ import type { EventSetupInput } from '../../../src/domain/setup.js';
 import { isEventWorkspace } from '../../../src/contracts/setup.js';
 import { catalogFixture, identifier, manifest, tee } from '../../test/catalog-fixtures.js';
 import { creator, event, member } from '../../test/fixtures.js';
+import { decode } from '../catalog/entities.js';
+import { isIndexRefreshAudit } from './index-refresh.js';
 
 async function fixture() {
   const f = catalogFixture();
@@ -34,6 +36,7 @@ describe('saved owner workspace', () => {
       event: { name: f.input.name }, location: f.input.location, etag: saved.event.etag,
       rounds: [{ courseVersionId: f.version.id, teeProfile: tee, groups: f.input.rounds[0]?.groups }],
     });
+
     expect(saved.rounds[0]?.players[0]?.handicapIndex).toMatchObject({ value: '+1.2', recordedBy: creator });
     expect(saved.rounds[0]?.players[1]?.handicapIndex).toBeNull();
     expect(saved.rounds[0]?.course).toEqual(manifest.course);
@@ -46,6 +49,179 @@ describe('saved owner workspace', () => {
     expect(writes?.every((action) => action[1].partitionKey === event.id)).toBe(true);
   });
 
+    async function refreshFixture() {
+      const f = await fixture();
+      const first = f.input.rounds[0];
+      if (!first) throw new Error('Missing fictional first round');
+      const saved = await f.workspace.save(creator, event.id, {
+        ...f.input, rounds: [first, { ...first, id: identifier(501), name: 'Fictional Round Two' }],
+      }, f.empty.etag);
+      const player = await f.players.get(creator, identifier(200));
+      const latest = await f.players.observe(creator, player.id, identifier(310), {
+        value: '7.5', effectiveDate: '2026-03-01', source: 'Fictional current observation',
+      }, player.etag);
+      f.submit.mockClear();
+      return { ...f, saved, latest };
+    }
+
+    describe('explicit setup-only captured-index refresh', () => {
+      it('updates only the selected round captures, retaining unknowns, other rounds, course/groups and global profiles', async () => {
+        const f = await refreshFixture();
+        const globalBefore = [...f.rows.entries()].filter(([key]) => key.startsWith('catalog:'));
+        const refreshed = await f.workspace.refreshIndices(creator, event.id, identifier(500), identifier(600), f.saved.etag);
+        const previousRound = f.saved.rounds[0];
+        expect(refreshed.rounds[0]).toEqual({
+          ...previousRound,
+          players: previousRound?.players.map((entry) => ({
+            ...entry, handicapIndex: entry.playerId === identifier(200) ? f.latest.currentIndex : entry.handicapIndex,
+          })),
+        });
+        expect(refreshed.rounds[0]?.players[1]?.handicapIndex).toBeNull();
+        expect(refreshed.rounds[1]).toEqual(f.saved.rounds[1]);
+        expect(refreshed.roster).toEqual(f.saved.roster);
+        expect(refreshed.location).toBe(f.saved.location);
+        expect(refreshed.event.name).toBe(f.saved.event.name);
+        expect(refreshed.etag).not.toBe(f.saved.etag);
+        expect([...f.rows.entries()].filter(([key]) => key.startsWith('catalog:'))).toEqual(globalBefore);
+        const receipt = f.rows.get(`${event.id}|index-refresh:${identifier(600)}`);
+        const audit = decode(receipt?.content, isIndexRefreshAudit);
+        expect(audit).toMatchObject({
+          eventId: event.id, roundId: identifier(500), requestId: identifier(600), expectedEtag: f.saved.etag,
+          recordedBy: creator,
+        });
+        expect(audit.recordedAt).toEqual(expect.any(String));
+        expect(audit.previous[0]?.handicapIndex?.value).toBe('+1.2');
+        expect(audit.updated[0]?.handicapIndex).toEqual(f.latest.currentIndex);
+        expect(f.rows.get(`${event.id}|event`)?.indicesRefreshedAt).toBe(audit.recordedAt);
+        expect(f.submit.mock.calls[0]?.[0]).toEqual([
+          ['update', expect.objectContaining({ rowKey: 'event', indicesRefreshedAt: audit.recordedAt }), 'Merge', { etag: f.saved.etag }],
+          ['update', expect.objectContaining({ rowKey: `member:${creator.objectId}` }), 'Merge', expect.any(Object)],
+          ['update', expect.objectContaining({ rowKey: `round:${identifier(500)}` }), 'Merge'],
+          ['create', expect.objectContaining({ rowKey: `index-refresh:${identifier(600)}` })],
+        ]);
+        expect(f.submit.mock.calls[0]?.[0][1]?.[3]?.etag).toEqual(expect.any(String));
+        f.seed({ partitionKey: event.id, rowKey: `member:${member.objectId}`, ...member, role: 'member' });
+        const memberRead = await f.workspace.get(member, event.id);
+        expect(JSON.stringify(memberRead)).not.toContain('handicapIndex');
+        expect(JSON.stringify(memberRead)).not.toContain('recordedBy');
+      });
+
+      it('captures unknown as null explicitly and refreshes newly known observations only on the explicit action', async () => {
+        const f = await refreshFixture();
+        const unknownPlayer = await f.players.get(creator, identifier(201));
+        const observed = await f.players.observe(creator, unknownPlayer.id, identifier(311), {
+          value: '+0.5', effectiveDate: '2026-03-01', source: 'Fictional initially unknown observation',
+        }, unknownPlayer.etag);
+        expect((await f.workspace.get(creator, event.id)).rounds[0]?.players[1]?.handicapIndex).toBeNull();
+        const result = await f.workspace.refreshIndices(creator, event.id, identifier(500), identifier(600), f.saved.etag);
+        expect(result.rounds[0]?.players[1]?.handicapIndex).toEqual(observed.currentIndex);
+        expect(result.rounds[0]?.players[2]?.handicapIndex).toBeNull();
+        expect(result.rounds[1]?.players[1]?.handicapIndex).toBeNull();
+      });
+
+      it('replays a lost committed response with the original revision, returns fresh workspace and preserves one audit', async () => {
+        const f = await refreshFixture();
+        f.submit.mockImplementationOnce((actions) => {
+          f.apply(actions);
+          return Promise.reject(new Error('Fictional lost refresh response'));
+        });
+        await expect(f.workspace.refreshIndices(creator, event.id, identifier(500), identifier(600), f.saved.etag)).rejects.toThrow('Fictional lost refresh response');
+        const committed = await f.workspace.get(creator, event.id);
+        const receipt = f.rows.get(`${event.id}|index-refresh:${identifier(600)}`);
+        const player = await f.players.get(creator, identifier(200));
+        await f.players.observe(creator, player.id, identifier(312), {
+          value: '9', effectiveDate: '2026-04-01', source: 'Fictional later current index',
+        }, player.etag);
+        const original = f.input.rounds[0];
+        if (!original) throw new Error('Missing fictional original round');
+        const fresh = await f.workspace.save(creator, event.id, {
+          ...f.input, location: 'Fictional subsequent location',
+          rounds: [original, { ...original, id: identifier(501), name: 'Fictional Round Two' }],
+        }, committed.etag);
+        expect(await f.workspace.refreshIndices(creator, event.id, identifier(500), identifier(600), f.saved.etag)).toEqual(fresh);
+        expect(fresh.rounds[0]?.players[0]?.handicapIndex?.value).toBe('7.5');
+        expect(f.rows.get(`${event.id}|index-refresh:${identifier(600)}`)).toEqual(receipt);
+        expect([...f.rows.values()].filter((row) => row.rowKey?.startsWith('index-refresh:'))).toHaveLength(1);
+        await expect(f.workspace.refreshIndices(creator, event.id, identifier(501), identifier(600), f.saved.etag)).rejects.toMatchObject({ code: 'INDEX_REFRESH_REQUEST_CONFLICT' });
+        await expect(f.workspace.refreshIndices(creator, event.id, identifier(500), identifier(600), fresh.etag)).rejects.toMatchObject({ code: 'INDEX_REFRESH_REQUEST_CONFLICT' });
+      });
+
+      it('requires both authoritative event ownership and organizer capability, including for replays', async () => {
+        const f = await refreshFixture();
+        await expect(f.workspace.refreshIndices(member, event.id, identifier(500), identifier(600), f.saved.etag)).rejects.toMatchObject({ status: 404 });
+        for (const role of ['member', 'owner']) {
+          f.seed({ partitionKey: event.id, rowKey: `member:${member.objectId}`, ...member, role });
+          await expect(f.workspace.refreshIndices(member, event.id, identifier(500), identifier(600), f.saved.etag)).rejects.toMatchObject({ status: 403 });
+        }
+        await expect(f.workspace.refreshIndices({ ...creator, tenantId: member.objectId }, event.id, identifier(500), identifier(600), f.saved.etag)).rejects.toMatchObject({ status: 404 });
+        expect(f.submit).not.toHaveBeenCalled();
+        const refreshed = await f.workspace.refreshIndices(creator, event.id, identifier(500), identifier(600), f.saved.etag);
+        f.seed({ partitionKey: event.id, rowKey: 'event', ...event, status: 'archived' });
+        await expect(f.workspace.refreshIndices(creator, event.id, identifier(500), identifier(600), f.saved.etag)).rejects.toMatchObject({ code: 'EVENT_ARCHIVED' });
+        f.rows.delete(`${event.id}|member:${creator.objectId}`);
+        await expect(f.workspace.refreshIndices(creator, event.id, identifier(500), identifier(601), refreshed.etag)).rejects.toMatchObject({ status: 404 });
+      });
+
+      it('rejects stale revisions and nonexistent rounds without saving any changes', async () => {
+        const f = await refreshFixture();
+        const before = new Map(f.rows);
+        await expect(f.workspace.refreshIndices(creator, event.id, identifier(500), identifier(600), 'stale')).rejects.toMatchObject({ code: 'EVENT_CHANGED' });
+        await expect(f.workspace.refreshIndices(creator, event.id, identifier(999), identifier(600), f.saved.etag)).rejects.toMatchObject({ code: 'ROUND_NOT_FOUND' });
+        expect(f.submit).not.toHaveBeenCalled();
+        expect(f.rows).toEqual(before);
+      });
+
+      it.each(['revoke', 'archive', 'edit'] as const)('conditionally aborts all snapshot/audit writes when %s races refresh', async (operation) => {
+        const f = await refreshFixture();
+        const beforeRound = f.rows.get(`${event.id}|round:${identifier(500)}`);
+        f.submit.mockImplementationOnce((actions) => {
+          if (operation === 'revoke') f.rows.delete(`${event.id}|member:${creator.objectId}`);
+          else f.seed({ partitionKey: event.id, rowKey: 'event', ...event, status: operation === 'archive' ? 'archived' : 'active' });
+          try { f.apply(actions); } catch (error) {
+            return Promise.reject(error instanceof Error ? error : new Error('Invalid fictional refresh transaction'));
+          }
+          return Promise.reject(new Error('Unexpected successful refresh race'));
+        });
+        await expect(f.workspace.refreshIndices(creator, event.id, identifier(500), identifier(600), f.saved.etag)).rejects.toMatchObject({ code: 'EVENT_CHANGED' });
+        expect(f.rows.get(`${event.id}|round:${identifier(500)}`)).toEqual(beforeRound);
+        expect(f.rows.has(`${event.id}|index-refresh:${identifier(600)}`)).toBe(false);
+      });
+
+      it('converges identical concurrent retries but rejects competing new refreshes using the same revision', async () => {
+        const f = await refreshFixture();
+        const identical = await Promise.all([
+          f.workspace.refreshIndices(creator, event.id, identifier(500), identifier(600), f.saved.etag),
+          f.workspace.refreshIndices(creator, event.id, identifier(500), identifier(600), f.saved.etag),
+        ]);
+        expect(identical[0]).toEqual(identical[1]);
+        const etag = identical[0].etag;
+        const competing = await Promise.allSettled([
+          f.workspace.refreshIndices(creator, event.id, identifier(500), identifier(601), etag),
+          f.workspace.refreshIndices(creator, event.id, identifier(501), identifier(602), etag),
+        ]);
+        expect(competing.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+        expect(competing.filter((result) => result.status === 'rejected')).toHaveLength(1);
+        expect([...f.rows.values()].filter((row) => row.rowKey?.startsWith('index-refresh:'))).toHaveLength(2);
+      });
+
+      it('fails closed on catalog/transaction provider failure or corrupt audit without modifying saved data', async () => {
+        const f = await refreshFixture();
+        const before = new Map(f.rows);
+        const original = f.get.getMockImplementation();
+        if (!original) throw new Error('Missing fictional table getter');
+        f.get.mockImplementation((partition, row, options) => partition === 'catalog:players'
+          ? Promise.reject(new Error('Fictional catalog provider failure')) : original(partition, row, options));
+        await expect(f.workspace.refreshIndices(creator, event.id, identifier(500), identifier(600), f.saved.etag)).rejects.toThrow('Fictional catalog provider failure');
+        expect(f.submit).not.toHaveBeenCalled();
+        expect(f.rows).toEqual(before);
+        f.get.mockImplementation(original);
+        f.submit.mockRejectedValueOnce(new Error('Fictional batch provider failure'));
+        await expect(f.workspace.refreshIndices(creator, event.id, identifier(500), identifier(600), f.saved.etag)).rejects.toThrow('Fictional batch provider failure');
+        expect(f.rows).toEqual(before);
+        f.seed({ partitionKey: event.id, rowKey: `index-refresh:${identifier(600)}`, content: '{}' });
+        await expect(f.workspace.refreshIndices(creator, event.id, identifier(500), identifier(600), f.saved.etag)).rejects.toMatchObject({ status: 503 });
+      });
+    });
   it('does not refresh old-round HI snapshots; new rounds and newly added round players capture current observations', async () => {
     const f = await fixture();
     let saved = await f.workspace.save(creator, event.id, f.input, f.empty.etag);

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { EventsView } from './EventsView';
@@ -31,6 +31,10 @@ describe('EventsView', () => {
       capabilities: { canCreateEvents: true, canManageCatalog: false },
     }} busy={false} notice="" />);
     expect(screen.getByRole('heading', { name: 'Fictional Open' })).toBeVisible();
+    const cardActions = screen.getByRole('group', { name: 'Actions for Fictional Open' });
+    expect(cardActions).toHaveClass('event-card-actions');
+    expect(within(cardActions).getByRole('link', { name: 'Open Fictional Open workspace' })).toHaveAttribute('href', '#events?event=fictional');
+    expect(within(cardActions).getByRole('button', { name: 'Archive Fictional Open' })).toBeEnabled();
     await user.type(screen.getByLabelText('Event name'), 'Another fictional event');
     await user.click(screen.getByRole('button', { name: 'Create event' }));
     expect(actions.onCreate).toHaveBeenCalledWith('Another fictional event');

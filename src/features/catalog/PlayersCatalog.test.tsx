@@ -1,10 +1,10 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { EventChangedError } from '../../client/events';
 import { fakeCatalog, fictionalId, fictionalPlayers } from '../../client/catalog.test-support';
 import { PlayersCatalog } from './PlayersCatalog';
-import type { PlayerCatalogPage, PlayerIndexHistory } from '../../domain/catalog';
+import type { PlayerCatalogPage, PlayerIndexHistory, PlayerProfile } from '../../domain/catalog';
 
 const player = fictionalPlayers[0];
 if (!player) throw new Error('Missing fictional player.');
@@ -15,6 +15,116 @@ const observation = {
 };
 
 describe('manager player catalog', () => {
+  it('creates an optional initial plus HI atomically, retaining the complete draft and request identity until confirmation', async () => {
+    const client = fakeCatalog();
+    let finish: ((profile: PlayerProfile) => void) | undefined;
+    const saved = new Promise<PlayerProfile>((resolve) => { finish = resolve; });
+    vi.mocked(client.createPlayer).mockRejectedValueOnce(new Error('Atomic creation response lost.')).mockReturnValueOnce(saved);
+    const user = userEvent.setup();
+    render(<PlayersCatalog client={client} />);
+    const name = screen.getByLabelText('Player display name');
+    await waitFor(() => { expect(name).toBeEnabled(); });
+    await user.type(name, 'Fictional Initial Player');
+    await user.type(screen.getByLabelText('Initial handicap index (optional)'), '+1.2');
+    await user.type(screen.getByLabelText('Initial index effective date'), '2026-01-02');
+    expect(screen.getByLabelText('Initial index manual source')).toHaveValue('Manual organizer entry');
+    await user.click(screen.getByRole('button', { name: 'Save player' }));
+    await screen.findByText('Atomic creation response lost.');
+    expect(name).toHaveValue('Fictional Initial Player');
+    expect(screen.getByLabelText('Initial handicap index (optional)')).toHaveValue('+1.2');
+    expect(screen.getByLabelText('Initial index effective date')).toHaveValue('2026-01-02');
+    await user.click(screen.getByRole('button', { name: 'Save player' }));
+    expect(name).toBeDisabled();
+    const calls = vi.mocked(client.createPlayer).mock.calls;
+    expect(calls[0]?.[1]).toBe(calls[1]?.[1]);
+    expect(calls[1]?.[3]).toEqual({ value: '+1.2', effectiveDate: '2026-01-02', source: 'Manual organizer entry' });
+    const requestId = calls[1]?.[1];
+    if (!requestId) throw new Error('Missing fictional request ID.');
+    await act(async () => {
+      finish?.({ ...player, id: requestId, displayName: 'Fictional Initial Player', currentIndex: { ...observation, id: requestId, source: 'Manual organizer entry' } });
+      await saved;
+    });
+    await screen.findByText('Player and initial manual handicap observation saved together.');
+    expect(name).toHaveValue('');
+    expect(screen.getByLabelText('Initial handicap index (optional)')).toHaveValue('');
+    expect(screen.getByLabelText('Initial index effective date')).toHaveValue('');
+    expect(client.recordIndex).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { name: 'Fictional Initial Player' })).toBeVisible();
+  });
+
+  it('requires a date and source only when an initial index is supplied, and keys uncertain retries on the complete payload', async () => {
+    const client = fakeCatalog();
+    vi.mocked(client.createPlayer).mockRejectedValue(new Error('Create not confirmed.'));
+    const user = userEvent.setup();
+    render(<PlayersCatalog client={client} />);
+    await waitFor(() => { expect(screen.getByLabelText('Player display name')).toBeEnabled(); });
+    await user.type(screen.getByLabelText('Player display name'), 'Fictional Optional Player');
+    await user.type(screen.getByLabelText('Initial handicap index (optional)'), '12.3');
+    await user.click(screen.getByRole('button', { name: 'Save player' }));
+    expect(screen.getByLabelText('Initial index effective date')).toBeInvalid();
+    expect(client.createPlayer).not.toHaveBeenCalled();
+    await user.type(screen.getByLabelText('Initial index effective date'), '2026-01-02');
+    await user.clear(screen.getByLabelText('Initial index manual source'));
+    await user.click(screen.getByRole('button', { name: 'Save player' }));
+    expect(client.createPlayer).not.toHaveBeenCalled();
+    await user.type(screen.getByLabelText('Initial index manual source'), 'Fictional manual report');
+    await user.click(screen.getByRole('button', { name: 'Save player' }));
+    await screen.findByText('Create not confirmed.');
+    await user.clear(screen.getByLabelText('Initial handicap index (optional)'));
+    await user.type(screen.getByLabelText('Initial handicap index (optional)'), '+2.1');
+    await user.click(screen.getByRole('button', { name: 'Save player' }));
+    await screen.findByText('Create not confirmed.');
+    const calls = vi.mocked(client.createPlayer).mock.calls;
+    expect(calls[0]?.[1]).not.toBe(calls[1]?.[1]);
+    await user.clear(screen.getByLabelText('Initial handicap index (optional)'));
+    await user.clear(screen.getByLabelText('Initial index effective date'));
+    await user.clear(screen.getByLabelText('Initial index manual source'));
+    await user.click(screen.getByRole('button', { name: 'Save player' }));
+    await screen.findByText('Create not confirmed.');
+    expect(vi.mocked(client.createPlayer).mock.calls[2]).toHaveLength(3);
+    expect(screen.getByLabelText('Player display name')).toHaveValue('Fictional Optional Player');
+  });
+
+  it('opens a nonfirst player editor inline, focuses once ready, preserves card order through updates and restores Edit focus on close', async () => {
+    const client = fakeCatalog();
+    let finish: ((history: PlayerIndexHistory) => void) | undefined;
+    const initial = new Promise<PlayerIndexHistory>((resolve) => { finish = resolve; });
+    vi.mocked(client.history).mockReturnValueOnce(initial);
+    const third = fictionalPlayers[2];
+    if (!third) throw new Error('Missing fictional player.');
+    vi.mocked(client.renamePlayer).mockResolvedValue({ ...third, displayName: 'Fictional Third Revised', etag: 'player-v2' });
+    const user = userEvent.setup();
+    render(<PlayersCatalog client={client} />);
+    const edit = await screen.findByRole('button', { name: `Edit ${third.displayName}` });
+    const card = edit.closest('li');
+    const creation = screen.getByRole('heading', { name: 'Create a saved player' }).closest('form');
+    if (!card || !creation) throw new Error('Missing player card or creation form.');
+    expect(creation.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await user.click(edit);
+    const editor = within(card).getByRole('region', { name: 'Player editor' });
+    const heading = within(editor).getByRole('heading', { name: `Edit saved player: ${third.displayName}` });
+    expect(edit).toHaveAttribute('aria-expanded', 'true');
+    expect(edit).toHaveAttribute('aria-controls', editor.id);
+    expect(heading).not.toHaveFocus();
+    expect(within(editor).getByRole('button', { name: 'Close player editor' })).toBeDisabled();
+    await act(async () => { finish?.({ observations: [] }); await initial; });
+    await waitFor(() => { expect(heading).toHaveFocus(); });
+    const name = within(editor).getByLabelText('Saved player name');
+    await user.clear(name);
+    await user.type(name, 'Fictional Third Revised');
+    await user.click(within(editor).getByRole('button', { name: 'Save player name' }));
+    await screen.findByText(/Player name saved/);
+    expect(heading).not.toHaveFocus();
+    expect(screen.getAllByRole('heading', { level: 2 }).map((item) => item.textContent)).toEqual([
+      'Create a saved player', 'Fictional Player 1', 'Fictional Player 2', 'Fictional Third Revised', 'Fictional Player 4',
+    ]);
+    expect(within(card).getByRole('region', { name: 'Player editor' })).toBe(editor);
+    await user.click(within(editor).getByRole('button', { name: 'Close player editor' }));
+    const renamedEdit = screen.getByRole('button', { name: 'Edit Fictional Third Revised' });
+    expect(renamedEdit).toHaveFocus();
+    expect(renamedEdit).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('region', { name: 'Player editor' })).not.toBeInTheDocument();
+  });
   it('prevents refresh and creation while the initial catalog is pending, then preserves a confirmed newly created player', async () => {
     const client = fakeCatalog();
     let finish: ((page: PlayerCatalogPage) => void) | undefined;

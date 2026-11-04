@@ -49,6 +49,7 @@ const catalogRoutes: readonly { readonly action: CatalogAction; readonly route: 
   { action: 'player', route: 'catalog/players/{playerId}', methods: ['PATCH'] },
   { action: 'indices', route: 'catalog/players/{playerId}/indices', methods: ['GET', 'POST'] },
   { action: 'workspace', route: 'events/{id}/workspace', methods: ['GET', 'PUT'] },
+  { action: 'round-indices-refresh', route: 'events/{id}/workspace/rounds/{roundId}/indices/refresh', methods: ['POST'] },
 ];
 for (const item of catalogRoutes) {
   app.http(`setup-${item.action}`, { route: item.route, methods: item.methods, authLevel: 'anonymous', handler: createCatalogHandler(resolveApi, item.action) });

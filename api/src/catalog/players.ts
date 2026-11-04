@@ -1,8 +1,8 @@
 import { odata } from '@azure/data-tables';
-import type { TableClient } from '@azure/data-tables';
-import type { IndexObservation, PlayerCatalogPage, PlayerIndexHistory, PlayerProfile } from '../../../src/domain/catalog.js';
+import type { TableClient, TransactionAction } from '@azure/data-tables';
+import type { IndexObservation, ManualIndexInput, PlayerCatalogPage, PlayerIndexHistory, PlayerProfile } from '../../../src/domain/catalog.js';
 import type { AccountIdentity } from '../../../src/domain/events.js';
-import { isIndexObservation, isPlayerProfile } from '../../../src/contracts/catalog.js';
+import { isIndexObservation, isManualIndexInput, isPlayerProfile } from '../../../src/contracts/catalog.js';
 import { isUuid } from '../../../src/contracts/events.js';
 import { ApiError } from '../errors.js';
 import { canonical, decode, isConflict, optionalRow, page, revision, transaction } from './entities.js';
@@ -55,17 +55,49 @@ export class TablePlayerCatalog {
     return player(await this.row(id), id);
   }
 
-  async create(identity: AccountIdentity, id: string, displayName: string): Promise<PlayerProfile> {
+  async create(identity: AccountIdentity, id: string, displayName: string, initialIndex?: ManualIndexInput): Promise<PlayerProfile> {
     requireManager(identity, this.allowed);
-    const content: PlayerProfile = { id, displayName, createdAt: new Date().toISOString(), currentIndex: null, etag: 'stored-revision' };
+    if (initialIndex !== undefined && !isManualIndexInput(initialIndex)) throw new ApiError(400, 'INVALID_INDEX_OBSERVATION');
+    const index = initialIndex === undefined ? null : {
+      value: initialIndex.value, effectiveDate: initialIndex.effectiveDate, source: initialIndex.source,
+    };
+    const requestPayload = canonical({ displayName, initialIndex: index });
+    const createdAt = new Date().toISOString();
+    const currentIndex: IndexObservation | null = index === null ? null : {
+      id, value: index.value, effectiveDate: index.effectiveDate, source: index.source,
+      recordedAt: createdAt, recordedBy: { tenantId: identity.tenantId, objectId: identity.objectId }, previousObservationId: null,
+    };
+    const content: PlayerProfile = { id, displayName, createdAt, currentIndex, etag: 'stored-revision' };
+    const entity = {
+      partitionKey, rowKey: playerKey(id), content: canonical(content), requestPayload,
+      requestName: displayName, lastObservationId: currentIndex ? id : '',
+    };
     try {
-      await this.table.createEntity({
-        partitionKey, rowKey: playerKey(id), content: canonical(content), requestName: displayName, lastObservationId: '',
-      });
+      if (currentIndex === null) await this.table.createEntity(entity);
+      else {
+        const actions: TransactionAction[] = [
+          ['create', entity],
+          ['create', { partitionKey, rowKey: observationKey(id, id), content: canonical(currentIndex) }],
+        ];
+        await this.table.submitTransaction(actions);
+      }
     } catch (error) {
       if (!isConflict(error)) throw error;
-      const existing = await this.row(id);
-      if (existing.requestName !== displayName) throw new ApiError(409, 'PLAYER_REQUEST_CONFLICT');
+      const existing = await optionalRow(this.table, partitionKey, playerKey(id));
+      if (!existing) throw new ApiError(409, 'PLAYER_REQUEST_CONFLICT');
+      if (existing.requestPayload === undefined) {
+        if (index !== null || existing.requestName !== displayName) throw new ApiError(409, 'PLAYER_REQUEST_CONFLICT');
+      } else {
+        if (typeof existing.requestPayload !== 'string') throw new ApiError(503, 'INVALID_STORED_CATALOG');
+        if (existing.requestPayload !== requestPayload) throw new ApiError(409, 'PLAYER_REQUEST_CONFLICT');
+      }
+      if (index !== null) {
+        const audit = await optionalRow(this.table, partitionKey, observationKey(id, id));
+        if (!audit) throw new ApiError(503, 'INVALID_STORED_CATALOG');
+        const observation = decode(audit.content, isIndexObservation);
+        if (observation.id !== id || observation.previousObservationId !== null || observation.value !== index.value
+          || observation.effectiveDate !== index.effectiveDate || observation.source !== index.source) throw new ApiError(503, 'INVALID_STORED_CATALOG');
+      }
     }
     return this.get(identity, id);
   }

@@ -4,11 +4,13 @@ import type { EventRosterPlayer, EventSetupInput, EventWorkspace, RoundSnapshot 
 import { isEventSummary, isRecord, isUuid } from '../../../src/contracts/events.js';
 import { isEventSetupInput, isEventWorkspace } from '../../../src/contracts/setup.js';
 import { ApiError } from '../errors.js';
-import { canonical, decode, optionalRow, revision, transaction } from '../catalog/entities.js';
+import { canonical, decode, isConflict, optionalRow, revision, transaction } from '../catalog/entities.js';
 import { requireManager } from '../catalog/courses.js';
 import type { CatalogPermission, TableCourseCatalog } from '../catalog/courses.js';
 import type { TablePlayerCatalog } from '../catalog/players.js';
 import { metadata, profile } from '../catalog/projections.js';
+import { isIndexRefreshAudit } from './index-refresh.js';
+import type { IndexRefreshAudit } from './index-refresh.js';
 
 interface WorkspaceHeader {
   readonly location: string;
@@ -85,6 +87,59 @@ export class TableWorkspaceStore {
           : { playerId: player.playerId, displayName: player.displayName }),
       })),
     };
+  }
+
+  private async refreshReplay(identity: AccountIdentity, eventId: string, roundId: string, requestId: string, etag: string): Promise<boolean> {
+    const row = await optionalRow(this.table, eventId, `index-refresh:${requestId}`);
+    if (!row) return false;
+    const audit = decode(row.content, isIndexRefreshAudit);
+    if (audit.eventId !== eventId || audit.roundId !== roundId || audit.requestId !== requestId
+      || audit.expectedEtag !== etag || audit.recordedBy.tenantId !== identity.tenantId
+      || audit.recordedBy.objectId !== identity.objectId) throw new ApiError(409, 'INDEX_REFRESH_REQUEST_CONFLICT');
+    return true;
+  }
+
+  // Setup-only: future scored/locked-round rules must gate this action before any refresh.
+  async refreshIndices(identity: AccountIdentity, eventId: string, roundId: string, requestId: string, etag: string): Promise<EventWorkspace> {
+    const access = await this.access(identity, eventId);
+    if (access.summary.role !== 'owner') throw new ApiError(403, 'EVENT_MANAGEMENT_FORBIDDEN');
+    if (access.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
+    requireManager(identity, this.allowed);
+    if (await this.refreshReplay(identity, eventId, roundId, requestId, etag)) return this.get(identity, eventId);
+    if (access.summary.etag !== etag) throw new ApiError(409, 'EVENT_CHANGED');
+    const workspace = await this.load(access.summary);
+    const round = workspace.rounds.find((entry) => entry.id === roundId);
+    if (!round) throw new ApiError(404, 'ROUND_NOT_FOUND');
+    const profiles = await Promise.all(round.players.map((entry) => this.players.get(identity, entry.playerId)));
+    const updated: RoundSnapshot = {
+      ...round,
+      players: round.players.map((entry, index) => {
+        const current = profiles[index];
+        if (!current || current.id !== entry.playerId) throw new ApiError(503, 'INVALID_STORED_CATALOG');
+        return { playerId: entry.playerId, displayName: entry.displayName, handicapIndex: current.currentIndex };
+      }),
+    };
+    const recordedAt = new Date().toISOString();
+    const audit: IndexRefreshAudit = {
+      eventId, roundId, requestId, expectedEtag: etag, recordedAt,
+      recordedBy: { tenantId: identity.tenantId, objectId: identity.objectId },
+      previous: round.players.map((entry) => ({ playerId: entry.playerId, handicapIndex: entry.handicapIndex ?? null })),
+      updated: updated.players.map((entry) => ({ playerId: entry.playerId, handicapIndex: entry.handicapIndex ?? null })),
+    };
+    try {
+      await this.table.submitTransaction([
+        ['update', { partitionKey: eventId, rowKey: 'event', indicesRefreshedAt: recordedAt }, 'Merge', { etag }],
+        ['update', {
+          partitionKey: eventId, rowKey: `member:${identity.objectId}`, tenantId: identity.tenantId, objectId: identity.objectId, role: 'owner',
+        }, 'Merge', { etag: revision(access.member) }],
+        ['update', { partitionKey: eventId, rowKey: `round:${roundId}`, content: canonical(updated) }, 'Merge'],
+        ['create', { partitionKey: eventId, rowKey: `index-refresh:${requestId}`, content: canonical(audit) }],
+      ]);
+    } catch (error) {
+      if (!isConflict(error)) throw error;
+      if (!await this.refreshReplay(identity, eventId, roundId, requestId, etag)) throw new ApiError(409, 'EVENT_CHANGED');
+    }
+    return this.get(identity, eventId);
   }
 
   async save(identity: AccountIdentity, id: string, input: EventSetupInput, etag: string): Promise<EventWorkspace> {

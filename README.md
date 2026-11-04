@@ -135,9 +135,19 @@ a profile does not select it for a round.
 Players are independent of sign-in accounts and event membership. Manual index
 observations have effective dates, source labels and audit history. Unknown is
 not zero, and plus-index notation is preserved without calculating handicaps.
+An optional starting index can be entered when creating a player; the player
+and first audited observation are saved together. Editing opens beside the
+selected player rather than below the whole directory.
 Backdated observations remain in history rather than replacing a newer current
 observation. Round-captured inputs do not automatically change on catalog edits.
 The eventual event/per-round handicap policy is not implemented.
+
+The manager's owner workspace distinguishes current catalog indices from saved
+round captures. An explicit, confirmed setup refresh can replace one round's
+captured indices with current catalog observations, preserving the previous
+inputs in an audit record. This does not change course/tee/group selections,
+update the global players, calculate handicaps or select a future scored-round
+correction policy.
 
 Owner setup selects saved players and an explicit course version/tee for one
 or more rounds, with manual groups numbered 1–4 and at most four players per

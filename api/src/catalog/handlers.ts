@@ -1,7 +1,7 @@
 import type { HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import type { AccountIdentity } from '../../../src/domain/events.js';
 import {
-  boundedText, isCourseId, isCourseImportManifest, isDateOnly, isHandicapIndex, isTeeProfile, isVersionId,
+  boundedText, isCourseId, isCourseImportManifest, isDateOnly, isHandicapIndex, isManualIndexInput, isTeeProfile, isVersionId,
 } from '../../../src/contracts/catalog.js';
 import { isEventRevision, isRecord, isUuid } from '../../../src/contracts/events.js';
 import { isEventSetupInput } from '../../../src/contracts/setup.js';
@@ -25,7 +25,7 @@ export interface CatalogSetupApi {
 }
 
 export type CatalogAction = 'courses' | 'course-version' | 'imports' | 'import'
-  | 'import-profile' | 'import-publish' | 'players' | 'player' | 'indices' | 'workspace';
+  | 'import-profile' | 'import-publish' | 'players' | 'player' | 'indices' | 'workspace' | 'round-indices-refresh';
 
 function uuid(value: unknown): string {
   if (!isUuid(value)) throw new ApiError(400, 'INVALID_REQUEST_ID');
@@ -41,7 +41,7 @@ function etag(request: HttpRequest): string {
 const methods: Readonly<Record<CatalogAction, readonly string[]>> = {
   courses: ['GET'], 'course-version': ['GET'], imports: ['POST'], import: ['GET'],
   'import-profile': ['PUT'], 'import-publish': ['POST'], players: ['GET', 'POST'],
-  player: ['PATCH'], indices: ['GET', 'POST'], workspace: ['GET', 'PUT'],
+  player: ['PATCH'], indices: ['GET', 'POST'], workspace: ['GET', 'PUT'], 'round-indices-refresh': ['POST'],
 };
 
 export function createCatalogHandler(resolveApi: () => CatalogSetupApi, action: CatalogAction) {
@@ -50,10 +50,20 @@ export function createCatalogHandler(resolveApi: () => CatalogSetupApi, action: 
       const api = resolveApi();
       const identity = await api.verify(request.headers.get('authorization'));
       const write = request.method !== 'GET';
-      if (action !== 'workspace') requireManager(identity, api.canManageCatalog);
-      await api.limiter.check(identity, action === 'workspace'
+      const setup = action === 'workspace' || action === 'round-indices-refresh';
+      if (!setup) requireManager(identity, api.canManageCatalog);
+      await api.limiter.check(identity, setup
         ? write ? 'setup-write' : 'setup-read' : write ? 'catalog-write' : 'catalog-read');
       if (!methods[action].includes(request.method)) return response(405, { code: 'METHOD_NOT_ALLOWED' });
+      if (action === 'round-indices-refresh') {
+        const id = uuid(request.params.id);
+        const roundId = uuid(request.params.roundId);
+        const requestId = uuid(request.headers.get('Idempotency-Key'));
+        const expected = etag(request);
+        const body = await readJson(request);
+        if (!isRecord(body) || Object.keys(body).length !== 0) throw new ApiError(400, 'INVALID_INDEX_REFRESH');
+        return response(200, await api.workspace.refreshIndices(identity, id, roundId, requestId, expected));
+      }
       if (action === 'workspace') {
         const id = uuid(request.params.id);
         if (!write) return response(200, await api.workspace.get(identity, id));
@@ -94,7 +104,8 @@ export function createCatalogHandler(resolveApi: () => CatalogSetupApi, action: 
         const id = uuid(request.headers.get('Idempotency-Key'));
         const body = await readJson(request);
         if (!isRecord(body) || !boundedText(body.displayName)) throw new ApiError(400, 'INVALID_PLAYER_NAME');
-        return response(200, await api.players.create(identity, id, body.displayName));
+        if (body.initialIndex !== undefined && !isManualIndexInput(body.initialIndex)) throw new ApiError(400, 'INVALID_INDEX_OBSERVATION');
+        return response(200, await api.players.create(identity, id, body.displayName, body.initialIndex));
       }
       const playerId = uuid(request.params.playerId);
       if (action === 'player') {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isHandicapIndex, isIndexObservation, isPlayerProfile } from './catalog';
+import { isHandicapIndex, isIndexObservation, isManualIndexInput, isPlayerProfile } from './catalog';
 import { isEventSetupInput, isEventWorkspace } from './setup';
 
 const ids = [1, 2, 3, 4].map((value) => `00000000-0000-4000-8000-${String(value).padStart(12, '0')}`);
@@ -40,6 +40,10 @@ describe('private setup and index contracts', () => {
       recordedAt: '2026-01-01T12:00:00Z', recordedBy: { tenantId: ids[2], objectId: ids[3] }, previousObservationId: null,
     })).toBe(true);
     expect(isPlayerProfile({ ...player, currentIndex: 0 })).toBe(false);
+    expect(isManualIndexInput({ value: '+2.4', effectiveDate: '2026-01-01', source: 'Fictional manual entry' })).toBe(true);
+    expect(isManualIndexInput({ value: 0, effectiveDate: '2026-01-01', source: 'Fictional' })).toBe(false);
+    expect(isManualIndexInput({ value: '12.3', effectiveDate: '2026-02-31', source: 'Fictional' })).toBe(false);
+    expect(isManualIndexInput({ value: '12.3', effectiveDate: '2026-01-01', source: '' })).toBe(false);
   });
 
   it('rejects malformed or mixed-revision workspaces without throwing at the network boundary', () => {

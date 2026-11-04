@@ -22,6 +22,10 @@ Further tenant, consent, role, resource, push and deployment changes require the
 relevant scope approval. The production frontend deployment workflow is
 unchanged. The separate test workflow publishes validated frontend/API
 artifacts, never infrastructure or production, and does not enable the API.
+The test frontend publication waits for API deployment/readiness. This
+intentionally trades deployment parallelism for compatibility: newly exposed
+initial-index and setup-refresh controls must not reach older handlers that
+ignore or lack their request contract.
 
 ## Identity and application authority
 
@@ -130,6 +134,10 @@ are separate. Dated, source-attributed manual index observations are audited.
 An older effective date may add history without replacing the newer current
 projection; a same-date correction requires the current revision. There is no
 official GHIN fetch/post or automatic index calculation. Unknown remains null.
+An optional initial manual index is created atomically with a new player and
+its first audit observation. Creation retries compare the complete original
+name/index/date/source payload; a failed write cannot leave a player without
+the requested observation.
 Only owner workspace data contains captured index observations; participant
 projections omit them and their audit identities.
 
@@ -139,6 +147,16 @@ rounds/players capture selected/current inputs; changing a saved round's
 handicap treatment is outside this increment. Existing configured rounds cannot
 be silently removed by a whole-workspace save. Setup remains 4–8 players with
 manual group numbers 1–4, at most four per group and one assignment per round.
+
+The organizer's workspace shows latest catalog values separately from captured
+round inputs. `POST /api/events/<event-id>/workspace/rounds/<round-id>/indices/refresh`
+is an explicit setup action with `If-Match` and a UUID `Idempotency-Key`.
+It requires the active event's current owner grant plus catalog authority.
+The conditional event/owner/round transaction records prior/new captures and
+the actor/time in an immutable receipt; retry does not duplicate that history.
+It leaves course, tee, roster groups and global player observations untouched.
+This is not automatic refresh, net calculation or permission to revise future
+scored/locked rounds; the scoring increment must define and enforce those rules.
 
 No live source seed is performed by implementing or testing this workflow.
 After a separately approved release/review, the organizer may select the

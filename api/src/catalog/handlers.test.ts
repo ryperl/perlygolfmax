@@ -75,6 +75,77 @@ describe('bounded authorized catalog/setup HTTP handlers', () => {
     }, { id: event.id }, { 'If-Match': empty.etag })).toMatchObject({ status: 200, jsonBody: { roster: players.map((player) => ({ playerId: player.id, displayName: player.displayName })) } });
     expect(f.api.limiter.check).toHaveBeenCalledWith(creator, 'setup-read');
     expect(f.api.limiter.check).toHaveBeenCalledWith(creator, 'setup-write');
+    const saved = await f.workspace.get(creator, event.id);
+    const first = players[0];
+    if (!first) throw new Error('Missing fictional first player');
+    await f.players.observe(creator, first.id, identifier(300), {
+      value: '+2.3', effectiveDate: '2026-03-01', source: 'Fictional later current index',
+    }, first.etag);
+    const headers = { 'If-Match': saved.etag, 'Idempotency-Key': identifier(600) };
+    const params = { id: event.id, roundId: identifier(500) };
+    const refreshed = await f.call('round-indices-refresh', 'POST', {}, params, headers);
+    expect(refreshed).toMatchObject({
+      status: 200, jsonBody: { rounds: [{ players: [{ handicapIndex: { value: '+2.3' } }, { handicapIndex: null }, { handicapIndex: null }, { handicapIndex: null }] }] },
+    });
+    expect(await f.call('round-indices-refresh', 'POST', {}, params, headers)).toEqual(refreshed);
+    expect(f.api.limiter.check).toHaveBeenLastCalledWith(creator, 'setup-write');
+    f.api.verify.mockResolvedValue(member);
+    expect(await f.call('round-indices-refresh', 'POST', {}, params, headers)).toMatchObject({ status: 404 });
+  });
+
+  it('creates an initial index atomically, ignores supplied audit identities and replays after a lost response', async () => {
+    const f = fixture();
+    const body = {
+      displayName: 'Fictional Initially Known Player',
+      initialIndex: {
+        value: '+1.2', effectiveDate: '2026-03-01', source: 'Fictional manual initial entry',
+        recordedAt: '1900-01-01', recordedBy: member, previousObservationId: identifier(900),
+      },
+    };
+    f.submit.mockImplementationOnce((actions) => {
+      f.apply(actions);
+      return Promise.reject(new Error('Fictional lost creation reply'));
+    });
+    expect(await f.call('players', 'POST', body)).toMatchObject({ status: 503, jsonBody: { code: 'SERVICE_UNAVAILABLE' } });
+    expect(await f.call('players', 'POST', body)).toMatchObject({
+      status: 200, jsonBody: {
+        currentIndex: {
+          id: identifier(100), value: '+1.2', effectiveDate: '2026-03-01',
+          source: 'Fictional manual initial entry', recordedBy: creator, previousObservationId: null,
+        },
+      },
+    });
+    expect((await f.players.get(creator, identifier(100))).currentIndex?.recordedAt).not.toBe('1900-01-01');
+    expect((await f.players.history(creator, identifier(100))).observations).toHaveLength(1);
+    expect(await f.call('players', 'POST', { ...body, initialIndex: { ...body.initialIndex, value: '4' } })).toMatchObject({ status: 409 });
+  });
+
+  it.each([
+    null, {}, { value: '2' }, { value: '-1', effectiveDate: '2026-03-01', source: 'Fictional source' },
+    { value: '2', effectiveDate: '2026-02-30', source: 'Fictional source' },
+    { value: '2', effectiveDate: '2026-03-01', source: '' },
+  ])('rejects invalid initial index %j before creating a profile', async (initialIndex) => {
+    const f = fixture();
+    expect(await f.call('players', 'POST', { displayName: 'Fictional Player', initialIndex })).toMatchObject({
+      status: 400, jsonBody: { code: 'INVALID_INDEX_OBSERVATION' },
+    });
+    expect(f.create).not.toHaveBeenCalled();
+    expect(f.submit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['POST', {}, { id: event.id, roundId: 'invalid' }, { 'If-Match': 'etag' }, 400],
+    ['POST', {}, { id: event.id, roundId: identifier(500) }, { 'If-Match': '*' }, 400],
+    ['POST', {}, { id: event.id, roundId: identifier(500) }, { 'If-Match': 'etag', 'Idempotency-Key': '*' }, 400],
+    ['POST', [], { id: event.id, roundId: identifier(500) }, { 'If-Match': 'etag' }, 400],
+    ['POST', { playerIds: [] }, { id: event.id, roundId: identifier(500) }, { 'If-Match': 'etag' }, 400],
+    ['POST', 'x'.repeat(4097), { id: event.id, roundId: identifier(500) }, { 'If-Match': 'etag' }, 413],
+    ['GET', undefined, { id: event.id, roundId: identifier(500) }, {}, 405],
+  ] as const)('rejects malformed or unsupported refresh requests before storage mutation', async (method, body, params, headers, status) => {
+    const f = fixture();
+    expect(await f.call('round-indices-refresh', method, body, params, headers)).toMatchObject({ status });
+    expect(f.submit).not.toHaveBeenCalled();
+    expect(f.get).not.toHaveBeenCalled();
   });
 
   it('rejects invalid tokens, nonmanagers and cross-tenant callers before any global catalog IO', async () => {

@@ -41,10 +41,12 @@ export function EventsView({ state, busy, notice, view, onSignIn, onSignOut, onR
       {state.page.events.length === 0 ? <p>{view === 'archived' ? 'No archived events you own on this page.' : 'No events on this page. Signing in alone does not add you to an event.'}</p>
         : <ul className="round-list" aria-label="Your events">{state.page.events.map((event) => <li className="panel" key={event.id}>
           <h2>{event.name}</h2><p>{event.role === 'owner' ? 'Event owner' : 'Event member'} / Private</p>
-          <a href={`#events?event=${encodeURIComponent(event.id)}`}>Open {event.name} workspace</a>
-          {event.role === 'owner' && <button disabled={busy} onClick={() => {
-            onStatusChange(event, event.status === 'active' ? 'archived' : 'active');
-          }} aria-label={`${event.status === 'active' ? 'Archive' : 'Restore'} ${event.name}`}>{event.status === 'active' ? 'Archive event' : 'Restore event'}</button>}
+          <div className="event-card-actions" role="group" aria-label={`Actions for ${event.name}`}>
+            <a href={`#events?event=${encodeURIComponent(event.id)}`}>Open {event.name} workspace</a>
+            {event.role === 'owner' && <button disabled={busy} onClick={() => {
+              onStatusChange(event, event.status === 'active' ? 'archived' : 'active');
+            }} aria-label={`${event.status === 'active' ? 'Archive' : 'Restore'} ${event.name}`}>{event.status === 'active' ? 'Archive event' : 'Restore event'}</button>}
+          </div>
         </li>)}</ul>}
       {state.page.continuationToken && <button disabled={busy} onClick={onNextPage}>Next page</button>}
       {view === 'active' && state.capabilities.canCreateEvents && <form className="panel event-form" onSubmit={(event) => {

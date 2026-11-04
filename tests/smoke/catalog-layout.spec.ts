@@ -40,7 +40,9 @@ test('catalog navigation gaps and actual hole preview fit narrow and enlarged la
   await page.setContent(`<html><head>${stylesheets.map((href) => `<link rel="stylesheet" href="${href}">`).join('')}</head>
     <body><div class="app"><main><nav class="event-actions" aria-label="Catalog spacing fixture">
     <a href="#events">Events</a><a href="#courses">Course catalog</a><a href="#players">Player catalog</a>
-    </nav><section class="catalog-view">${preview}</section></main></div></body></html>`);
+    </nav><div class="event-card-actions" role="group" aria-label="Event card spacing fixture">
+    <a href="#workspace">Open fictional ${'Event'.repeat(20)} workspace</a><button type="button">Archive event</button>
+    </div><section class="catalog-view">${preview}</section></main></div></body></html>`);
   await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
   const links = await page.getByRole('navigation', { name: 'Catalog spacing fixture' }).getByRole('link').all();
   for (let index = 1; index < links.length; index++) {
@@ -50,6 +52,12 @@ test('catalog navigation gaps and actual hole preview fit narrow and enlarged la
     if (next.y >= previous.y + previous.height) expect(next.y - previous.y - previous.height).toBeGreaterThanOrEqual(11.5);
     else expect(next.x - previous.x - previous.width).toBeGreaterThanOrEqual(19.5);
   }
+  const card = page.getByRole('group', { name: 'Event card spacing fixture' });
+  const workspace = await card.getByRole('link').boundingBox();
+  const archive = await card.getByRole('button').boundingBox();
+  if (!workspace || !archive) throw new Error('Event card fixture has no rendered action boxes.');
+  if (archive.y >= workspace.y + workspace.height) expect(archive.y - workspace.y - workspace.height).toBeGreaterThanOrEqual(11.5);
+  else expect(archive.x - workspace.x - workspace.width).toBeGreaterThanOrEqual(19.5);
   const summary = page.locator('summary');
   await summary.focus();
   await expect(summary).toBeFocused();

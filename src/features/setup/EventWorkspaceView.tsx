@@ -3,7 +3,7 @@ import type { CatalogClient } from '../../client/catalog';
 import { EventChangedError } from '../../client/events';
 import type { SetupClient } from '../../client/setup';
 import { isEventSetupInput } from '../../contracts/setup';
-import type { CourseCatalogEntry, CourseVersion, PlayerProfile, TeeProfile } from '../../domain/catalog';
+import type { CourseCatalogEntry, CourseVersion, IndexObservation, PlayerProfile, TeeProfile } from '../../domain/catalog';
 import type { EventSetupInput, EventWorkspace, RoundSetupInput, RoundSnapshot } from '../../domain/setup';
 import './setup.css';
 
@@ -17,6 +17,29 @@ function inputFrom(workspace: EventWorkspace): EventSetupInput {
 function roundInput(round: RoundSnapshot): RoundSetupInput {
   return { id: round.id, name: round.name, courseId: round.courseId, courseVersionId: round.courseVersionId,
     teeProfileId: round.teeProfile.id, groups: round.groups };
+}
+
+async function readSetupCatalog(catalog: CatalogClient, signal: AbortSignal) {
+  const courses: CourseCatalogEntry[] = [];
+  const players: PlayerProfile[] = [];
+  const courseCursors = new Set<string>();
+  const playerCursors = new Set<string>();
+  let cursor: string | undefined;
+  do {
+    const page = await catalog.courses(signal, cursor);
+    signal.throwIfAborted();
+    courses.push(...page.courses); cursor = page.continuationToken;
+    if (cursor && courseCursors.has(cursor)) throw new Error('Invalid course paging response.');
+    if (cursor) courseCursors.add(cursor);
+  } while (cursor);
+  do {
+    const page = await catalog.players(signal, cursor);
+    signal.throwIfAborted();
+    players.push(...page.players); cursor = page.continuationToken;
+    if (cursor && playerCursors.has(cursor)) throw new Error('Invalid player paging response.');
+    if (cursor) playerCursors.add(cursor);
+  } while (cursor);
+  return { courses, players };
 }
 
 export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }: {
@@ -38,7 +61,10 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
   const initialPending = settledWorkspace?.client !== setup || settledWorkspace.eventId !== eventId;
   const [settledCatalog, setSettledCatalog] = useState<{ readonly client: CatalogClient; readonly attempt: number } | null>(null);
   const [catalogAttempt, setCatalogAttempt] = useState(0);
-  const catalogPending = settledCatalog?.client !== catalog || settledCatalog.attempt !== catalogAttempt;
+  const [catalogRefreshing, setCatalogRefreshing] = useState(false);
+  const catalogPending = catalogRefreshing || settledCatalog?.client !== catalog || settledCatalog.attempt !== catalogAttempt;
+  const [refreshConfirmed, setRefreshConfirmed] = useState<ReadonlySet<string>>(new Set());
+  const refreshRequests = useRef(new Map<string, { readonly id: string; readonly etag: string }>());
   const [versionPending, setVersionPending] = useState<ReadonlySet<string>>(new Set());
   const active = useRef<AbortController | null>(null);
   const editing = workspace?.event.role === 'owner' && workspace.event.status === 'active' && canManageCatalog;
@@ -60,24 +86,8 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
     const controller = new AbortController();
     void (async () => {
       try {
-        const allCourses: CourseCatalogEntry[] = [];
-        const allPlayers: PlayerProfile[] = [];
-        const courseCursors = new Set<string>();
-        const playerCursors = new Set<string>();
-        let cursor: string | undefined;
-        do {
-          const page = await catalog.courses(controller.signal, cursor);
-          allCourses.push(...page.courses); cursor = page.continuationToken;
-          if (cursor && courseCursors.has(cursor)) throw new Error('Invalid course paging response.');
-          if (cursor) courseCursors.add(cursor);
-        } while (cursor);
-        do {
-          const page = await catalog.players(controller.signal, cursor);
-          allPlayers.push(...page.players); cursor = page.continuationToken;
-          if (cursor && playerCursors.has(cursor)) throw new Error('Invalid player paging response.');
-          if (cursor) playerCursors.add(cursor);
-        } while (cursor);
-        if (!controller.signal.aborted) { setCourses(allCourses); setPlayers(allPlayers); setCatalogError(''); }
+        const result = await readSetupCatalog(catalog, controller.signal);
+        if (!controller.signal.aborted) { setCourses(result.courses); setPlayers(result.players); setCatalogError(''); setRefreshConfirmed(new Set()); }
       } catch (failure) {
         if (!controller.signal.aborted) setCatalogError(failure instanceof Error ? failure.message : 'Could not load catalog selections.');
       } finally {
@@ -105,6 +115,11 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
   function changeRound(updated: RoundSetupInput) {
     setDraft((previous) => previous ? { ...previous, rounds: previous.rounds.map((round) => round.id === updated.id ? updated : round) } : previous);
   }
+  function preserveDraft(value: EventWorkspace) {
+    setDraft((previous) => previous ? { ...previous, rounds: [
+      ...previous.rounds, ...value.rounds.filter((round) => !previous.rounds.some((item) => item.id === round.id)).map(roundInput),
+    ] } : inputFrom(value));
+  }
   const onVersionPending = useCallback((id: string, pending: boolean) => {
     setVersionPending((previous) => {
       const next = new Set(previous);
@@ -116,13 +131,27 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
   return <section className="setup-view">
     <a href="#events">Back to events</a>
     <h1>Saved event workspace</h1>
-    <button disabled={busy || initialPending || versionPending.size > 0} onClick={() => { void run(async (signal) => {
+    <button disabled={busy || initialPending || editing && catalogPending || versionPending.size > 0} onClick={() => { void run(async (signal) => {
       const value = await setup.load(eventId, signal);
-      if (signal.aborted) return;
-      setWorkspace(value); setError(''); setConflict(false);
-      setDraft((previous) => previous ? { ...previous, rounds: [
-        ...previous.rounds, ...value.rounds.filter((round) => !previous.rounds.some((item) => item.id === round.id)).map(roundInput),
-      ] } : inputFrom(value));
+      signal.throwIfAborted();
+      setWorkspace(value); setError(''); setConflict(false); setRefreshConfirmed(new Set());
+      preserveDraft(value);
+      if (canManageCatalog && value.event.role === 'owner' && value.event.status === 'active') {
+        setCatalogRefreshing(true);
+        try {
+          const result = await readSetupCatalog(catalog, signal);
+          signal.throwIfAborted();
+          setCourses(result.courses); setPlayers(result.players); setCatalogError('');
+        } catch (failure) {
+          if (!signal.aborted) {
+            setCatalogError(failure instanceof Error ? failure.message : 'Current catalog values are unavailable.');
+            setNotice('Workspace refreshed, but current catalog values are unavailable. Your local draft is preserved. Retry catalog selections before changing captured setup inputs.');
+          }
+          return;
+        } finally {
+          if (!signal.aborted) setCatalogRefreshing(false);
+        }
+      }
       setNotice('Workspace refreshed. Your local draft is preserved, including newly saved rounds. Review before saving.');
     }); }}>Refresh workspace</button>
     {error && <p role="alert">{error}</p>}
@@ -137,12 +166,58 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
         <p className="setup-version">Saved course version: {round.courseVersionId}</p>
         <p>Tee: {round.teeProfile.name} / {round.teeProfile.category} / {round.teeProfile.holeCount} holes</p>
         <ul>{round.groups.map((group) => <li key={group.number}>Group {group.number}: {group.playerIds.map((id) => round.players.find((player) => player.playerId === id)?.displayName ?? 'Unavailable').join(', ')}</li>)}</ul>
-        {workspace.event.role === 'owner' && <ul>{round.players.map((player) => <li key={player.playerId}>{player.displayName}: captured HI {player.handicapIndex?.value ?? 'Unknown'}{player.handicapIndex ? ` (${player.handicapIndex.effectiveDate}; ${player.handicapIndex.source})` : ''}</li>)}</ul>}
+        {workspace.event.role === 'owner' && <div>
+          <ul className="setup-index-list">{round.players.map((player) => {
+            const current = players?.find((item) => item.id === player.playerId);
+            return <li key={player.playerId}>
+              <h4>{player.displayName}</h4>
+              <dl className="setup-index-comparison"><div><dt>Captured setup HI</dt><dd>{indexLabel(player.handicapIndex)}</dd></div>
+                {editing && <div><dt>Current catalog HI</dt><dd>{catalogPending ? 'Loading current catalog HI...'
+                  : catalogError ? 'Unavailable — catalog loading failed.' : current ? indexLabel(current.currentIndex) : 'Unavailable — player not found in current catalog.'}</dd></div>}
+              </dl>
+              {editing && !catalogPending && !catalogError && current && <p>{current.currentIndex?.id !== player.handicapIndex?.id
+                ? 'Changed since capture. The saved input has not been changed automatically.'
+                : 'Captured and current observations match.'}</p>}
+            </li>;
+          })}</ul>
+          {editing && <div className="setup-index-refresh">
+            <p>Review captured and current values above. Refresh replaces this saved round's captured setup inputs using catalog observations at refresh time and audits the previous values. It preserves saved course, tee and groups. This is not score recalculation; scored-round policy remains unresolved.</p>
+            <label className="setup-index-confirm"><input type="checkbox" checked={refreshConfirmed.has(round.id)}
+              disabled={busy || initialPending || catalogPending || catalogError !== '' || versionPending.size > 0 || conflict
+                || !round.players.every((player) => players?.some((item) => item.id === player.playerId))}
+              onChange={(event) => {
+                const checked = event.target.checked;
+                setRefreshConfirmed((previous) => {
+                  const next = new Set(previous);
+                  if (checked) next.add(round.id); else next.delete(round.id);
+                  return next;
+                });
+              }} />I confirm replacing captured setup HI for {round.name} with the current catalog observations.</label>
+            <button disabled={busy || initialPending || catalogPending || catalogError !== '' || versionPending.size > 0 || conflict || !refreshConfirmed.has(round.id)
+              || !round.players.every((player) => players?.some((item) => item.id === player.playerId))}
+              onClick={() => { void run(async (signal) => {
+                const request = refreshRequests.current.get(round.id) ?? { id: crypto.randomUUID(), etag: workspace.etag };
+                refreshRequests.current.set(round.id, request);
+                try {
+                  const saved = await setup.refreshIndices(eventId, round.id, request.etag, request.id, signal);
+                  signal.throwIfAborted();
+                  setWorkspace(saved); preserveDraft(saved); setRefreshConfirmed(new Set());
+                  refreshRequests.current.delete(round.id);
+                  setNotice(`Captured setup HI refreshed for ${round.name}. Saved course, tee and groups were preserved. No scores were recalculated.`);
+                } catch (failure) {
+                  if (failure instanceof EventChangedError) {
+                    refreshRequests.current.delete(round.id); setRefreshConfirmed(new Set());
+                  }
+                  throw failure;
+                }
+              }); }}>Refresh captured setup HI for {round.name}</button>
+          </div>}
+        </div>}
       </li>)}</ol>
     </>}
     {editing && draft && <form className="panel setup-form" onSubmit={(event) => {
       event.preventDefault();
-      if (conflict || !isEventSetupInput(draft) || versionPending.size > 0) return;
+      if (initialPending || catalogPending || catalogError !== '' || conflict || !isEventSetupInput(draft) || versionPending.size > 0) return;
       void run(async (signal) => {
         const saved = await setup.save(eventId, workspace.etag, draft, signal);
         if (!signal.aborted) {
@@ -187,8 +262,12 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
       <button disabled={busy || conflict || initialPending || catalogPending || catalogError !== '' || versionPending.size > 0 || courses === null || players === null || !isEventSetupInput(draft)}>Save event workspace</button>
     </form>}
     <p role={conflict ? 'alert' : 'status'}>{busy ? 'Working...' : notice}</p>
-    <p>Catalog edits do not automatically change captured handicap inputs in saved rounds. Invitations, score entry, scoring, randomization and synchronization are not included.</p>
+    <p>Catalog edits do not automatically change captured handicap inputs in saved rounds. Current catalog values are the latest loaded observations; Refresh workspace fetches updates. An eligible owner must explicitly confirm a setup-input refresh to change saved captures. Invitations, score entry, scoring, randomization and synchronization are not included.</p>
   </section>;
+}
+
+function indexLabel(observation: IndexObservation | null | undefined): string {
+  return observation ? `${observation.value} — effective ${observation.effectiveDate}; ${observation.source}` : 'Unknown — no handicap observation';
 }
 
 function RoundEditor({ round, number, saved, courses, players, rosterIds, client, onChange, onPending }: {

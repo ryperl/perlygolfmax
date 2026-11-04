@@ -57,7 +57,7 @@ describe('catalog API client', () => {
     if (!player) throw new Error('Missing fictional player.');
     const send = vi.fn<typeof fetch>().mockImplementation(() => Promise.resolve(response(player)));
     const client = createCatalogClient(url, token, send);
-    await expect(client.createPlayer(player.displayName, fictionalId(20), signal())).resolves.toMatchObject({ currentIndex: null });
+    await expect(client.createPlayer(player.displayName, player.id, signal())).resolves.toMatchObject({ currentIndex: null });
     await client.renamePlayer(player, 'Fictional New Name', signal());
     const input = { value: '+1.2', effectiveDate: '2026-01-02', source: 'Fictional manual report' };
     await client.recordIndex(player, input, fictionalId(21), signal());
@@ -65,8 +65,63 @@ describe('catalog API client', () => {
     expect(send.mock.calls[2]?.[1]).toMatchObject({
       body: JSON.stringify(input), headers: { 'If-Match': player.etag, 'Idempotency-Key': fictionalId(21) },
     });
+
     await expect(client.recordIndex(player, { ...input, effectiveDate: '2026-02-31' }, fictionalId(22), signal())).rejects.toThrow('Invalid catalog request');
     expect(send).toHaveBeenCalledTimes(3);
+  });
+
+  it('creates a player and optional initial plus observation atomically in one bounded request', async () => {
+      const player = fictionalPlayers[0];
+      if (!player) throw new Error('Missing fictional player.');
+      const input = { value: '+1.2', effectiveDate: '2026-01-02', source: 'Manual organizer entry' };
+      const currentIndex = { ...input, id: player.id, recordedAt: '2026-01-02T00:00:00Z',
+        recordedBy: { tenantId: fictionalId(201), objectId: fictionalId(202) }, previousObservationId: null };
+      const send = vi.fn<typeof fetch>().mockResolvedValue(response({ ...player, currentIndex }));
+      const client = createCatalogClient(url, token, send);
+      await expect(client.createPlayer(player.displayName, player.id, signal(), input)).resolves.toMatchObject({ id: player.id, currentIndex: input });
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send.mock.calls[0]?.[0]).toBe(`${url}/catalog/players`);
+      expect(send.mock.calls[0]?.[1]).toMatchObject({
+        method: 'POST', body: JSON.stringify({ displayName: player.displayName, initialIndex: input }),
+        headers: { 'Idempotency-Key': player.id },
+      });
+      await expect(client.createPlayer(player.displayName, player.id, signal(), { ...input, effectiveDate: '2026-02-31' })).rejects.toThrow('Invalid catalog request');
+      expect(send).toHaveBeenCalledTimes(1);
+    });
+
+  it('rejects wrong player IDs and older-server responses that fail to confirm the exact atomic initial observation', async () => {
+      const player = fictionalPlayers[0];
+      if (!player) throw new Error('Missing fictional player.');
+      const input = { value: '+1.2', effectiveDate: '2026-01-02', source: 'Manual organizer entry' };
+      const currentIndex = { ...input, id: player.id, recordedAt: '2026-01-02T00:00:00Z',
+        recordedBy: { tenantId: fictionalId(201), objectId: fictionalId(202) }, previousObservationId: null };
+      const send = vi.fn<typeof fetch>().mockImplementation(() => Promise.resolve(response({ ...player, id: fictionalId(99), currentIndex })));
+      const client = createCatalogClient(url, token, send);
+      await expect(client.createPlayer(player.displayName, player.id, signal(), input)).rejects.toThrow('Invalid saved player');
+      await expect(client.createPlayer(player.displayName, player.id, signal())).rejects.toThrow('Invalid saved player');
+      for (const badIndex of [null, { ...currentIndex, value: '1.2' }, { ...currentIndex, effectiveDate: '2026-01-01' }, { ...currentIndex, source: 'Different manual source' }]) {
+        send.mockResolvedValueOnce(response({ ...player, currentIndex: badIndex })).mockResolvedValueOnce(response({ observations: [] }));
+        await expect(client.createPlayer(player.displayName, player.id, signal(), input)).rejects.toThrow('not confirmed');
+      }
+      expect(send.mock.calls.filter(([, request]) => request?.method === 'POST')).toHaveLength(6);
+    });
+
+  it('confirms an idempotent creation from immutable paginated history when a later index is now current', async () => {
+    const player = fictionalPlayers[0];
+    if (!player) throw new Error('Missing fictional player.');
+    const initial = { value: '+1.2', effectiveDate: '2026-01-02', source: 'Manual organizer entry' };
+    const original = { ...initial, id: player.id, recordedAt: '2026-01-02T00:00:00Z',
+      recordedBy: { tenantId: fictionalId(201), objectId: fictionalId(202) }, previousObservationId: null };
+    const later = { ...original, id: fictionalId(205), value: '2.5', effectiveDate: '2026-02-02', previousObservationId: original.id };
+    const updated = { ...player, currentIndex: later, etag: 'player-v2' };
+    const send = vi.fn<typeof fetch>().mockResolvedValueOnce(response(updated))
+      .mockResolvedValueOnce(response({ observations: [later], continuationToken: 'older' }))
+      .mockResolvedValueOnce(response({ observations: [original] }));
+    const client = createCatalogClient(url, token, send);
+    await expect(client.createPlayer(player.displayName, player.id, signal(), initial)).resolves.toEqual(updated);
+    expect(send.mock.calls[1]?.[0]).toBe(`${url}/catalog/players/${player.id}/indices`);
+    expect(send.mock.calls[2]?.[0]).toBe(`${url}/catalog/players/${player.id}/indices?cursor=older`);
+    expect(send.mock.calls.filter(([, request]) => request?.method === 'POST')).toHaveLength(1);
   });
 
   it.each([
