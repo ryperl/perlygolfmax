@@ -12,8 +12,6 @@ interface EventsViewProps {
   readonly busy: boolean;
   readonly notice: string;
   readonly view: EventStatus;
-  readonly onSignIn: () => void;
-  readonly onSignOut: () => void;
   readonly onReload: () => void;
   readonly onNextPage: () => void;
   readonly onCreate: (name: string) => Promise<boolean>;
@@ -21,17 +19,17 @@ interface EventsViewProps {
   readonly onStatusChange: (event: EventSummary, status: EventStatus) => void;
 }
 
-export function EventsView({ state, busy, notice, view, onSignIn, onSignOut, onReload, onNextPage, onCreate, onViewChange, onStatusChange }: EventsViewProps) {
+export function EventsView({ state, busy, notice, view, onReload, onNextPage, onCreate, onViewChange, onStatusChange }: EventsViewProps) {
   return <section>
     <p className="eyebrow">Your private clubhouse</p>
     <h1>Events</h1>
     <p className="page-description">Private trips, each with its own owners and members. The fictional preview is separate from your saved events.</p>
     {state.kind === 'unconfigured' && <div className="panel"><h2>Event services are not configured</h2><p>{state.message}</p><p>No sign-in or saved-event connection is active. Fictional content is available separately under Preview.</p></div>}
-    {state.kind === 'signed-out' && <div className="panel"><h2>Sign in with an email code</h2><p>No Microsoft account is needed. Signing in does not grant event access.</p>{state.message && <p role="status">{state.message}</p>}<button disabled={busy} onClick={onSignIn}>Sign in</button></div>}
+    {state.kind === 'signed-out' && <div className="panel"><h2>Sign in with an email code</h2><p>Use Sign in above. No Microsoft account is needed. Signing in does not grant event access.</p>{state.message && <p role="status">{state.message}</p>}</div>}
     {state.kind === 'loading' && <p role="status">Loading your events...</p>}
-    {state.kind === 'error' && <div className="panel"><p role="alert">{state.message}</p><button disabled={busy} onClick={onReload}>Try again</button><button disabled={busy} onClick={onSignOut}>Sign out</button></div>}
+    {state.kind === 'error' && <div className="panel"><p role="alert">{state.message}</p><button disabled={busy} onClick={onReload}>Try again</button></div>}
     {state.kind === 'ready' && <>
-      <div className="event-actions"><button disabled={busy} onClick={onReload}>Refresh events</button><button disabled={busy} onClick={onSignOut}>Sign out</button></div>
+      <div className="event-actions"><button disabled={busy} onClick={onReload}>Refresh events</button></div>
       {state.capabilities.canManageCatalog && <nav className="event-actions" aria-label="Catalog navigation"><a href="#events?catalog=courses">Course catalog</a><a href="#events?catalog=players">Player catalog</a></nav>}
       <div className="event-actions" role="group" aria-label="Event lists">
         <button disabled={busy} aria-pressed={view === 'active'} onClick={() => { onViewChange('active'); }}>Active events</button>

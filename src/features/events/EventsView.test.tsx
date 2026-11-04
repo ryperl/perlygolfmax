@@ -5,10 +5,15 @@ import { EventsView } from './EventsView';
 import type { EventsState } from './EventsView';
 
 const actions = {
-  onSignIn: vi.fn(), onSignOut: vi.fn(), onReload: vi.fn(), onNextPage: vi.fn(), onCreate: vi.fn().mockResolvedValue(false),
+  onReload: vi.fn(), onNextPage: vi.fn(), onCreate: vi.fn().mockResolvedValue(false),
   view: 'active', onViewChange: vi.fn(), onStatusChange: vi.fn(),
 } as const;
 describe('EventsView', () => {
+  it('leaves account controls to its hosting controller', () => {
+    render(<EventsView {...actions} state={{ kind: 'signed-out' }} busy={false} notice="" />);
+    expect(screen.getByText(/Use Sign in above/)).toBeVisible();
+    expect(screen.queryByRole('button', { name: /^Sign (in|out)$/ })).not.toBeInTheDocument();
+  });
   it.each([
     { kind: 'unconfigured', message: 'No API configured' },
     { kind: 'loading' },

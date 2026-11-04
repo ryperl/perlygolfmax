@@ -20,6 +20,8 @@
 .event-trip h5 { font-size: .9rem; }
 .event-trip-round p, .event-trip-section > p { color: var(--cp-text-muted); }
 .event-trip-scorecard { flex-shrink: 0; }
+.event-trip-progress { margin-top: 20px; padding: 16px; border: 1px solid var(--cp-border); border-radius: 8px; background: var(--cp-bg-elevated); }
+.event-trip-progress ul { padding-left: 20px; }
 .event-trip-tee { display: flex; flex-wrap: wrap; gap: 16px 32px; margin: 20px 0; }
 .event-trip-tee dd { margin: 4px 0 0; }
 .event-trip-groups { border-top: 1px solid var(--cp-border); padding-top: 20px; display: grid; gap: 12px; }

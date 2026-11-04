@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
@@ -7,12 +7,13 @@ import type * as EventsPageModule from './EventsPage';
 import { fakeCatalog, fakeSetup, fictionalEvent, fictionalWorkspace } from '../client/catalog.test-support';
 import { fakeScores } from '../client/scoring.test-support';
 import { SessionExpiredError } from '../client/events';
+import type { EventPage } from '../domain/events';
 
 let testServices: EventServices | undefined;
 vi.mock('./EventsPage', async (importOriginal) => {
   const actual = await importOriginal<typeof EventsPageModule>();
-  return { ...actual, ConfiguredEventsPage: ({ onSignedOut }: { readonly onSignedOut?: () => void }) =>
-    <actual.EventsPage services={testServices} onSignedOut={onSignedOut} /> };
+  return { ...actual, ConfiguredEventsPage: (props: Omit<Parameters<typeof actual.EventsPage>[0], 'services'>) =>
+    <actual.EventsPage services={testServices} {...props} /> };
 });
 
 function service(): EventServices {
@@ -35,6 +36,10 @@ function navigate(hash: string) {
   });
 }
 function mainNavigation() { return within(screen.getByRole('navigation', { name: 'Main navigation' })); }
+function headerAccount(name: 'Sign in' | 'Sign out') {
+  expect(screen.getAllByRole('button', { name: /^Sign (in|out)$/ })).toHaveLength(1);
+  return within(screen.getByRole('banner', { name: 'Site header' })).getByRole('button', { name });
+}
 beforeEach(() => {
   testServices = undefined;
   window.history.replaceState(null, '', '/');
@@ -45,12 +50,14 @@ describe('App', () => {
     render(<App />);
     expect(await screen.findByRole('heading', { name: 'Events' })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Event services are not configured' })).toBeVisible();
+    expect(headerAccount('Sign in')).toBeDisabled();
     expect(screen.queryByText('The Coastal Classic')).not.toBeInTheDocument();
     expect(screen.queryByText('12 golfers / 5 rounds')).not.toBeInTheDocument();
     const user = userEvent.setup();
     await user.click(screen.getByRole('link', { name: 'Preview' }));
     expect(await screen.findByRole('heading', { name: 'The Coastal Classic' })).toBeVisible();
     expect(screen.getByText('Fictional data. Nothing here is saved or synced.')).toBeVisible();
+    expect(headerAccount('Sign in')).toBeDisabled();
     await user.click(screen.getByRole('link', { name: 'Explore the rounds' }));
     expect(await screen.findByRole('heading', { name: /Five days/ })).toBeVisible();
     expect(within(screen.getByRole('list')).getAllByRole('listitem')).toHaveLength(5);
@@ -67,22 +74,32 @@ describe('App', () => {
     render(<App />);
     const user = userEvent.setup();
     await user.click(await screen.findByRole('link', { name: `Open ${fictionalEvent.name}` }));
+    expect(headerAccount('Sign out')).toBeEnabled();
     expect(await screen.findByRole('heading', { name: fictionalEvent.name })).toBeVisible();
     const event = encodeURIComponent(fictionalEvent.id);
     expect(mainNavigation().getByRole('link', { name: 'Rounds' })).toHaveAttribute('href', `#rounds?event=${event}`);
     await user.click(mainNavigation().getByRole('link', { name: 'Rounds' }));
     await screen.findByRole('heading', { level: 1, name: 'Rounds' });
+    expect(headerAccount('Sign out')).toBeEnabled();
     expect(screen.getByRole('main')).toHaveFocus();
     expect(document.title).toBe('Rounds | Perly Golf Max');
     expect(screen.getByText('Fictional Meadows')).toBeVisible();
     expect(screen.queryByText(/Five days|sample tee time/i)).not.toBeInTheDocument();
     await user.click(mainNavigation().getByRole('link', { name: 'The group' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'The Group' })).toBeVisible();
+    expect(headerAccount('Sign out')).toBeEnabled();
     expect(screen.getByRole('region', { name: 'Event roster' })).toHaveTextContent('Fictional Player 1');
     const round = fictionalWorkspace.rounds[0];
     if (!round) throw new Error('Missing fictional round.');
     await user.click(screen.getByRole('link', { name: `Open scorecard for ${round.name}` }));
     expect(await screen.findByRole('heading', { name: 'Round scorecard' })).toBeVisible();
+    expect(headerAccount('Sign out')).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Enter scores' }));
+    expect(await screen.findByRole('form', { name: 'Group 1 hole 1 entry' })).toBeVisible();
+    expect(headerAccount('Sign out')).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Games' }));
+    expect(screen.getByRole('button', { name: 'Games' })).toHaveAttribute('aria-pressed', 'true');
+    expect(headerAccount('Sign out')).toBeEnabled();
     expect(mainNavigation().getByRole('link', { name: 'Rounds' })).toHaveAttribute('aria-current', 'page');
     expect(testServices.scores.load).toHaveBeenCalledWith(fictionalEvent.id, round.id, expect.any(AbortSignal));
     expect(testServices.catalog.players).not.toHaveBeenCalled();
@@ -127,7 +144,7 @@ describe('App', () => {
     navigate(`#group?event=${fictionalEvent.id}`);
     render(<App />);
     expect(await screen.findByRole('button', { name: 'Sign in' })).toBeVisible();
-    expect(mainNavigation().getByRole('link', { name: 'The group' })).toHaveAttribute('href', '#group');
+    await waitFor(() => { expect(mainNavigation().getByRole('link', { name: 'The group' })).toHaveAttribute('href', '#group'); });
     expect(screen.queryByText('The Coastal Classic')).not.toBeInTheDocument();
     expect(screen.queryByText('Fictional Player 1')).not.toBeInTheDocument();
   });
@@ -144,5 +161,95 @@ describe('App', () => {
     expect(window.location.hash).toBe('#preview?view=group');
     navigate('#missing');
     expect(await screen.findByRole('heading', { name: 'Events' })).toBeVisible();
+  });
+
+  it('initializes identity on Preview without fetching private event or catalog data and keeps the current header action after navigation', async () => {
+    testServices = service();
+    navigate('#preview');
+    render(<App />);
+    await screen.findByRole('button', { name: 'Sign out' });
+    expect(headerAccount('Sign out')).toBeEnabled();
+    expect(testServices.events.capabilities).not.toHaveBeenCalled();
+    expect(testServices.events.list).not.toHaveBeenCalled();
+    expect(testServices.catalog.courses).not.toHaveBeenCalled();
+    const user = userEvent.setup();
+    await user.click(mainNavigation().getByRole('link', { name: 'Events' }));
+    await user.click(await screen.findByRole('link', { name: `Open ${fictionalEvent.name}` }));
+    await screen.findByRole('heading', { name: fictionalEvent.name });
+    await user.click(screen.getByRole('link', { name: 'Preview' }));
+    await screen.findByRole('heading', { name: 'The Coastal Classic' });
+    await user.click(headerAccount('Sign out'));
+    expect(await screen.findByRole('button', { name: 'Sign in' })).toBeEnabled();
+    expect(mainNavigation().getByRole('link', { name: 'Rounds' })).toHaveAttribute('href', '#rounds');
+    expect(testServices.session.signOut).toHaveBeenCalledOnce();
+    expect(testServices.session.initialize).toHaveBeenCalledOnce();
+  });
+
+  it('keeps signed-out Preview fictional and invokes only the existing sign-in action', async () => {
+    testServices = service();
+    vi.mocked(testServices.session.initialize).mockResolvedValue(false);
+    navigate('#preview?view=group');
+    render(<App />);
+    await screen.findByRole('button', { name: 'Sign in' });
+    const user = userEvent.setup();
+    await user.tab();
+    await user.tab();
+    await user.tab();
+    expect(headerAccount('Sign in')).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(testServices.session.signIn).toHaveBeenCalledOnce();
+    expect(headerAccount('Sign in')).toBeEnabled();
+    expect(screen.getByText('Fictional data. Nothing here is saved or synced.')).toBeVisible();
+    expect(testServices.events.list).not.toHaveBeenCalled();
+    expect(testServices.events.capabilities).not.toHaveBeenCalled();
+  });
+
+  it('hides the previous archived list while returning from Preview and consistently selects the fresh active list', async () => {
+    const services = service();
+    testServices = services;
+    const archived = { ...fictionalEvent, name: 'Fictional Archived Trip', status: 'archived' } as const;
+    let finish: ((page: EventPage) => void) | undefined;
+    const pending = new Promise<EventPage>((resolve) => { finish = resolve; });
+    vi.mocked(testServices.events.list)
+      .mockResolvedValueOnce({ events: [fictionalEvent] })
+      .mockResolvedValueOnce({ events: [archived] })
+      .mockReturnValueOnce(pending);
+    render(<App />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Archived events' }));
+    await screen.findByRole('heading', { name: archived.name });
+    expect(screen.getByRole('button', { name: 'Archived events' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('link', { name: 'Preview' }));
+    await screen.findByRole('heading', { name: 'The Coastal Classic' });
+    expect(testServices.events.list).toHaveBeenCalledTimes(2);
+    await user.click(mainNavigation().getByRole('link', { name: 'Events' }));
+    await waitFor(() => { expect(services.events.list).toHaveBeenCalledTimes(3); });
+    expect(screen.getByText('Loading your events...')).toBeVisible();
+    expect(screen.queryByRole('heading', { name: archived.name })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Archived events' })).not.toBeInTheDocument();
+    expect(headerAccount('Sign out')).toBeEnabled();
+    await act(async () => { finish?.({ events: [fictionalEvent] }); await pending; });
+    expect(await screen.findByRole('heading', { name: fictionalEvent.name })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Active events' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Archived events' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByRole('heading', { name: archived.name })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Archived events are visible only/)).not.toBeInTheDocument();
+    expect(testServices.events.list).toHaveBeenLastCalledWith(expect.any(AbortSignal));
+    expect(testServices.events.list).toHaveBeenCalledTimes(3);
+    expect(testServices.session.initialize).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['#events?catalog=courses', 'Saved course catalog'],
+    ['#events?catalog=players', 'Saved player catalog'],
+    [`#events?event=${fictionalEvent.id}`, 'Event setup'],
+  ])('keeps one header account control on %s', async (hash, heading) => {
+    testServices = service();
+    vi.mocked(testServices.events.capabilities).mockResolvedValue({ canCreateEvents: true, canManageCatalog: true });
+    navigate(hash);
+    render(<App />);
+    await screen.findByRole('heading', { name: heading });
+    expect(headerAccount('Sign out')).toBeEnabled();
+    expect(within(screen.getByRole('main')).queryByRole('button', { name: /^Sign (in|out)$/ })).not.toBeInTheDocument();
   });
 });

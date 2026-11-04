@@ -29,6 +29,7 @@ export function App() {
   const previewTab = readPreviewTab(hash);
   const mainRef = useRef<HTMLElement>(null);
   const previousPage = useRef(hash);
+  const [accountHost, setAccountHost] = useState<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const label = activePage === 'preview' ? 'Preview' : navigation.find((item) => item.id === activePage)?.label ?? 'Events';
@@ -49,12 +50,14 @@ export function App() {
         event.preventDefault();
         mainRef.current?.focus();
       }}>Skip to content</a>
-      <header className="site-header">
+      <header className="site-header" aria-label="Site header">
         <a className="brand" href="#events" aria-label="Perly Golf Max home">
           <span className="brand-mark" aria-hidden="true">P<span>↗</span></span>
           <span>PERLY <span className="brand-secondary">GOLF MAX</span></span>
         </a>
-        <span className="edition">The trip companion</span>
+        <div className="header-account" ref={setAccountHost}>
+          <span className="edition">The trip companion</span>
+        </div>
       </header>
       {page === 'preview' && <div className="demo-banner"><span className="demo-dot" aria-hidden="true" /><strong>Demo clubhouse</strong><span>Fictional data. Nothing here is saved or synced.</span></div>}
       <nav className="navigation" aria-label="Main navigation">
@@ -63,7 +66,10 @@ export function App() {
         ))}
       </nav>
       <main id="main-content" ref={mainRef} tabIndex={-1}>
-        {page !== 'preview' && <Suspense fallback={<p role="status">Loading event screen...</p>}><EventsPage onSignedOut={clearSelection} /></Suspense>}
+        {/* Keep account state mounted on Preview without loading private event data. */}
+        <Suspense fallback={page === 'preview' ? null : <p role="status">Loading event screen...</p>}>
+          <EventsPage onSignedOut={clearSelection} accountHost={accountHost} preview={page === 'preview'} />
+        </Suspense>
         {page === 'preview' && <>
           <nav className="event-actions" aria-label="Fictional preview">
             <a href="#preview" aria-current={previewTab === 'overview' ? 'page' : undefined}>Demo overview</a>

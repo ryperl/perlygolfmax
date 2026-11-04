@@ -19,10 +19,10 @@ test('production shell supports navigation, history, and keyboard access', async
   await expect(page.getByRole('link', { name: 'Demo rounds', exact: true })).toHaveAttribute('aria-current', 'page');
   await page.getByRole('link', { name: 'Events', exact: true }).click();
   if (process.env.EXPECT_EVENT_SERVICES_CONFIGURED === 'true') {
-    await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
+    await expect(page.getByRole('banner').getByRole('button', { name: 'Sign in', exact: true })).toBeEnabled();
   } else {
     await expect(page.getByRole('heading', { name: 'Event services are not configured' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('banner').getByRole('button', { name: 'Sign in', exact: true })).toBeDisabled();
   }
   await page.goto('/#unknown');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Events');
@@ -35,6 +35,17 @@ test('every page fits a narrow viewport and enlarged text', async ({ page }) => 
     await page.goto(`/#${hash}`);
     await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    const account = page.getByRole('banner').getByRole('button', { name: 'Sign in', exact: true });
+    await expect(account).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Sign (in|out)$/ })).toHaveCount(1);
+    const brandBounds = await page.getByRole('link', { name: 'Perly Golf Max home' }).boundingBox();
+    const accountBounds = await account.boundingBox();
+    expect(brandBounds).not.toBeNull();
+    expect(accountBounds).not.toBeNull();
+    if (brandBounds && accountBounds) {
+      expect(accountBounds.y >= brandBounds.y + brandBounds.height || accountBounds.x >= brandBounds.x + brandBounds.width).toBe(true);
+      expect(accountBounds.x + accountBounds.width).toBeLessThanOrEqual(320);
+    }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }
 });

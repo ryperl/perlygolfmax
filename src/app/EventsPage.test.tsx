@@ -18,6 +18,119 @@ function service(): EventServices {
 }
 beforeEach(() => { window.history.replaceState(null, '', '/'); });
 describe('EventsPage composition', () => {
+  it('disables the account control during initialization and sign-out, then reports incomplete provider sign-out', async () => {
+    const services = service();
+    let initialize: ((value: boolean) => void) | undefined;
+    vi.mocked(services.session.initialize).mockImplementationOnce(() => new Promise((resolve) => { initialize = resolve; }));
+    let fail: ((error: Error) => void) | undefined;
+    vi.mocked(services.session.signOut).mockImplementationOnce(() => new Promise((_resolve, reject) => { fail = reject; }));
+    const onSignedOut = vi.fn();
+    render(<EventsPage services={services} onSignedOut={onSignedOut} />);
+    expect(screen.getByRole('button', { name: 'Checking account…' })).toBeDisabled();
+    await act(async () => { initialize?.(true); await Promise.resolve(); });
+    await screen.findByLabelText('Event name');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeDisabled();
+    expect(onSignedOut).toHaveBeenCalledOnce();
+    expect(screen.queryByLabelText('Event name')).not.toBeInTheDocument();
+    await act(async () => { fail?.(new Error('fictional provider failure')); await Promise.resolve(); });
+    expect(await screen.findByText(/Sign-out did not complete/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled();
+  });
+
+  it('keeps Preview sign-in pending and shows failure without claiming authenticated access', async () => {
+    const services = service();
+    vi.mocked(services.session.initialize).mockResolvedValue(false);
+    let fail: ((error: Error) => void) | undefined;
+    vi.mocked(services.session.signIn).mockImplementationOnce(() => new Promise((_resolve, reject) => { fail = reject; }));
+    render(<EventsPage services={services} preview />);
+    const user = userEvent.setup();
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled(); });
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeDisabled();
+    await act(async () => { fail?.(new Error('fictional provider failure')); await Promise.resolve(); });
+    expect(await screen.findByText(/Sign-in did not complete/)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
+    expect(services.events.list).not.toHaveBeenCalled();
+  });
+
+  it('discards late account operations and private data when the injected services are replaced', async () => {
+    const first = service();
+    const second = service();
+    let fail: ((error: Error) => void) | undefined;
+    vi.mocked(first.session.signOut).mockImplementationOnce(() => new Promise((_resolve, reject) => { fail = reject; }));
+    const { rerender } = render(<EventsPage services={first} />);
+    await screen.findByLabelText('Event name');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
+    rerender(<EventsPage services={second} preview />);
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Sign out' })).toBeEnabled(); });
+    await act(async () => { fail?.(new Error('old provider failure')); await Promise.resolve(); });
+    expect(screen.queryByText(/Sign-out did not complete/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
+    expect(second.session.signOut).toHaveBeenCalledOnce();
+    expect(first.session.signOut).toHaveBeenCalledOnce();
+    expect(second.events.list).not.toHaveBeenCalled();
+  });
+
+  it('ignores a replaced client initialization that settles after the new signed-out account', async () => {
+    const first = service();
+    const second = service();
+    let initialize: ((value: boolean) => void) | undefined;
+    vi.mocked(first.session.initialize).mockImplementationOnce(() => new Promise((resolve) => { initialize = resolve; }));
+    vi.mocked(second.session.initialize).mockResolvedValue(false);
+    const { rerender } = render(<EventsPage services={first} preview />);
+    rerender(<EventsPage services={second} preview />);
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled(); });
+    await act(async () => { initialize?.(true); await Promise.resolve(); });
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(second.session.signIn).toHaveBeenCalledOnce();
+    expect(first.session.signIn).not.toHaveBeenCalled();
+    expect(first.events.list).not.toHaveBeenCalled();
+    expect(second.events.list).not.toHaveBeenCalled();
+  });
+
+  it('retries uncertain identity on Preview without incorrectly offering operational sign-in or reading private data', async () => {
+    const services = service();
+    vi.mocked(services.session.initialize).mockRejectedValueOnce(new Error('fictional unavailable account'));
+    render(<EventsPage services={services} preview />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Retry account' }));
+    expect(await screen.findByRole('button', { name: 'Sign out' })).toBeEnabled();
+    expect(services.session.initialize).toHaveBeenCalledTimes(2);
+    expect(services.session.signIn).not.toHaveBeenCalled();
+    expect(services.events.list).not.toHaveBeenCalled();
+    expect(services.events.capabilities).not.toHaveBeenCalled();
+  });
+
+  it('uses the latest sign-out callback without reinitializing the account controller', async () => {
+    const services = service();
+    const first = vi.fn();
+    const current = vi.fn();
+    const { rerender } = render(<EventsPage services={services} onSignedOut={first} />);
+    await screen.findByLabelText('Event name');
+    rerender(<EventsPage services={services} onSignedOut={current} preview />);
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Sign out' }));
+    expect(first).not.toHaveBeenCalled();
+    expect(current).toHaveBeenCalledOnce();
+    expect(services.session.initialize).toHaveBeenCalledOnce();
+  });
+
+  it('does not reuse a failed identity state to enable an account action while replacement services initialize', async () => {
+    const first = service();
+    const second = service();
+    vi.mocked(first.session.initialize).mockRejectedValueOnce(new Error('fictional unavailable account'));
+    let initialize: ((value: boolean) => void) | undefined;
+    vi.mocked(second.session.initialize).mockImplementationOnce(() => new Promise((resolve) => { initialize = resolve; }));
+    const { rerender } = render(<EventsPage services={first} preview />);
+    await screen.findByRole('button', { name: 'Retry account' });
+    rerender(<EventsPage services={second} preview />);
+    expect(screen.getByRole('button', { name: 'Checking account…' })).toBeDisabled();
+    await act(async () => { initialize?.(false); await Promise.resolve(); });
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled();
+    expect(second.session.initialize).toHaveBeenCalledOnce();
+  });
   it('restores owner score routes without catalog authority and returns expired scoring sessions to Sign in', async () => {
     const services = service();
     window.history.replaceState(null, '', `#events?event=${fictionalRoundScores.eventId}&round=${fictionalRoundScores.roundId}`);
@@ -163,6 +276,7 @@ describe('EventsPage composition', () => {
     vi.mocked(services.events.list).mockRejectedValue(new Error('storage unavailable'));
     const { unmount } = render(<EventsPage services={services} />);
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not connect');
+    expect(screen.getAllByRole('button', { name: 'Sign out' })).toHaveLength(1);
     expect(screen.queryByText(/No events on this page/)).not.toBeInTheDocument();
     unmount();
     expect(vi.mocked(services.events.list).mock.calls[0]?.[0].aborted).toBe(true);

@@ -3,7 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { emptyWorkspace, fictionalId, fictionalWorkspace } from '../../client/catalog.test-support';
 import type { EventWorkspace, RoundSnapshot } from '../../domain/setup';
-import { EventTripView } from './index';
+import { EventTripView, summarizeEntryProgress } from './index';
+import { fictionalRoundScores, scoreResult } from '../../client/scoring.test-support';
 
 const openingRound = fictionalWorkspace.rounds[0];
 if (!openingRound) throw new Error('Missing fictional round fixture.');
@@ -124,6 +125,27 @@ describe('saved event group', () => {
 });
 
 describe.each(['overview', 'rounds', 'group'] as const)('saved %s navigation and state', (view) => {
+  it('shows the same authoritative round and group progress on every tab', () => {
+    render(<EventTripView workspace={fictionalWorkspace} view={view} progress={{
+      [fictionalRoundScores.roundId]: summarizeEntryProgress(fictionalWorkspace.event.id, openingRound, scoreResult().round),
+    }} />);
+    const progress = screen.getByRole('region', { name: 'Saved entry progress' });
+    expect(progress).toHaveTextContent('Saved entry progress: In progress');
+    expect(progress).toHaveTextContent('Group 1 · In progress · 0/9 holes');
+    expect(progress).toHaveAccessibleDescription('A hole counts when every golfer in that group has a saved entry.');
+    expect(screen.getAllByText('Saved entries, not finalization. Includes pickups and DNF.')).toHaveLength(1);
+  });
+
+  it('does not infer progress from setup locks and hides supplied private progress from members', () => {
+    const rendered = render(<EventTripView workspace={workspace} view={view} />);
+    expect(screen.getAllByText('Progress unavailable. Use Refresh event to retry.')).toHaveLength(2);
+    expect(screen.queryByText('No scores yet')).not.toBeInTheDocument();
+    rendered.rerender(<EventTripView workspace={{ ...fictionalWorkspace, event: { ...fictionalWorkspace.event, role: 'member' } }} view={view}
+      progress={{ [fictionalRoundScores.roundId]: summarizeEntryProgress(fictionalWorkspace.event.id, openingRound, scoreResult().round) }} />);
+    expect(screen.getByText('Entry progress is available to the event owner only.')).toBeVisible();
+    expect(screen.queryByRole('region', { name: 'Saved entry progress' })).not.toBeInTheDocument();
+  });
+
   it('provides keyboard-accessible setup and scorecard actions without duplicating main navigation', async () => {
     const user = userEvent.setup();
     render(<EventTripView workspace={workspace} view={view} />);

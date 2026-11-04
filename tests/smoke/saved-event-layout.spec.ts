@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { EventWorkspace } from '../../src/domain/setup';
+import type { EventEntryProgress } from '../../src/features/event-trip/entry-progress';
 import { renderComponentFixture } from './render-fixture';
 
 const id = (number: number) => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
@@ -24,6 +25,18 @@ const workspace: EventWorkspace = {
     players, scoringStarted: number === 1,
   })),
 };
+const progress: EventEntryProgress = Object.fromEntries(workspace.rounds.map((round, index) => [round.id, {
+  kind: 'ready',
+  summary: {
+    status: index === 0 ? 'In progress' : 'No scores yet', entered: index === 0 ? 56 : 0,
+    total: 72, completeHoles: index === 0 ? 5 : 0, totalHoles: 9,
+    groups: [1, 2].map((number) => ({
+      number, status: index !== 0 ? 'No scores yet' : number === 1 ? 'Entries complete' : 'In progress',
+      entered: index !== 0 ? 0 : number === 1 ? 36 : 20, total: 36,
+      completeHoles: index !== 0 ? 0 : number === 1 ? 9 : 5, totalHoles: 9,
+    })),
+  },
+}]));
 
 for (const view of ['overview', 'rounds', 'group'] as const) {
   test(`saved event ${view} remains readable and event-specific on narrow screens`, async ({ page }) => {
@@ -32,8 +45,8 @@ for (const view of ['overview', 'rounds', 'group'] as const) {
     await expect(page.getByRole('heading', { name: 'Events', exact: true })).toBeVisible();
     const stylesheets = await page.locator('link[rel="stylesheet"]').evaluateAll((links) =>
       links.map((link) => link.getAttribute('href')).filter((href): href is string => href !== null));
-    const html = await renderComponentFixture('/src/features/event-trip/EventTripView.tsx', 'EventTripView', { workspace, view });
-    await page.setContent(`<html><head>${stylesheets.map((href) => `<link rel="stylesheet" href="${href}">`).join('')}</head>
+    const html = await renderComponentFixture('/src/features/event-trip/EventTripView.tsx', 'EventTripView', { workspace, view, progress });
+    await page.setContent(`<html><head><meta name="viewport" content="width=device-width, initial-scale=1">${stylesheets.map((href) => `<link rel="stylesheet" href="${href}">`).join('')}</head>
       <body><div class="app"><main>${html}</main></div></body></html>`);
     await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(view === 'overview' ? workspace.event.name : view === 'rounds' ? 'Rounds' : 'The Group');
@@ -41,6 +54,10 @@ for (const view of ['overview', 'rounds', 'group'] as const) {
     await expect(open).toHaveAttribute('href', `#events?event=${id(50)}&round=${id(71)}`);
     await open.focus();
     await expect(open).toBeFocused();
+    await expect(page.getByText('In progress', { exact: false }).first()).toBeVisible();
+    await expect(page.getByText('Entries complete', { exact: false }).first()).toBeVisible();
+    await expect(page.getByText('No scores yet', { exact: false }).first()).toBeVisible();
+    expect(await page.evaluate(() => window.innerWidth)).toBe(320);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.setViewportSize({ width: 1280, height: 900 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

@@ -71,9 +71,14 @@ h1, h2, p { margin: 0; }
 h1 { font-size: clamp(2.25rem, 5vw, 4.25rem); line-height: 1.08; letter-spacing: -0.055em; font-weight: 650; }
 h2 { font-size: 1.5rem; line-height: 1.25; letter-spacing: -0.03em; font-weight: 600; }
 .app { max-width: 1200px; margin: auto; padding: 0 40px; }
-.site-header { display: flex; justify-content: space-between; align-items: center; padding: 28px 0; gap: 20px; }
-.brand { display: inline-flex; gap: 12px; align-items: center; text-decoration: none; color: var(--cp-text); font-weight: 750; letter-spacing: 0.08em; font-size: 0.9rem; }
-.brand-mark { width: 40px; height: 40px; display: flex; justify-content: center; align-items: center; background: var(--cp-accent); color: var(--cp-accent-fg); border-radius: 10px; font-size: 1.5rem; letter-spacing: -0.12em; }
+.site-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; padding: 28px 0; gap: 12px 20px; }
+.header-account { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 12px 20px; margin-left: auto; max-width: 100%; }
+.account-control { display: flex; flex-direction: column; align-items: flex-end; max-width: 100%; text-align: right; }
+.account-control button { margin: 0; }
+.account-control p { max-width: 28ch; overflow-wrap: anywhere; color: var(--cp-text-muted); font-size: 0.85rem; }
+.account-hint { color: var(--cp-text-muted); font-size: 0.75rem; }
+.brand { display: inline-flex; min-width: 0; gap: 12px; align-items: center; text-decoration: none; color: var(--cp-text); font-weight: 750; letter-spacing: 0.08em; font-size: 0.9rem; }
+.brand-mark { flex-shrink: 0; width: 40px; height: 40px; display: flex; justify-content: center; align-items: center; background: var(--cp-accent); color: var(--cp-accent-fg); border-radius: 10px; font-size: 1.5rem; letter-spacing: -0.12em; }
 .brand-mark span { font-size: 0.9rem; align-self: flex-start; margin-top: 5px; }
 .brand-secondary { font-weight: 400; }
 .edition { font-size: 0.75rem; color: var(--cp-text-muted); letter-spacing: 0.1em; text-transform: uppercase; }

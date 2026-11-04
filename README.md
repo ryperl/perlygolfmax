@@ -360,6 +360,14 @@ Rounds, Group, setup and scorecards without reusing demo models or fetching the
 global catalogs for read-only views. Direct links restore the event context;
 without one, choose an event rather than automatically taking the first result.
 Sign-out/session expiry clears the in-memory selection and private UI.
+Account controls belong in the site header rather than inside individual
+event screens, with the same pending, unavailable and sign-out failure behavior.
+Saved round cards distinguish **No scores yet**, **In progress** and
+**Entries complete**, including playing-group coverage. A saved pickup or DNF
+counts as an entry, but does not make an incomplete gross score complete or
+finalize the round. Progress uses saved owner-authorized scorecards, not local
+drafts or the permanent setup-lock flag, and refreshes with **Refresh event**.
+Loading or unavailable progress must not be presented as zero or complete.
 Workspace reads retain their existing membership checks and allowlisted
 member projections. Setup writes keep their owner-plus-catalog checks;
 scorecards and game management require event ownership, not catalog authority.

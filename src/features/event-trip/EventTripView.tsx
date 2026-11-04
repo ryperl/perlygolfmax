@@ -1,9 +1,25 @@
 import type { EventWorkspace, RoundSnapshot } from '../../domain/setup';
+import type { EventEntryProgress, RoundEntryProgressState } from './entry-progress';
 import './event-trip.css';
 
 interface EventTripViewProps {
   readonly workspace: EventWorkspace;
   readonly view: 'overview' | 'rounds' | 'group';
+  readonly progress?: EventEntryProgress;
+}
+
+function EntryProgress({ state, owner }: { readonly state: RoundEntryProgressState | undefined; readonly owner: boolean }) {
+  if (!owner) return <p>Entry progress is available to the event owner only.</p>;
+  if (state?.kind === 'loading') return <p role="status">Loading entry progress…</p>;
+  if (state?.kind !== 'ready') return <p>Progress unavailable. Use Refresh event to retry.</p>;
+  const { summary } = state;
+  return <section className="event-trip-progress" aria-label="Saved entry progress"
+    aria-description="A hole counts when every golfer in that group has a saved entry.">
+    <h4>Saved entry progress: {summary.status}</h4>
+    <ul>{summary.groups.map((group) => <li key={group.number}>
+      Group {group.number} · {group.status} · {group.completeHoles}/{group.totalHoles} holes
+    </li>)}</ul>
+  </section>;
 }
 
 function setupLink(eventId: string) {
@@ -46,13 +62,15 @@ function ManualGroups({ round }: { readonly round: RoundSnapshot }) {
   );
 }
 
-function SavedRounds({ workspace, showGroups }: {
+function SavedRounds({ workspace, showGroups, progress }: {
   readonly workspace: EventWorkspace;
   readonly showGroups: boolean;
+  readonly progress: EventEntryProgress | undefined;
 }) {
   return (
     <section className="event-trip-section" aria-label="Saved rounds">
       <h2>Saved rounds</h2>
+      {workspace.event.role === 'owner' && workspace.rounds.length > 0 && <p>Saved entries, not finalization. Includes pickups and DNF.</p>}
       {workspace.rounds.length === 0 ? <p>No rounds saved for this event.</p> : (
         <ol className="event-trip-rounds">
           {workspace.rounds.map((round) => (
@@ -63,6 +81,7 @@ function SavedRounds({ workspace, showGroups }: {
                   <p>{round.course.name}</p>
                   <p><span>{round.teeProfile.name} tees</span> · {round.teeProfile.category}</p>
                 </div>
+                <EntryProgress state={progress?.[round.id]} owner={workspace.event.role === 'owner'} />
                 {workspace.event.role === 'owner' && (
                   <a
                     className="event-trip-scorecard"
@@ -89,7 +108,7 @@ function SavedRounds({ workspace, showGroups }: {
   );
 }
 
-export function EventTripView({ workspace, view }: EventTripViewProps) {
+export function EventTripView({ workspace, view, progress }: EventTripViewProps) {
   const { event } = workspace;
   const archived = event.status === 'archived';
 
@@ -124,7 +143,7 @@ export function EventTripView({ workspace, view }: EventTripViewProps) {
           )}
         </section>
       )}
-      <SavedRounds workspace={workspace} showGroups={view !== 'overview'} />
+      <SavedRounds workspace={workspace} showGroups={view !== 'overview'} progress={progress} />
     </div>
   );
 }
