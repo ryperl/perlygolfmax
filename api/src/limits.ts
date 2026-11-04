@@ -2,6 +2,7 @@ import type { TableClient } from '@azure/data-tables';
 import type { AccountIdentity } from '../../src/domain/events.js';
 import { isRecord } from '../../src/contracts/events.js';
 import { ApiError } from './errors.js';
+import { isMissingTableEntity } from './table-errors.js';
 
 export type RequestClass = 'identity-read' | 'events-read' | 'events-create';
 const limits: Readonly<Record<RequestClass, number>> = {
@@ -25,7 +26,7 @@ export class TableRequestLimiter implements RequestLimiter {
         try {
           current = await this.table.getEntity(partitionKey, rowKey);
         } catch (error) {
-          if (!isRecord(error) || error.statusCode !== 404 || error.code !== 'ResourceNotFound') throw error;
+          if (!isMissingTableEntity(error)) throw error;
           await this.table.createEntity({ partitionKey, rowKey, window, count: 1 });
           return;
         }

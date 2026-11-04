@@ -25,4 +25,11 @@ describe('safe dependency failure diagnostics', () => {
     })).toEqual({});
     expect(failureDiagnostics(null)).toEqual({});
   });
+
+  it('extracts only the nested OData service code, never the service body or message', () => {
+    expect(failureDiagnostics({
+      name: 'RestError', statusCode: 404,
+      details: { odataError: { code: 'ResourceNotFound', message: 'fixture-private-details' } },
+    })).toEqual({ failureType: 'RestError', failureStatus: 404, failureCode: 'ResourceNotFound' });
+  });
 });

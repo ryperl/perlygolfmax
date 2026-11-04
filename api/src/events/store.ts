@@ -3,14 +3,11 @@ import type { TableClient } from '@azure/data-tables';
 import type { AccountIdentity, EventPage, EventSummary, GolfEvent } from '../../../src/domain/events.js';
 import { isEventSummary, isRecord } from '../../../src/contracts/events.js';
 import { ApiError } from '../errors.js';
+import { isMissingTableEntity } from '../table-errors.js';
 
 export interface EventStore {
   list(identity: AccountIdentity, continuationToken?: string): Promise<EventPage>;
   create(identity: AccountIdentity, event: GolfEvent): Promise<EventSummary>;
-}
-
-function isNotFound(error: unknown): boolean {
-  return isRecord(error) && error.statusCode === 404 && error.code === 'ResourceNotFound';
 }
 
 export class TableEventStore implements EventStore {
@@ -29,7 +26,7 @@ export class TableEventStore implements EventStore {
       try {
         member = await this.table.getEntity(event.partitionKey, `member:${identity.objectId}`);
       } catch (error) {
-        if (isNotFound(error)) continue;
+        if (isMissingTableEntity(error)) continue;
         throw error;
       }
       if (member.tenantId !== identity.tenantId || member.objectId !== identity.objectId) continue;
@@ -56,7 +53,7 @@ export class TableEventStore implements EventStore {
       let member;
       try { member = await this.table.getEntity(event.id, `member:${identity.objectId}`); }
       catch (membershipError) {
-        if (isNotFound(membershipError)) throw new ApiError(403, 'EVENT_ACCESS_REVOKED');
+        if (isMissingTableEntity(membershipError)) throw new ApiError(403, 'EVENT_ACCESS_REVOKED');
         throw membershipError;
       }
       if (member.tenantId !== identity.tenantId || member.objectId !== identity.objectId) throw new ApiError(403, 'EVENT_ACCESS_REVOKED');

@@ -9,9 +9,10 @@ planning allowance is roughly USD 15/month, not a quote or spending cap.
 The repository contains an initial implementation with a provisioned test
 foundation, not a connected operational scoreboard:
 customer sign-in, token acquisition, API handlers, bounded event discovery and
-idempotent event creation with atomic owner membership. Real OTP delivery,
-customer identity and storage data-plane behavior still need non-production
-verification. Runtime resource settings and narrow role scopes have been read
+idempotent event creation with atomic owner membership. Hosted customer
+sign-in has been exercised in test; signed-in event loading and durable
+creation still need non-production verification. Runtime resource settings
+and narrow role scopes have been read
 back after foundation creation; that does not prove a signed-in data flow.
 No invitations, owner appointment UI, rounds,
 score-entry endpoints, scoring engine, audit exports or backup job are shipped.
@@ -134,6 +135,14 @@ reused row per identity/endpoint, not an unbounded row per minute, and remain
 application data subject to the eventual deletion policy. A valid but uninvited
 directory identity can still consume authentication, quota/storage operations
 and bounded event-discovery work; it cannot read event data.
+
+Missing entity handling checks the exact Table Storage `ResourceNotFound`
+service code, including the SDK's nested `details.odataError.code` shape.
+A missing table, an unclassified 404 or a permission/outage error is not an
+empty event list or an unlimited quota. A loopback HTTP test exercises actual
+SDK error deserialization and first-counter creation without Azure credentials.
+Service-failure logs contain bounded error type/code/status and network-cause
+codes plus invocation IDs, never raw exception messages, bodies or tokens.
 
 These are application limits, NOT a global ingress or volumetric DDoS defense.
 Requests with bad tokens can reach Functions before authentication; request

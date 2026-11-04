@@ -1,4 +1,5 @@
 import { isRecord } from '../../src/contracts/events.js';
+import { tableErrorCode } from './table-errors.js';
 
 function classification(value: unknown): string | undefined {
   return typeof value === 'string' && /^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(value)
@@ -10,7 +11,7 @@ export function failureDiagnostics(error: unknown): Readonly<Record<string, stri
   if (!isRecord(error)) return {};
   const result: Record<string, string | number> = {};
   const name = classification(error.name);
-  const code = classification(error.code);
+  const code = classification(tableErrorCode(error));
   if (name) result.failureType = name;
   if (code) result.failureCode = code;
   if (typeof error.statusCode === 'number' && Number.isInteger(error.statusCode)

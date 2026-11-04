@@ -33,7 +33,7 @@ describe('Table event persistence', () => {
     vi.spyOn(client, 'submitTransaction').mockRejectedValue({ statusCode: 409 });
     vi.spyOn(client, 'getEntity')
       .mockImplementationOnce(() => Promise.resolve({ ...event, etag: 'event', creatorTenantId: creator.tenantId, creatorObjectId: creator.objectId }))
-      .mockRejectedValueOnce({ statusCode: 404, code: 'ResourceNotFound' });
+      .mockRejectedValueOnce({ statusCode: 404, details: { odataError: { code: 'ResourceNotFound' } } });
     await expect(new TableEventStore(client).create(creator, event)).rejects.toMatchObject({ status: 403 });
   });
 
@@ -48,7 +48,7 @@ describe('Table event persistence', () => {
     vi.spyOn(client, 'listEntities').mockReturnValue(source);
     vi.spyOn(client, 'getEntity')
       .mockImplementationOnce(() => Promise.resolve({ etag: 'member', ...creator, role: 'owner' }))
-      .mockRejectedValueOnce({ statusCode: 404, code: 'ResourceNotFound' });
+      .mockRejectedValueOnce({ statusCode: 404, details: { odataError: { code: 'ResourceNotFound' } } });
     await expect(new TableEventStore(client).list(creator)).resolves.toEqual({ events: [{ ...event, role: 'owner' }], continuationToken: 'next' });
     expect(byPage).toHaveBeenCalledWith({ maxPageSize: 50 });
   });
@@ -59,6 +59,21 @@ describe('Table event persistence', () => {
     vi.spyOn(source, 'byPage').mockImplementation(async function* () { await Promise.reject(new Error('unavailable')); yield []; });
     vi.spyOn(client, 'listEntities').mockReturnValue(source);
     await expect(new TableEventStore(client).list(creator)).rejects.toThrow('unavailable');
+  });
+
+  it('does not hide a missing table or an unclassified membership lookup failure', async () => {
+    const client = table();
+    const source = client.listEntities();
+    vi.spyOn(source, 'byPage').mockImplementation(async function* () {
+      yield await Promise.resolve([{ partitionKey: event.id, ...event, etag: 'event' }]);
+    });
+    vi.spyOn(client, 'listEntities').mockReturnValue(source);
+    const get = vi.spyOn(client, 'getEntity').mockRejectedValue({
+      statusCode: 404, details: { odataError: { code: 'TableNotFound' } },
+    });
+    await expect(new TableEventStore(client).list(creator)).rejects.toMatchObject({ statusCode: 404 });
+    get.mockRejectedValue({ statusCode: 404 });
+    await expect(new TableEventStore(client).list(creator)).rejects.toMatchObject({ statusCode: 404 });
   });
 
   it('does not disclose an event to a mismatched tenant or revoked member', async () => {
