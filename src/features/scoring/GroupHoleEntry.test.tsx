@@ -31,6 +31,7 @@ describe('pure mobile group hole entry', () => {
     expect(screen.getByRole('button', { name: 'Previous hole' })).toBeDisabled();
     expect(screen.getByText('Par 4 · 100 yards · Stroke index 1')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Decrease score for Fictional Player 1' })).toBeDisabled();
+    expect(screen.queryByText(/Other options|Number = strokes|Clear to unplayed|DNF for|Request ID|Base revision/)).not.toBeInTheDocument();
   });
   it('keeps quick scores and the X button explicit, with +/- retaining the X7 disposition', async () => {
     const input = props();

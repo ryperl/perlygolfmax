@@ -56,7 +56,6 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
       <div><h2>Hole {hole.number}</h2><p>Par {hole.par} · {hole.length} yards · Stroke index {hole.allocation}</p></div>
       <button type="button" aria-label="Next hole" disabled={busy || !next} onClick={() => { if (next) onHoleChange(next.number); }}>→</button>
     </header>
-    <p className="score-hint">Number = strokes · blank = unplayed · X / X7 = pickup · DNF (hole).</p>
     <form aria-label={`Group ${String(groupNumber)} hole ${String(hole.number)} entry`} onSubmit={(event) => { event.preventDefault(); onSave(true); }}>
       <div className="group-entry-rows">{rows.slice(0, 4).map((row, rowIndex) => {
         const text = row.draft?.text ?? scoreEntryText(row.saved);
@@ -96,26 +95,18 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
             {pickedUp ? 'X' : ''}{value}{value === hole.par && <small>par</small>}
           </button>)}</div>
           <p className="entry-saved">Saved: {scoreLabel(row.saved)}{row.draft && score ? ` · Local: ${scoreEntryText(score) || 'unplayed'}${score.kind === 'picked-up' ? ' (pickup; incomplete)' : ''}` : ''}</p>
-          {!score && <p className="entry-error" role="alert">Use a positive whole exact-safe number, X, X7, DNF, or leave blank for unplayed. Zero is not a score.</p>}
+          {!score && <p className="entry-error" role="alert">Enter a valid whole-number score above zero, X or X with a number, or leave this blank.</p>}
           {row.draft?.status === 'conflict' && <div className="entry-conflict">
             <p>Saved and intended values need review. Refresh saved round first, then choose your value or use the saved value.</p>
             <button type="button" disabled={disabled || !row.canReview} onClick={() => { onReview(row.playerId); }}>Review my value for {row.displayName}</button>
             <button type="button" disabled={disabled} onClick={() => { onDiscard(row.playerId); }}>Use saved value for {row.displayName}</button>
           </div>}
-          <details className="entry-options"><summary>Other options{row.draft?.attempt ? ' & save details' : ''}</summary>
-            <button type="button" disabled={disabled} onClick={() => { onEdit(row.playerId, 'DNF'); }}>DNF for {row.displayName}</button>
-            <button type="button" disabled={disabled} onClick={() => { onEdit(row.playerId, ''); }}>Clear to unplayed for {row.displayName}</button>
-            {row.draft && <button type="button" disabled={disabled} onClick={() => { onDiscard(row.playerId); }}>Discard local edit for {row.displayName}</button>}
-            {row.draft?.attempt && <p>Request ID: {row.draft.attempt.id}. Base revision: {row.draft.attempt.etag ?? 'new card'}. Unconfirmed retries keep this identity.</p>}
-            {row.draft?.acknowledged && <p>Original save acknowledged: {scoreLabel(row.draft.acknowledged.after)}. Request {row.draft.acknowledged.id}. The saved projection changed afterwards.</p>}
-          </details>
         </article>;
       })}</div>
       <div className="group-save-actions">
         <button ref={primaryAction} className="primary-score-action" disabled={disabled}>{next ? 'Save & Next Hole' : 'Save Hole'}</button>
         <button type="button" disabled={disabled} onClick={() => { onSave(false); }}>Save changes</button>
       </div>
-      <p className="score-hint">X7 adds 7 reported strokes, but stays incomplete. Blank stays unplayed. Changes save one player at a time, not atomically. Save changes stays here; the last hole does not finalize the round.</p>
     </form>
   </section>;
 }

@@ -3,15 +3,47 @@
 .recap-heading h3, .recap-heading p { margin: 0; }
 .recap-total { display: grid; gap: 4px; padding: 12px 16px; background: var(--cp-bg-elevated); border: 1px solid var(--cp-border); border-radius: 8px; }
 .recap-total strong { font-size: 2rem; line-height: 1.1; }
-.recap-total span, .recap-legend { color: var(--cp-text-muted); font-size: .85rem; }
-.recap-sections { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 32rem), 1fr)); gap: 16px; min-width: 0; }
-.recap-nine { min-width: 0; }
-.recap-nine h4 { margin: 0 0 8px; }
-.recap-scroll { overflow-x: auto; max-width: 100%; }
+.recap-total span, .scorecard-incomplete { color: var(--cp-text-muted); font-size: .85rem; }
+.recap-sections { display: grid; gap: 20px; min-width: 0; }
+.recap-nine { min-width: 0; background: var(--cp-surface); border: 1px solid var(--cp-border); border-radius: 16px; overflow: hidden; }
+.recap-nine h4 { margin: 0; padding: 12px 16px; font-size: .9rem; letter-spacing: .04em; text-transform: uppercase; border-bottom: 1px solid var(--cp-border); }
+.recap-scroll { overflow-x: auto; max-width: 100%; position: relative; }
 .recap-scroll:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
-.recap-table { border-collapse: collapse; width: 100%; min-width: 28rem; font-variant-numeric: tabular-nums; }
-.recap-table caption { text-align: left; padding-bottom: 8px; font-size: .85rem; }
-.recap-table th, .recap-table td { text-align: center; padding: 9px 5px; border-bottom: 1px solid var(--cp-border); }
-.recap-table th:first-child { text-align: left; min-width: 5rem; }
-.recap-table thead, .recap-table td:last-child, .recap-table th:last-child { background: var(--cp-bg-elevated); font-weight: 650; }
-.recap-score-row { font-weight: 650; }
+.recap-table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 40rem; font-variant-numeric: tabular-nums; }
+.recap-table caption { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); }
+.recap-table th, .recap-table td { text-align: center; padding: 10px 6px; border-bottom: 1px solid var(--cp-border); min-width: 2.5rem; }
+.recap-table th:first-child { position: sticky; left: 0; z-index: 1; background: var(--cp-surface); text-align: left; min-width: 8rem; max-width: 12rem; border-right: 1px solid var(--cp-border); padding-inline: 16px; }
+.recap-table thead th { background: var(--cp-bg-elevated); font-size: .9rem; }
+.recap-table thead th:first-child { background: var(--cp-bg-elevated); }
+.recap-table .recap-par td, .recap-table .recap-par th { background: var(--cp-surface-soft); font-weight: 650; }
+.recap-course-row { font-size: .75rem; color: var(--cp-text-muted); }
+.recap-score-row { font-weight: 650; font-size: 1.05rem; }
+.recap-score-row:last-child td, .recap-score-row:last-child th { border-bottom: 0; }
+.recap-subtotal { background: var(--cp-accent-soft); color: var(--cp-accent); font-weight: 700; }
+.score-mark { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; }
+.score-token { font-size: .75rem; white-space: nowrap; min-width: max-content; }
+.score-birdie, .score-eagle { border: 1px solid var(--cp-accent); border-radius: 50%; color: var(--cp-accent); }
+.score-eagle { outline: 1px solid var(--cp-accent); outline-offset: 3px; }
+.score-bogey, .score-double { border: 1px solid var(--cp-text-muted); border-radius: 0; }
+.score-double { outline: 1px solid var(--cp-text-muted); outline-offset: 3px; }
+.round-scorecards { min-width: 0; display: grid; gap: 20px; }
+.round-card-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; padding-block: 12px; }
+.round-card-heading h2 { font-size: clamp(1.5rem, 3vw, 2rem); margin-block: 4px; }
+.round-card-heading p { margin: 0; }
+.scorecard-eyebrow { color: var(--cp-accent); font-size: .8rem; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
+.scorecard-course { color: var(--cp-text-muted); font-size: .85rem; }
+.scorecard-controls { display: flex; flex-wrap: wrap; gap: 16px; }
+.scorecard-controls label { display: grid; gap: 4px; flex: 1 1 10rem; min-width: 0; font-size: .85rem; font-weight: 600; }
+.scorecard-controls select { width: 100%; min-width: 0; min-height: 48px; padding: 8px; font: inherit; color: var(--cp-text); background: var(--cp-surface); border: 1px solid var(--cp-border-strong); border-radius: 10px; }
+.scorecard-player-link { margin: 0; padding: 6px 0; min-height: 44px; text-align: left; border: 0; background: transparent; color: var(--cp-text); font-size: .85rem; font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
+.scorecard-nine-picker { display: flex; flex-wrap: wrap; gap: 8px; }
+.scorecard-nine-picker button, .scorecard-back { margin: 0; min-height: 44px; }
+.scorecard-nine-picker [aria-pressed="true"] { background: var(--cp-accent-soft); border-color: var(--cp-accent); color: var(--cp-accent); }
+@media (max-width: 600px) {
+  .recap-table { min-width: 33rem; }
+  .recap-table th:first-child { width: 5rem; min-width: 5rem; max-width: 5rem; padding-inline: 8px; }
+  .scorecard-player-link { font-size: .7rem; }
+  .recap-course-row { font-size: .65rem; }
+  .scorecard-nine-picker { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .scorecard-nine-picker button { padding: 8px 4px; font-size: .8rem; }
+}

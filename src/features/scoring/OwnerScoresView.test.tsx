@@ -26,7 +26,11 @@ function mount(store = memoryScores()) {
   return { ...store, onSessionExpired, ...render(<OwnerScoresView client={store.client} eventId={fictionalRoundScores.eventId}
     roundId={fictionalRoundScores.roundId} onSessionExpired={onSessionExpired} />) };
 }
-async function loaded() { await screen.findByRole('textbox', { name: 'Fictional Player 1 score' }); }
+async function loaded() {
+  await screen.findByRole('heading', { name: 'Round scorecard' });
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Enter scores' }));
+  await screen.findByRole('textbox', { name: 'Fictional Player 1 score' });
+}
 
 describe('hole-first owner scoring', () => {
   it('shows only one hole and at most four empty entry rows, with honest online and first-save warnings', async () => {
@@ -39,7 +43,7 @@ describe('hole-first owner scoring', () => {
     for (const field of screen.getAllByRole('textbox')) expect(field).toHaveValue('');
     expect(screen.getByText(/Unsaved drafts live only in this page/)).toBeVisible();
     expect(screen.getByText(/first accepted score locks course, tee, roster, groups and captured indices/)).toHaveTextContent('Clearing scores does not unlock setup.');
-    expect(screen.getByRole('table')).not.toBeVisible();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /Group 2/ })).not.toBeInTheDocument();
     expect(client.save).not.toHaveBeenCalled();
   });
@@ -118,6 +122,10 @@ describe('hole-first owner scoring', () => {
     await user.click(screen.getByRole('button', { name: 'Previous hole' }));
     expect(input()).toHaveValue('X7');
     expect(screen.getByText(/3 unsaved \/ review values in this page/)).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Scorecards' }));
+    expect(screen.getByText(/3 unsaved scores are not included in this card/)).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Enter scores' }));
+    expect(input()).toHaveValue('X7');
     expect(client.save).not.toHaveBeenCalled();
   });
   it('supports direct scores, +/- and the touch X toggle, persisting X7 as incomplete reported strokes', async () => {
@@ -138,8 +146,10 @@ describe('hole-first owner scoring', () => {
     ]);
     expect(input()).toHaveValue('X7');
     await user.click(screen.getByRole('button', { name: 'Scorecards' }));
-    const saved = within(screen.getByRole('article', { name: 'Fictional Player 1 saved scorecard' }));
-    expect(saved.getByText(/Recorded strokes: 7 across 1\/9 recorded holes; 0 completed/)).toHaveTextContent('Incomplete');
+    await user.click(screen.getByRole('button', { name: 'Open scorecard for Fictional Player 1' }));
+    const saved = within(screen.getByRole('region', { name: 'Fictional Player 1 full scorecard' }));
+    expect(saved.getByText('7', { selector: 'strong' })).toBeVisible();
+    expect(saved.getByText('Incomplete')).toBeVisible();
   });
   it('clearing an existing score is an audited unplayed write, while an untouched blank is not written', async () => {
     const { client } = mount(memoryScores(scoreResult().round));
@@ -317,7 +327,7 @@ describe('hole-first owner scoring', () => {
     expect(screen.getByRole('button', { name: 'Next hole' })).toBeDisabled();
     await enter(user, 'X7');
     await user.click(screen.getByRole('button', { name: 'Save Hole' }));
-    expect(await screen.findByRole('heading', { name: 'Saved scorecards' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Round scorecard' })).toBeVisible();
     expect(screen.getByText(/Scorecards opened for review; the round is not finalized/)).toBeVisible();
     expect(client.save).toHaveBeenCalledOnce();
     expect(vi.mocked(client.save).mock.calls[0]?.[3]).toBe(9);
@@ -335,7 +345,7 @@ describe('hole-first owner scoring', () => {
     await user.click(screen.getByRole('button', { name: 'Save Hole' }));
     await screen.findByText(/Stayed on hole 9/);
     expect(screen.getByRole('heading', { name: 'Hole 9' })).toBeVisible();
-    expect(screen.queryByRole('heading', { name: 'Saved scorecards' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Round scorecard' })).not.toBeInTheDocument();
   });
   it('keeps reads and polling out of the entire multi-player save, aborting late private responses on unmount', async () => {
     const store = memoryScores();
@@ -394,36 +404,18 @@ describe('hole-first owner scoring', () => {
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
     expect(screen.queryByText(new RegExp(id))).not.toBeInTheDocument();
   });
-  it('provides audit toggle + Close history, and a response completing after close never reopens it', async () => {
+  it('opens the actual saved group card by default without requesting or exposing audit records', async () => {
     const store = memoryScores();
-    const pending = deferred<{ readonly changes: readonly typeof fictionalChange[]; readonly continuationToken: string }>();
-    vi.mocked(store.client.history).mockReturnValueOnce(pending.promise).mockResolvedValueOnce({
-      changes: [{ ...fictionalChange, id: fictionalId(402), after: { kind: 'picked-up', reportedStrokes: 7 } }],
-    });
     mount(store);
-    await loaded();
+    await screen.findByRole('table', { name: 'Front nine scorecard' });
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.queryByText(/History|Connection & save details|Request ID|actor|Base revision/)).not.toBeInTheDocument();
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: 'Scorecards' }));
-    const toggle = screen.getByRole('button', { name: 'History for Fictional Player 1' });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    await user.click(toggle);
-    const close = await screen.findByRole('button', { name: 'Close history for Fictional Player 1' });
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(toggle).toHaveAttribute('aria-controls', `score-history-${fictionalId(1)}`);
-    await user.click(close);
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    await act(async () => { pending.resolve({ changes: [fictionalChange], continuationToken: 'next-page' }); await pending.promise; });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByRole('region', { name: 'Fictional Player 1 audit history' })).not.toBeInTheDocument();
-    await user.click(toggle);
-    expect(store.client.history).toHaveBeenCalledOnce();
-    const history = screen.getByRole('region', { name: 'Fictional Player 1 audit history' });
-    expect(history).toHaveTextContent('Unplayed → 4 strokes');
-    await user.click(screen.getByRole('button', { name: 'More history for Fictional Player 1' }));
-    await waitFor(() => { expect(history).toHaveTextContent('X7 — picked up; 7 reported, incomplete'); });
-    expect(vi.mocked(store.client.history).mock.calls[1]?.[4]).toBe('next-page');
-    await user.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await user.click(screen.getByRole('button', { name: 'Open scorecard for Fictional Player 1' }));
+    expect(screen.getByRole('region', { name: 'Fictional Player 1 full scorecard' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Enter scores' }));
+    expect(screen.getAllByRole('textbox')).toHaveLength(4);
+    expect(store.client.history).not.toHaveBeenCalled();
   });
   it('keeps archives read-only, hides private entry on owner denial, and routes expiry explicitly', async () => {
     const archived = mount(memoryScores({ ...fictionalRoundScores, eventStatus: 'archived' }));

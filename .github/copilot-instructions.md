@@ -59,6 +59,9 @@
   durability, net rules or permission to unlock scored rounds.
   `X7` preserves a pickup's reported seven in recorded totals, but never makes
   that hole a completed numeric score. Blank shorthand stays unplayed.
+- Present golfer scores as hole-ordered scorecards, not audit records. Keep
+  operation IDs, actor GUIDs, revisions and raw timestamps out of player
+  entry/view screens; preserve backend audit and conditional-save safeguards.
 - Keep limits effective across instances; fail closed on missing configuration
   or limit-store failure. CORS and Functions keys are not user authentication.
 - Read `docs/operations.md` before identity, infrastructure, deployment or

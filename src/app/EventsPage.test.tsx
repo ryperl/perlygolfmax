@@ -32,8 +32,8 @@ describe('EventsPage composition', () => {
     const services = service();
     window.history.replaceState(null, '', `#events?event=${fictionalRoundScores.eventId}&round=${fictionalRoundScores.roundId}`);
     render(<EventsPage services={services} />);
-    expect(await screen.findByRole('heading', { name: 'Online owner scorecards' })).toBeVisible();
-    await screen.findByRole('article', { name: 'Fictional Player 1 scorecard' });
+    expect(await screen.findByRole('heading', { name: 'Round scores' })).toBeVisible();
+    await screen.findByRole('table', { name: 'Front nine scorecard' });
     expect(services.catalog.players).not.toHaveBeenCalled();
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
@@ -58,6 +58,8 @@ describe('EventsPage composition', () => {
     }));
     window.history.replaceState(null, '', `#events?event=${fictionalRoundScores.eventId}&round=${fictionalRoundScores.roundId}`);
     render(<EventsPage services={services} />);
+    await screen.findByRole('heading', { name: 'Round scorecard' });
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Enter scores' }));
     const form = within(await screen.findByRole('form', { name: 'Group 1 hole 1 entry' }));
     const user = userEvent.setup();
     await user.type(form.getByRole('textbox', { name: 'Fictional Player 1 score' }), 'X7');
@@ -70,7 +72,7 @@ describe('EventsPage composition', () => {
     expect(vi.mocked(services.scores.save).mock.calls[0]?.[7].aborted).toBe(true);
     await act(async () => { finish?.(); await Promise.resolve(); });
     expect(services.scores.save).toHaveBeenCalledOnce();
-    expect(screen.queryByRole('heading', { name: 'Online owner scorecards' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Round scores' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Save acknowledged/)).not.toBeInTheDocument();
   });
   it('shows catalog navigation only for managers, not for event creators/owners without catalog permission', async () => {

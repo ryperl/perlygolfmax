@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fictionalChange, fictionalRoundScores, scoreResult } from '../../client/scoring.test-support';
 import { fictionalId } from '../../client/catalog.test-support';
-import type { RoundScores, ScoreChange } from '../../domain/scoring';
+import type { RoundScores } from '../../domain/scoring';
 import { cardFor, editedDraft, entryKey } from './entry-state';
 import type { HoleDraft } from './entry-state';
 import { planGroup, saveGroupEntries } from './save-group';
@@ -14,13 +14,12 @@ function entries() {
 function harness(initial = fictionalRoundScores) {
   const store = memoryScores(initial);
   const drafts = entries();
-  const changes: ScoreChange[] = [];
   let latest = initial;
   const callbacks = {
     onDraft: (key: string, value: HoleDraft | null) => { if (value) drafts.set(key, value); else drafts.delete(key); },
-    onProjection: (round: RoundScores) => { latest = round; }, onAcknowledged: (change: ScoreChange) => { changes.push(change); },
+    onProjection: (round: RoundScores) => { latest = round; },
   };
-  return { ...store, drafts, changes, latest: () => latest,
+  return { ...store, drafts, latest: () => latest,
     save: () => saveGroupEntries({ client: store.client, round: latest, holeNumber: 1,
       plan: planGroup(latest, playerIds, 1, drafts), signal: new AbortController().signal, refreshVersion: 0, ...callbacks }) };
 }
@@ -54,7 +53,6 @@ describe('serialized group save protocol', () => {
     gate.resolve(undefined);
     await operation;
     expect(test.client.save).toHaveBeenCalledTimes(4);
-    expect(test.changes).toHaveLength(4);
     expect(test.drafts.size).toBe(0);
   });
   it('preserves request IDs and original bases for failed and unattempted players across a partial-save retry', async () => {
@@ -76,7 +74,7 @@ describe('serialized group save protocol', () => {
     expect(d?.sent).toBe(false);
     await test.save();
     const calls = vi.mocked(test.client.save).mock.calls;
-    expect(calls.map((call) => call[6])).toEqual([test.changes[0]?.id, b?.id, b?.id, c?.id, d?.id]);
+    expect(calls.map((call) => call[6])).toEqual([calls[0]?.[6], b?.id, b?.id, c?.id, d?.id]);
     expect(calls.slice(2).map((call) => call[5])).toEqual([null, null, null]);
     expect(test.drafts.size).toBe(0);
   });
@@ -107,7 +105,7 @@ describe('serialized group save protocol', () => {
       } : saved;
     });
     await expect(test.save()).rejects.toThrow('later saved values differ');
-    expect(test.changes).toHaveLength(4);
+    expect(test.client.save).toHaveBeenCalledTimes(4);
     expect(test.drafts.get(entryKey(fictionalId(1), 1))).toMatchObject({
       text: 'X7', status: 'conflict', acknowledged: { after: { kind: 'picked-up', reportedStrokes: 7 } },
     });

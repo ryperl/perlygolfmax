@@ -129,8 +129,25 @@ per-player write contract; it is not an all-or-nothing group transaction.
 Partial acknowledgements stay saved, pending/unattempted drafts retain their
 intent/revision/request identity and a failure never advances the hole. A later
 owner projection must not silently rebase another player's draft or be reported
-as matching the user's intended value. Audit visibility is separate from cached
-history, so closing it stays closed when a pending read completes.
+as matching the user's intended value.
+
+The round opens on a golfer-facing group scorecard, not the score editor or
+an audit log. Its columns follow saved hole numbers, irrespective of entry or
+storage order. Group and individual cards show front/back nines, Out/In/Total,
+source par/yardage/stroke index and recorded values. Circle/square markings
+compare only completed raw gross strokes with source par; they do not imply
+handicap, net or Stableford rules. Pickup counts are not a separate column.
+Normal entry omits disposition menus and explanatory shorthand boilerplate.
+Conflict/error and online/first-save-lock warnings remain visible when needed.
+
+Golfer screens do not call the audit-history endpoint or expose operation
+identities, actor GUIDs, ETags or raw timestamps. Conditional requests,
+immutable acknowledgements, audited corrections and owner-only backend history
+are preserved. A separate organizer audit interface, including its access and
+presentation choices, is deferred rather than hidden behind a device-width gate.
+Saved-card summaries, repeated completion counts and long explanatory legends
+are omitted from player cards. Incomplete totals retain a short indication;
+administrative master edits and player reports remain future scope.
 
 MSAL manages tab-scoped sessionStorage. The callback and logout reply URI is
 `https://<frontend-host>/?event-auth=1`; local development uses the exact local

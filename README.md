@@ -132,12 +132,23 @@ arithmetic, not by an invented golf scoring cap.
 
 Use the group **Save & Next Hole** action for normal entry. Each player's
 acknowledgement is tracked separately: on partial failure, saved values stay
-saved, pending drafts remain and the screen does not advance. Full scorecards,
-source layout and closable per-player audit history are secondary views.
-Each individual recap presents front/back nines with source yardage, par and
-stroke index, exact hole shorthand, Out/In subtotals and the recorded total.
+saved, pending drafts remain and the screen does not advance.
+Opening a round shows a traditional group scorecard immediately: holes run
+left to right, with a row per golfer, front/back nines and Out/In/Total columns.
+Select a golfer for their individual card, or choose **Enter scores** for the
+hole-first editor. Front/back controls and locally scrolling tables with fixed
+player labels support narrow screens. Circles/squares mark raw gross strokes
+relative to source par, not net or handicap-adjusted results.
+Cards include source yardage, par and stroke index, exact hole shorthand and
+recorded totals. Normal score entry has no extra disposition menu or format
+instruction paragraph; blank and X shorthand remain supported.
 Pickup or missing values keep subtotals/results marked incomplete. The recap
 is available without finalizing a round; no Net or Stableford row is fabricated.
+Internal audit records, actor/request IDs, revisions and raw timestamps are not
+part of golfer entry or scorecard screens. Cards omit saved-state summaries and
+long legends, with only a compact incomplete-total indication when needed.
+Audit storage and the owner-protected history API remain unchanged; separate
+organizer audit, master-edit and player-report interfaces are not built.
 
 Each saved operation has an idempotency ID, conditional card revision and
 immutable before/after/actor/time history. Conflicting edits require explicit

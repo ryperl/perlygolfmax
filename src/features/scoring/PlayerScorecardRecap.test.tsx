@@ -29,15 +29,16 @@ describe('individual traditional scorecard recap', () => {
   it('shows source rows, front/back recorded subtotals and complete gross without net formulas', () => {
     const { round, card } = fixture();
     render(<PlayerScorecardRecap round={round} card={card} />);
-    const front = screen.getByRole('table', { name: `Front nine — ${card.displayName}` });
-    const back = screen.getByRole('table', { name: `Back nine — ${card.displayName}` });
+    const front = screen.getByRole('table', { name: 'Front nine scorecard' });
+    const back = screen.getByRole('table', { name: 'Back nine scorecard' });
     expect(within(front).getByRole('columnheader', { name: 'Out' })).toBeVisible();
     expect(within(back).getByRole('columnheader', { name: 'In' })).toBeVisible();
-    const score = within(front).getByRole('rowheader', { name: 'Score' }).closest('tr');
+    const score = within(front).getByRole('rowheader', { name: card.displayName }).closest('tr');
     if (!score) throw new Error('Missing score row.');
     expect(within(score).getAllByRole('cell').at(-1)).toHaveTextContent('36');
     expect(screen.getByText('72', { selector: 'strong' })).toBeVisible();
-    expect(screen.getByText('18 holes completed')).toBeVisible();
+    expect(screen.getByText('Gross total:')).toBeVisible();
+    expect(screen.queryByText(/Incomplete|Recorded strokes:|Saved card updated|History for|No net or Stableford|unplayed · X/)).not.toBeInTheDocument();
     expect(screen.getByText(/Course rating 70 · Slope 120/)).toBeVisible();
     expect(screen.queryByRole('columnheader', { name: 'Net' })).not.toBeInTheDocument();
     expect(screen.queryByRole('rowheader', { name: 'Stableford' })).not.toBeInTheDocument();
@@ -48,12 +49,11 @@ describe('individual traditional scorecard recap', () => {
     render(<PlayerScorecardRecap round={round} card={{
       ...card, holes: card.holes.map((hole) => hole.number === 1 ? { ...hole, score: { kind: 'picked-up', reportedStrokes: 7 } } : hole),
     }} />);
-    expect(screen.getByRole('cell', { name: 'X7' })).toBeVisible();
+    expect(screen.getByLabelText('Hole 1: X7')).toBeVisible();
     expect(screen.getByRole('cell', { name: '39*' })).toBeVisible();
     expect(screen.getByText('75', { selector: 'strong' })).toBeVisible();
-    expect(screen.getByText('Incomplete — not a final gross result')).toBeVisible();
-    expect(screen.getByText(/17\/18 holes completed with numeric strokes/)).toBeVisible();
-    expect(screen.queryByText('18 holes completed')).not.toBeInTheDocument();
+    expect(screen.getByText('Incomplete')).toBeVisible();
+    expect(screen.getByText('* Incomplete recorded total.')).toBeVisible();
   });
 
   it('does not turn blank, bare X or DNF into zero or a completed result', () => {
@@ -63,10 +63,10 @@ describe('individual traditional scorecard recap', () => {
         ...hole, score: hole.number === 1 ? { kind: 'picked-up' } : hole.number === 2 ? { kind: 'did-not-finish' } : { kind: 'unplayed' },
       })),
     }} />);
-    expect(screen.getByRole('cell', { name: 'X' })).toBeVisible();
-    expect(screen.getByRole('cell', { name: 'DNF' })).toBeVisible();
+    expect(screen.getByLabelText('Hole 1: X')).toBeVisible();
+    expect(screen.getByLabelText('Hole 2: DNF')).toBeVisible();
     expect(screen.getByText('—', { selector: 'strong' })).toBeVisible();
-    expect(screen.getByText('Incomplete — not a final gross result')).toBeVisible();
+    expect(screen.getByText('Incomplete')).toBeVisible();
     expect(screen.queryByText('0', { selector: 'strong' })).not.toBeInTheDocument();
   });
 

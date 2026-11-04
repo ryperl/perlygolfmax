@@ -43,7 +43,7 @@ export function planGroup(round: RoundScores, playerIds: readonly string[], hole
   return { targets, writes, unchanged, invalid, conflicts };
 }
 
-export async function saveGroupEntries({ client, round, holeNumber, plan, signal, refreshVersion, onDraft, onProjection, onAcknowledged }: {
+export async function saveGroupEntries({ client, round, holeNumber, plan, signal, refreshVersion, onDraft, onProjection }: {
   readonly client: ScoresClient;
   readonly round: RoundScores;
   readonly holeNumber: number;
@@ -52,7 +52,6 @@ export async function saveGroupEntries({ client, round, holeNumber, plan, signal
   readonly refreshVersion: number;
   readonly onDraft: (key: string, value: HoleDraft | null) => void;
   readonly onProjection: (round: RoundScores) => void;
-  readonly onAcknowledged: (change: ScoreChange) => void;
 }): Promise<RoundScores> {
   if (plan.invalid.length > 0 || plan.conflicts.length > 0) throw new Error('Review all entries before saving this group.');
   let latest = round;
@@ -91,7 +90,6 @@ export async function saveGroupEntries({ client, round, holeNumber, plan, signal
         acknowledged.set(write.playerId, result.change);
         onDraft(key, null);
         onProjection(latest);
-        onAcknowledged(result.change);
       } catch (failure) {
         signal.throwIfAborted();
         onDraft(key, failure instanceof EventChangedError
