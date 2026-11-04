@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { EventChangedError } from '../../client/events';
@@ -113,6 +113,12 @@ describe('manager course catalog', () => {
     expect(screen.getAllByText(/Fictional Teal/)).toHaveLength(2);
     expect(client.version).toHaveBeenCalledWith(fictionalVersion.courseId, fictionalVersion.id, expect.any(AbortSignal));
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    const preview = screen.getByText(/Fictional Teal \/ Fictional A/);
+    await user.click(preview);
+    const details = preview.closest('details');
+    if (!details) throw new Error('Published profile preview is missing.');
+    expect(within(details).getByRole('table', { name: 'Hole yardage, par and stroke index' })).toBeVisible();
+    expect(within(details).getByRole('table', { name: 'Course and slope ratings' })).toBeVisible();
   });
   it('rejects oversized or malformed JSON before sending any import and does not render raw parse snippets', async () => {
     const client = fakeCatalog();
@@ -145,6 +151,11 @@ describe('manager course catalog', () => {
     await user.upload(screen.getByLabelText('Course JSON file'), sourceFile());
     await screen.findByText(/2 independent tee profiles/);
     expect(screen.getAllByText(/Fictional Teal/)).toHaveLength(2);
+    const preview = screen.getByText(/Fictional Teal \/ Fictional B/);
+    await user.click(preview);
+    const details = preview.closest('details');
+    if (!details) throw new Error('Staged profile preview is missing.');
+    expect(within(details).getByRole('table', { name: 'Hole yardage, par and stroke index' })).toBeVisible();
     expect(screen.getByText(/freshness unknown/)).toBeVisible();
     expect(client.beginImport).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Stage import' }));

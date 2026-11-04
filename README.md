@@ -128,6 +128,9 @@ or ratings. Repeating an import is idempotent; an authorized changed import
 creates a new version, not an overwrite of an existing round. Saved courses are
 reusable without the original file or a live provider. Source attribution and
 an unknown export date are not a claim that ratings were freshly verified.
+Expand a tee profile in the import preview or saved-version view to inspect its
+hole yardage, par, stroke-index allocation and Total/Front/Back ratings. Previewing
+a profile does not select it for a round.
 
 Players are independent of sign-in accounts and event membership. Manual index
 observations have effective dates, source labels and audit history. Unknown is

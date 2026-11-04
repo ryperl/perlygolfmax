@@ -7,3 +7,12 @@
 .catalog-check input { width: auto; }
 .catalog-version { overflow-wrap: anywhere; font-size: .8rem; }
 .catalog-form button { justify-self: start; max-width: 100%; white-space: normal; }
+.tee-preview-list { display: grid; gap: 12px; list-style: none; padding: 0; min-width: 0; }
+.tee-preview { min-width: 0; padding: 12px; border: 1px solid var(--cp-border); border-radius: 8px; }
+.tee-preview-summary { cursor: pointer; overflow-wrap: anywhere; }
+.tee-preview-summary:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
+.tee-preview-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-variant-numeric: tabular-nums; }
+.tee-preview-table caption { text-align: left; font-weight: 650; padding: 12px 0 8px; }
+.tee-preview-table th, .tee-preview-table td { border-bottom: 1px solid var(--cp-border); padding: 8px 4px; text-align: right; overflow-wrap: anywhere; }
+.tee-preview-table th:first-child { text-align: left; }
+.tee-preview-table tfoot { font-weight: 650; }

@@ -62,7 +62,7 @@ button { cursor: pointer; min-height: 44px; margin: 8px 8px 8px 0; }
 button:hover { border-color: var(--cp-accent); }
 button:disabled { opacity: 0.6; cursor: wait; }
 button:focus-visible, input:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
-.event-actions { margin-bottom: 20px; }
+.event-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-bottom: 20px; }
 .event-form { display: grid; gap: 12px; margin-top: 24px; max-width: 560px; }
 .event-form button { justify-self: start; }
 h1, h2, p { margin: 0; }
