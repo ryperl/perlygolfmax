@@ -52,6 +52,23 @@ test('real setup controls preserve drafts and fit narrow, enlarged and dark layo
     await expect(page.getByRole('checkbox', { checked: true })).toHaveCount(4);
     await search.press('Enter');
     await expect(page.getByText(/^Matches saved setup\./)).toBeVisible();
+    await search.clear();
+    await page.getByRole('checkbox', { name: 'Fictional Player 5 — HI Unknown', exact: true }).check();
+    const fifthGroup = page.getByRole('combobox', { name: 'Fictional Player 5 — round 2 group', exact: true });
+    await expect(fifthGroup.getByRole('option', { name: 'Group 1 (4/4, full)', exact: true })).toHaveJSProperty('disabled', true);
+    const firstGroup = page.getByRole('combobox', { name: 'Fictional Player 1 — round 2 group', exact: true });
+    await expect(firstGroup.getByRole('option', { name: 'Group 1 (4/4, full)', exact: true })).toHaveJSProperty('disabled', false);
+    await fifthGroup.focus();
+    await expect(fifthGroup).toBeFocused();
+    await fifthGroup.selectOption('1');
+    await expect(fifthGroup).toHaveValue('');
+    await expect(page.getByRole('alert')).toContainText('Group 1 is full.');
+    await firstGroup.selectOption('2');
+    await expect(fifthGroup.getByRole('option', { name: 'Group 1 (3/4)', exact: true })).toHaveJSProperty('disabled', false);
+    await fifthGroup.selectOption('1');
+    await expect(fifthGroup).toHaveValue('1');
+    await expect(firstGroup).toHaveValue('2');
+    await expect(firstGroup.getByRole('option', { name: 'Group 1 (4/4, full)', exact: true })).toHaveJSProperty('disabled', true);
     for (const width of [390, 320]) {
       await page.setViewportSize({ width, height: 844 });
       await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
@@ -59,7 +76,7 @@ test('real setup controls preserve drafts and fit narrow, enlarged and dark layo
     }
     await page.emulateMedia({ colorScheme: 'dark' });
     await page.evaluate(() => { document.documentElement.setAttribute('data-theme', 'dark'); });
-    await page.getByText('2. Players (4 selected)', { exact: true }).click();
+    await page.getByText('2. Players (5 selected)', { exact: true }).click();
     await page.getByRole('heading', { name: 'Configure event setup' }).scrollIntoViewIfNeeded();
     await page.screenshot({ path: `.azure/setup-cleanup-${testInfo.project.name}.png` });
     await page.getByRole('button', { name: 'Add Round' }).click();

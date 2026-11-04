@@ -3,6 +3,8 @@ import type { CatalogClient } from '../../client/catalog';
 import type { CourseCatalogEntry, CourseVersion, PlayerProfile, TeeProfile } from '../../domain/catalog';
 import type { RoundSetupInput, RoundSnapshot } from '../../domain/setup';
 
+const groupCapacity = 4;
+
 export function RoundEditor({ round, number, saved, courses, players, rosterIds, client, onChange, onPending }: {
   readonly round: RoundSetupInput;
   readonly number: number;
@@ -18,6 +20,7 @@ export function RoundEditor({ round, number, saved, courses, players, rosterIds,
   const [failure, setFailure] = useState<{ readonly courseId: string; readonly versionId: string; readonly message: string } | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [query, setQuery] = useState('');
+  const [assignmentError, setAssignmentError] = useState('');
   const current = courses.find((course) => course.id === round.courseId);
   const savedMatches = saved?.courseId === round.courseId && saved.courseVersionId === round.courseVersionId;
   const versionId = round.courseVersionId;
@@ -79,22 +82,35 @@ export function RoundEditor({ round, number, saved, courses, players, rosterIds,
       <button type="button" onClick={() => { setAttempt((previous) => previous + 1); }}>Retry round {number} version</button>
     </div>}
     <fieldset><legend>Playing groups</legend>
-      <p>Assign every selected player once. Playing groups are not competition teams.</p>
+      <p>Assign every selected player once, up to four per group. Playing groups are not competition teams.</p>
+      {assignmentError && <p role="alert">{assignmentError}</p>}
       {rosterIds.length === 0 && <p>Select the event players first.</p>}
       {unassigned.length > 0 && <p>{unassigned.length} {unassigned.length === 1 ? 'player needs' : 'players need'} a group.</p>}
-      {round.groups.filter((group) => group.playerIds.length > 4).map((group) => <p key={group.number}>
+      {round.groups.filter((group) => group.playerIds.length > groupCapacity).map((group) => <p key={group.number}>
         Group {group.number} has {group.playerIds.length} players; maximum four.
       </p>)}
       {rosterIds.map((id) => <label key={id}>{players.find((player) => player.id === id)?.displayName ?? 'Saved player'} — round {number} group
         <select required value={round.groups.find((group) => group.playerIds.includes(id))?.number ?? ''} onChange={(event) => {
           const number = Number(event.target.value);
+          const target = round.groups.find((group) => group.number === number);
+          if (target && target.playerIds.length >= groupCapacity && !target.playerIds.includes(id)) {
+            setAssignmentError(`Group ${String(number)} is full. Choose a group with fewer than four players.`);
+            return;
+          }
+          setAssignmentError('');
           const groups = round.groups.map((group) => ({ ...group, playerIds: group.playerIds.filter((playerId) => playerId !== id) })).filter((group) => group.playerIds.length > 0);
           if (number) {
             const existing = groups.find((group) => group.number === number);
             if (existing) onChange({ ...round, groups: groups.map((group) => group.number === number ? { ...group, playerIds: [...group.playerIds, id] } : group) });
             else onChange({ ...round, groups: [...groups, { number, playerIds: [id] }] });
           } else onChange({ ...round, groups });
-        }}><option value="">Assign manually</option>{[1, 2, 3, 4].map((number) => <option key={number} value={number}>Group {number}</option>)}</select>
+        }}><option value="">Assign manually</option>{[1, 2, 3, 4].map((number) => {
+          const members = round.groups.find((group) => group.number === number)?.playerIds ?? [];
+          const full = members.length >= groupCapacity;
+          return <option key={number} value={number} disabled={full && !members.includes(id)}>
+            Group {number} ({members.length}/{groupCapacity}{full ? ', full' : ''})
+          </option>;
+        })}</select>
       </label>)}
     </fieldset>
   </fieldset>;

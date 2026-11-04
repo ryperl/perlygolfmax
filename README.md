@@ -278,9 +278,12 @@ correction policy.
 
 Owner setup selects saved players and an explicit course version/tee for one
 or more rounds, with manual groups numbered 1–4 and at most four players per
-group. Every selected player must be assigned once per round. Stale edits
-require refresh rather than silently overwrite another update. Setup does not
-bind a player to an account, invite anyone, save scores or provide offline sync.
+group. Every selected player must be assigned once per round. Group choices
+show their current counts and are disabled for additional players when full;
+moving or unassigning a player frees a place without moving anyone else.
+Stale edits require refresh rather than silently overwrite another update.
+Setup does not bind a player to an account, invite anyone, save scores or provide
+offline sync.
 The setup screen separates collapsible event details and player selection from
 the selected round's editor. Player search keeps selected players visible;
 course search retains the current choice without selecting a new version or tee.

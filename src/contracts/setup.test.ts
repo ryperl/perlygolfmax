@@ -30,6 +30,18 @@ describe('private setup and index contracts', () => {
     expect(isEventSetupInput({ ...input, rounds: [{ ...round, groups: [{ number: 1, playerIds: ids.slice(0, 3) }] }] })).toBe(false);
   });
 
+  it('requires at least two groups for eight distinct golfers and rejects an overfilled group', () => {
+    const playerIds = Array.from({ length: 8 }, (_, index) => `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`);
+    const round = input.rounds[0];
+    expect(isEventSetupInput({ ...input, playerIds, rounds: [{ ...round, groups: [{ number: 1, playerIds }] }] })).toBe(false);
+    expect(isEventSetupInput({ ...input, playerIds, rounds: [{ ...round, groups: [
+      { number: 1, playerIds: playerIds.slice(0, 5) }, { number: 2, playerIds: playerIds.slice(5) },
+    ] }] })).toBe(false);
+    expect(isEventSetupInput({ ...input, playerIds, rounds: [{ ...round, groups: [
+      { number: 1, playerIds: playerIds.slice(0, 4) }, { number: 2, playerIds: playerIds.slice(4) },
+    ] }] })).toBe(true);
+  });
+
   it('keeps unknown indices distinct from zero and accepts explicit plus notation without calculation', () => {
     const player = { id: ids[0], displayName: 'Fictional Golfer', createdAt: '2026-01-01', currentIndex: null, etag: 'fictional' };
     expect(isPlayerProfile(player)).toBe(true);

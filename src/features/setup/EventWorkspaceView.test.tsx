@@ -486,7 +486,7 @@ describe('saved event workspace', () => {
     expect(setup.load).toHaveBeenCalledTimes(1);
     expect(setup.save).not.toHaveBeenCalled();
   });
-  it('leaves roster additions unassigned, bounds roster at eight, and rejects more than four players per manual group', async () => {
+  it('leaves roster additions unassigned, bounds roster at eight, and prevents adding a fifth player to a group', async () => {
     const catalog = fakeCatalog();
     const setup = fakeSetup();
     const players = Array.from({ length: 9 }, (_, i) => ({
@@ -507,7 +507,11 @@ describe('saved event workspace', () => {
     for (const [index, player] of players.slice(0, 8).entries()) {
       const group = screen.getByLabelText(`${player.displayName} — round 1 group`);
       expect(group).toHaveValue('');
-      await user.selectOptions(group, index < 5 ? '1' : '2');
+      if (index === 4) {
+        expect(within(group).getByRole('option', { name: 'Group 1 (4/4, full)' })).toBeDisabled();
+        await user.selectOptions(group, '1');
+        expect(group).toHaveValue('');
+      } else await user.selectOptions(group, index < 4 ? '1' : '2');
     }
     expect(screen.getByRole('button', { name: 'Save event workspace' })).toBeDisabled();
     await user.selectOptions(screen.getByLabelText('Fictional Player 5 — round 1 group'), '2');
