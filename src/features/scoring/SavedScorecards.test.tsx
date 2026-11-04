@@ -3,11 +3,46 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { fictionalChange, fictionalRoundScores, scoreResult } from '../../client/scoring.test-support';
 import { SavedScorecards } from './SavedScorecards';
+import { scorecardGamesFixture } from './scorecard-games.test-support';
+import { withGameResults } from '../../client/scoring.test-support';
 
 function props() {
   return { round: fictionalRoundScores, groupNumber: 1, busy: false, onGroupChange: vi.fn(), onEnterScores: vi.fn() };
 }
 describe('golfer-facing round scorecards', () => {
+  it('automatically adds the first saved game, switches games for both group and individual cards, and supports strokes-only viewing', async () => {
+    const { round, games } = scorecardGamesFixture(9);
+    const { rerender } = render(<SavedScorecards {...props()} />);
+    expect(screen.queryByLabelText('Game')).not.toBeInTheDocument();
+    rerender(<SavedScorecards {...props()} round={round} />);
+    expect(screen.getByLabelText('Game')).toHaveValue(games[0]?.id);
+    expect(screen.getByRole('row', { name: 'Fictional Player 1 · Fictional standard points' })).toBeVisible();
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText('Game'), games[1]?.id ?? '');
+    expect(screen.getByRole('row', { name: 'Fictional Player 1 · Fictional modified points' })).toHaveTextContent('0');
+    await user.click(screen.getByRole('button', { name: 'Open scorecard for Fictional Player 1' }));
+    expect(screen.getByLabelText('Game')).toHaveValue(games[1]?.id);
+    expect(screen.getByRole('row', { name: 'Fictional Player 1 · Fictional modified points' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Back to group scorecard' }));
+    await user.selectOptions(screen.getByLabelText('Game'), '');
+    expect(screen.queryByRole('row', { name: /points$/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open scorecard for Fictional Player 1' })).toBeVisible();
+  });
+
+  it('updates game points from new server projections and shows missing net inputs only once for both nines', async () => {
+    const { round, games } = scorecardGamesFixture();
+    const { rerender } = render(<SavedScorecards {...props()} round={round} />);
+    const standard = games[0];
+    if (!standard) throw new Error('Missing fictional standard game.');
+    const edited = { ...standard, points: { ...standard.points, rows: standard.points.rows.map((row) => row.scoreToPar === 0 ? { ...row, points: 3 } : row) } };
+    rerender(<SavedScorecards {...props()} round={withGameResults(round, [edited], 'games-v2')} />);
+    const back = screen.getByRole('region', { name: 'Back nine scorecard' });
+    expect(within(back).getByRole('row', { name: 'Fictional Player 1 · Fictional standard points' })).toHaveTextContent('54');
+    rerender(<SavedScorecards {...props()} round={round} />);
+    await userEvent.setup().selectOptions(screen.getByLabelText('Game'), games[2]?.id ?? '');
+    expect(screen.getAllByText(/Fictional Player 3: No captured Handicap Index/)).toHaveLength(1);
+    expect(screen.getAllByRole('row', { name: 'Fictional Player 3 · Fictional net points' })).toHaveLength(2);
+  });
   it('immediately shows a paper-style group grid in hole and group order, not an audit list', () => {
     const round = scoreResult().round;
     const { container } = render(<SavedScorecards {...props()} round={{

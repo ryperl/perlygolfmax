@@ -186,6 +186,10 @@ visible and guarded.
 
 Open a saved round's **Games** tab to add games, edit their rules or see results.
 Entry stays in gross strokes; changing a game does not rewrite the stroke card.
+The scorecard automatically shows the first saved game's per-hole points below
+the strokes, including Out/In/Total points. Its **Game** selector switches
+between saved games or a strokes-only view, for both group and individual cards.
+These are the existing server-derived results, not a second client calculation.
 Standard and GolfLink Modified presets can each use gross or net scoring, and
 multiple games can use the same round. Net allowance defaults to 95% and is
 configurable per game.

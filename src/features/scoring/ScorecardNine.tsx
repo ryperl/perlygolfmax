@@ -1,7 +1,9 @@
 import { scoreEntryText } from '../../contracts/scoring';
 import type { CourseHole } from '../../domain/catalog';
 import type { HoleScore, Scorecard } from '../../domain/scoring';
-import { cardTotalText } from './scorecard-presentation';
+import { cardTotalText, pointsTotalText } from './scorecard-presentation';
+import type { ScorecardGame } from './scorecard-presentation';
+import { gameUnavailableMessage } from '../games';
 import './scorecard-recap.css';
 
 function scoreMark(score: HoleScore | undefined, par: number) {
@@ -14,12 +16,13 @@ function scoreMark(score: HoleScore | undefined, par: number) {
     : { className: 'score-double', description: 'double bogey or more' };
 }
 
-export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, onPlayerSelect }: {
+export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game, onPlayerSelect }: {
   readonly label: string;
   readonly subtotal: 'Out' | 'In';
   readonly layout: readonly CourseHole[];
   readonly fullLayout: readonly CourseHole[];
   readonly cards: readonly Scorecard[];
+  readonly game?: ScorecardGame | undefined;
   readonly onPlayerSelect?: (playerId: string) => void;
 }) {
   const showTotal = subtotal === 'In' || fullLayout.length === layout.length;
@@ -39,7 +42,11 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, onPl
             <td>—</td>{showTotal && <td>—</td>}</tr>
           {cards.map((card) => {
             const saved = new Map(card.holes.map((hole) => [hole.number, hole.score]));
-            return <tr className="recap-score-row" key={card.playerId}>
+            const player = game?.result?.players.find((entry) => entry.playerId === card.playerId);
+            const holePoints = new Map(player?.holes.map((hole) => [hole.number, hole.points]));
+            const available = player !== undefined && player.status !== 'unavailable';
+            const completeNine = layout.every((hole) => typeof holePoints.get(hole.number) === 'number');
+            return <Fragment key={card.playerId}><tr className={`recap-score-row${game ? ' recap-has-game' : ''}`}>
               <th scope="row">{onPlayerSelect ? <button type="button" className="scorecard-player-link"
                 aria-label={`Open scorecard for ${card.displayName}`} onClick={() => { onPlayerSelect(card.playerId); }}>{card.displayName}</button> : card.displayName}</th>
               {layout.map((hole) => {
@@ -51,10 +58,25 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, onPl
                   aria-label={score ? `Hole ${String(hole.number)}: ${score.kind === 'unplayed' ? 'unplayed' : text}${mark.description ? `, ${mark.description}` : ''}` : `Hole ${String(hole.number)}: score unavailable`}>{text}</span></td>;
               })}
               <td className="recap-subtotal">{cardTotalText(card, layout)}</td>{showTotal && <td className="recap-subtotal">{cardTotalText(card, fullLayout)}</td>}
-            </tr>;
+            </tr>
+            {game && <tr className="recap-game-row" aria-label={`${card.displayName} · ${game.definition.name} points`}>
+              <th scope="row" aria-label={`${card.displayName} game points`}
+                title={!available ? gameUnavailableMessage(player?.unavailableReason) : undefined}>Points{!available && <small>Unavailable</small>}</th>
+              {layout.map((hole) => {
+                const points = holePoints.get(hole.number);
+                const description = !available ? 'unavailable' : typeof points === 'number' ? String(points) : 'pending';
+                return <td key={hole.number} aria-label={`${card.displayName}, hole ${String(hole.number)} game points: ${description}`}>
+                  {points ?? '—'}
+                </td>;
+              })}
+              <td className="recap-subtotal">{pointsTotalText(subtotal === 'Out' ? player?.frontPoints ?? null : player?.backPoints ?? null, completeNine)}</td>
+              {showTotal && <td className="recap-subtotal">{pointsTotalText(player?.totalPoints ?? null, player?.status === 'complete')}</td>}
+            </tr>}
+            </Fragment>;
           })}
         </tbody>
       </table>
     </div>
   </section>;
 }
+import { Fragment } from 'react';

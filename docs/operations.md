@@ -207,6 +207,11 @@ other owners' additional games. Stroke and game requests share the existing
 single-operation hook, and both kinds of local draft pause background polling.
 No game configuration, points input or audit log is added to normal stroke
 entry. No invitation, golfer-scoring grant or full administrative UI is implied.
+Group and individual scorecards display the selected game's server-derived
+hole points and Out/In/Total values below the raw strokes. The first configured
+game is the default view; a compact selector switches games or shows strokes
+only. This selection is local presentation state, not a game-setting write,
+and is preserved when moving between score entry, cards and games.
 
 MSAL manages tab-scoped sessionStorage. The callback and logout reply URI is
 `https://<frontend-host>/?event-auth=1`; local development uses the exact local

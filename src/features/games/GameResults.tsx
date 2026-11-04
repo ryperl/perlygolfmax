@@ -1,19 +1,12 @@
 import { useId, useRef } from 'react';
-import type { GamePlayerResult, GameUnavailableReason, RoundGameDefinition, RoundGameResult } from '../../domain/games';
+import type { GamePlayerResult, RoundGameDefinition, RoundGameResult } from '../../domain/games';
 import { sameGameDefinitions } from '../../domain/games';
 import { stablefordPoints } from '../../domain/stableford';
-
-const reasons: Record<GameUnavailableReason, string> = {
-  'missing-handicap-index': 'No captured Handicap Index is available.',
-  'invalid-handicap-index': 'The captured Handicap Index cannot be used.',
-  'missing-tee-ratings': 'Tee ratings are unavailable.',
-  'missing-stroke-index': 'Hole stroke indexes are unavailable.',
-  'missing-score-data': 'Score data is unavailable.',
-};
+import { gameUnavailableMessage } from './game-presentation';
 
 function progress(player: GamePlayerResult): string {
   return player.status === 'unavailable'
-    ? reasons[player.unavailableReason ?? 'missing-score-data']
+    ? gameUnavailableMessage(player.unavailableReason)
     : player.status === 'complete' ? 'Complete'
       : `${String(player.holesScored)}/${String(player.totalHoles)} holes · In progress`;
 }

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { RoundScores, Scorecard } from '../../domain/scoring';
 import { fictionalRoundScores } from '../../client/scoring.test-support';
 import { PlayerScorecardRecap } from './PlayerScorecardRecap';
+import { scorecardGamesFixture } from './scorecard-games.test-support';
 
 function fixture() {
   const first = fictionalRoundScores.cards[0];
@@ -26,6 +27,20 @@ function fixture() {
 }
 
 describe('individual traditional scorecard recap', () => {
+  it('shows the saved game alongside strokes by default and respects an explicit game or strokes-only selection', () => {
+    const { round, games } = scorecardGamesFixture();
+    const card = round.cards[0];
+    if (!card) throw new Error('Missing fictional player.');
+    const { rerender } = render(<PlayerScorecardRecap round={round} card={card} />);
+    expect(screen.getAllByRole('row', { name: 'Fictional Player 1 · Fictional standard points' })).toHaveLength(2);
+    expect(screen.getByText('72', { selector: 'strong' })).toBeVisible();
+    rerender(<PlayerScorecardRecap round={round} card={card} gameId={games[1]?.id} />);
+    expect(screen.getAllByRole('row', { name: 'Fictional Player 1 · Fictional modified points' })).toHaveLength(2);
+    expect(screen.getByText('Fictional modified · Gross points')).toBeVisible();
+    rerender(<PlayerScorecardRecap round={round} card={card} gameId={null} />);
+    expect(screen.queryByRole('row', { name: /points$/ })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('table')).toHaveLength(2);
+  });
   it('shows source rows, front/back recorded subtotals and complete gross without net formulas', () => {
     const { round, card } = fixture();
     render(<PlayerScorecardRecap round={round} card={card} />);

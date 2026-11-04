@@ -45,6 +45,41 @@ const round: RoundScores = {
   games: { configuration: { eventId: id(50), roundId: snapshot.id, etag: 'games-v1', games: definitions }, results: calculateGameResults(definitions, snapshot, cards) },
 };
 
+test('configured game points appear alongside strokes on group and individual scorecards', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.goto('/#events');
+  await expect(page.getByRole('heading', { name: 'Events', exact: true })).toBeVisible();
+  const stylesheets = await page.locator('link[rel="stylesheet"]').evaluateAll((links) =>
+    links.map((link) => link.getAttribute('href')).filter((href): href is string => href !== null));
+  const noop = () => undefined;
+  const group = await renderComponentFixture('/src/features/scoring/SavedScorecards.tsx', 'SavedScorecards', {
+    round, groupNumber: 1, busy: false, onGroupChange: noop, onEnterScores: noop,
+  });
+  const card = round.cards[0];
+  if (!card) throw new Error('Missing fictional player.');
+  const individual = await renderComponentFixture('/src/features/scoring/PlayerScorecardRecap.tsx', 'PlayerScorecardRecap', { round, card });
+  await page.setContent(`<html><head>${stylesheets.map((href) => `<link rel="stylesheet" href="${href}">`).join('')}</head>
+    <body><div class="app"><main><section class="owner-scores">${group}${individual}</section></main></div></body></html>`);
+  await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
+  const scorecard = page.getByRole('region', { name: 'Round scorecards', exact: true });
+  await expect(scorecard.getByRole('combobox', { name: 'Game', exact: true })).toHaveValue(id(700));
+  const back = scorecard.getByRole('region', { name: 'Back nine scorecard', exact: true });
+  const points = back.getByRole('row', { name: 'Fictional golfer 1 · Fictional standard net points', exact: true });
+  await expect(points.getByRole('cell').last()).toHaveText('54');
+  await expect(back.getByLabel('Hole 10: 4, par', { exact: true })).toHaveCount(4);
+  await back.focus();
+  await expect(back).toBeFocused();
+  const player = page.getByRole('region', { name: 'Fictional golfer 1 full scorecard', exact: true });
+  await expect(player.getByRole('row', { name: 'Fictional golfer 1 · Fictional standard net points', exact: true })).toHaveCount(2);
+  await expect(scorecard.getByText('Fictional golfer 4: No captured Handicap Index is available.', { exact: true })).toHaveCount(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  if (testInfo.project.name === 'desktop-chromium') {
+    await scorecard.screenshot({ path: '.azure/scorecard-with-game-points.png' });
+  }
+});
+
 test('configurable game results and points editor fit narrow and enlarged layouts', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 740 });
   await page.goto('/#events');

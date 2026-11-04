@@ -184,8 +184,10 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired }: O
         onGroupChange={setGroupNumber} onHoleChange={setHoleNumber} onEdit={edit} onReview={review}
         onDiscard={(playerId) => { update(entryKey(playerId, hole.number), null); }}
         onSave={(advance) => { void save(advance); }} />}
-      {screen === 'cards' && group && <SavedScorecards round={round} groupNumber={group.number} busy={busy}
-        onGroupChange={setGroupNumber} onEnterScores={() => { setScreen('entry'); }} />}
+      {group && <div hidden={screen !== 'cards'}>
+        <SavedScorecards round={round} groupNumber={group.number} busy={busy}
+          onGroupChange={setGroupNumber} onEnterScores={() => { setScreen('entry'); }} />
+      </div>}
       <div hidden={screen !== 'games'}>
         <RoundGamesPanel round={round} busy={busy} onDirtyChange={gameDirtyChanged}
           onSave={saveGameSettings} onRefresh={refreshSavedRound} />

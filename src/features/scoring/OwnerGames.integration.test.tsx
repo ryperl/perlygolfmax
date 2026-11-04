@@ -51,6 +51,17 @@ describe('games integrated with owner stroke entry', () => {
     expect(screen.getByRole('region', { name: 'Fictional net game results' })).toHaveTextContent('No captured Handicap Index');
     expect(view.client.save).not.toHaveBeenCalled();
     expect(view.read().cards).toEqual(originalCards);
+    await user.click(screen.getByRole('button', { name: 'Scorecards' }));
+    expect(screen.getByLabelText('Game')).toHaveValue(view.read().games?.configuration.games[0]?.id);
+    const points = screen.getByRole('row', { name: 'Fictional Player 1 · Fictional custom gross points' });
+    expect(within(points).getAllByRole('cell').at(-1)).toHaveTextContent('0*');
+    expect(view.client.saveGames).toHaveBeenCalledTimes(2);
+    const netId = view.read().games?.configuration.games[1]?.id;
+    if (!netId) throw new Error('Missing fictional net game.');
+    await user.selectOptions(screen.getByLabelText('Game'), netId);
+    await user.click(screen.getByRole('button', { name: 'Enter scores' }));
+    await user.click(screen.getByRole('button', { name: 'Scorecards' }));
+    expect(screen.getByLabelText('Game')).toHaveValue(netId);
   });
 
   it('retains both rule and stroke drafts across tabs and explicitly warns about unsaved settings', async () => {
