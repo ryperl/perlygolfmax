@@ -1,4 +1,13 @@
-import type { EventCapabilities, EventPage, EventSummary } from '../domain/events.js';
+import type { EventCapabilities, EventPage, EventStatus, EventSummary } from '../domain/events.js';
+
+export function isEventStatus(value: unknown): value is EventStatus {
+  return value === 'active' || value === 'archived';
+}
+
+export function isEventRevision(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= 512
+    && value !== '*' && /^[\x21-\x7e]+$/.test(value);
+}
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -18,7 +27,8 @@ export function isEventSummary(value: unknown): value is EventSummary {
   return isRecord(value) && isUuid(value.id)
     && typeof value.name === 'string' && readEventName(value) === value.name
     && typeof value.createdAt === 'string' && Number.isFinite(Date.parse(value.createdAt))
-    && (value.role === 'owner' || value.role === 'member');
+    && (value.role === 'owner' || value.role === 'member')
+    && isEventStatus(value.status) && isEventRevision(value.etag);
 }
 
 export function isEventCapabilities(value: unknown): value is EventCapabilities {

@@ -6,7 +6,8 @@ import type { EventsState } from './EventsView';
 
 const actions = {
   onSignIn: vi.fn(), onSignOut: vi.fn(), onReload: vi.fn(), onNextPage: vi.fn(), onCreate: vi.fn().mockResolvedValue(false),
-};
+  view: 'active', onViewChange: vi.fn(), onStatusChange: vi.fn(),
+} as const;
 describe('EventsView', () => {
   it.each([
     { kind: 'unconfigured', message: 'No API configured' },
@@ -26,7 +27,7 @@ describe('EventsView', () => {
   it('renders authorized saved events and submits a bounded name only through its callback', async () => {
     const user = userEvent.setup();
     render(<EventsView {...actions} state={{
-      kind: 'ready', page: { events: [{ id: 'fictional', name: 'Fictional Open', createdAt: '2026-01-01', role: 'owner' }] },
+      kind: 'ready', page: { events: [{ id: 'fictional', name: 'Fictional Open', createdAt: '2026-01-01', role: 'owner', status: 'active', etag: 'fictional-v1' }] },
       capabilities: { canCreateEvents: true },
     }} busy={false} notice="" />);
     expect(screen.getByRole('heading', { name: 'Fictional Open' })).toBeVisible();
@@ -47,5 +48,24 @@ describe('EventsView', () => {
     await user.click(screen.getByRole('button', { name: 'Create event' }));
     expect(onCreate).toHaveBeenCalledWith('Fictional Practice');
     expect(name).toHaveValue('');
+  });
+
+  it('offers archive only for owners and restore only in the owner archived list', async () => {
+    const user = userEvent.setup();
+    const owned = { id: 'fictional', name: 'Fictional Open', createdAt: '2026-01-01', role: 'owner', status: 'active', etag: 'event-v1' } as const;
+    const { rerender } = render(<EventsView {...actions} state={{
+      kind: 'ready', page: { events: [owned, { ...owned, id: 'member', name: 'Member Trip', role: 'member' }] }, capabilities: { canCreateEvents: false },
+    }} busy={false} notice="" />);
+    await user.click(screen.getByRole('button', { name: 'Archive Fictional Open' }));
+    expect(actions.onStatusChange).toHaveBeenCalledWith(owned, 'archived');
+    expect(screen.queryByRole('button', { name: 'Archive Member Trip' })).not.toBeInTheDocument();
+    const archived = { ...owned, status: 'archived' } as const;
+    rerender(<EventsView {...actions} view="archived" state={{
+      kind: 'ready', page: { events: [archived] }, capabilities: { canCreateEvents: true },
+    }} busy={false} notice="" />);
+    expect(screen.queryByLabelText('Event name')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Archived events' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: 'Restore Fictional Open' }));
+    expect(actions.onStatusChange).toHaveBeenCalledWith(archived, 'active');
   });
 });

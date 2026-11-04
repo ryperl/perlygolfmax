@@ -25,3 +25,4 @@ function resolveApi(): EventApi {
 
 app.http('currentUser', { route: 'me', methods: ['GET'], authLevel: 'anonymous', handler: createHandler(resolveApi, 'me') });
 app.http('events', { route: 'events', methods: ['GET', 'POST'], authLevel: 'anonymous', handler: createHandler(resolveApi, 'events') });
+app.http('eventStatus', { route: 'events/{id}/status', methods: ['PATCH'], authLevel: 'anonymous', handler: createHandler(resolveApi, 'event-status') });

@@ -4,9 +4,9 @@ import { isRecord } from '../../src/contracts/events.js';
 import { ApiError } from './errors.js';
 import { isMissingTableEntity } from './table-errors.js';
 
-export type RequestClass = 'identity-read' | 'events-read' | 'events-create';
+export type RequestClass = 'identity-read' | 'events-read' | 'events-create' | 'events-manage';
 const limits: Readonly<Record<RequestClass, number>> = {
-  'identity-read': 20, 'events-read': 60, 'events-create': 10,
+  'identity-read': 20, 'events-read': 60, 'events-create': 10, 'events-manage': 10,
 };
 
 export interface RequestLimiter {

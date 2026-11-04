@@ -4,13 +4,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { EventsPage } from './EventsPage';
 import type { EventServices } from './EventsPage';
 import type { EventPage, EventSummary } from '../domain/events';
-import { SessionExpiredError } from '../client/events';
+import { EventChangedError, SessionExpiredError } from '../client/events';
 
-const saved: EventSummary = { id: '00000000-0000-4000-8000-000000000001', name: 'Fictional Open', createdAt: '2026-01-01', role: 'owner' };
+const saved: EventSummary = { id: '00000000-0000-4000-8000-000000000001', name: 'Fictional Open', createdAt: '2026-01-01', role: 'owner', status: 'active', etag: 'fictional-v1' };
 function service(): EventServices {
   return {
     session: { initialize: vi.fn().mockResolvedValue(true), signIn: vi.fn().mockResolvedValue(undefined), signOut: vi.fn().mockResolvedValue(undefined), token: vi.fn().mockResolvedValue('fictional') },
-    events: { capabilities: vi.fn().mockResolvedValue({ canCreateEvents: true }), list: vi.fn().mockResolvedValue({ events: [] }), create: vi.fn().mockResolvedValue(saved) },
+    events: { capabilities: vi.fn().mockResolvedValue({ canCreateEvents: true }), list: vi.fn().mockResolvedValue({ events: [] }), create: vi.fn().mockResolvedValue(saved), setStatus: vi.fn().mockResolvedValue({ ...saved, status: 'archived', etag: 'fictional-v2' }) },
   };
 }
 describe('EventsPage composition', () => {
@@ -85,5 +85,46 @@ describe('EventsPage composition', () => {
     render(<EventsPage services={services} />);
     expect(await screen.findByRole('button', { name: 'Sign in' })).toBeVisible();
     expect(screen.queryByLabelText('Event name')).not.toBeInTheDocument();
+  });
+
+  it('archives and restores through separate lists without granting global creation to an owner', async () => {
+    const services = service();
+    const archived = { ...saved, status: 'archived', etag: 'event-v2' } as const;
+    vi.mocked(services.events.capabilities).mockResolvedValue({ canCreateEvents: false });
+    vi.mocked(services.events.list).mockResolvedValueOnce({ events: [saved] }).mockResolvedValueOnce({ events: [archived] }).mockResolvedValueOnce({ events: [saved] });
+    vi.mocked(services.events.setStatus).mockResolvedValueOnce(archived).mockResolvedValueOnce({ ...saved, etag: 'event-v3' });
+    const user = userEvent.setup();
+    render(<EventsPage services={services} />);
+    await user.click(await screen.findByRole('button', { name: 'Archive Fictional Open' }));
+    await screen.findByText('Event archived. Its data was preserved.');
+    expect(screen.queryByRole('heading', { name: saved.name })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Archived events' }));
+    await user.click(await screen.findByRole('button', { name: 'Restore Fictional Open' }));
+    await screen.findByText('Event restored to Active events.');
+    expect(services.events.list).toHaveBeenLastCalledWith(expect.any(AbortSignal), undefined, 'archived');
+    expect(services.events.setStatus).toHaveBeenLastCalledWith(archived, 'active', expect.any(AbortSignal));
+    await user.click(screen.getByRole('button', { name: 'Active events' }));
+    expect(await screen.findByRole('heading', { name: saved.name })).toBeVisible();
+    expect(screen.queryByLabelText('Event name')).not.toBeInTheDocument();
+  });
+
+  it('retains the event after archive failure or conflict and blocks overlapping navigation', async () => {
+    const services = service();
+    vi.mocked(services.events.list).mockResolvedValue({ events: [saved] });
+    let fail: ((error: Error) => void) | undefined;
+    const response = new Promise<EventSummary>((_resolve, reject) => { fail = reject; });
+    vi.mocked(services.events.setStatus).mockReturnValueOnce(response)
+      .mockRejectedValueOnce(new EventChangedError('The event changed. Refresh events before trying again.'));
+    const user = userEvent.setup();
+    render(<EventsPage services={services} />);
+    await user.click(await screen.findByRole('button', { name: 'Archive Fictional Open' }));
+    expect(screen.getByRole('button', { name: 'Archived events' })).toBeDisabled();
+    expect(screen.getByRole('heading', { name: saved.name })).toBeVisible();
+    await act(async () => { fail?.(new Error('network unavailable')); await response.catch(() => undefined); });
+    expect(screen.getByRole('heading', { name: saved.name })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Archive Fictional Open' }));
+    expect(await screen.findByText(/The event changed/)).toBeVisible();
+    expect(screen.getByRole('heading', { name: saved.name })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Archive Fictional Open' })).toBeEnabled();
   });
 });

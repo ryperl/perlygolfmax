@@ -44,6 +44,9 @@
   and storage/synchronization semantics explicitly before adding a service worker.
 - Identity sign-in is not event admission. Verify access tokens, authoritative
   object permissions and owner-versus-global-creator grants on every operation.
+- Keep archived events owner-only. Archive/restore must conditionally check
+  both event and owner-grant revisions. Deletion or retention rules require
+  a separate scope decision.
 - Keep limits effective across instances; fail closed on missing configuration
   or limit-store failure. CORS and Functions keys are not user authentication.
 - Read `docs/operations.md` before identity, infrastructure, deployment or

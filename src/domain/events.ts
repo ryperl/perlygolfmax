@@ -4,6 +4,7 @@ export interface AccountIdentity {
 }
 
 export type EventRole = 'owner' | 'member';
+export type EventStatus = 'active' | 'archived';
 
 export interface GolfEvent {
   readonly id: string;
@@ -13,6 +14,8 @@ export interface GolfEvent {
 
 export interface EventSummary extends GolfEvent {
   readonly role: EventRole;
+  readonly status: EventStatus;
+  readonly etag: string;
 }
 
 export interface EventMembership {

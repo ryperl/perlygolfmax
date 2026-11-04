@@ -1,4 +1,4 @@
-import type { EventCapabilities, EventPage } from '../../domain/events';
+import type { EventCapabilities, EventPage, EventStatus, EventSummary } from '../../domain/events';
 
 export type EventsState =
   | { readonly kind: 'unconfigured'; readonly message: string }
@@ -11,14 +11,17 @@ interface EventsViewProps {
   readonly state: EventsState;
   readonly busy: boolean;
   readonly notice: string;
+  readonly view: EventStatus;
   readonly onSignIn: () => void;
   readonly onSignOut: () => void;
   readonly onReload: () => void;
   readonly onNextPage: () => void;
   readonly onCreate: (name: string) => Promise<boolean>;
+  readonly onViewChange: (status: EventStatus) => void;
+  readonly onStatusChange: (event: EventSummary, status: EventStatus) => void;
 }
 
-export function EventsView({ state, busy, notice, onSignIn, onSignOut, onReload, onNextPage, onCreate }: EventsViewProps) {
+export function EventsView({ state, busy, notice, view, onSignIn, onSignOut, onReload, onNextPage, onCreate, onViewChange, onStatusChange }: EventsViewProps) {
   return <section>
     <p className="eyebrow">Your private clubhouse</p>
     <h1>Events</h1>
@@ -29,10 +32,20 @@ export function EventsView({ state, busy, notice, onSignIn, onSignOut, onReload,
     {state.kind === 'error' && <div className="panel"><p role="alert">{state.message}</p><button disabled={busy} onClick={onReload}>Try again</button><button disabled={busy} onClick={onSignOut}>Sign out</button></div>}
     {state.kind === 'ready' && <>
       <div className="event-actions"><button disabled={busy} onClick={onReload}>Refresh events</button><button disabled={busy} onClick={onSignOut}>Sign out</button></div>
-      {state.page.events.length === 0 ? <p>No events on this page. Signing in alone does not add you to an event.</p>
-        : <ul className="round-list" aria-label="Your events">{state.page.events.map((event) => <li className="panel" key={event.id}><h2>{event.name}</h2><p>{event.role === 'owner' ? 'Event owner' : 'Event member'} / Private</p></li>)}</ul>}
+      <div className="event-actions" role="group" aria-label="Event lists">
+        <button disabled={busy} aria-pressed={view === 'active'} onClick={() => { onViewChange('active'); }}>Active events</button>
+        <button disabled={busy} aria-pressed={view === 'archived'} onClick={() => { onViewChange('archived'); }}>Archived events</button>
+      </div>
+      {view === 'archived' && <p>Archived events are visible only to their owners. Their data is preserved and can be restored.</p>}
+      {state.page.events.length === 0 ? <p>{view === 'archived' ? 'No archived events you own on this page.' : 'No events on this page. Signing in alone does not add you to an event.'}</p>
+        : <ul className="round-list" aria-label="Your events">{state.page.events.map((event) => <li className="panel" key={event.id}>
+          <h2>{event.name}</h2><p>{event.role === 'owner' ? 'Event owner' : 'Event member'} / Private</p>
+          {event.role === 'owner' && <button disabled={busy} onClick={() => {
+            onStatusChange(event, event.status === 'active' ? 'archived' : 'active');
+          }} aria-label={`${event.status === 'active' ? 'Archive' : 'Restore'} ${event.name}`}>{event.status === 'active' ? 'Archive event' : 'Restore event'}</button>}
+        </li>)}</ul>}
       {state.page.continuationToken && <button disabled={busy} onClick={onNextPage}>Next page</button>}
-      {state.capabilities.canCreateEvents && <form className="panel event-form" onSubmit={(event) => {
+      {view === 'active' && state.capabilities.canCreateEvents && <form className="panel event-form" onSubmit={(event) => {
         event.preventDefault();
         const form = event.currentTarget;
         const value = new FormData(form).get('name');

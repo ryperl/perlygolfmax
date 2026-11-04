@@ -67,18 +67,24 @@ from npm installation and must also comply with your machine's policies.
 - Strict checks, component/module tests, production-browser smoke tests, and CI.
 - Separate Events navigation with explicit unconfigured/signed-out/loading/
   empty/error states, email-code MSAL integration and authorized event creation.
+- Active/Archived event lists with owner-only archive and restore. Archived
+  events stay private to their owners, preserve their data, and can be restored.
+  Permanent deletion is not implemented.
 - An independent TypeScript Functions workspace with strict JWT validation,
   Table event/membership transactions, idempotent create requests, bounded
   pagination/body sizes and shared ETag-based per-user request limits.
 
 The Events screen is deliberately unavailable until an approved identity tenant
-and API are configured. Its API/storage adapters have automated tests, not
-live-provider verification. The existing fictional preview remains available
+and API are configured. Customer sign-in and event creation/reload have been
+manually verified in isolated test; archive/restore also has automated coverage.
+This does not establish all live authorization, concurrency or recovery cases.
+The existing fictional preview remains available
 without configuration. See [architecture, security and recovery](docs/operations.md)
 for setup requirements, controls, residual risks and separate approval gates.
 
-All names, locations, courses, and tee times are **fictional sample content**.
-There are no real bookings, invitations, scores, handicap indexes, or identities.
+Bundled names, locations, courses, and tee times are **fictional sample content**.
+The repository contains no real bookings, invitations, scores, handicap indexes,
+or identities. Private saved events live separately in the configured environment.
 Never commit real trip data, contact details, account identifiers, credentials,
 corporate feed configuration, or secrets to this public repository.
 
@@ -176,8 +182,10 @@ permissions and uses no production secrets. The workflow uses ordinary
 Production deployment on `main` calls that same validation workflow and only
 uploads the resulting verified `dist/` artifact after every check passes.
 There is no second platform build or dependency installation during upload.
-Feature branches and pull requests never receive deployment credentials and do
-not deploy. Manual production runs are also restricted to `main`. After upload,
+Ordinary feature branches and pull requests do not deploy or receive deployment
+credentials. The separately approved, branch-restricted test environment has
+its own frontend token and narrow API deployment identity; it cannot deploy
+production. Manual production runs are also restricted to `main`. After upload,
 the workflow verifies HTTPS responses from both custom domains, matching their
 published JS/CSS bytes against that run's verified artifact and checking the
 manifest. Failed verification fails the run; it does not automatically roll back.

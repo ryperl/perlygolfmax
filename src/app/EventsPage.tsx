@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { EventsView } from '../features/events';
 import type { EventsState } from '../features/events';
 import type { EventsClient } from '../client/events';
-import { SessionExpiredError } from '../client/events';
+import { EventChangedError, SessionExpiredError } from '../client/events';
+import type { EventStatus } from '../domain/events';
 import type { EventSession } from '../client/identity';
 import { configureEventServices } from './event-services';
 
@@ -21,6 +22,7 @@ export function EventsPage({ services, configurationError }: { readonly services
   const [state, setState] = useState<EventsState>({ kind: 'loading' });
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  const [view, setView] = useState<EventStatus>('active');
   const request = useRef<AbortController | null>(null);
   const pendingCreate = useRef<{ readonly name: string; readonly id: string } | null>(null);
   const mounted = useRef(false);
@@ -36,7 +38,12 @@ export function EventsPage({ services, configurationError }: { readonly services
         const capabilities = await services.events.capabilities(controller.signal);
         const page = await services.events.list(controller.signal);
         return { kind: 'ready', capabilities, page } satisfies EventsState;
-      }).then((result) => { if (!controller.signal.aborted) setState(result); })
+      }).then((result) => {
+        if (!controller.signal.aborted) {
+          setView('active');
+          setState(result);
+        }
+      })
         .catch((error: unknown) => {
           if (!controller.signal.aborted) setState(error instanceof SessionExpiredError
             ? { kind: 'signed-out', message: error.message }
@@ -61,7 +68,8 @@ export function EventsPage({ services, configurationError }: { readonly services
     catch (error) {
       if (mounted.current && !controller.signal.aborted) {
         if (error instanceof SessionExpiredError) setState({ kind: 'signed-out', message: error.message });
-        else setNotice('The operation failed. Nothing was confirmed saved. Try again; an event retry uses the same request ID.');
+        else if (error instanceof EventChangedError) setNotice(error.message);
+        else setNotice('The operation failed. Nothing was confirmed saved. Refresh before retrying; an event creation retry uses the same request ID.');
       }
       return false;
     } finally {
@@ -72,7 +80,7 @@ export function EventsPage({ services, configurationError }: { readonly services
 
   return <EventsView
     state={services ? state : { kind: 'unconfigured', message: configurationError ?? 'Identity and API settings have not been supplied.' }}
-    busy={busy} notice={notice}
+    busy={busy} notice={notice} view={view}
     onSignIn={() => { void run(async ({ session }) => { await session.signIn(); }); }}
     onSignOut={() => { void run(async ({ session }) => {
       setState({ kind: 'signed-out' });
@@ -87,12 +95,12 @@ export function EventsPage({ services, configurationError }: { readonly services
         return;
       }
       const capabilities = await service.events.capabilities(signal);
-      const page = await service.events.list(signal);
+      const page = await service.events.list(signal, undefined, view);
       if (!signal.aborted) setState({ kind: 'ready', capabilities, page });
     }); }}
     onNextPage={() => { void run(async (service, signal) => {
       if (state.kind !== 'ready') return;
-      const page = await service.events.list(signal, state.page.continuationToken);
+      const page = await service.events.list(signal, state.page.continuationToken, view);
       if (!signal.aborted) setState({ ...state, page });
     }); }}
     onCreate={(name) => {
@@ -102,10 +110,31 @@ export function EventsPage({ services, configurationError }: { readonly services
         const saved = await service.events.create(name, pendingCreate.current.id, signal);
         if (!signal.aborted) {
           pendingCreate.current = null;
-          setState({ ...state, page: { events: [saved, ...state.page.events.filter((event) => event.id !== saved.id)] } });
-          setNotice('Event saved.');
+          setState({ ...state, page: { events: [
+            ...(saved.status === view ? [saved] : []),
+            ...state.page.events.filter((event) => event.id !== saved.id),
+          ] } });
+          setNotice(saved.status === 'archived' ? 'The previously saved event is now archived. Find it in Archived events.' : 'Event saved.');
         }
       });
     }}
+    onViewChange={(status) => { void run(async (service, signal) => {
+      if (state.kind !== 'ready') return;
+      const page = await service.events.list(signal, undefined, status);
+      if (!signal.aborted) {
+        setView(status);
+        setState({ ...state, page });
+      }
+    }); }}
+    onStatusChange={(event, status) => { void run(async (service, signal) => {
+      if (state.kind !== 'ready') return;
+      await service.events.setStatus(event, status, signal);
+      if (!signal.aborted) {
+        setState({ ...state, page: {
+          ...state.page, events: state.page.events.filter((item) => item.id !== event.id),
+        } });
+        setNotice(status === 'archived' ? 'Event archived. Its data was preserved.' : 'Event restored to Active events.');
+      }
+    }); }}
   />;
 }

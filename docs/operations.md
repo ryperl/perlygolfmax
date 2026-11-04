@@ -45,6 +45,29 @@ for every private object operation, not a stale listing index or hidden button.
 No public roster/score access is authorized. Invitation admission mechanics and
 owner-appointment lifecycle remain pending; do not infer them from sign-in.
 
+### Event archiving
+
+Events have `active` or `archived` status. Existing records without a status
+are read as active; invalid stored values fail explicitly. The default list
+contains active events for authoritative members. `GET /api/events?status=archived`
+returns only archived events owned by the caller, with the same bounded paging.
+Archive discovery never grants access based on the global creator setting.
+
+An event owner can `PATCH /api/events/<event-id>/status` with JSON
+`{"status":"archived"}` or `{"status":"active"}` and the event's exact `If-Match`
+revision. Wildcard/missing revisions are rejected. The event status merge and
+an unchanged owner membership merge are committed in one partition transaction,
+each with its own ETag, so concurrent metadata or owner-grant changes prevent
+the write. A stale revision returns `409 EVENT_CHANGED`; refresh before retrying.
+Nonowners cannot manage events, and nonmembers receive no event-existence detail.
+
+Archiving hides an event from active lists and from ordinary members; restoring
+returns it to its existing members. Metadata, membership and other event data
+are not deleted. Creation retries do not restore an already archived event.
+There is no permanent-delete endpoint, automatic expiry, retention policy or
+new backup guarantee. Future detail, score and invitation endpoints must enforce
+these lifecycle rules independently of discovery.
+
 The score policy for a later increment is per-hole gross strokes, blank
 unplayed holes, explicit picked-up/did-not-finish status, self-entry and a
 round/foursome-assigned scorekeeper. Owners retain correction rights with
@@ -126,7 +149,8 @@ are separate trust boundaries.
 JSON writes are limited to 4 KiB, event names to 100 characters and authorization
 headers to 8 KiB. Discovery scans at most 50 metadata rows/page and rechecks
 membership before returning each event. Quotas are 20 identity reads, 60 event
-reads and 10 creates per user/minute. Reusing an idempotency key with changed
+reads, 10 creates and 10 archive/restore requests per user/minute. Reusing an
+idempotency key with changed
 content or identity conflicts rather than overwriting. Real key rotation,
 provider outages and storage transaction behavior still need integration tests.
 
