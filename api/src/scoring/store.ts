@@ -1,7 +1,10 @@
 import type { TableClient, TransactionAction } from '@azure/data-tables';
 import type { AccountIdentity } from '../../../src/domain/events.js';
 import type { EventWorkspace, RoundSnapshot } from '../../../src/domain/setup.js';
-import type { HoleScore, RoundScores, Scorecard, ScoreChange, ScoreHistoryPage, ScoreWriteResult } from '../../../src/domain/scoring.js';
+import type { GameWriteResult, HoleScore, RoundScores, Scorecard, ScoreChange, ScoreHistoryPage, ScoreWriteResult } from '../../../src/domain/scoring.js';
+import type { GameChange, GameConfiguration, RoundGameDefinition } from '../../../src/domain/games.js';
+import { calculateGameResults } from '../../../src/domain/stableford.js';
+import { isGameChange, isRoundGameDefinitions } from '../../../src/contracts/games.js';
 import { isEventRevision, isEventSummary, isRecord, isUuid } from '../../../src/contracts/events.js';
 import { isHoleScore, isScorecard, isScoreChange } from '../../../src/contracts/scoring.js';
 import { sameHoleScore } from '../../../src/domain/scoring.js';
@@ -10,6 +13,7 @@ import { ApiError } from '../errors.js';
 import type { TableWorkspaceStore } from '../setup/store.js';
 import { scoringLock } from './lock.js';
 import type { ScoringLock, StoredScoringLock } from './lock.js';
+import { configuredGameRounds, gameChangeKey, gameConfigurationContent, gameConfigurationKey, readGameConfiguration } from './games.js';
 
 function cardKey(roundId: string, playerId: string): string {
   return `score-card:${roundId}:${playerId}`;
@@ -46,7 +50,7 @@ export class TableScoreStore {
     if (!isEventSummary(summary)) throw new ApiError(503, 'INVALID_STORED_EVENT');
     if (summary.role !== 'owner') throw new ApiError(summary.status === 'archived' ? 404 : 403,
       summary.status === 'archived' ? 'EVENT_NOT_FOUND' : 'SCORES_OWNER_REQUIRED');
-    return { summary, memberEtag: revision(member) };
+    return { summary, memberEtag: revision(member), gameRoundIds: configuredGameRounds(event.gameRoundIds) };
   }
 
   private async snapshot(identity: AccountIdentity, eventId: string, roundId: string) {
@@ -56,9 +60,11 @@ export class TableScoreStore {
     if (access.summary.etag !== workspace.etag) throw new ApiError(409, 'EVENT_CHANGED');
     const round = workspace.rounds.find((entry) => entry.id === roundId);
     if (!round) throw new ApiError(404, 'ROUND_NOT_FOUND');
+    if (access.gameRoundIds.some((id) => !workspace.rounds.some((entry) => entry.id === id))) throw new ApiError(503, 'INVALID_STORED_GAMES');
     const lock = await scoringLock(this.table, eventId, roundId);
     if ((round.scoringStarted === true) !== (lock !== undefined)) throw new ApiError(409, 'EVENT_CHANGED');
-    return { ...access, workspace, round, lock };
+    const games = await readGameConfiguration(this.table, eventId, roundId, access.gameRoundIds);
+    return { ...access, workspace, round, lock, games };
   }
 
   private async unchanged(identity: AccountIdentity, eventId: string, etag: string, memberEtag: string): Promise<void> {
@@ -89,7 +95,7 @@ export class TableScoreStore {
     return card;
   }
 
-  private projection(workspace: EventWorkspace, round: RoundSnapshot, cards: readonly Scorecard[]): RoundScores {
+  private projection(workspace: EventWorkspace, round: RoundSnapshot, cards: readonly Scorecard[], games?: GameConfiguration): RoundScores {
     const timestamps = cards.flatMap((card) => card.updatedAt === null ? [] : [card.updatedAt]).sort();
     return {
       eventId: workspace.event.id, eventName: workspace.event.name, eventStatus: workspace.event.status,
@@ -100,6 +106,7 @@ export class TableScoreStore {
       })),
       groups: round.groups, cards, setupLocked: round.scoringStarted === true,
       lastUpdatedAt: timestamps.at(-1) ?? null,
+      ...(games ? { games: { configuration: games, results: calculateGameResults(games.games, round, cards) } } : {}),
     };
   }
 
@@ -107,7 +114,82 @@ export class TableScoreStore {
     const state = await this.snapshot(identity, eventId, roundId);
     const cards = await Promise.all(state.round.players.map((player) => this.card(eventId, state.round, player.playerId, state.lock)));
     await this.unchanged(identity, eventId, state.summary.etag, state.memberEtag);
-    return this.projection(state.workspace, state.round, cards);
+    return this.projection(state.workspace, state.round, cards, state.games);
+  }
+
+  private async gameReceipt(eventId: string, roundId: string, requestId: string): Promise<GameChange | undefined> {
+    const row = await optionalRow(this.table, eventId, gameChangeKey(roundId, requestId));
+    if (!row) return undefined;
+    const change = decode(row.content, isGameChange);
+    if (row.kind !== 'game-change' || row.roundId !== roundId || change.eventId !== eventId
+      || change.roundId !== roundId || change.id !== requestId) throw new ApiError(503, 'INVALID_STORED_GAMES');
+    return change;
+  }
+
+  private async gameAcknowledgement(identity: AccountIdentity, change: GameChange): Promise<GameWriteResult> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const round = await this.get(identity, change.eventId, change.roundId);
+        if (!round.games) throw new ApiError(503, 'INVALID_STORED_GAMES');
+        return { round, change };
+      } catch (error) {
+        if (attempt < 2 && error instanceof ApiError && error.code === 'EVENT_CHANGED') continue;
+        throw error;
+      }
+    }
+  }
+
+  private async replayGames(identity: AccountIdentity, eventId: string, roundId: string,
+    games: readonly RoundGameDefinition[], expectedEtag: string | null, requestId: string): Promise<GameWriteResult | undefined> {
+    const change = await this.gameReceipt(eventId, roundId, requestId);
+    if (!change) return undefined;
+    if (change.expectedEtag !== expectedEtag || change.recordedBy.tenantId !== identity.tenantId
+      || change.recordedBy.objectId !== identity.objectId || canonical(change.after) !== canonical(games)) {
+      throw new ApiError(409, 'GAME_REQUEST_CONFLICT');
+    }
+    const result = await this.gameAcknowledgement(identity, change);
+    if (result.round.eventStatus !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
+    return result;
+  }
+
+  async saveGames(identity: AccountIdentity, eventId: string, roundId: string, games: readonly RoundGameDefinition[],
+    expectedEtag: string | null, requestId: string): Promise<GameWriteResult> {
+    if (!isUuid(requestId) || !isRoundGameDefinitions(games) || games.length === 0
+      || expectedEtag !== null && !isEventRevision(expectedEtag)) throw new ApiError(400, 'INVALID_GAME_SETUP');
+    const state = await this.snapshot(identity, eventId, roundId);
+    if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
+    const replay = await this.replayGames(identity, eventId, roundId, games, expectedEtag, requestId);
+    if (replay) return replay;
+    const before = state.games;
+    if ((before?.etag ?? null) !== expectedEtag) throw new ApiError(409, 'GAMES_CHANGED');
+    if (before?.games.some((saved) => !games.some((game) => game.id === saved.id))) throw new ApiError(409, 'GAME_REMOVAL_NOT_SUPPORTED');
+    const recordedAt = new Date().toISOString();
+    const actor = { tenantId: identity.tenantId, objectId: identity.objectId };
+    const change: GameChange = {
+      id: requestId, eventId, roundId, expectedEtag, before: before?.games ?? [], after: games,
+      recordedAt, recordedBy: actor,
+    };
+    const configuredRounds = state.gameRoundIds.includes(roundId) ? state.gameRoundIds : [...state.gameRoundIds, roundId];
+    const entity = {
+      partitionKey: eventId, rowKey: gameConfigurationKey(roundId), kind: 'round-games', schemaVersion: 1,
+      content: canonical(gameConfigurationContent(eventId, roundId, games)),
+    };
+    try {
+      await this.table.submitTransaction([
+        ['update', { partitionKey: eventId, rowKey: 'event', gameRoundIds: canonical(configuredRounds) }, 'Merge', { etag: state.summary.etag }],
+        ['update', {
+          partitionKey: eventId, rowKey: `member:${identity.objectId}`, ...actor, role: 'owner',
+        }, 'Merge', { etag: state.memberEtag }],
+        expectedEtag === null ? ['create', entity] : ['update', entity, 'Replace', { etag: expectedEtag }],
+        ['create', { partitionKey: eventId, rowKey: gameChangeKey(roundId, requestId), kind: 'game-change', roundId, content: canonical(change) }],
+      ]);
+    } catch (error) {
+      const committed = await this.replayGames(identity, eventId, roundId, games, expectedEtag, requestId);
+      if (committed) return committed;
+      if (isConflict(error)) throw new ApiError(409, 'GAMES_CHANGED');
+      throw error;
+    }
+    return this.gameAcknowledgement(identity, change);
   }
 
   private async receipt(eventId: string, requestId: string): Promise<ScoreChange | undefined> {

@@ -1,6 +1,7 @@
 import type { CourseHole, CourseRating } from './catalog.js';
 import type { AccountIdentity, EventStatus } from './events.js';
 import type { RoundGroup } from './setup.js';
+import type { GameChange, RoundGamesView } from './games.js';
 
 export type HoleScore =
   | { readonly kind: 'unplayed' }
@@ -36,6 +37,7 @@ export interface RoundScores {
   readonly cards: readonly Scorecard[];
   readonly setupLocked: boolean;
   readonly lastUpdatedAt: string | null;
+  readonly games?: RoundGamesView;
 }
 
 export interface ScoreChange {
@@ -54,6 +56,11 @@ export interface ScoreChange {
 export interface ScoreWriteResult {
   readonly round: RoundScores;
   readonly change: ScoreChange;
+}
+
+export interface GameWriteResult {
+  readonly round: RoundScores;
+  readonly change: GameChange;
 }
 
 export interface ScoreHistoryPage {

@@ -1,6 +1,9 @@
 import { isEventRevision, isUuid } from '../contracts/events';
-import { isHoleScore, isRoundScores, isScoreHistoryPage, isScoreWriteResult } from '../contracts/scoring';
-import type { HoleScore, RoundScores, ScoreHistoryPage, ScoreWriteResult } from '../domain/scoring';
+import { isGameWriteResult, isHoleScore, isRoundScores, isScoreHistoryPage, isScoreWriteResult } from '../contracts/scoring';
+import { isRoundGameDefinitions } from '../contracts/games';
+import type { RoundGameDefinition } from '../domain/games';
+import { sameGameDefinitions } from '../domain/games';
+import type { GameWriteResult, HoleScore, RoundScores, ScoreHistoryPage, ScoreWriteResult } from '../domain/scoring';
 import { sameHoleScore } from '../domain/scoring';
 import { createPrivateRequest } from './private-request';
 
@@ -9,6 +12,8 @@ export interface ScoresClient {
   readonly save: (eventId: string, roundId: string, playerId: string, holeNumber: number, score: HoleScore,
     etag: string | null, requestId: string, signal: AbortSignal) => Promise<ScoreWriteResult>;
   readonly history: (eventId: string, roundId: string, playerId: string, signal: AbortSignal, cursor?: string) => Promise<ScoreHistoryPage>;
+  readonly saveGames: (eventId: string, roundId: string, games: readonly RoundGameDefinition[], etag: string | null,
+    requestId: string, signal: AbortSignal) => Promise<GameWriteResult>;
 }
 
 export function createScoresClient(apiUrl: string, getToken: () => Promise<string>, send: typeof fetch = fetch): ScoresClient {
@@ -47,6 +52,20 @@ export function createScoresClient(apiUrl: string, getToken: () => Promise<strin
       const value = await request(`${base}/players/${encodeURIComponent(playerId)}/score-history${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, signal);
       if (!isScoreHistoryPage(value) || value.changes.some((change) => change.eventId !== eventId || change.roundId !== roundId || change.playerId !== playerId)) {
         throw new Error('Invalid score history response.');
+      }
+      return value;
+    },
+    async saveGames(eventId, roundId, games, etag, requestId, signal) {
+      const base = path(eventId, roundId);
+      if (!isRoundGameDefinitions(games) || games.length === 0 || !isUuid(requestId)
+        || etag !== null && !isEventRevision(etag)) throw new Error('Check the game settings. Nothing was sent.');
+      const value = await request(`${base}/games`, signal, {
+        method: 'PUT', body: { games }, requestId, ...(etag === null ? { createOnly: true } : { etag }),
+      });
+      if (!isGameWriteResult(value) || value.round.eventId !== eventId || value.round.roundId !== roundId
+        || value.change.id !== requestId || value.change.expectedEtag !== etag
+        || !sameGameDefinitions(value.change.after, games)) {
+        throw new Error('Invalid game save acknowledgement. The outcome is uncertain; keep this draft and refresh to review.');
       }
       return value;
     },

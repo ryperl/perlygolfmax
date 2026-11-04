@@ -53,12 +53,17 @@
 - Keep archived events owner-only. Archive/restore must conditionally check
   both event and owner-grant revisions. Deletion or retention rules require
   a separate scope decision.
-- Gross scoring is currently an owner-only online simulation. First saved
+- Scoring is currently an owner-only online simulation. First saved
   scores lock setup inputs; preserve atomic score/audit/grant checks, explicit
   unplayed/pickup/DNF and incomplete totals. Do not infer admission, offline
-  durability, net rules or permission to unlock scored rounds.
+  durability, team rules or permission to unlock scored rounds.
   `X7` preserves a pickup's reported seven in recorded totals, but never makes
   that hole a completed numeric score. Blank shorthand stays unplayed.
+- Stableford results are server-derived from raw strokes and captured round
+  inputs. Games have versioned/audited editable points and net allowance
+  (default 95%); never rewrite strokes or silently use current global indices.
+  Pickup/DNF award minimum configured points; unplayed remains pending.
+  Missing net inputs are unavailable, never a zero handicap.
 - Present golfer scores as hole-ordered scorecards, not audit records. Keep
   operation IDs, actor GUIDs, revisions and raw timestamps out of player
   entry/view screens; preserve backend audit and conditional-save safeguards.

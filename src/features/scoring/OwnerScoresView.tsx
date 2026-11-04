@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ScoresClient } from '../../client/scoring';
-import type { RoundScores } from '../../domain/scoring';
+import { EventChangedError } from '../../client/events';
+import type { GameWriteResult, RoundScores } from '../../domain/scoring';
+import type { RoundGameDefinition } from '../../domain/games';
+import { RoundGamesPanel } from '../games';
 import { sameHoleScore } from '../../domain/scoring';
 import { useOwnerScores } from './useOwnerScores';
 import { GroupHoleEntry } from './GroupHoleEntry';
@@ -26,15 +29,20 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired }: O
   const currentDrafts = useRef(drafts);
   const [groupNumber, setGroupNumber] = useState<number | null>(null);
   const [holeNumber, setHoleNumber] = useState<number | null>(null);
-  const [screen, setScreen] = useState<'entry' | 'cards'>('cards');
+  const [screen, setScreen] = useState<'entry' | 'cards' | 'games'>('cards');
+  const [gamesDirty, setGamesDirty] = useState(false);
   const [notice, setNotice] = useState('');
   const [refreshVersion, setRefreshVersion] = useState(0);
   const saving = useRef(false);
   const alive = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const { round, busy, error, stale, run, refresh, accept, pauseForEdit } = useOwnerScores(
-    client, eventId, roundId, drafts.size > 0, onSessionExpired,
+    client, eventId, roundId, drafts.size > 0 || gamesDirty, onSessionExpired,
   );
+  const gameDirtyChanged = useCallback((dirty: boolean) => {
+    if (dirty) pauseForEdit();
+    setGamesDirty(dirty);
+  }, [pauseForEdit]);
   const group = round?.groups.find((item) => item.number === groupNumber) ?? round?.groups[0];
   const hole = round?.layout.find((item) => item.number === holeNumber) ?? round?.layout[0];
 
@@ -58,6 +66,30 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired }: O
     if (!local || local.status !== 'conflict' || local.conflictAt === undefined || refreshVersion <= local.conflictAt) return;
     update(key, { text: local.text, baseEtag: cardFor(round, playerId).etag, status: 'draft', mustWrite: true });
     setNotice('Reviewed against the refreshed saved card. Your value is a new unsaved intent; save the group to apply it.');
+  }
+  async function refreshSavedRound(): Promise<RoundScores | null> {
+    const value = await refresh();
+    if (!value) return null;
+    for (const [key, local] of currentDrafts.current) {
+      const playerId = key.slice(0, key.lastIndexOf(':'));
+      const score = entryScore(local.text);
+      const card = cardFor(value, playerId);
+      if (score && local.status !== 'conflict' && !local.attempt?.sent && card.etag !== local.baseEtag) {
+        update(key, conflictedDraft(score, card, refreshVersion, local));
+      }
+    }
+    setRefreshVersion((previous) => previous + 1);
+    setNotice('Saved round refreshed. Local values are preserved; compare saved vs intended before reviewing a conflict.');
+    return value;
+  }
+  async function saveGameSettings(games: readonly RoundGameDefinition[], etag: string | null, requestId: string): Promise<GameWriteResult | null> {
+    if (!round || round.eventStatus !== 'active') throw new EventChangedError('This round is read-only. Refresh before changing games.');
+    return run(async (signal) => {
+      const result = await client.saveGames(eventId, roundId, games, etag, requestId, signal);
+      signal.throwIfAborted();
+      accept(result.round);
+      return result;
+    });
   }
   async function save(advance: boolean) {
     if (!round || !group || !hole || busy || saving.current || round.eventStatus !== 'active') return;
@@ -122,27 +154,16 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired }: O
     <div className="score-toolbar">
       <button disabled={busy} onClick={() => { setScreen('cards'); }} aria-pressed={screen === 'cards'}>Scorecards</button>
       <button disabled={busy} onClick={() => { setScreen('entry'); }} aria-pressed={screen === 'entry'}>Enter scores</button>
+      <button disabled={busy} onClick={() => { setScreen('games'); }} aria-pressed={screen === 'games'}>Games</button>
       <button aria-label="Refresh saved round" disabled={busy} onClick={() => {
-        void refresh().then((value) => {
-          if (value) {
-            for (const [key, local] of currentDrafts.current) {
-              const playerId = key.slice(0, key.lastIndexOf(':'));
-              const score = entryScore(local.text);
-              const card = cardFor(value, playerId);
-              if (score && local.status !== 'conflict' && !local.attempt?.sent && card.etag !== local.baseEtag) {
-                update(key, conflictedDraft(score, card, refreshVersion, local));
-              }
-            }
-            setRefreshVersion((previous) => previous + 1);
-            setNotice('Saved round refreshed. Local values are preserved; compare saved vs intended before reviewing a conflict.');
-          }
-        }).catch(() => undefined);
+        void refreshSavedRound().catch(() => undefined);
       }}>Refresh</button>
     </div>
     <p className="score-connection" role="status">{busy ? 'Contacting score service…' : stale ? 'Saved data may be stale — refresh to review.' : 'Saved scores loaded.'}
-      {drafts.size > 0 ? ' Auto-check paused for local edits.' : ' Auto-checks while visible.'}</p>
+      {drafts.size > 0 || gamesDirty ? ' Auto-check paused for local edits.' : ' Auto-checks while visible.'}</p>
     {error && <p role="alert">{error} Unconfirmed entries are kept on this page.</p>}
     {notice && <p className="score-notice" role="status">{notice}</p>}
+    {gamesDirty && screen !== 'games' && <p className="score-notice" role="status">Unsaved game settings. Open Games to save or cancel them.</p>}
     {screen === 'cards' && round && drafts.size > 0 && <p className="score-notice" role="status">
       {drafts.size} unsaved {drafts.size === 1 ? 'score is' : 'scores are'} not included in this card. Return to Enter scores to save or review them.
     </p>}
@@ -165,6 +186,10 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired }: O
         onSave={(advance) => { void save(advance); }} />}
       {screen === 'cards' && group && <SavedScorecards round={round} groupNumber={group.number} busy={busy}
         onGroupChange={setGroupNumber} onEnterScores={() => { setScreen('entry'); }} />}
+      <div hidden={screen !== 'games'}>
+        <RoundGamesPanel round={round} busy={busy} onDirtyChange={gameDirtyChanged}
+          onSave={saveGameSettings} onRefresh={refreshSavedRound} />
+      </div>
     </>}
   </section>;
 }

@@ -6,6 +6,7 @@ import { creator, event, member } from '../../test/fixtures.js';
 import { ApiError } from '../errors.js';
 import { createScoringHandler } from './handlers.js';
 import type { ScoringAction } from './handlers.js';
+import { stablefordPoints } from '../../../src/domain/stableford.js';
 
 async function fixture() {
   const f = await scoringFixture();
@@ -14,15 +15,40 @@ async function fixture() {
   const call = (action: ScoringAction = 'score-hole', headers: Record<string, string> = { 'If-None-Match': '*' },
     body: unknown = { score: { kind: 'strokes', strokes: 4 } }, params: Record<string, string> = {}, method?: string, query = '') =>
     createScoringHandler(() => api, action)(new HttpRequest({
-      url: `https://fictional.example.test/api/fixture${query}`, method: method ?? (action === 'score-hole' ? 'PUT' : 'GET'),
+      url: `https://fictional.example.test/api/fixture${query}`, method: method ?? (action === 'score-hole' || action === 'round-games' ? 'PUT' : 'GET'),
       params: { id: event.id, roundId: f.roundId, playerId: f.playerId, holeNumber: '1', ...params },
       headers: { authorization: 'Bearer fictional-test-token', 'Content-Type': 'application/json', 'Idempotency-Key': identifier(600), ...headers },
-      ...(action === 'score-hole' ? { body: { string: typeof body === 'string' ? body : JSON.stringify(body) } } : {}),
+      ...(action === 'score-hole' || action === 'round-games' ? { body: { string: typeof body === 'string' ? body : JSON.stringify(body) } } : {}),
     }), context);
   return { ...f, api, context, call };
 }
 
 describe('JWT-first owner-only bounded scoring HTTP routes', () => {
+  it('saves versioned games with the existing write quota and no-store without creating stroke cards', async () => {
+    const f = await fixture();
+    const game = { id: identifier(700), name: 'Fictional Stableford', preset: 'standard', basis: 'gross', handicapAllowancePercent: 95, points: stablefordPoints('standard') };
+    const saved = await f.call('round-games', { 'If-None-Match': '*' }, { games: [game] });
+    expect(saved).toMatchObject({
+      status: 200, headers: { 'Cache-Control': 'no-store' },
+      jsonBody: { change: { before: [], after: [game] }, round: { setupLocked: false, games: { configuration: { games: [game] } } } },
+    });
+    expect(f.api.limiter.check).toHaveBeenCalledWith(creator, 'scores-write');
+    expect(await f.call('round-games', { 'If-None-Match': '*' }, { games: [game] })).toEqual(saved);
+    expect(f.submit).toHaveBeenCalledOnce();
+    expect(await f.call('round-games', {}, { games: [game] })).toMatchObject({ status: 400, jsonBody: { code: 'GAME_REVISION_REQUIRED' } });
+  });
+
+  it('rejects invalid game definitions, extra fields, oversized bodies and wrong methods before writes', async () => {
+    const f = await fixture();
+    const game = { id: identifier(700), name: 'Fictional Stableford', preset: 'modified', basis: 'net', handicapAllowancePercent: 95, points: stablefordPoints('modified') };
+    for (const body of [null, { games: [] }, { games: [game, game] }, { games: [{ ...game, handicapAllowancePercent: 101 }] },
+      { games: [game], role: 'owner' }, { games: [{ ...game, points: { ...game.points, betterScorePoints: Infinity } }] }]) {
+      expect(await f.call('round-games', { 'If-None-Match': '*' }, body)).toMatchObject({ status: 400 });
+    }
+    expect(await f.call('round-games', { 'If-None-Match': '*' }, 'x'.repeat(4097))).toMatchObject({ status: 413 });
+    expect(await f.call('round-games', { 'If-None-Match': '*' }, { games: [game] }, {}, 'GET')).toMatchObject({ status: 405 });
+    expect(f.submit).not.toHaveBeenCalled();
+  });
   it('round-trips X7 JSON exactly through reads/history/retries and audits correction to completed seven separately', async () => {
     const f = await fixture();
     const pickup = { kind: 'picked-up', reportedStrokes: 7 };

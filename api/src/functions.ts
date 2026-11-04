@@ -70,3 +70,7 @@ app.http('scoreHistory', {
   route: 'events/{id}/rounds/{roundId}/players/{playerId}/score-history', methods: ['GET'], authLevel: 'anonymous',
   handler: createScoringHandler(resolveApi, 'score-history'),
 });
+app.http('roundGames', {
+  route: 'events/{id}/rounds/{roundId}/games', methods: ['PUT'], authLevel: 'anonymous',
+  handler: createScoringHandler(resolveApi, 'round-games'),
+});

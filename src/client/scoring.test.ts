@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createScoresClient } from './scoring';
-import { fictionalChange, fictionalRoundScores, scoreResult } from './scoring.test-support';
+import { fictionalChange, fictionalRoundScores, gameResult, scoreResult, withGameResults } from './scoring.test-support';
 import { fictionalId } from './catalog.test-support';
 import { EventChangedError, SessionExpiredError } from './events';
 import { maximumExactHoleStrokes } from '../domain/scoring';
+import type { RoundGameDefinition } from '../domain/games';
+import { stablefordPoints } from '../domain/stableford';
 
 const { eventId, roundId } = fictionalRoundScores;
 const { playerId, id, after: score } = fictionalChange;
@@ -13,6 +15,57 @@ function fixture(value: unknown = fictionalRoundScores, status = 200) {
   return { send, token, client: createScoresClient('https://fictional.example.test/api', token, send), signal: new AbortController().signal };
 }
 describe('owner scoring transport', () => {
+  const game: RoundGameDefinition = {
+    id: fictionalId(700), name: 'Fictional Stableford', preset: 'standard', basis: 'gross',
+    handicapAllowancePercent: 95, points: stablefordPoints('standard'),
+  };
+  it.each([null, 'games-v1'])('saves game settings with exact base %s, request identity and no cookies', async (etag) => {
+    const base = etag === null ? fictionalRoundScores : withGameResults(fictionalRoundScores, [game], etag);
+    const result = gameResult([game], etag, id, base, 'games-v2');
+    const { client, send, signal } = fixture(result);
+    expect(await client.saveGames(eventId, roundId, [game], etag, id, signal)).toEqual(result);
+    const init = send.mock.calls[0]?.[1];
+    expect(send.mock.calls[0]?.[0]).toBe(`https://fictional.example.test/api/events/${eventId}/rounds/${roundId}/games`);
+    expect(init).toMatchObject({ method: 'PUT', cache: 'no-store', credentials: 'omit', body: JSON.stringify({ games: [game] }) });
+    const headers = new Headers(init?.headers);
+    expect(headers.get('Idempotency-Key')).toBe(id);
+    expect(headers.get('If-Match')).toBe(etag);
+    expect(headers.get('If-None-Match')).toBe(etag === null ? '*' : null);
+  });
+  it('accepts a definitive game acknowledgement separately from a later configuration projection', async () => {
+    const first = gameResult([game], null, id);
+    const changed = { ...game, name: 'Fictional later game name' };
+    const response = { ...first, round: withGameResults(first.round, [changed], 'games-v2') };
+    const { client, signal } = fixture(response);
+    expect(await client.saveGames(eventId, roundId, [game], null, id, signal)).toEqual(response);
+  });
+  it('rejects mismatched game acknowledgements and incorrect derived points even when totals are self-consistent', async () => {
+    const first = gameResult([game], null, id, scoreResult().round);
+    for (const change of [{ id: fictionalId(999) }, { expectedEtag: 'other' }, { after: [{ ...game, name: 'Wrong game' }] }]) {
+      const { client, signal } = fixture({ ...first, change: { ...first.change, ...change } });
+      await expect(client.saveGames(eventId, roundId, [game], null, id, signal)).rejects.toThrow('acknowledgement');
+    }
+    const view = first.round.games;
+    if (!view) throw new Error('Missing fictional game result.');
+    const invalid = { ...first.round, games: { ...view, results: view.results.map((result) => ({
+      ...result, players: result.players.map((player) => player.playerId !== playerId ? player : {
+        ...player, frontPoints: 3, totalPoints: 3,
+        holes: player.holes.map((hole) => hole.number === 1 ? { ...hole, points: 3 } : hole),
+      }),
+    })) } };
+    const { client, signal } = fixture(invalid);
+    await expect(client.load(eventId, roundId, signal)).rejects.toThrow('response');
+  });
+  it('validates game input and service body limits before authenticating or sending', async () => {
+    const { client, token, send, signal } = fixture();
+    for (const games of [[], [game, game], [{ ...game, handicapAllowancePercent: 0 }]]) {
+      await expect(client.saveGames(eventId, roundId, games, null, id, signal)).rejects.toThrow('settings');
+    }
+    const oversized = Array.from({ length: 16 }, (_, index) => ({ ...game, id: fictionalId(700 + index), name: 'F'.repeat(100) }));
+    await expect(client.saveGames(eventId, roundId, oversized, null, id, signal)).rejects.toThrow('4096');
+    expect(token).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
   it('loads authenticated, uncached owner scorecards without cookies', async () => {
     const { client, send, token, signal } = fixture();
     expect(await client.load(eventId, roundId, signal)).toEqual(fictionalRoundScores);

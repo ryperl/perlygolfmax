@@ -9,6 +9,8 @@ import { creator, event, member } from '../../api/test/fixtures.js';
 import { createScoresClient } from '../client/scoring';
 import { EventChangedError } from '../client/events';
 import { summarizeGross } from '../domain/scoring';
+import { stablefordPoints } from '../domain/stableford';
+import type { RoundGameDefinition } from '../domain/games';
 
 describe('owner scoring client/handler/storage workflow', () => {
   it('persists audited dispositions, confirms replay after later edits and prevents nonowner access', async () => {
@@ -22,7 +24,8 @@ describe('owner scoring client/handler/storage workflow', () => {
     const send = vi.fn<typeof fetch>().mockImplementation(async (target, options) => {
       const url = typeof target === 'string' ? target : target instanceof URL ? target.href : target.url;
       const parts = new URL(url).pathname.replace(/^\/api\//, '').split('/').map(decodeURIComponent);
-      const action: ScoringAction = parts[4] === 'scores' ? 'scores' : parts[6] === 'score-history' ? 'score-history' : 'score-hole';
+      const action: ScoringAction = parts[4] === 'scores' ? 'scores' : parts[4] === 'games' ? 'round-games'
+        : parts[6] === 'score-history' ? 'score-history' : 'score-hole';
       const request = new HttpRequest({
         url, method: options?.method ?? 'GET',
         params: { id: parts[1] ?? '', roundId: parts[3] ?? '', playerId: parts[5] ?? '', holeNumber: parts[7] ?? '' },
@@ -72,10 +75,29 @@ describe('owner scoring client/handler/storage workflow', () => {
       ...stored.input,
       rounds: stored.input.rounds.map((round) => ({ ...round, name: 'Fictional changed locked round' })),
     }, workspace.etag)).rejects.toMatchObject({ code: 'ROUND_SCORING_STARTED' });
+    const rawCards = (await client.load(event.id, stored.roundId, signal)).cards;
+    const games: readonly RoundGameDefinition[] = [
+      { id: identifier(700), name: 'Fictional standard gross', preset: 'standard', basis: 'gross', handicapAllowancePercent: 95, points: stablefordPoints('standard') },
+      { id: identifier(701), name: 'Fictional modified net', preset: 'modified', basis: 'net', handicapAllowancePercent: 95, points: stablefordPoints('modified') },
+    ];
+    const configured = await client.saveGames(event.id, stored.roundId, games, null, identifier(800), signal);
+    expect(configured.round.games?.configuration.games).toEqual(games);
+    expect(configured.round.games?.results[1]?.players[0]?.unavailableReason).toBe('missing-handicap-index');
+    expect(configured.round.cards).toEqual(rawCards);
+    const revision = configured.round.games?.configuration.etag;
+    if (!revision) throw new Error('Configured games lack a revision.');
+    const edited = games.map((game) => game.id === identifier(700) ? { ...game, name: 'Fictional revised gross' } : game);
+    const revised = await client.saveGames(event.id, stored.roundId, edited, revision, identifier(801), signal);
+    expect(revised.round.games?.configuration.games).toEqual(edited);
+    const confirmed = await client.saveGames(event.id, stored.roundId, games, null, identifier(800), signal);
+    expect(confirmed.change).toEqual(configured.change);
+    expect(confirmed.round.games?.configuration.games).toEqual(edited);
+    expect(confirmed.round.cards).toEqual(rawCards);
     stored.seed({ partitionKey: event.id, rowKey: `member:${member.objectId}`, ...member, role: 'member' });
     const participant = createScoresClient('https://fictional.example.test/api', () => Promise.resolve('fictional-member'), send);
     await expect(participant.load(event.id, stored.roundId, signal)).rejects.toThrow('permission');
     await expect(participant.history(event.id, stored.roundId, stored.playerId, signal)).rejects.toThrow('permission');
+    await expect(participant.saveGames(event.id, stored.roundId, edited, revision, identifier(802), signal)).rejects.toThrow('permission');
     expect(api.verify).toHaveBeenCalledWith('Bearer fictional-owner');
     expect(api.verify).toHaveBeenCalledWith('Bearer fictional-member');
   });

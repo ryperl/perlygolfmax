@@ -1,6 +1,7 @@
 import type { HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { isEventRevision, isRecord, isUuid } from '../../../src/contracts/events.js';
 import { isHoleScore } from '../../../src/contracts/scoring.js';
+import { isRoundGameDefinitions } from '../../../src/contracts/games.js';
 import { failureDiagnostics } from '../diagnostics.js';
 import { ApiError } from '../errors.js';
 import { readCursor, readJson, response } from '../http.js';
@@ -14,19 +15,19 @@ export interface ScoringApi {
   readonly scores: TableScoreStore;
 }
 
-export type ScoringAction = 'scores' | 'score-hole' | 'score-history';
+export type ScoringAction = 'scores' | 'score-hole' | 'score-history' | 'round-games';
 
 function uuid(value: unknown): string {
   if (!isUuid(value)) throw new ApiError(400, 'INVALID_REQUEST_ID');
   return value;
 }
 
-function precondition(request: HttpRequest): string | null {
+function precondition(request: HttpRequest, code = 'SCORE_REVISION_REQUIRED'): string | null {
   const match = request.headers.get('If-Match');
   const none = request.headers.get('If-None-Match');
   if (match !== null && none === null && isEventRevision(match) && !match.includes(',')) return match;
   if (match === null && none === '*') return null;
-  throw new ApiError(400, 'SCORE_REVISION_REQUIRED');
+  throw new ApiError(400, code);
 }
 
 export function createScoringHandler(resolveApi: () => ScoringApi, action: ScoringAction) {
@@ -34,12 +35,21 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
     try {
       const api = resolveApi();
       const identity = await api.verify(request.headers.get('authorization'));
-      const write = action === 'score-hole';
+      const write = action === 'score-hole' || action === 'round-games';
       await api.limiter.check(identity, write ? 'scores-write' : 'scores-read');
       if (request.method !== (write ? 'PUT' : 'GET')) return response(405, { code: 'METHOD_NOT_ALLOWED' });
       const eventId = uuid(request.params.id);
       const roundId = uuid(request.params.roundId);
       if (action === 'scores') return response(200, await api.scores.get(identity, eventId, roundId));
+      if (action === 'round-games') {
+        const requestId = uuid(request.headers.get('Idempotency-Key'));
+        const expectedEtag = precondition(request, 'GAME_REVISION_REQUIRED');
+        const body = await readJson(request);
+        if (!isRecord(body) || Object.keys(body).length !== 1 || !isRoundGameDefinitions(body.games) || body.games.length === 0) {
+          throw new ApiError(400, 'INVALID_GAME_SETUP');
+        }
+        return response(200, await api.scores.saveGames(identity, eventId, roundId, body.games, expectedEtag, requestId));
+      }
       const playerId = uuid(request.params.playerId);
       if (action === 'score-history') return response(200, await api.scores.history(identity, eventId, roundId, playerId, readCursor(request)));
       const requestId = uuid(request.headers.get('Idempotency-Key'));

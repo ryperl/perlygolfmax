@@ -15,13 +15,15 @@ creation followed by a page reload. Runtime resource settings and narrow
 role scopes have been read back after foundation creation. Those checks do not
 prove all authorization, concurrency or recovery boundaries.
 Saved owner round setup and an owner-only gross-score simulation are implemented.
-No invitations, owner appointment UI, golfer/assigned-scorer access, net/team
-scoring engine, audit exports or backup job are shipped.
+Individual gross/net Stableford games and configurable point tables are
+implemented. No invitations, owner appointment UI, golfer/assigned-scorer
+access, team scoring, audit exports or backup job are shipped.
 An unconfigured Events page says so explicitly, without fictional saved events.
 
 Main navigation starts at Events. Opening a saved event binds Overview, Rounds
 and The Group to the same explicit event ID in the URL. Their typed projections
-use the existing owner-guarded workspace read, not global catalog reads or
+use the existing membership-checked workspace projection, not global catalog
+reads or
 synthetic demo models. This does not grant ordinary members new access.
 Snapshot rounds/groups are not assumed finished just because scoring started.
 Selection is retained only in app memory, restored from validated deep links
@@ -91,8 +93,8 @@ round remains incomplete. This is not a completed seven-stroke hole, automatic
 maximum/penalty, handicap posting rule or invented Stableford treatment.
 Self-entry, invitation/account mapping and a round/foursome-assigned
 scorekeeper remain a later increment. Scorekeeper assignment is not event
-administration. Pickup points, Stableford, purse and financial rules are
-undefined; no missing value becomes zero and no points are implied.
+administration. Individual Stableford rules are configured per game; purse,
+team and financial rules remain undefined. Missing inputs never become zero.
 
 ### Owner scoring authority and persistence
 
@@ -165,6 +167,46 @@ presentation choices, is deferred rather than hidden behind a device-width gate.
 Saved-card summaries, repeated completion counts and long explanatory legends
 are omitted from player cards. Incomplete totals retain a short indication;
 administrative master edits and player reports remain future scope.
+
+### Round game configuration and results
+
+`PUT /api/events/<event-id>/rounds/<round-id>/games` saves the complete game
+configuration for a round. It requires the active event's authoritative owner,
+JSON within the existing 4 KiB cap, an exact game-configuration `If-Match` or
+first-create `If-None-Match: *`, and a UUID `Idempotency-Key`. It shares the
+existing durable `scores-write` quota. Catalog management is not required.
+
+The same-event-partition transaction checks both event and owner-grant
+revisions, creates/replaces `round-games:<round-id>`, updates the event's
+additive `gameRoundIds` registry and writes an immutable before/after/actor/time
+receipt under `game-change:<round-id>:<request-id>`. Lost-response retries match
+the exact original settings, actor and base revision. Acknowledgements remain
+separate from a later current projection, just as stroke receipts do.
+Existing configured game IDs cannot be silently removed by a whole-set save.
+There is no saved-game delete endpoint or new retention policy.
+
+Game settings do not lock an unstarted round's course setup. The first
+persisted stroke card retains that responsibility. Games can be applied to
+existing saved strokes and their settings edited with audit while the event
+is active; neither operation changes those strokes or captured course/index
+inputs. Archived owners can read results but cannot change settings.
+
+`GET .../scores` and confirmed stroke/game writes include an additive `games`
+projection only when configuration exists. Results are computed server-side
+from the current validated cards, captured player inputs, selected tee Total
+rating and saved point rules. Nothing is written back as a replacement stroke.
+Legacy rounds without games remain compatible. Missing/corrupt known settings
+fail closed before reads or score writes; a missing registry/config pair also
+probes for surviving round-specific audit evidence with a one-row bounded
+query. A partial empty page is not proof of no configuration.
+
+The game editor preserves its original configuration revision and request ID
+until confirmation or explicit new intent. Conflicts require a real refresh
+and explicit review; rebasing replaces only the edited game and preserves
+other owners' additional games. Stroke and game requests share the existing
+single-operation hook, and both kinds of local draft pause background polling.
+No game configuration, points input or audit log is added to normal stroke
+entry. No invitation, golfer-scoring grant or full administrative UI is implied.
 
 MSAL manages tab-scoped sessionStorage. The callback and logout reply URI is
 `https://<frontend-host>/?event-auth=1`; local development uses the exact local

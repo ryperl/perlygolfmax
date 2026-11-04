@@ -83,8 +83,12 @@ from npm installation and must also comply with your machine's policies.
   Real source exports are never bundled or committed.
 - Owner-only online gross scorecard simulation from saved round setup:
   explicit hole dispositions, conditional saved scores, correction history
-  and complete-versus-incomplete gross summaries. This is not golfer admission,
-  net scoring, offline recording or a finished tournament scoreboard.
+  and complete-versus-incomplete gross summaries.
+- Configurable individual Stableford games derived server-side from the same
+  stroke cards: gross/net, Standard/GolfLink Modified presets, editable scoring
+  bands and per-game handicap allowance. Multiple games can share one round.
+  This is not golfer admission, team scoring, offline recording or a finished
+  tournament scoreboard.
 
 The Events screen is deliberately unavailable until an approved identity tenant
 and API are configured. Customer sign-in and event creation/reload have been
@@ -112,13 +116,13 @@ Production PWA capabilities require HTTPS and platform-specific verification.
 
 ### Future work, not implemented
 
-Golfer/self/assigned-foursome admission and scoring, calculated Stableford/team
-results, owner appointment UI, offline synchronization and
+Golfer/self/assigned-foursome admission and scoring, team formats and aggregate
+trip results, owner appointment UI, offline synchronization and
 leaderboards remain later increments. The selected design is Entra External ID
 email codes, a standalone Functions API and Table Storage, with SWA staying Free.
 Provisioning/deployment is separately approval-gated. Detailed scoring, betting,
 payouts, reporting, overall-trip rules, admission and retention remain unsettled.
-No handicap, Stableford, team or financial formulas are implied by this demo.
+The fictional Preview remains separate from authenticated scoring and results.
 
 ### Owner gross scorecard simulation
 
@@ -178,6 +182,57 @@ the edit-time card baseline; a save waits for that read rather than overlapping
 it. Changed saved data, errors, permission revocation and session expiry remain
 visible and guarded.
 
+### Individual Stableford games
+
+Open a saved round's **Games** tab to add games, edit their rules or see results.
+Entry stays in gross strokes; changing a game does not rewrite the stroke card.
+Standard and GolfLink Modified presets can each use gross or net scoring, and
+multiple games can use the same round. Net allowance defaults to 95% and is
+configurable per game.
+
+| Result relative to par | Standard preset | GolfLink Modified preset |
+|------------------------|----------------:|-------------------------:|
+| Four under | 6 | Configured better-score value |
+| Albatross, three under | 5 | 8 |
+| Eagle, two under | 4 | 5 |
+| Birdie, one under | 3 | 2 |
+| Par | 2 | 0 |
+| Bogey, one over | 1 | -1 |
+| Double bogey, two over | 0 | -2 |
+
+These are starting configurations, not a universal definition of modified
+Stableford. Edit individual points, add contiguous better/worse scoring bands
+and set explicit values for scores beyond the listed rows. Initial outside-row
+values are 6/0 for Standard and 8/-2 for Modified; they remain editable, rather
+than being silently extrapolated. Customized results are labelled custom.
+See the [user-selected GolfLink reference](https://www.golflink.com/lifestyle/stableford-scoring-go-big-or-go-home)
+and [R&A Rule 21](https://www.randa.org/rog/the-rules-of-golf/rule-21).
+
+Pickup (`X`/`X7`) and per-hole DNF receive the minimum configured points
+(initially 0/-2). Unplayed holes remain pending, not automatic zero/negative
+points. Partial totals are identified and are not ranked as completed results.
+Missing captured Handicap Index, rating or stroke-allocation inputs make net
+results explicitly unavailable; gross results do not require a handicap.
+
+Net calculations use the round's saved tee **Total** rating for its complete
+9- or 18-hole layout and the captured manual index, never a later global
+catalog/index value. Nine-hole index halving rounds to one decimal first;
+allowance applies to the unrounded Course Handicap, followed by final whole
+Playing Handicap rounding. Exact decimal ties round toward positive infinity,
+including mathematically negative plus-handicap values. This was checked with
+synthetic boundary cases against the [official R&A calculator](https://www.randa.org/en/course-handicap-calculator).
+Handicap strokes repeat through stroke-index order; plus handicaps give strokes
+back starting with the highest stroke index. This is game scoring, not WHS
+score posting or automatic adjusted-gross/net-double-bogey processing.
+
+Game settings are owner-only, online, conditional and idempotent, with
+before/after audit records. Active-event games can be added or adjusted on
+existing stroke cards; archived events remain read-only. Conflicts preserve
+the draft and require explicit refresh/review. Saved-game removal and a
+general administrative/history interface are not included. Technical budgets
+are 16 games and 32 points rows, also subject to the existing 4 KiB request
+limit; an oversized request is refused explicitly, not partially saved.
+
 ### Local catalog and round setup
 
 The explicitly bootstrapped organizer manages the private reusable course and
@@ -207,7 +262,8 @@ and first audited observation are saved together. Editing opens beside the
 selected player rather than below the whole directory.
 Backdated observations remain in history rather than replacing a newer current
 observation. Round-captured inputs do not automatically change on catalog edits.
-The eventual event/per-round handicap policy is not implemented.
+Official index verification/posting and scored-round index correction remain
+outside this increment.
 
 The manager's owner workspace distinguishes current catalog indices from saved
 round captures. An explicit, confirmed setup refresh can replace one round's
@@ -274,8 +330,10 @@ Rounds, Group, setup and scorecards without reusing demo models or fetching the
 global catalogs for read-only views. Direct links restore the event context;
 without one, choose an event rather than automatically taking the first result.
 Sign-out/session expiry clears the in-memory selection and private UI.
-The existing owner-only workspace API remains the access boundary for these
-views; this does not add ordinary-player admission or new permissions.
+Workspace reads retain their existing membership checks and allowlisted
+member projections. Setup writes keep their owner-plus-catalog checks;
+scorecards and game management require event ownership, not catalog authority.
+This does not add player admission or grants.
 
 ## Local feeds versus public CI
 
