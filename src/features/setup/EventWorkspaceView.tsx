@@ -256,7 +256,7 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
           rosterIds={draft.playerIds} client={catalog} onChange={changeRound} onPending={onVersionPending} />)}
         <button type="button" disabled={draft.rounds.length >= 8} onClick={() => {
           setDraft({ ...draft, rounds: [...draft.rounds, { id: crypto.randomUUID(), name: '', courseId: '', courseVersionId: '', teeProfileId: 0, groups: [] }] });
-        }}>Add another round</button>
+        }}>Add Round</button>
       </fieldset>
       {!isEventSetupInput(draft) && <p>Setup is incomplete: require 4–8 players, 1–8 named rounds, explicit course versions/tees and complete valid group assignments.</p>}
       <button disabled={busy || conflict || initialPending || catalogPending || catalogError !== '' || versionPending.size > 0 || courses === null || players === null || !isEventSetupInput(draft)}>Save event workspace</button>

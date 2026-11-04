@@ -310,7 +310,7 @@ describe('saved event workspace', () => {
     render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={catalog} />);
     for (const player of players.slice(0, 8)) await user.click(await screen.findByLabelText(`${player.displayName} — HI Unknown`));
     expect(screen.getByLabelText('Fictional Player 9 — HI Unknown')).toBeDisabled();
-    await user.click(screen.getByRole('button', { name: 'Add another round' }));
+    await user.click(screen.getByRole('button', { name: 'Add Round' }));
     await user.type(screen.getByLabelText('Round 1 name'), 'Fictional round');
     await user.selectOptions(screen.getByLabelText('Round 1 course'), fictionalVersion.courseId);
     await user.selectOptions(screen.getByLabelText('Round 1 course version'), fictionalVersion.id);
@@ -336,8 +336,8 @@ describe('saved event workspace', () => {
     const setup = fakeSetup();
     const user = userEvent.setup();
     render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={catalog} />);
-    await waitFor(() => { expect(screen.getByRole('button', { name: 'Add another round' })).toBeEnabled(); });
-    await user.click(screen.getByRole('button', { name: 'Add another round' }));
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Add Round' })).toBeEnabled(); });
+    await user.click(screen.getByRole('button', { name: 'Add Round' }));
     await user.selectOptions(screen.getByLabelText('Round 1 course'), fictionalVersion.courseId);
     await user.selectOptions(screen.getByLabelText('Round 1 course version'), fictionalVersion.id);
     expect(await screen.findByRole('alert')).toHaveTextContent('Selected course version unavailable');
@@ -359,10 +359,10 @@ describe('saved event workspace', () => {
     expect(save).toBeDisabled();
     for (const player of fictionalPlayers) await user.click(await screen.findByLabelText(`${player.displayName} — HI Unknown`));
     await user.type(screen.getByLabelText('General location'), 'Fictional County');
-    await user.click(screen.getByRole('button', { name: 'Add another round' }));
+    await user.click(screen.getByRole('button', { name: 'Add Round' }));
     await configureRound(user, 1);
     expect(save).toBeEnabled();
-    await user.click(screen.getByRole('button', { name: 'Add another round' }));
+    await user.click(screen.getByRole('button', { name: 'Add Round' }));
     expect(save).toBeDisabled();
     await configureRound(user, 2);
     await user.click(save);
@@ -458,8 +458,8 @@ describe('saved event workspace', () => {
     const user = userEvent.setup();
     const { unmount } = render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={catalog} />);
     await screen.findByLabelText('Workspace name');
-    await waitFor(() => { expect(screen.getByRole('button', { name: 'Add another round' })).toBeEnabled(); });
-    await user.click(screen.getByRole('button', { name: 'Add another round' }));
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Add Round' })).toBeEnabled(); });
+    await user.click(screen.getByRole('button', { name: 'Add Round' }));
     await user.selectOptions(screen.getByLabelText('Round 1 course'), fictionalVersion.courseId);
     await user.selectOptions(screen.getByLabelText('Round 1 course version'), fictionalVersion.id);
     expect(screen.getByRole('button', { name: 'Save event workspace' })).toBeDisabled();
