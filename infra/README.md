@@ -224,6 +224,13 @@ identity configuration fails deployment. The build injects the API URL only
 with complete identity configuration; configured browser smoke checks require
 the sign-in UI but do not attempt to retrieve/send real email codes.
 
+`AZURE_TEST_API_READY` declares only the deployment check's expected state;
+it never authorizes a request. Absent/false requires actual no-store 503
+`SERVICE_NOT_CONFIGURED` responses. Set it true only after verified creator/
+server configuration; then unauthenticated probes must return no-store 401
+`AUTHENTICATION_REQUIRED`. Frontend sign-in configuration alone must not skip
+server access verification.
+
 New workflow-dispatch files may not be dispatchable until present on the
 default branch. The approved feature-branch push trigger starts testing without
 requiring a main merge. Changing the allowed branch or widening federation

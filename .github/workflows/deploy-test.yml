@@ -164,25 +164,30 @@ jobs:
           package: api-artifact/test-api.zip
           sku: flexconsumption
           remote-build: false
-      - name: Verify the unconfigured API fails closed
-        if: vars.VITE_ENTRA_SPA_CLIENT_ID == ''
+      - name: Verify the API authentication readiness contract
         env:
           API_URL: ${{ vars.AZURE_TEST_API_URL }}
+          API_READY: ${{ vars.AZURE_TEST_API_READY }}
         run: |
           node --input-type=module <<'JS'
           import assert from 'node:assert/strict';
           assert.ok(process.env.API_URL?.startsWith('https://'), 'Missing test API HTTPS URL');
+          const readiness = process.env.API_READY ?? '';
+          assert.ok(['', 'false', 'true'].includes(readiness), 'Invalid API readiness flag');
+          const ready = readiness === 'true';
+          const expectedStatus = ready ? 401 : 503;
+          const expectedCode = ready ? 'AUTHENTICATION_REQUIRED' : 'SERVICE_NOT_CONFIGURED';
           let failure;
           for (let attempt = 0; attempt < 24; attempt++) {
             try {
               for (const route of ['me', 'events']) {
                 const response = await fetch(`${process.env.API_URL}/${route}`, { signal: AbortSignal.timeout(10000) });
-                assert.equal(response.status, 503);
+                assert.equal(response.status, expectedStatus);
                 assert.equal(response.headers.get('cache-control'), 'no-store');
                 const body = await response.json();
-                assert.equal(body.code, 'SERVICE_NOT_CONFIGURED');
+                assert.equal(body.code, expectedCode);
               }
-              console.log('Verified deployed API explicitly refuses unconfigured event access.');
+              console.log('Verified deployed API refuses unauthorized access in its declared readiness state.');
               failure = undefined;
               break;
             } catch (error) {
