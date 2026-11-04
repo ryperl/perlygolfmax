@@ -12,8 +12,11 @@ import { TablePlayerCatalog } from './catalog/players.js';
 import { TableWorkspaceStore } from './setup/store.js';
 import { createCatalogHandler } from './catalog/handlers.js';
 import type { CatalogAction, CatalogSetupApi } from './catalog/handlers.js';
+import { createScoringHandler } from './scoring/handlers.js';
+import type { ScoringApi } from './scoring/handlers.js';
+import { TableScoreStore } from './scoring/store.js';
 
-type RuntimeApi = EventApi & CatalogSetupApi;
+type RuntimeApi = EventApi & CatalogSetupApi & ScoringApi;
 let api: RuntimeApi | undefined;
 
 function resolveApi(): RuntimeApi {
@@ -23,13 +26,14 @@ function resolveApi(): RuntimeApi {
   const manager = (identity: Parameters<typeof canManageCatalog>[0]) => canManageCatalog(identity, settings);
   const courses = new TableCourseCatalog(table, manager);
   const players = new TablePlayerCatalog(table, manager);
+  const workspace = new TableWorkspaceStore(table, courses, players, manager);
   api = {
     verify: createIdentityVerifier(settings),
     store: new TableEventStore(table),
     limiter: new TableRequestLimiter(table),
     canCreate: (identity) => canCreateEvents(identity, settings),
     canManageCatalog: manager, courses, players,
-    workspace: new TableWorkspaceStore(table, courses, players, manager),
+    workspace, scores: new TableScoreStore(table, workspace),
   };
   return api;
 }
@@ -54,3 +58,15 @@ const catalogRoutes: readonly { readonly action: CatalogAction; readonly route: 
 for (const item of catalogRoutes) {
   app.http(`setup-${item.action}`, { route: item.route, methods: item.methods, authLevel: 'anonymous', handler: createCatalogHandler(resolveApi, item.action) });
 }
+app.http('roundScores', {
+  route: 'events/{id}/rounds/{roundId}/scores', methods: ['GET'], authLevel: 'anonymous',
+  handler: createScoringHandler(resolveApi, 'scores'),
+});
+app.http('scoreHole', {
+  route: 'events/{id}/rounds/{roundId}/players/{playerId}/holes/{holeNumber}', methods: ['PUT'], authLevel: 'anonymous',
+  handler: createScoringHandler(resolveApi, 'score-hole'),
+});
+app.http('scoreHistory', {
+  route: 'events/{id}/rounds/{roundId}/players/{playerId}/score-history', methods: ['GET'], authLevel: 'anonymous',
+  handler: createScoringHandler(resolveApi, 'score-history'),
+});

@@ -40,6 +40,7 @@ export interface RoundSnapshot {
   readonly teeProfile: TeeProfile;
   readonly groups: readonly RoundGroup[];
   readonly players: readonly RoundPlayerSnapshot[];
+  readonly scoringStarted?: boolean;
 }
 
 export interface EventWorkspace {

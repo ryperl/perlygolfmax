@@ -19,6 +19,22 @@ function roundInput(round: RoundSnapshot): RoundSetupInput {
     teeProfileId: round.teeProfile.id, groups: round.groups };
 }
 
+interface SupersededSetupEdits {
+  readonly roster: EventWorkspace['roster'] | null;
+  readonly rounds: readonly RoundSetupInput[];
+}
+function sameIds(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((id, index) => id === right[index]);
+}
+function sameRoundInput(left: RoundSetupInput, right: RoundSetupInput): boolean {
+  return left.id === right.id && left.name === right.name && left.courseId === right.courseId
+    && left.courseVersionId === right.courseVersionId && left.teeProfileId === right.teeProfileId
+    && left.groups.length === right.groups.length && left.groups.every((group, index) => {
+      const other = right.groups[index];
+      return other !== undefined && group.number === other.number && sameIds(group.playerIds, other.playerIds);
+    });
+}
+
 async function readSetupCatalog(catalog: CatalogClient, signal: AbortSignal) {
   const courses: CourseCatalogEntry[] = [];
   const players: PlayerProfile[] = [];
@@ -50,6 +66,7 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
 }) {
   const [workspace, setWorkspace] = useState<EventWorkspace | null>(null);
   const [draft, setDraft] = useState<EventSetupInput | null>(null);
+  const [supersededEdits, setSupersededEdits] = useState<readonly SupersededSetupEdits[]>([]);
   const [courses, setCourses] = useState<readonly CourseCatalogEntry[] | null>(null);
   const [players, setPlayers] = useState<readonly PlayerProfile[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -68,6 +85,7 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
   const [versionPending, setVersionPending] = useState<ReadonlySet<string>>(new Set());
   const active = useRef<AbortController | null>(null);
   const editing = workspace?.event.role === 'owner' && workspace.event.status === 'active' && canManageCatalog;
+  const rosterLocked = workspace?.rounds.some((round) => round.scoringStarted === true) ?? false;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -116,9 +134,33 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
     setDraft((previous) => previous ? { ...previous, rounds: previous.rounds.map((round) => round.id === updated.id ? updated : round) } : previous);
   }
   function preserveDraft(value: EventWorkspace) {
-    setDraft((previous) => previous ? { ...previous, rounds: [
-      ...previous.rounds, ...value.rounds.filter((round) => !previous.rounds.some((item) => item.id === round.id)).map(roundInput),
-    ] } : inputFrom(value));
+    if (!draft) { setDraft(inputFrom(value)); return false; }
+    const lockedRounds = new Map<string, RoundSetupInput>(value.rounds.filter((round) => round.scoringStarted).map((round) => [round.id, roundInput(round)]));
+    const savedRosterIds = value.roster.map((player) => player.playerId);
+    const rosterSuperseded = lockedRounds.size > 0 && !sameIds(draft.playerIds, savedRosterIds);
+    const roundsSuperseded = draft.rounds.filter((round) => {
+      const saved = lockedRounds.get(round.id);
+      return saved !== undefined && !sameRoundInput(round, saved);
+    });
+    const superseded = rosterSuperseded || roundsSuperseded.length > 0;
+    if (superseded) {
+      const review: SupersededSetupEdits = {
+        roster: rosterSuperseded ? draft.playerIds.map((playerId) => ({
+          playerId, displayName: players?.find((player) => player.id === playerId)?.displayName
+            ?? workspace?.roster.find((player) => player.playerId === playerId)?.displayName ?? playerId,
+        })) : null,
+        rounds: roundsSuperseded,
+      };
+      setSupersededEdits((previous) => [...previous, review]);
+    }
+    setDraft({ ...draft,
+      playerIds: lockedRounds.size > 0 ? savedRosterIds : draft.playerIds,
+      rounds: [
+        ...draft.rounds.map((round) => lockedRounds.get(round.id) ?? round),
+        ...value.rounds.filter((round) => !draft.rounds.some((item) => item.id === round.id)).map(roundInput),
+      ],
+    });
+    return superseded;
   }
   const onVersionPending = useCallback((id: string, pending: boolean) => {
     setVersionPending((previous) => {
@@ -135,7 +177,10 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
       const value = await setup.load(eventId, signal);
       signal.throwIfAborted();
       setWorkspace(value); setError(''); setConflict(false); setRefreshConfirmed(new Set());
-      preserveDraft(value);
+      const superseded = preserveDraft(value);
+      const draftNotice = superseded
+        ? 'Scoring locked saved setup inputs. Locked form values now match the server; superseded local roster/round edits are retained below for read-only review. Your event name/location and unstarted-round drafts remain editable.'
+        : 'Your local draft is preserved, including newly saved rounds. Review before saving.';
       if (canManageCatalog && value.event.role === 'owner' && value.event.status === 'active') {
         setCatalogRefreshing(true);
         try {
@@ -145,14 +190,14 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
         } catch (failure) {
           if (!signal.aborted) {
             setCatalogError(failure instanceof Error ? failure.message : 'Current catalog values are unavailable.');
-            setNotice('Workspace refreshed, but current catalog values are unavailable. Your local draft is preserved. Retry catalog selections before changing captured setup inputs.');
+            setNotice(`Workspace refreshed, but current catalog values are unavailable. ${draftNotice} Retry catalog selections before changing captured setup inputs.`);
           }
           return;
         } finally {
           if (!signal.aborted) setCatalogRefreshing(false);
         }
       }
-      setNotice('Workspace refreshed. Your local draft is preserved, including newly saved rounds. Review before saving.');
+      setNotice(`Workspace refreshed. ${draftNotice}`);
     }); }}>Refresh workspace</button>
     {error && <p role="alert">{error}</p>}
     {!workspace && !error && <p role="status">Loading workspace...</p>}
@@ -163,6 +208,8 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
       {workspace.rounds.length === 0 && <p>No saved rounds.</p>}
       <ol className="round-list">{workspace.rounds.map((round) => <li className="panel" key={round.id}>
         <h3>{round.name} — {round.course.name}</h3>
+        {workspace.event.role === 'owner' && <a href={`#events?event=${eventId}&round=${round.id}`}>Open owner scorecards for {round.name}</a>}
+        {round.scoringStarted && <p>Scoring started: course, tee, players, groups and captured indices are locked. Clearing scores cannot unlock setup. Event name/location and unstarted new rounds remain editable.</p>}
         <p className="setup-version">Saved course version: {round.courseVersionId}</p>
         <p>Tee: {round.teeProfile.name} / {round.teeProfile.category} / {round.teeProfile.holeCount} holes</p>
         <ul>{round.groups.map((group) => <li key={group.number}>Group {group.number}: {group.playerIds.map((id) => round.players.find((player) => player.playerId === id)?.displayName ?? 'Unavailable').join(', ')}</li>)}</ul>
@@ -180,8 +227,8 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
                 : 'Captured and current observations match.'}</p>}
             </li>;
           })}</ul>
-          {editing && <div className="setup-index-refresh">
-            <p>Review captured and current values above. Refresh replaces this saved round's captured setup inputs using catalog observations at refresh time and audits the previous values. It preserves saved course, tee and groups. This is not score recalculation; scored-round policy remains unresolved.</p>
+          {editing && <fieldset className="setup-index-refresh" disabled={round.scoringStarted === true}>
+            <p>Review captured and current values above. Refresh replaces this unstarted saved round's captured setup inputs using catalog observations at refresh time and audits the previous values. It preserves saved course, tee and groups. Scored rounds are locked; this is not score recalculation.</p>
             <label className="setup-index-confirm"><input type="checkbox" checked={refreshConfirmed.has(round.id)}
               disabled={busy || initialPending || catalogPending || catalogError !== '' || versionPending.size > 0 || conflict
                 || !round.players.every((player) => players?.some((item) => item.id === player.playerId))}
@@ -201,9 +248,11 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
                 try {
                   const saved = await setup.refreshIndices(eventId, round.id, request.etag, request.id, signal);
                   signal.throwIfAborted();
-                  setWorkspace(saved); preserveDraft(saved); setRefreshConfirmed(new Set());
+                  setWorkspace(saved);
+                  const superseded = preserveDraft(saved);
+                  setRefreshConfirmed(new Set());
                   refreshRequests.current.delete(round.id);
-                  setNotice(`Captured setup HI refreshed for ${round.name}. Saved course, tee and groups were preserved. No scores were recalculated.`);
+                  setNotice(`Captured setup HI refreshed for ${round.name}. Saved course, tee and groups were preserved. No scores were recalculated.${superseded ? ' Scoring locked other setup inputs; superseded local edits are retained below for read-only review, and locked form values now match the server.' : ''}`);
                 } catch (failure) {
                   if (failure instanceof EventChangedError) {
                     refreshRequests.current.delete(round.id); setRefreshConfirmed(new Set());
@@ -211,10 +260,23 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
                   throw failure;
                 }
               }); }}>Refresh captured setup HI for {round.name}</button>
-          </div>}
+          </fieldset>}
         </div>}
       </li>)}</ol>
     </>}
+    {supersededEdits.length > 0 && <section className="panel" aria-label="Superseded locked setup edits">
+      <h2>Read-only review of superseded setup edits</h2>
+      <p role="alert">Scoring locked saved setup inputs while you were editing. The editable form now uses the server-authoritative locked roster and rounds. Your prior local edits below were not applied and cannot change locked inputs. Event name/location edits remain available. These review copies live only in this page.</p>
+      {supersededEdits.map((review, index) => <div key={index}>
+        {review.roster && <div><h3>Prior local roster selection</h3><ul>{review.roster.map((player) => <li key={player.playerId}>{player.displayName} ({player.playerId})</li>)}</ul></div>}
+        {review.rounds.map((round) => <div key={round.id}>
+          <h3>Prior local round draft: {round.name || 'Unnamed round'}</h3>
+          <p className="setup-version">Course: {round.courseId || 'Not selected'}; version: {round.courseVersionId || 'Not selected'}; tee profile: {round.teeProfileId || 'Not selected'}.</p>
+          <ul>{round.groups.map((group) => <li key={group.number}>Prior group {group.number}: {group.playerIds.map((id) =>
+            `${players?.find((player) => player.id === id)?.displayName ?? workspace?.roster.find((player) => player.playerId === id)?.displayName ?? 'Unavailable'} (${id})`).join(', ')}</li>)}</ul>
+        </div>)}
+      </div>)}
+    </section>}
     {editing && draft && <form className="panel setup-form" onSubmit={(event) => {
       event.preventDefault();
       if (initialPending || catalogPending || catalogError !== '' || conflict || !isEventSetupInput(draft) || versionPending.size > 0) return;
@@ -236,7 +298,8 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
       <fieldset disabled={busy || initialPending || catalogPending || catalogError !== '' || versionPending.size > 0 || courses === null || players === null}>
         <label>Workspace name<input required maxLength={100} value={draft.name} onChange={(event) => { setDraft({ ...draft, name: event.target.value }); }} /></label>
         <label>General location<input maxLength={200} value={draft.location} onChange={(event) => { setDraft({ ...draft, location: event.target.value }); }} /></label>
-        <fieldset><legend>Saved player roster ({draft.playerIds.length}/8)</legend>
+        <fieldset disabled={rosterLocked}><legend>Saved player roster ({draft.playerIds.length}/8)</legend>
+          {rosterLocked && <p>Roster locked because scoring has started in a saved round.</p>}
           {players?.length === 0 && <p>No saved players. Create players in the manager catalog first.</p>}
           {players?.map((player) => <label className="setup-check" key={player.id}>
             <input type="checkbox" checked={draft.playerIds.includes(player.id)}
@@ -262,7 +325,7 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
       <button disabled={busy || conflict || initialPending || catalogPending || catalogError !== '' || versionPending.size > 0 || courses === null || players === null || !isEventSetupInput(draft)}>Save event workspace</button>
     </form>}
     <p role={conflict ? 'alert' : 'status'}>{busy ? 'Working...' : notice}</p>
-    <p>Catalog edits do not automatically change captured handicap inputs in saved rounds. Current catalog values are the latest loaded observations; Refresh workspace fetches updates. An eligible owner must explicitly confirm a setup-input refresh to change saved captures. Invitations, score entry, scoring, randomization and synchronization are not included.</p>
+    <p>Catalog edits do not automatically change captured handicap inputs in saved rounds. Current catalog values are the latest loaded observations; Refresh workspace fetches updates. An eligible owner must explicitly confirm a setup-input refresh for an unstarted round. Owner-only online gross scorecards are separate. Invitations, net scoring, randomization and offline synchronization are not included.</p>
   </section>;
 }
 
@@ -300,7 +363,7 @@ function RoundEditor({ round, number, saved, courses, players, rosterIds, client
   }, [attempt, client, onPending, round.courseId, round.id, versionId]);
   const profiles: readonly TeeProfile[] = loaded?.id === versionId && loaded.courseId === round.courseId ? loaded.data.teeProfiles
     : savedMatches ? [saved.teeProfile] : [];
-  return <fieldset className="setup-round">
+  return <fieldset className="setup-round" disabled={saved?.scoringStarted === true}>
     <legend>Round {number}{saved ? ' (saved; retained)' : ''}</legend>
     <label>Round {number} name<input required maxLength={100} value={round.name} onChange={(event) => { onChange({ ...round, name: event.target.value }); }} /></label>
     <label>Round {number} course<select required value={round.courseId} onChange={(event) => {

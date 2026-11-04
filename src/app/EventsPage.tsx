@@ -8,8 +8,10 @@ import type { EventSession } from '../client/identity';
 import { configureEventServices } from './event-services';
 import type { CatalogClient } from '../client/catalog';
 import type { SetupClient } from '../client/setup';
+import type { ScoresClient } from '../client/scoring';
 import { CoursesCatalog, PlayersCatalog } from '../features/catalog';
 import { EventWorkspaceView } from '../features/setup';
+import { OwnerScoresView } from '../features/scoring';
 import { readEventRoute } from './navigation';
 
 const configuredServices = configureEventServices(import.meta.env);
@@ -23,6 +25,7 @@ export interface EventServices {
   readonly events: EventsClient;
   readonly catalog: CatalogClient;
   readonly setup: SetupClient;
+  readonly scores: ScoresClient;
 }
 
 function subscribe(onChange: () => void) {
@@ -102,7 +105,10 @@ export function EventsPage({ services, configurationError }: { readonly services
         try { await session.signOut(); }
         catch { setNotice('Sign-out did not complete. The identity-provider session may still be active.'); }
       }); }}>Sign out</button>
-      {route.startsWith('event:') ? <EventWorkspaceView key={route} eventId={route.slice(6)}
+      {route === 'invalid-score' ? <p role="alert">Invalid event or round identifier. No score request was made.</p>
+        : route.startsWith('score:') ? <OwnerScoresView key={route} eventId={route.split(':')[1] ?? ''} roundId={route.split(':')[2] ?? ''}
+          client={services.scores} onSessionExpired={(message) => { setState({ kind: 'signed-out', message }); }} />
+        : route.startsWith('event:') ? <EventWorkspaceView key={route} eventId={route.slice(6)}
         canManageCatalog={state.capabilities.canManageCatalog} setup={services.setup} catalog={services.catalog} />
         : state.capabilities.canManageCatalog
           ? route === 'courses' ? <CoursesCatalog client={services.catalog} /> : <PlayersCatalog client={services.catalog} />

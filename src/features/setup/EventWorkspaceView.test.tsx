@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { EventChangedError } from '../../client/events';
 import {
   emptyWorkspace, fakeCatalog, fakeSetup, fictionalEvent, fictionalPlayers, fictionalManifest,
-  fictionalProfile, fictionalVersion, fictionalWorkspace, fictionalId, fictionalEntry,
+  fictionalProfile, fictionalVersion, fictionalWorkspace, fictionalId, fictionalEntry, fictionalSetup,
 } from '../../client/catalog.test-support';
 import type { CourseCatalogPage, CourseVersion, IndexObservation, PlayerCatalogPage } from '../../domain/catalog';
 import type { EventSetupInput, EventWorkspace } from '../../domain/setup';
@@ -59,6 +59,89 @@ async function configureRound(user: ReturnType<typeof userEvent.setup>, number: 
 }
 
 describe('saved event workspace', () => {
+  it('offers owner-only score links without catalog grants and keeps members out of scoring discovery', async () => {
+    const setup = fakeSetup();
+    vi.mocked(setup.load).mockResolvedValue(fictionalWorkspace);
+    const catalog = fakeCatalog();
+    const view = render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog={false} setup={setup} catalog={catalog} />);
+    expect(await screen.findByRole('link', { name: /Open owner scorecards/ })).toHaveAttribute('href',
+      `#events?event=${fictionalEvent.id}&round=${fictionalId(70)}`);
+    expect(catalog.players).not.toHaveBeenCalled();
+    view.unmount();
+    vi.mocked(setup.load).mockResolvedValue({ ...fictionalWorkspace, event: { ...fictionalEvent, role: 'member' } });
+    render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog={false} setup={setup} catalog={catalog} />);
+    await screen.findByText('Fictional Meadows', { exact: false });
+    expect(screen.queryByRole('link', { name: /Open owner scorecards/ })).not.toBeInTheDocument();
+  });
+  it('locks scored-round setup, roster and captured-index refresh, but allows event metadata and new rounds', async () => {
+    const setup = fakeSetup();
+    vi.mocked(setup.load).mockResolvedValue({ ...fictionalWorkspace, rounds: fictionalWorkspace.rounds.map((round) => ({ ...round, scoringStarted: true })) });
+    const user = userEvent.setup();
+    render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={fakeCatalog()} />);
+    await screen.findByLabelText('Round 1 name');
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Add Round' })).toBeEnabled(); });
+    expect(screen.getByLabelText('Workspace name')).toBeEnabled();
+    expect(screen.getByLabelText('General location')).toBeEnabled();
+    expect(screen.getByLabelText('Round 1 name')).toBeDisabled();
+    expect(screen.getByLabelText('Round 1 course')).toBeDisabled();
+    expect(screen.getByLabelText('Round 1 tee profile')).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: /I confirm replacing captured setup HI/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Refresh captured setup HI for/ })).toBeDisabled();
+    expect(screen.getByRole('group', { name: /Saved player roster/ })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Add Round' }));
+    expect(screen.getByLabelText('Round 2 name')).toBeEnabled();
+    expect(screen.getByText(/Clearing scores cannot unlock setup/)).toBeVisible();
+    expect(setup.refreshIndices).not.toHaveBeenCalled();
+  });
+  it('retains superseded dirty setup for read-only review when scoring starts in another tab, without blocking metadata saves', async () => {
+    const setup = fakeSetup();
+    const scored: EventWorkspace = {
+      ...fictionalWorkspace, etag: 'workspace-v2',
+      rounds: fictionalWorkspace.rounds.map((round) => ({ ...round, scoringStarted: true })),
+    };
+    vi.mocked(setup.load).mockResolvedValueOnce(fictionalWorkspace).mockResolvedValue(scored);
+    vi.mocked(setup.save).mockImplementation((_eventId, _etag, input) => Promise.resolve({
+      ...scored, event: { ...scored.event, name: input.name }, location: input.location, etag: 'workspace-v3',
+    }));
+    const user = userEvent.setup();
+    render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={fakeCatalog()} />);
+    await screen.findByLabelText('Round 1 name');
+    await waitFor(() => { expect(screen.getByLabelText('Workspace name')).toBeEnabled(); });
+    await user.clear(screen.getByLabelText('Workspace name'));
+    await user.type(screen.getByLabelText('Workspace name'), 'Fictional updated event name');
+    await user.clear(screen.getByLabelText('General location'));
+    await user.type(screen.getByLabelText('General location'), 'Fictional changed location');
+    await user.clear(screen.getByLabelText('Round 1 name'));
+    await user.type(screen.getByLabelText('Round 1 name'), 'Unsaved fictional round name');
+    await user.selectOptions(screen.getByLabelText('Round 1 tee profile'), '905');
+    await user.selectOptions(screen.getByLabelText('Fictional Player 1 — round 1 group'), '2');
+    const roster = within(screen.getByRole('group', { name: /Saved player roster/ }));
+    await user.click(roster.getByRole('checkbox', { name: /Fictional Player 4/ }));
+    expect(screen.getByRole('button', { name: 'Save event workspace' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Refresh workspace' }));
+    const review = await screen.findByRole('region', { name: 'Superseded locked setup edits' });
+    expect(review).toHaveTextContent('Scoring locked saved setup inputs while you were editing');
+    expect(review).toHaveTextContent('Prior local round draft: Unsaved fictional round name');
+    expect(review).toHaveTextContent('tee profile: 905');
+    expect(review).toHaveTextContent('Prior group 2: Fictional Player 1');
+    expect(within(review).getByRole('heading', { name: 'Prior local roster selection' })).toBeVisible();
+    expect(within(review).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Round 1 name')).toHaveValue('Fictional opening round');
+    expect(screen.getByLabelText('Round 1 name')).toBeDisabled();
+    expect(screen.getByLabelText('Round 1 tee profile')).toHaveValue('901');
+    expect(screen.getByRole('group', { name: 'Saved player roster (4/8)' })).toBeDisabled();
+    expect(screen.getByLabelText('Workspace name')).toHaveValue('Fictional updated event name');
+    expect(screen.getByLabelText('General location')).toHaveValue('Fictional changed location');
+    const save = screen.getByRole('button', { name: 'Save event workspace' });
+    await waitFor(() => { expect(save).toBeEnabled(); });
+    expect(screen.getByRole('status')).toHaveTextContent('superseded local roster/round edits are retained below');
+    await user.click(save);
+    await screen.findByText(/Event workspace saved/);
+    expect(setup.save).toHaveBeenCalledWith(fictionalEvent.id, scored.etag, {
+      ...fictionalSetup, name: 'Fictional updated event name', location: 'Fictional changed location',
+    }, expect.any(AbortSignal));
+    expect(screen.getByRole('region', { name: 'Superseded locked setup edits' })).toHaveTextContent('Unsaved fictional round name');
+  });
   it('marks current values unavailable after catalog failure and blocks capture replacement until catalog recovery', async () => {
     const setup = fakeSetup();
     vi.mocked(setup.load).mockResolvedValue(capturedWorkspace);

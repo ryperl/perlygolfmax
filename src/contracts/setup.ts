@@ -38,6 +38,7 @@ export function isEventSetupInput(value: unknown): value is EventSetupInput {
 
 function isRoundSnapshot(value: unknown, playerIds: readonly string[]): value is RoundSnapshot {
   return isRecord(value) && isUuid(value.id) && boundedText(value.name)
+    && (value.scoringStarted === undefined || typeof value.scoringStarted === 'boolean')
     && isCourseId(value.courseId) && isVersionId(value.courseVersionId)
     && isCourseMetadata(value.course) && isTeeProfile(value.teeProfile)
     && groups(value.groups, playerIds) && Array.isArray(value.players)

@@ -202,6 +202,9 @@ jobs:
                 ['events/00000000-0000-4000-8000-000000000001/workspace', 'GET'],
                 ['events/00000000-0000-4000-8000-000000000001/workspace', 'PUT'],
                 ['events/00000000-0000-4000-8000-000000000001/workspace/rounds/00000000-0000-4000-8000-000000000002/indices/refresh', 'POST'],
+                ['events/00000000-0000-4000-8000-000000000001/rounds/00000000-0000-4000-8000-000000000002/scores', 'GET'],
+                ['events/00000000-0000-4000-8000-000000000001/rounds/00000000-0000-4000-8000-000000000002/players/00000000-0000-4000-8000-000000000003/holes/1', 'PUT'],
+                ['events/00000000-0000-4000-8000-000000000001/rounds/00000000-0000-4000-8000-000000000002/players/00000000-0000-4000-8000-000000000003/score-history', 'GET'],
               ]) {
                 const response = await fetch(`${process.env.API_URL}/${route}`, { method, signal: AbortSignal.timeout(10000) });
                 assert.equal(response.status, expectedStatus);

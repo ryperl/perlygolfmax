@@ -14,8 +14,9 @@ has exercised hosted customer sign-in, signed-in event loading and event
 creation followed by a page reload. Runtime resource settings and narrow
 role scopes have been read back after foundation creation. Those checks do not
 prove all authorization, concurrency or recovery boundaries.
-No invitations, owner appointment UI, rounds,
-score-entry endpoints, scoring engine, audit exports or backup job are shipped.
+Saved owner round setup and an owner-only gross-score simulation are implemented.
+No invitations, owner appointment UI, golfer/assigned-scorer access, net/team
+scoring engine, audit exports or backup job are shipped.
 An unconfigured Events page says so explicitly, without fictional saved events.
 
 Further tenant, consent, role, resource, push and deployment changes require the
@@ -72,12 +73,50 @@ There is no permanent-delete endpoint, automatic expiry, retention policy or
 new backup guarantee. Future detail, score and invitation endpoints must enforce
 these lifecycle rules independently of discovery.
 
-The score policy for a later increment is per-hole gross strokes, blank
-unplayed holes, explicit picked-up/did-not-finish status, self-entry and a
-round/foursome-assigned scorekeeper. Owners retain correction rights with
-history. Scorekeeper assignment is not event administration. Pickup points,
-Stableford, purse and financial rules are undefined; no missing value becomes
-zero and no points are implied. These payloads/endpoints are not implemented.
+The current scoring slice is an online owner-operated simulation: per-hole
+gross strokes, unplayed holes and explicit pickup/DNF dispositions with audited
+corrections. Self-entry, invitation/account mapping and a round/foursome-assigned
+scorekeeper remain a later increment. Scorekeeper assignment is not event
+administration. Pickup points, Stableford, purse and financial rules are
+undefined; no missing value becomes zero and no points are implied.
+
+### Owner scoring authority and persistence
+
+Scoring reads, writes and history require an authoritative event owner grant.
+Catalog-manager/global-creator status alone is not scoring authority. Ordinary
+members cannot access this simulation's score endpoints. Owner archive reads
+remain private and read-only; active status is required for writes.
+
+The round score read uses the saved course/tee/hole layout and roster, not the
+live catalogs or fictional previews. New cards are virtual unplayed cards until
+a saved operation creates their revision. A first-card write requires
+`If-None-Match: *`; an existing-card write requires the exact `If-Match` revision.
+Every write requires a UUID idempotency key and a validated explicit disposition.
+The conditional event/owner/card transaction also records immutable before/after,
+actor/time and operation identity. Replays confirm the original audit, not a
+potentially newer current projection.
+
+First score persistence creates a per-round setup lock. Conditional event and
+grant checks coordinate scoring against setup/index-refresh/archive/revocation
+races. A started round cannot have its setup inputs or event roster silently
+changed, and clearing scores does not unlock it. This conservative simulation
+does not define finalization, score deletion, unlock or future handicap policy.
+Audit/score rows use the existing application table and runtime data-plane role;
+there is no new database, queue, role or infrastructure grant.
+Score reads and writes have separate durable limits of 60 requests per
+identity/minute. The existing 4 KiB request cap is unchanged. Polling honors
+bounded `Retry-After` seconds/dates and exponential backoff; explicit retries
+do not bypass the server minimum. These are application controls, not global
+ingress protection or new production quota approval.
+
+The client distinguishes server-saved cards from local unsaved edits and
+conflicts. Foreground polling is bounded, non-overlapping, paused when hidden
+and backed off on failures; it must not overwrite local edits. No score or
+token is put in IndexedDB/localStorage/Cache Storage in this increment. A
+connection is required to save, background execution is not promised, and
+reload/close may lose unsaved page drafts. This is not the offline-capable
+Arizona pilot; private caching/logout/retention/update/sync design is still
+pending, and paper backup remains necessary.
 
 MSAL manages tab-scoped sessionStorage. The callback and logout reply URI is
 `https://<frontend-host>/?event-auth=1`; local development uses the exact local

@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { readEventRoute, readPage } from './navigation';
 
 describe('readPage', () => {
+  it('validates both identifiers for refresh-safe score routes before issuing requests', () => {
+    const event = '00000000-0000-4000-8000-000000000050';
+    const round = '00000000-0000-4000-8000-000000000070';
+    expect(readEventRoute(`#events?event=${event}&round=${round}`)).toBe(`score:${event}:${round}`);
+    expect(readPage(`#events?event=${event}&round=${round}`)).toBe('events');
+    for (const hash of [`#events?event=bad&round=${round}`, `#events?event=${event}&round=bad`, `#events?round=${round}`, `#events?event=${event}&round=`]) {
+      expect(readEventRoute(hash)).toBe('invalid-score');
+    }
+  });
   it('keeps saved workspace and catalog deep links on Events without changing demo routes or callbacks', () => {
     expect(readPage('#events?catalog=courses')).toBe('events');
     expect(readPage('#events?event=fictional')).toBe('events');

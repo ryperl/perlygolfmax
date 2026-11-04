@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { configureEventServices } from './event-services';
 import { createEventSession } from '../client/identity';
 import { emptyWorkspace, fictionalEvent } from '../client/catalog.test-support';
+import { fictionalRoundScores } from '../client/scoring.test-support';
 
 vi.mock('../client/identity', () => ({ createEventSession: vi.fn() }));
 afterEach(() => { vi.unstubAllGlobals(); });
@@ -16,7 +17,8 @@ describe('event service composition', () => {
     const send = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(JSON.stringify({ canCreateEvents: true, canManageCatalog: true })))
       .mockResolvedValueOnce(new Response(JSON.stringify({ courses: [] })))
-      .mockResolvedValueOnce(new Response(JSON.stringify(emptyWorkspace)));
+      .mockResolvedValueOnce(new Response(JSON.stringify(emptyWorkspace)))
+      .mockResolvedValueOnce(new Response(JSON.stringify(fictionalRoundScores)));
     vi.stubGlobal('fetch', send);
     const { services } = configureEventServices({
       VITE_ENTRA_SPA_CLIENT_ID: '00000000-0000-4000-8000-000000000001',
@@ -30,7 +32,8 @@ describe('event service composition', () => {
     await services.events.capabilities(signal);
     await services.catalog.courses(signal);
     await services.setup.load(fictionalEvent.id, signal);
-    expect(token).toHaveBeenCalledTimes(3);
+    await services.scores.load(fictionalRoundScores.eventId, fictionalRoundScores.roundId, signal);
+    expect(token).toHaveBeenCalledTimes(4);
     for (const [, request] of send.mock.calls) {
       expect(new Headers(request?.headers).get('Authorization')).toBe('Bearer fictional-token');
       expect(request).toMatchObject({ credentials: 'omit', cache: 'no-store', signal });

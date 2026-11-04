@@ -32,6 +32,20 @@ describe('catalog and workspace SDK batch transport', () => {
     const server = createServer((request, response) => {
       requests.push(`${request.method ?? ''} ${request.url ?? ''}`);
       if (request.method === 'GET') {
+        const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+        const filter = url.searchParams.get('$filter');
+        if (filter !== null) {
+          expect(url.searchParams.get('$top')).toBe('1');
+          const conditions = [...filter.matchAll(/(PartitionKey|RowKey) (eq|ge|lt) '([^']*)'/g)];
+          const evidence = [...stored.values()].filter((row) => conditions.every((condition) => {
+            const value = row[condition[1] ?? ''];
+            const expected = condition[3] ?? '';
+            return typeof value === 'string' && (condition[2] === 'eq' ? value === expected : condition[2] === 'ge' ? value >= expected : value < expected);
+          })).slice(0, 1);
+          response.writeHead(200, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ value: evidence }));
+          return;
+        }
         const path = decodeURIComponent(request.url ?? '');
         const match = /PartitionKey='([^']+)',RowKey='([^']+)'/.exec(path);
         const key = match ? `${match[1] ?? ''}|${match[2] ?? ''}` : '';

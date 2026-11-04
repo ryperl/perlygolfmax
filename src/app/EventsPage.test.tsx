@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventsPage } from './EventsPage';
@@ -6,17 +6,72 @@ import type { EventServices } from './EventsPage';
 import type { EventPage, EventSummary } from '../domain/events';
 import { EventChangedError, SessionExpiredError } from '../client/events';
 import { fakeCatalog, fakeSetup, fictionalEvent } from '../client/catalog.test-support';
+import { fakeScores, fictionalRoundScores, scoreResult } from '../client/scoring.test-support';
 
 const saved: EventSummary = { id: '00000000-0000-4000-8000-000000000001', name: 'Fictional Open', createdAt: '2026-01-01', role: 'owner', status: 'active', etag: 'fictional-v1' };
 function service(): EventServices {
   return {
-    catalog: fakeCatalog(), setup: fakeSetup(),
+    catalog: fakeCatalog(), setup: fakeSetup(), scores: fakeScores(),
     session: { initialize: vi.fn().mockResolvedValue(true), signIn: vi.fn().mockResolvedValue(undefined), signOut: vi.fn().mockResolvedValue(undefined), token: vi.fn().mockResolvedValue('fictional') },
     events: { capabilities: vi.fn().mockResolvedValue({ canCreateEvents: true, canManageCatalog: false }), list: vi.fn().mockResolvedValue({ events: [] }), create: vi.fn().mockResolvedValue(saved), setStatus: vi.fn().mockResolvedValue({ ...saved, status: 'archived', etag: 'fictional-v2' }) },
   };
 }
 beforeEach(() => { window.history.replaceState(null, '', '/'); });
 describe('EventsPage composition', () => {
+  it('restores owner score routes without catalog authority and returns expired scoring sessions to Sign in', async () => {
+    const services = service();
+    window.history.replaceState(null, '', `#events?event=${fictionalRoundScores.eventId}&round=${fictionalRoundScores.roundId}`);
+    vi.mocked(services.scores.load).mockRejectedValueOnce(new SessionExpiredError('Your scoring session expired. Sign in again.'));
+    render(<EventsPage services={services} />);
+    expect(await screen.findByRole('button', { name: /Sign in/ })).toBeVisible();
+    expect(services.scores.load).toHaveBeenCalledWith(fictionalRoundScores.eventId, fictionalRoundScores.roundId, expect.any(AbortSignal));
+    expect(services.catalog.courses).not.toHaveBeenCalled();
+    expect(screen.queryByRole('article')).not.toBeInTheDocument();
+  });
+  it('shows owner scoring without manager permission and aborts its read on route change/signout', async () => {
+    const services = service();
+    window.history.replaceState(null, '', `#events?event=${fictionalRoundScores.eventId}&round=${fictionalRoundScores.roundId}`);
+    render(<EventsPage services={services} />);
+    expect(await screen.findByRole('heading', { name: 'Online owner scorecards' })).toBeVisible();
+    await screen.findByRole('article', { name: 'Fictional Player 1 scorecard' });
+    expect(services.catalog.players).not.toHaveBeenCalled();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
+    await screen.findByRole('button', { name: /Sign in/ });
+    expect(screen.queryByRole('article')).not.toBeInTheDocument();
+    expect(services.session.signOut).toHaveBeenCalledOnce();
+  });
+  it('blocks malformed score routes before scores client access', async () => {
+    const services = service();
+    window.history.replaceState(null, '', '#events?event=invalid&round=invalid');
+    render(<EventsPage services={services} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid event or round identifier');
+    expect(services.scores.load).not.toHaveBeenCalled();
+  });
+  it('aborts an in-flight score save on navigation and never restores private scoring UI from a late acknowledgement', async () => {
+    const services = service();
+    let finish: (() => void) | undefined;
+    vi.mocked(services.scores.save).mockImplementationOnce((_eventId, _roundId, playerId, holeNumber, score, etag, id) => new Promise((resolve) => {
+      finish = () => { resolve(scoreResult({
+        ...scoreResult().change, playerId, holeNumber, after: score, expectedEtag: etag, id,
+      })); };
+    }));
+    window.history.replaceState(null, '', `#events?event=${fictionalRoundScores.eventId}&round=${fictionalRoundScores.roundId}`);
+    render(<EventsPage services={services} />);
+    const form = within(await screen.findByRole('form', { name: 'Fictional Player 1 hole 1' }));
+    const user = userEvent.setup();
+    await user.selectOptions(form.getByRole('combobox'), 'picked-up');
+    await user.click(form.getByRole('button', { name: 'Save hole 1' }));
+    expect(services.scores.save).toHaveBeenCalledOnce();
+    act(() => {
+      window.history.replaceState(null, '', '#events');
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    });
+    expect(vi.mocked(services.scores.save).mock.calls[0]?.[7].aborted).toBe(true);
+    await act(async () => { finish?.(); await Promise.resolve(); });
+    expect(screen.queryByRole('heading', { name: 'Online owner scorecards' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Save acknowledged/)).not.toBeInTheDocument();
+  });
   it('shows catalog navigation only for managers, not for event creators/owners without catalog permission', async () => {
     const services = service();
     const { unmount } = render(<EventsPage services={services} />);

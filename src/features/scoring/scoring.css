@@ -1,0 +1,13 @@
+.owner-scores { display: grid; gap: 1rem; min-width: 0; overflow-wrap: anywhere; }
+.owner-scores h4 { margin: 0; }
+.owner-scores p { overflow-wrap: anywhere; }
+.score-layout { overflow-x: auto; min-width: 0; max-width: 100%; }
+.score-layout:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
+.score-layout table { border-collapse: collapse; width: 100%; }
+.score-layout th, .score-layout td { padding: .5rem; border-bottom: 1px solid var(--cp-border); text-align: left; }
+.score-holes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: 1rem; }
+.score-hole { display: grid; align-content: start; gap: .5rem; padding: 1rem; border: 1px solid var(--cp-border); border-radius: .5rem; }
+.score-hole label { display: grid; gap: .3rem; }
+.score-hole input, .score-hole select { width: 100%; min-width: 0; }
+.score-hole select { font: inherit; min-height: 44px; padding: .5rem; background: var(--cp-surface); color: var(--cp-text); border: 1px solid var(--cp-border-strong); border-radius: .5rem; }
+.score-hole select:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }

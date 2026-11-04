@@ -6,6 +6,7 @@ import { TableRequestLimiter } from './limits.js';
 describe('shared identity request limits', () => {
   it.each([
     ['catalog-read', 60], ['catalog-write', 60], ['setup-read', 60], ['setup-write', 30],
+    ['scores-read', 60], ['scores-write', 60],
   ] as const)('enforces a separate bounded %s bucket without fallback', async (action, limit) => {
     const table = new TableClient('https://fictional.table.core.windows.net', 'Events');
     let count = 0;

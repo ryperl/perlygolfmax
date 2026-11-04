@@ -53,6 +53,10 @@
 - Keep archived events owner-only. Archive/restore must conditionally check
   both event and owner-grant revisions. Deletion or retention rules require
   a separate scope decision.
+- Gross scoring is currently an owner-only online simulation. First saved
+  scores lock setup inputs; preserve atomic score/audit/grant checks, explicit
+  unplayed/pickup/DNF and incomplete totals. Do not infer admission, offline
+  durability, net rules or permission to unlock scored rounds.
 - Keep limits effective across instances; fail closed on missing configuration
   or limit-store failure. CORS and Functions keys are not user authentication.
 - Read `docs/operations.md` before identity, infrastructure, deployment or

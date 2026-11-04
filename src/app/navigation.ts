@@ -1,3 +1,5 @@
+import { isUuid } from '../contracts/events';
+
 export const navigation = [
   { id: 'events', label: 'Events' },
   { id: 'overview', label: 'Overview' },
@@ -17,6 +19,8 @@ export function readEventRoute(hash: string): string {
   if (!hash.startsWith('#events?')) return '';
   const query = new URLSearchParams(hash.slice('#events?'.length));
   const event = query.get('event');
+  const round = query.get('round');
+  if (round !== null) return event && isUuid(event) && isUuid(round) ? `score:${event}:${round}` : 'invalid-score';
   if (event) return `event:${event}`;
   const catalog = query.get('catalog');
   return catalog === 'courses' || catalog === 'players' ? catalog : '';

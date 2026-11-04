@@ -11,6 +11,8 @@ import type { TablePlayerCatalog } from '../catalog/players.js';
 import { metadata, profile } from '../catalog/projections.js';
 import { isIndexRefreshAudit } from './index-refresh.js';
 import type { IndexRefreshAudit } from './index-refresh.js';
+import { scoringLock } from '../scoring/lock.js';
+import type { ScoringLock } from '../scoring/lock.js';
 
 interface WorkspaceHeader {
   readonly location: string;
@@ -53,16 +55,26 @@ export class TableWorkspaceStore {
     if (!header) return { event: summary, location: '', roster: [], rounds: [], etag: summary.etag };
     const saved = decode(header.content, isHeader);
     const rounds: unknown[] = [];
+    const locks = new Map<string, ScoringLock>();
     for (const id of saved.roundIds) {
       const row = await optionalRow(this.table, summary.id, `round:${id}`);
       if (!row || typeof row.content !== 'string') throw new ApiError(503, 'INVALID_STORED_WORKSPACE');
       let round: unknown;
       try { round = JSON.parse(row.content); } catch { throw new ApiError(503, 'INVALID_STORED_WORKSPACE'); }
       if (!isRecord(round) || round.id !== id) throw new ApiError(503, 'INVALID_STORED_WORKSPACE');
-      rounds.push(round);
+      const lock = await scoringLock(this.table, summary.id, id);
+      if (lock) locks.set(id, lock);
+      const { scoringStarted: _ignored, ...snapshot } = round;
+      void _ignored;
+      rounds.push({ ...snapshot, ...(lock ? { scoringStarted: true } : {}) });
     }
     const workspace = { event: { ...summary, role: 'owner' }, location: saved.location, roster: saved.roster, rounds, etag: summary.etag };
     if (!isEventWorkspace(workspace)) throw new ApiError(503, 'INVALID_STORED_WORKSPACE');
+    for (const round of workspace.rounds) {
+      if (locks.get(round.id)?.writtenPlayerIds.some((id) => !round.players.some((player) => player.playerId === id))) {
+        throw new ApiError(503, 'INVALID_STORED_SCORE_LOCK');
+      }
+    }
     return { ...workspace, event: summary };
   }
 
@@ -78,6 +90,7 @@ export class TableWorkspaceStore {
       rounds: workspace.rounds.map((round) => ({
         id: round.id, name: round.name, courseId: round.courseId, courseVersionId: round.courseVersionId,
         course: metadata(round.course), teeProfile: profile(round.teeProfile),
+        ...(round.scoringStarted ? { scoringStarted: true } : {}),
         groups: round.groups.map((group) => ({ number: group.number, playerIds: [...group.playerIds] })),
         players: round.players.map((player) => after.summary.role === 'owner'
           ? {
@@ -99,17 +112,22 @@ export class TableWorkspaceStore {
     return true;
   }
 
-  // Setup-only: future scored/locked-round rules must gate this action before any refresh.
   async refreshIndices(identity: AccountIdentity, eventId: string, roundId: string, requestId: string, etag: string): Promise<EventWorkspace> {
     const access = await this.access(identity, eventId);
     if (access.summary.role !== 'owner') throw new ApiError(403, 'EVENT_MANAGEMENT_FORBIDDEN');
     if (access.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     requireManager(identity, this.allowed);
-    if (await this.refreshReplay(identity, eventId, roundId, requestId, etag)) return this.get(identity, eventId);
+    if (await scoringLock(this.table, eventId, roundId)) throw new ApiError(409, 'ROUND_SCORING_STARTED');
+    if (await this.refreshReplay(identity, eventId, roundId, requestId, etag)) {
+      const current = await this.get(identity, eventId);
+      if (current.rounds.find((round) => round.id === roundId)?.scoringStarted) throw new ApiError(409, 'ROUND_SCORING_STARTED');
+      return current;
+    }
     if (access.summary.etag !== etag) throw new ApiError(409, 'EVENT_CHANGED');
     const workspace = await this.load(access.summary);
     const round = workspace.rounds.find((entry) => entry.id === roundId);
     if (!round) throw new ApiError(404, 'ROUND_NOT_FOUND');
+    if (round.scoringStarted) throw new ApiError(409, 'ROUND_SCORING_STARTED');
     const profiles = await Promise.all(round.players.map((entry) => this.players.get(identity, entry.playerId)));
     const updated: RoundSnapshot = {
       ...round,
@@ -139,7 +157,9 @@ export class TableWorkspaceStore {
       if (!isConflict(error)) throw error;
       if (!await this.refreshReplay(identity, eventId, roundId, requestId, etag)) throw new ApiError(409, 'EVENT_CHANGED');
     }
-    return this.get(identity, eventId);
+    const current = await this.get(identity, eventId);
+    if (current.rounds.find((round) => round.id === roundId)?.scoringStarted) throw new ApiError(409, 'ROUND_SCORING_STARTED');
+    return current;
   }
 
   async save(identity: AccountIdentity, id: string, input: EventSetupInput, etag: string): Promise<EventWorkspace> {
@@ -153,6 +173,16 @@ export class TableWorkspaceStore {
     if (previous.rounds.some((round) => !input.rounds.some((configured) => configured.id === round.id))) {
       throw new ApiError(409, 'ROUND_REMOVAL_NOT_SUPPORTED');
     }
+    const locked = previous.rounds.filter((round) => round.scoringStarted);
+    if (locked.length && canonical(input.playerIds) !== canonical(previous.roster.map((player) => player.playerId))) {
+      throw new ApiError(409, 'ROUND_SCORING_STARTED');
+    }
+    for (const saved of locked) {
+      const requested = input.rounds.find((round) => round.id === saved.id);
+      if (!requested || requested.name !== saved.name || requested.courseId !== saved.courseId
+        || requested.courseVersionId !== saved.courseVersionId || requested.teeProfileId !== saved.teeProfile.id
+        || canonical(requested.groups) !== canonical(saved.groups)) throw new ApiError(409, 'ROUND_SCORING_STARTED');
+    }
     const profiles = await Promise.all(input.playerIds.map((playerId) => this.players.get(identity, playerId)));
     const roster = profiles.map((player) => ({
       playerId: player.id,
@@ -160,6 +190,11 @@ export class TableWorkspaceStore {
     }));
     const rounds: RoundSnapshot[] = [];
     for (const round of input.rounds) {
+      const lockedRound = locked.find((existing) => existing.id === round.id);
+      if (lockedRound) {
+        rounds.push(lockedRound);
+        continue;
+      }
       const version = await this.courses.getVersion(identity, round.courseId, round.courseVersionId);
       const teeProfile = version.data.teeProfiles.find((tee) => tee.id === round.teeProfileId);
       if (!teeProfile) throw new ApiError(400, 'TEE_PROFILE_NOT_FOUND');

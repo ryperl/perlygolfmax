@@ -1,9 +1,5 @@
-import { createServer as createHttpServer } from 'node:http';
-import { isValidElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { createServer } from 'vite';
 import { expect, test } from '@playwright/test';
-import { isRecord } from '../../src/contracts/events';
+import { renderComponentFixture } from './render-fixture';
 import type { TeeProfile } from '../../src/domain/catalog';
 
 const profile: TeeProfile = {
@@ -23,20 +19,7 @@ test('catalog navigation gaps and actual hole preview fit narrow and enlarged la
   await expect(page.getByRole('heading', { level: 1, name: 'Events', exact: true })).toBeVisible();
   const stylesheets = await page.locator('link[rel="stylesheet"]').evaluateAll((links) =>
     links.map((link) => link.getAttribute('href')).filter((href): href is string => href !== null));
-  const hmrServer = createHttpServer();
-  const renderer = await createServer({
-    server: { middlewareMode: true, hmr: { server: hmrServer }, watch: null }, appType: 'custom',
-    logLevel: 'error', optimizeDeps: { noDiscovery: true },
-  });
-  let preview: string;
-  try {
-    const module: unknown = await renderer.ssrLoadModule('/src/features/catalog/TeeProfilePreview.tsx');
-    if (!isRecord(module) || typeof module.TeeProfilePreview !== 'function') throw new Error('Preview component export is missing.');
-    const element: unknown = Reflect.apply(module.TeeProfilePreview, undefined, [{ profile }]);
-    if (!isValidElement(element)) throw new Error('Preview did not render a React element.');
-    preview = renderToStaticMarkup(element);
-  } finally { await renderer.close(); }
-  expect(hmrServer.listening).toBe(false);
+  const preview = await renderComponentFixture('/src/features/catalog/TeeProfilePreview.tsx', 'TeeProfilePreview', { profile });
   await page.setContent(`<html><head>${stylesheets.map((href) => `<link rel="stylesheet" href="${href}">`).join('')}</head>
     <body><div class="app"><main><nav class="event-actions" aria-label="Catalog spacing fixture">
     <a href="#events">Events</a><a href="#courses">Course catalog</a><a href="#players">Player catalog</a>

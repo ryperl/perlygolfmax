@@ -78,6 +78,10 @@ from npm installation and must also comply with your machine's policies.
   reusable players with dated manual Handicap Index history, and saved-event
   owner setup with explicit course/tee selection, roster and manual foursomes.
   Real source exports are never bundled or committed.
+- Owner-only online gross scorecard simulation from saved round setup:
+  explicit hole dispositions, conditional saved scores, correction history
+  and complete-versus-incomplete gross summaries. This is not golfer admission,
+  net scoring, offline recording or a finished tournament scoreboard.
 
 The Events screen is deliberately unavailable until an approved identity tenant
 and API are configured. Customer sign-in and event creation/reload have been
@@ -105,13 +109,40 @@ Production PWA capabilities require HTTPS and platform-specific verification.
 
 ### Future work, not implemented
 
-Gross-score entry, calculated Stableford/team results, invitation admission,
-owner appointment UI, score-edit history, offline synchronization and
+Golfer/self/assigned-foursome admission and scoring, calculated Stableford/team
+results, owner appointment UI, offline synchronization and
 leaderboards remain later increments. The selected design is Entra External ID
 email codes, a standalone Functions API and Table Storage, with SWA staying Free.
 Provisioning/deployment is separately approval-gated. Detailed scoring, betting,
 payouts, reporting, overall-trip rules, admission and retention remain unsettled.
-No scoring or handicap formulas are implied by this demo.
+No handicap, Stableford, team or financial formulas are implied by this demo.
+
+### Owner gross scorecard simulation
+
+An event owner can open scorecards for a saved round and enter each player's
+per-hole gross strokes. Unplayed, picked-up and did-not-finish are distinct
+states, never automatic zero/penalty strokes. A numeric recorded-stroke sum is
+labelled incomplete unless every hole has numeric strokes; cards are not ranked
+by incomplete totals. Positive whole strokes are bounded only for exact numeric
+arithmetic, not by an invented golf scoring cap.
+
+Each saved operation has an idempotency ID, conditional card revision and
+immutable before/after/actor/time history. Conflicting edits require explicit
+refresh/review; failed local drafts are not confirmed saves. Owner access is
+checked by authoritative event membership, not global course-manager status.
+Ordinary members do not yet have scoring access. Archived owner cards are
+read-only.
+
+The first saved score locks that round's course, tee, roster/group and captured
+index inputs, even if all holes are later cleared. Catalog index changes remain
+independent. Event name/location edits are not score reinterpretation. There is
+no score deletion/unlock/finalization or handicap-policy selector in this slice.
+
+This simulation is online-only. Unsaved drafts exist only in the open page:
+closing/reloading it or losing browser storage can lose unsaved work. The PWA
+manifest is not offline score storage or synchronization. Keep a paper backup.
+Automatic foreground activity reads do not guarantee real-time updates, and
+another device sees changes only after the server saves them.
 
 ### Local catalog and round setup
 
