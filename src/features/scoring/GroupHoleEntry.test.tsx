@@ -32,16 +32,19 @@ describe('pure mobile group hole entry', () => {
     expect(screen.getByText('Par 4 · 100 yards · Stroke index 1')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Decrease score for Fictional Player 1' })).toBeDisabled();
     expect(screen.queryByText(/Other options|Number = strokes|Clear to unplayed|DNF for|Request ID|Base revision/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /4 strokes for/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Saved:/)).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Save & Next Hole' })).toHaveLength(1);
   });
   it('keeps quick scores and the X button explicit, with +/- retaining the X7 disposition', async () => {
     const input = props();
     const first = input.rows[0];
     if (!first) throw new Error('Missing fictional row');
-    const { rerender } = render(<GroupHoleEntry {...input} />);
+    const { rerender } = render(<GroupHoleEntry {...input} rows={[first]} />);
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: '4 strokes for Fictional Player 1' }));
     expect(input.onEdit).toHaveBeenLastCalledWith(first.playerId, '4');
-    rerender(<GroupHoleEntry {...input} rows={[{ ...first, draft: { text: 'X7', baseEtag: null, status: 'draft' } }, ...input.rows.slice(1)]} />);
+    rerender(<GroupHoleEntry {...input} rows={[{ ...first, draft: { text: 'X7', baseEtag: null, status: 'draft' } }]} />);
     expect(screen.getByRole('textbox', { name: 'Fictional Player 1 score' })).toHaveValue('X7');
     expect(screen.getByRole('button', { name: 'Pickup X for Fictional Player 1' })).toHaveAttribute('aria-pressed', 'true');
     await user.click(screen.getByRole('button', { name: 'Decrease score for Fictional Player 1' }));
@@ -87,6 +90,6 @@ describe('pure mobile group hole entry', () => {
     const row = within(screen.getByRole('article', { name: 'Fictional Player 1 scorecard' }));
     expect(row.getByText('Conflict — review')).toBeVisible();
     expect(row.getByRole('button', { name: 'Review my value for Fictional Player 1' })).toBeDisabled();
-    expect(row.getByText(/Saved: 8 strokes · Local: X7/)).toBeVisible();
+    expect(row.getByText(/Saved: 8 strokes · Intended: X7/)).toBeVisible();
   });
 });

@@ -19,6 +19,16 @@ No invitations, owner appointment UI, golfer/assigned-scorer access, net/team
 scoring engine, audit exports or backup job are shipped.
 An unconfigured Events page says so explicitly, without fictional saved events.
 
+Main navigation starts at Events. Opening a saved event binds Overview, Rounds
+and The Group to the same explicit event ID in the URL. Their typed projections
+use the existing owner-guarded workspace read, not global catalog reads or
+synthetic demo models. This does not grant ordinary members new access.
+Snapshot rounds/groups are not assumed finished just because scoring started.
+Selection is retained only in app memory, restored from validated deep links
+and cleared on sign-out/session expiry; requests abort on route/event changes.
+Missing selection, unavailable configuration, rejected access and service errors
+never fall back to fictional data. The separate Preview is explicitly selected.
+
 Further tenant, consent, role, resource, push and deployment changes require the
 relevant scope approval. The production frontend deployment workflow is
 unchanged. The separate test workflow publishes validated frontend/API
@@ -130,6 +140,13 @@ Partial acknowledgements stay saved, pending/unattempted drafts retain their
 intent/revision/request identity and a failure never advances the hole. A later
 owner projection must not silently rebase another player's draft or be reported
 as matching the user's intended value.
+Foursome entry uses one compact card rather than four expanded player panels.
+Routine polling has separate background semantics: no foreground busy/control
+pulses and no replacement of unchanged projections. An edit that starts during
+a pending poll keeps its original baseline; changed poll data is marked stale
+rather than overwriting that draft. A foreground action waits behind the pending
+read, preserving single-operation serialization and Retry-After minimums.
+Authorization failures still clear private data and errors remain visible.
 
 The round opens on a golfer-facing group scorecard, not the score editor or
 an audit log. Its columns follow saved hole numbers, irrespective of entry or
@@ -198,6 +215,9 @@ Source category, every profile's own holes and Total/Front/Back ratings, units,
 season and source identifiers are preserved. Missing source numbers stay null;
 they are not invented. Source provenance records the organizer's attribution
 and optional known export date; import time is not source freshness.
+Published and staged course previews show one explicitly selected tee profile.
+Changing this preview changes no saved-round selection or immutable snapshot,
+and does not omit any profile from import validation, staging or publication.
 
 Player profiles, login identities, event roster membership and round entries
 are separate. Dated, source-attributed manual index observations are audited.

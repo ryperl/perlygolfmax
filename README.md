@@ -1,10 +1,10 @@
 # Perly Golf Max
 
 A mobile-first golf-trip companion for a planned group of 12 golfers and five
-rounds. It includes a **read-only fictional preview** and an initial private
-Events/API implementation. The isolated test foundation is provisioned, but
-customer identity and saved events are not connected by default; this is not
-yet an operational scoreboard.
+rounds. It includes a private, selected-event workspace with an owner-operated
+online gross-scoring simulation and a separate **read-only fictional preview**.
+Local identity/API configuration is optional and explicitly unconfigured by
+default; this is not yet a golfer-admission or offline-capable tournament app.
 
 ## Local setup
 
@@ -57,7 +57,10 @@ from npm installation and must also comply with your machine's policies.
 
 ## Implemented scope
 
-- Responsive overview, five-round itinerary, and twelve-person demo group.
+- Live Overview, Rounds and The Group views for an explicitly selected saved
+  event, using its actual roster, round snapshots, tees and manual groups.
+- A separate Preview with a fictional five-round itinerary and twelve-person
+  group; fictional data never substitutes for failed or missing private data.
 - Hash-based navigation with direct links, browser history, keyboard focus
   management, skip link, and semantic landmarks.
 - Light/dark presentation follows the system setting at page load.
@@ -87,8 +90,8 @@ The Events screen is deliberately unavailable until an approved identity tenant
 and API are configured. Customer sign-in and event creation/reload have been
 manually verified in isolated test; archive/restore also has automated coverage.
 This does not establish all live authorization, concurrency or recovery cases.
-The existing fictional preview remains available
-without configuration. See [architecture, security and recovery](docs/operations.md)
+The fictional Preview remains available without configuration. Main navigation
+starts at Events, not the demo. See [architecture, security and recovery](docs/operations.md)
 for setup requirements, controls, residual risks and separate approval gates.
 
 Bundled names, locations, courses, and tee times are **fictional sample content**.
@@ -132,7 +135,9 @@ arithmetic, not by an invented golf scoring cap.
 
 Use the group **Save & Next Hole** action for normal entry. Each player's
 acknowledgement is tracked separately: on partial failure, saved values stay
-saved, pending drafts remain and the screen does not advance.
+saved, pending drafts remain and the screen does not advance. A foursome uses
+one compact card with a row per golfer and one shared save footer; single-player
+entry can additionally offer explicit quick scores.
 Opening a round shows a traditional group scorecard immediately: holes run
 left to right, with a row per golfer, front/back nines and Out/In/Total columns.
 Select a golfer for their individual card, or choose **Enter scores** for the
@@ -165,8 +170,13 @@ no score deletion/unlock/finalization or handicap-policy selector in this slice.
 This simulation is online-only. Unsaved drafts exist only in the open page:
 closing/reloading it or losing browser storage can lose unsaved work. The PWA
 manifest is not offline score storage or synchronization. Keep a paper backup.
-Automatic foreground activity reads do not guarantee real-time updates, and
+Automatic visible-page reads do not guarantee real-time updates, and
 another device sees changes only after the server saves them.
+Routine background checks do not toggle foreground loading/disabled controls
+or replace unchanged round projections. Editing during a pending check preserves
+the edit-time card baseline; a save waits for that read rather than overlapping
+it. Changed saved data, errors, permission revocation and session expiry remain
+visible and guarded.
 
 ### Local catalog and round setup
 
@@ -184,8 +194,10 @@ creates a new version, not an overwrite of an existing round. Saved courses are
 reusable without the original file or a live provider. Source attribution and
 an unknown export date are not a claim that ratings were freshly verified.
 Expand a tee profile in the import preview or saved-version view to inspect its
-hole yardage, par, stroke-index allocation and Total/Front/Back ratings. Previewing
-a profile does not select it for a round.
+hole yardage, par, stroke-index allocation and Total/Front/Back ratings after
+choosing **Preview tee**. Only the chosen profile is displayed; no tee is selected
+automatically. Previewing a profile does not select it for a round or reduce the
+set of profiles validated/staged/published by an import.
 
 Players are independent of sign-in accounts and event membership. Manual index
 observations have effective dates, source labels and audit history. Unknown is
@@ -228,8 +240,10 @@ src/
   contracts/       Runtime-validated network contracts, no provider SDKs
   client/          Browser identity and typed API adapters
   demo/            Fictional fixtures and fixture-invariant tests
-  features/trip/   Overview, rounds, group views and their own tests
+  features/trip/   Explicit fictional Preview views and their own tests
+  features/event-trip/ Saved-event Overview, Rounds, Group and their tests
   features/events/ Private Events presentation and co-located tests
+  features/scoring/ Group entry and saved scorecards, with co-located tests
   test/            Shared test environment setup
 tests/smoke/       Production-browser smoke tests
 public/           Manifest and static icons
@@ -253,6 +267,15 @@ beside the code they exercise; only end-to-end checks live in `tests/`.
 The API imports only shared domain/contracts, never UI/demo/client code.
 Provider SDKs stay in concrete adapters; the browser never imports storage or
 server credentials. No empty future layers or generic service framework exists.
+
+The selected event is explicit in each live-tab URL and retained only in app
+memory while moving between screens. Opening an event links its Overview,
+Rounds, Group, setup and scorecards without reusing demo models or fetching the
+global catalogs for read-only views. Direct links restore the event context;
+without one, choose an event rather than automatically taking the first result.
+Sign-out/session expiry clears the in-memory selection and private UI.
+The existing owner-only workspace API remains the access boundary for these
+views; this does not add ordinary-player admission or new permissions.
 
 ## Local feeds versus public CI
 

@@ -32,7 +32,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired }: O
   const saving = useRef(false);
   const alive = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  const { round, busy, error, stale, run, refresh, accept } = useOwnerScores(
+  const { round, busy, error, stale, run, refresh, accept, pauseForEdit } = useOwnerScores(
     client, eventId, roundId, drafts.size > 0, onSessionExpired,
   );
   const group = round?.groups.find((item) => item.number === groupNumber) ?? round?.groups[0];
@@ -46,6 +46,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired }: O
   }
   function edit(playerId: string, text: string) {
     if (!round || !hole || busy || saving.current || round.eventStatus !== 'active') return;
+    pauseForEdit();
     const key = entryKey(playerId, hole.number);
     update(key, editedDraft(text, cardFor(round, playerId), currentDrafts.current.get(key)));
     setNotice('');

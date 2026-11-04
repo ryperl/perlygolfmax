@@ -1,0 +1,1 @@
+export { EventTripView } from './EventTripView';

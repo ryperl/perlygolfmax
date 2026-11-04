@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readEventRoute, readPage } from './navigation';
+import { eventTabHref, readEventRoute, readPage, readPreviewTab, readSelectedEvent } from './navigation';
 
 describe('readPage', () => {
   it('validates both identifiers for refresh-safe score routes before issuing requests', () => {
@@ -11,16 +11,16 @@ describe('readPage', () => {
       expect(readEventRoute(hash)).toBe('invalid-score');
     }
   });
-  it('keeps saved workspace and catalog deep links on Events without changing demo routes or callbacks', () => {
+  it('preserves setup/catalog routes and rejects malformed selected-event routes', () => {
     expect(readPage('#events?catalog=courses')).toBe('events');
     expect(readPage('#events?event=fictional')).toBe('events');
     expect(readEventRoute('#events?catalog=courses')).toBe('courses');
     expect(readEventRoute('#events?catalog=players')).toBe('players');
-    expect(readEventRoute('#events?event=fictional')).toBe('event:fictional');
+    expect(readEventRoute('#events?event=fictional')).toBe('invalid-event');
     expect(readEventRoute('#events?catalog=unknown')).toBe('');
-    expect(readEventRoute('#rounds?event=fictional')).toBe('');
+    expect(readEventRoute('#rounds?event=fictional')).toBe('invalid-event');
   });
-  it.each(['events', 'overview', 'rounds', 'group'] as const)('recognizes #%s', (page) => {
+  it.each(['events', 'overview', 'rounds', 'group', 'preview'] as const)('recognizes #%s', (page) => {
     expect(readPage(`#${page}`)).toBe(page);
   });
 
@@ -29,10 +29,30 @@ describe('readPage', () => {
     expect(readPage('#error=access_denied', '?event-auth=1')).toBe('events');
     expect(readPage('', '?event-auth=1')).toBe('events');
     expect(readPage('#group', '?event-auth=1')).toBe('group');
-    expect(readPage('#code=fictional')).toBe('overview');
+    expect(readPage('#code=fictional')).toBe('events');
   });
 
   it.each(['', '#', '#unknown', '#Rounds', '#rounds/1', '#%67roup'])('falls back safely for %j', (hash) => {
-    expect(readPage(hash)).toBe('overview');
+    expect(readPage(hash)).toBe('events');
+  });
+  it('keeps explicit live event context in each tab and never treats Preview as a selected event', () => {
+    const event = '00000000-0000-4000-8000-000000000050';
+    for (const tab of ['overview', 'rounds', 'group'] as const) {
+      expect(readEventRoute(eventTabHref(tab, event))).toBe(`${tab}:${event}`);
+      expect(readSelectedEvent(eventTabHref(tab, event))).toBe(event);
+      expect(readEventRoute(eventTabHref(tab, null))).toBe(`select:${tab}`);
+    }
+    expect(readEventRoute(`#events?event=${event}`)).toBe(`event:${event}`);
+    expect(readSelectedEvent(`#events?event=${event}&event=${event}`)).toBeNull();
+    expect(readEventRoute(`#overview?event=${event}&event=${event}`)).toBe('invalid-event');
+    expect(readSelectedEvent(`#preview?event=${event}`)).toBeNull();
+    expect(readEventRoute(`#preview?event=${event}`)).toBe('');
+    expect(readEventRoute('#group?event=')).toBe('invalid-event');
+  });
+  it('names demo destinations only inside the explicit Preview route', () => {
+    expect(readPreviewTab('#preview')).toBe('overview');
+    expect(readPreviewTab('#preview?view=rounds')).toBe('rounds');
+    expect(readPreviewTab('#preview?view=group')).toBe('group');
+    expect(readPreviewTab('#preview?view=unsupported')).toBe('overview');
   });
 });

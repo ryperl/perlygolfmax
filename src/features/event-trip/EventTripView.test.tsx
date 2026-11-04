@@ -1,0 +1,160 @@
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it } from 'vitest';
+import { emptyWorkspace, fictionalId, fictionalWorkspace } from '../../client/catalog.test-support';
+import type { EventWorkspace, RoundSnapshot } from '../../domain/setup';
+import { EventTripView } from './index';
+
+const openingRound = fictionalWorkspace.rounds[0];
+if (!openingRound) throw new Error('Missing fictional round fixture.');
+const firstRound: RoundSnapshot = {
+  ...openingRound, scoringStarted: true,
+  groups: [
+    { number: 3, playerIds: [fictionalId(3), fictionalId(1)] },
+    { number: 2, playerIds: [] },
+  ],
+};
+const secondRound: RoundSnapshot = {
+  ...openingRound, id: fictionalId(71), name: 'Fictional closing round',
+  course: { ...openingRound.course, name: 'Fictional Pines' },
+  teeProfile: { ...openingRound.teeProfile, name: 'Fictional Gold', totalYardage: 1234, totalPar: 35 },
+  groups: [{ number: 4, playerIds: [fictionalId(2), fictionalId(4)] }],
+};
+const workspace: EventWorkspace = { ...fictionalWorkspace, rounds: [firstRound, secondRound] };
+const eventUrl = `event=${encodeURIComponent(workspace.event.id)}`;
+
+function roundCard(name: string) {
+  const card = screen.getByRole('heading', { name, level: 3 }).closest('li');
+  if (!card) throw new Error('Missing fictional round card.');
+  return within(card);
+}
+
+describe('saved event overview', () => {
+  it('uses the selected workspace, actual counts, and saved-round order and links', () => {
+    render(<EventTripView workspace={workspace} view="overview" />);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(workspace.event.name);
+    expect(screen.getByText(workspace.location)).toBeVisible();
+    const stats = screen.getByRole('region', { name: 'Event at a glance' });
+    expect(within(stats).getByText('Golfers on roster').nextElementSibling).toHaveTextContent('4');
+    expect(within(stats).getByText('Saved rounds').nextElementSibling).toHaveTextContent('2');
+    expect(screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent))
+      .toEqual([firstRound.name, secondRound.name]);
+    expect(roundCard(secondRound.name).getByText('Fictional Pines')).toBeVisible();
+    expect(roundCard(secondRound.name).getByText('Fictional Gold tees')).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Configure event' })).toHaveAttribute('href', `#events?${eventUrl}`);
+    for (const round of workspace.rounds) {
+      expect(screen.getByRole('link', { name: `Open scorecard for ${round.name}` }))
+        .toHaveAttribute('href', `#events?${eventUrl}&round=${encodeURIComponent(round.id)}`);
+    }
+    expect(screen.queryByText(/completed|today|tee time|handicap|demo/i)).not.toBeInTheDocument();
+  });
+
+  it('shows honest empty states without assuming a location, roster, or opening round', () => {
+    render(<EventTripView workspace={emptyWorkspace} view="overview" />);
+    expect(screen.getByText('No location saved.')).toBeVisible();
+    expect(screen.getByText('No golfers saved to this event roster.')).toBeVisible();
+    expect(screen.getByText('No rounds saved for this event.')).toBeVisible();
+    expect(screen.getAllByText('0')).toHaveLength(2);
+    expect(screen.queryByRole('link', { name: /scorecard/i })).not.toBeInTheDocument();
+  });
+});
+
+describe('saved event rounds', () => {
+  it('shows captured course/tee totals and manual group order without inferring completion', () => {
+    render(<EventTripView workspace={workspace} view="rounds" />);
+    expect(screen.getByRole('heading', { level: 1, name: 'Rounds' })).toBeVisible();
+    const first = roundCard(firstRound.name);
+    expect(first.getAllByRole('heading', { level: 5 }).map((heading) => heading.textContent))
+      .toEqual(['Group 3', 'Group 2', 'Not assigned to a group']);
+    const group = first.getByRole('heading', { name: 'Group 3' }).closest('li');
+    if (!group) throw new Error('Missing fictional group.');
+    expect(within(group).getAllByRole('listitem').map((item) => item.textContent))
+      .toEqual(['Fictional Player 3', 'Fictional Player 1']);
+    expect(first.getByText('No players assigned.')).toBeVisible();
+    const closing = roundCard(secondRound.name);
+    expect(closing.getByText('Yards').nextElementSibling).toHaveTextContent('1,234');
+    expect(closing.getByText('Par').nextElementSibling).toHaveTextContent('35');
+    expect(closing.getByText('Holes').nextElementSibling).toHaveTextContent('9');
+    expect(closing.getByRole('link', { name: /Open scorecard/ })).toBeVisible();
+    expect(screen.queryByText(/completed/i)).not.toBeInTheDocument();
+  });
+
+  it('handles a round with no groups or players, then an empty rounds list', () => {
+    const view = render(<EventTripView
+      workspace={{ ...workspace, rounds: [{ ...firstRound, groups: [], players: [] }] }} view="rounds"
+    />);
+    expect(screen.getByText('No manual groups saved for this round.')).toBeVisible();
+    expect(screen.getByText('No players saved for this round.')).toBeVisible();
+    view.rerender(<EventTripView workspace={emptyWorkspace} view="rounds" />);
+    expect(screen.getByText('No rounds saved for this event.')).toBeVisible();
+    expect(screen.queryByRole('heading', { level: 3 })).not.toBeInTheDocument();
+  });
+});
+
+describe('saved event group', () => {
+  it('preserves roster order and distinguishes per-round groups and account access', () => {
+    render(<EventTripView workspace={workspace} view="group" />);
+    const roster = screen.getByRole('region', { name: 'Event roster' });
+    expect(within(roster).getAllByRole('listitem').map((item) => item.textContent))
+      .toEqual(workspace.roster.map((player) => player.displayName));
+    expect(within(roster).getByText(/not a list of sign-in accounts or access permissions/)).toBeVisible();
+    expect(roundCard(firstRound.name).getByRole('heading', { name: 'Group 3' })).toBeVisible();
+    expect(roundCard(secondRound.name).getByRole('heading', { name: 'Group 4' })).toBeVisible();
+    expect(screen.queryByText(/handicap|invitation|net score/i)).not.toBeInTheDocument();
+  });
+
+  it('shows missing roster and round states without inventing players or assignments', () => {
+    render(<EventTripView workspace={emptyWorkspace} view="group" />);
+    expect(screen.getByText('No golfers saved to this event roster.')).toBeVisible();
+    expect(screen.getByText('No rounds saved for this event.')).toBeVisible();
+    expect(screen.queryByRole('listitem')).not.toBeInTheDocument();
+  });
+
+  it('uses round player snapshots for assignments rather than silently replacing saved names', () => {
+    render(<EventTripView workspace={{
+      ...workspace,
+      roster: [{ playerId: fictionalId(1), displayName: 'Fictional renamed golfer' }],
+      rounds: [{ ...firstRound, groups: [{ number: 1, playerIds: [fictionalId(1), fictionalId(99)] }] }],
+    }} view="group" />);
+    expect(screen.getByRole('region', { name: 'Event roster' })).toHaveTextContent('Fictional renamed golfer');
+    expect(roundCard(firstRound.name).getByText('Fictional Player 1')).toBeVisible();
+    expect(roundCard(firstRound.name).getByText('Player unavailable')).toBeVisible();
+    expect(screen.queryByText(fictionalId(99))).not.toBeInTheDocument();
+  });
+});
+
+describe.each(['overview', 'rounds', 'group'] as const)('saved %s navigation and state', (view) => {
+  it('provides keyboard-accessible setup and scorecard actions without duplicating main navigation', async () => {
+    const user = userEvent.setup();
+    render(<EventTripView workspace={workspace} view={view} />);
+    const nav = screen.getByRole('navigation', { name: 'Event setup' });
+    const links = within(nav).getAllByRole('link');
+    for (const link of links) {
+      await user.tab();
+      expect(link).toHaveFocus();
+    }
+    expect(within(nav).getByRole('link', { name: 'Configure event' })).toHaveAttribute('href', `#events?${eventUrl}`);
+    expect(screen.queryByRole('link', { name: 'Overview' })).not.toBeInTheDocument();
+    await user.tab();
+    expect(screen.getByRole('link', { name: `Open scorecard for ${firstRound.name}` })).toHaveFocus();
+  });
+
+  it('makes archived read-only state explicit and hides owner actions for members', () => {
+    const archived: EventWorkspace = { ...workspace, event: { ...workspace.event, status: 'archived' } };
+    const rendered = render(<EventTripView workspace={archived} view={view} />);
+    expect(screen.getByText('Archived event · Read-only')).toBeVisible();
+    expect(screen.getByRole('link', { name: 'View event setup' })).toHaveAttribute('href', `#events?${eventUrl}`);
+    expect(screen.queryByRole('link', { name: 'Configure event' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    rendered.rerender(<EventTripView workspace={{ ...workspace, event: { ...workspace.event, role: 'member' } }} view={view} />);
+    expect(screen.queryByRole('link', { name: /Configure event|View event setup|scorecard/i })).not.toBeInTheDocument();
+    expect(screen.queryByText('Archived event · Read-only')).not.toBeInTheDocument();
+  });
+
+  it('does not expose raw workspace metadata', () => {
+    render(<EventTripView workspace={workspace} view={view} />);
+    for (const value of [workspace.event.id, workspace.etag, workspace.event.createdAt, firstRound.courseVersionId]) {
+      expect(screen.queryByText(value, { exact: false })).not.toBeInTheDocument();
+    }
+  });
+});

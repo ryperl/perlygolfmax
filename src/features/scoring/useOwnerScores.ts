@@ -4,6 +4,14 @@ import { SessionExpiredError } from '../../client/events';
 import { PrivateRequestError } from '../../client/private-request';
 import type { RoundScores } from '../../domain/scoring';
 
+interface ActiveOperation {
+  readonly controller: AbortController;
+  readonly background: boolean;
+  readonly finished: Promise<void>;
+  readonly finish: () => void;
+  discardProjection: boolean;
+}
+
 export function useOwnerScores(client: ScoresClient, eventId: string, roundId: string, dirty: boolean,
   onSessionExpired: (message: string) => void) {
   const [round, setRound] = useState<RoundScores | null>(null);
@@ -11,7 +19,10 @@ export function useOwnerScores(client: ScoresClient, eventId: string, roundId: s
   const [error, setError] = useState('');
   const [stale, setStale] = useState(true);
   const [refreshedAt, setRefreshedAt] = useState<string | null>(null);
-  const active = useRef<AbortController | null>(null);
+  const projectionKey = useRef<string | null>(null);
+  const active = useRef<ActiveOperation | null>(null);
+  const foreground = useRef<object | null>(null);
+  const dirtyNow = useRef(dirty);
   const mounted = useRef(false);
   const failures = useRef(0);
   const retryAt = useRef(0);
@@ -21,14 +32,36 @@ export function useOwnerScores(client: ScoresClient, eventId: string, roundId: s
   const expiryHandler = useRef(onSessionExpired);
   useEffect(() => { expiryHandler.current = onSessionExpired; }, [onSessionExpired]);
 
-  const run = useCallback(async <T,>(work: (signal: AbortSignal) => Promise<T>): Promise<T | null> => {
-    if (!mounted.current || active.current || expired.current || Date.now() < serverRetryAt.current) return null;
-    const controller = new AbortController();
-    active.current = controller;
-    setBusy(true);
+  const pauseForEdit = useCallback(() => {
+    dirtyNow.current = true;
+    if (active.current?.background) active.current.discardProjection = true;
+  }, []);
+  useEffect(() => {
+    dirtyNow.current = dirty;
+    if (dirty && active.current?.background) active.current.discardProjection = true;
+  }, [dirty]);
+
+  const perform = useCallback(async <T,>(work: (signal: AbortSignal) => Promise<T>, background = false, allowDenied = false): Promise<T | null> => {
+    const available = () => mounted.current && !expired.current && (!denied.current || allowDenied) && Date.now() >= serverRetryAt.current;
+    if (!available() || foreground.current || background && dirtyNow.current) return null;
+    const previous = active.current;
+    if (previous && (background || !previous.background)) return null;
+    const ticket = {};
+    if (!background) { foreground.current = ticket; setBusy(true); }
+    let operation: ActiveOperation | undefined;
     try {
-      const value = await work(controller.signal);
-      controller.signal.throwIfAborted();
+      if (previous) {
+        // A user operation takes priority, but never overlaps the pending read.
+        previous.discardProjection = true;
+        await previous.finished;
+      }
+      if (!available() || !background && foreground.current !== ticket) return null;
+      let finish: (() => void) | undefined;
+      const finished = new Promise<void>((resolve) => { finish = resolve; });
+      operation = { controller: new AbortController(), background, finished, finish: () => { finish?.(); }, discardProjection: false };
+      active.current = operation;
+      const value = await work(operation.controller.signal);
+      operation.controller.signal.throwIfAborted();
       failures.current = 0;
       retryAt.current = 0;
       serverRetryAt.current = 0;
@@ -36,7 +69,7 @@ export function useOwnerScores(client: ScoresClient, eventId: string, roundId: s
       denied.current = false;
       return value;
     } catch (failure) {
-      if (!controller.signal.aborted) {
+      if (operation && !operation.controller.signal.aborted && mounted.current) {
         failures.current = Math.min(failures.current + 1, 4);
         const minimumSeconds = failure instanceof PrivateRequestError ? failure.retryAfterSeconds ?? 0 : 0;
         serverRetryAt.current = Date.now() + minimumSeconds * 1000;
@@ -46,32 +79,51 @@ export function useOwnerScores(client: ScoresClient, eventId: string, roundId: s
         setError(minimumSeconds > 0 ? `${message} Wait at least ${String(minimumSeconds)} seconds before retrying.` : message);
         if (failure instanceof PrivateRequestError && (failure.status === 403 || failure.status === 404)) {
           denied.current = true;
+          projectionKey.current = null;
           setRound(null);
         }
         if (failure instanceof SessionExpiredError) {
           expired.current = true;
+          projectionKey.current = null;
           setRound(null);
           expiryHandler.current(message);
         }
       }
       throw failure;
     } finally {
-      if (active.current === controller) active.current = null;
-      if (!controller.signal.aborted) setBusy(false);
+      if (operation) {
+        if (active.current === operation) active.current = null;
+        operation.finish();
+      }
+      if (!background && foreground.current === ticket) {
+        foreground.current = null;
+        if (mounted.current) setBusy(false);
+      }
     }
   }, []);
+  const run = useCallback(<T,>(work: (signal: AbortSignal) => Promise<T>) => perform(work), [perform]);
 
   const accept = useCallback((value: RoundScores) => {
     if (!mounted.current || expired.current) return;
-    setRound(value);
+    const key = JSON.stringify(value);
+    if (key !== projectionKey.current) {
+      projectionKey.current = key;
+      setRound(value);
+    }
     setStale(false);
     setRefreshedAt(new Date().toISOString());
   }, []);
-  const refresh = useCallback(async () => {
-    const value = await run((signal) => client.load(eventId, roundId, signal));
-    if (value) accept(value);
+  const load = useCallback((background: boolean) => perform(async (signal) => {
+    const value = await client.load(eventId, roundId, signal);
+    signal.throwIfAborted();
+    const unchanged = JSON.stringify(value) === projectionKey.current;
+    // Keep an edit-time baseline and the focused field intact if typing started
+    // after this poll began. Authorization errors still flow through perform.
+    if (background && (dirtyNow.current || active.current?.discardProjection) && !unchanged) setStale(true);
+    else accept(value);
     return value;
-  }, [accept, client, eventId, roundId, run]);
+  }, background, !background), [accept, client, eventId, roundId, perform]);
+  const refresh = useCallback(() => load(false), [load]);
 
   useEffect(() => {
     mounted.current = true;
@@ -79,8 +131,10 @@ export function useOwnerScores(client: ScoresClient, eventId: string, roundId: s
     void refresh().catch(() => undefined);
     return () => {
       mounted.current = false;
-      active.current?.abort();
+      active.current?.controller.abort();
+      active.current?.finish();
       active.current = null;
+      foreground.current = null;
     };
   }, [refresh]);
 
@@ -93,14 +147,14 @@ export function useOwnerScores(client: ScoresClient, eventId: string, roundId: s
     }
     async function tick() {
       if (disposed) return;
-      if (!dirty && !document.hidden && !active.current && !expired.current && !denied.current && Date.now() >= retryAt.current) {
-        try { await refresh(); } catch { /* The visible error and stale state are set by run. */ }
+      if (!dirtyNow.current && !document.hidden && !active.current && !foreground.current && !expired.current && !denied.current && Date.now() >= retryAt.current) {
+        try { await load(true); } catch { /* Errors and stale state remain visible. */ }
       }
       schedule();
     }
     schedule();
     return () => { disposed = true; clearTimeout(timer); };
-  }, [dirty, refresh]);
+  }, [dirty, load]);
 
-  return { round, busy, error, stale, refreshedAt, run, refresh, accept };
+  return { round, busy, error, stale, refreshedAt, run, refresh, accept, pauseForEdit };
 }

@@ -10,7 +10,10 @@
 .player-card-expanded { border-color: var(--cp-accent); }
 .player-editor { margin-top: 20px; padding: 20px; border: 2px solid var(--cp-accent); border-radius: 12px; background: var(--cp-accent-soft); }
 .player-editor h3:focus { outline: 3px solid var(--cp-accent); outline-offset: 6px; border-radius: 2px; }
-.tee-preview-list { display: grid; gap: 12px; list-style: none; padding: 0; min-width: 0; }
+.tee-selector { display: grid; gap: 12px; min-width: 0; }
+.tee-selector label { display: grid; gap: 6px; min-width: 0; }
+.tee-selector select { width: 100%; min-width: 0; min-height: 48px; color: var(--cp-text); background: var(--cp-surface); border: 1px solid var(--cp-border-strong); border-radius: 8px; padding: 8px; font: inherit; }
+.tee-selector select:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
 .tee-preview { min-width: 0; padding: 12px; border: 1px solid var(--cp-border); border-radius: 8px; }
 .tee-preview-summary { cursor: pointer; overflow-wrap: anywhere; }
 .tee-preview-summary:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }

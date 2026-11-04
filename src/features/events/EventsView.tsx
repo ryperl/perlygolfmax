@@ -26,7 +26,7 @@ export function EventsView({ state, busy, notice, view, onSignIn, onSignOut, onR
     <p className="eyebrow">Your private clubhouse</p>
     <h1>Events</h1>
     <p className="page-description">Private trips, each with its own owners and members. The fictional preview is separate from your saved events.</p>
-    {state.kind === 'unconfigured' && <div className="panel"><h2>Event services are not configured</h2><p>{state.message}</p><p>No sign-in or saved-event connection is active. The other tabs remain a read-only fictional preview.</p></div>}
+    {state.kind === 'unconfigured' && <div className="panel"><h2>Event services are not configured</h2><p>{state.message}</p><p>No sign-in or saved-event connection is active. Fictional content is available separately under Preview.</p></div>}
     {state.kind === 'signed-out' && <div className="panel"><h2>Sign in with an email code</h2><p>No Microsoft account is needed. Signing in does not grant event access.</p>{state.message && <p role="status">{state.message}</p>}<button disabled={busy} onClick={onSignIn}>Sign in</button></div>}
     {state.kind === 'loading' && <p role="status">Loading your events...</p>}
     {state.kind === 'error' && <div className="panel"><p role="alert">{state.message}</p><button disabled={busy} onClick={onReload}>Try again</button><button disabled={busy} onClick={onSignOut}>Sign out</button></div>}
@@ -42,7 +42,7 @@ export function EventsView({ state, busy, notice, view, onSignIn, onSignOut, onR
         : <ul className="round-list" aria-label="Your events">{state.page.events.map((event) => <li className="panel" key={event.id}>
           <h2>{event.name}</h2><p>{event.role === 'owner' ? 'Event owner' : 'Event member'} / Private</p>
           <div className="event-card-actions" role="group" aria-label={`Actions for ${event.name}`}>
-            <a href={`#events?event=${encodeURIComponent(event.id)}`}>Open {event.name} workspace</a>
+            <a href={`#overview?event=${encodeURIComponent(event.id)}`}>Open {event.name}</a>
             {event.role === 'owner' && <button disabled={busy} onClick={() => {
               onStatusChange(event, event.status === 'active' ? 'archived' : 'active');
             }} aria-label={`${event.status === 'active' ? 'Archive' : 'Restore'} ${event.name}`}>{event.status === 'active' ? 'Archive event' : 'Restore event'}</button>}
@@ -62,7 +62,7 @@ export function EventsView({ state, busy, notice, view, onSignIn, onSignOut, onR
         <input id="event-name" name="name" required maxLength={100} disabled={busy} />
         <button disabled={busy} type="submit">Create event</button>
       </form>}
-      <p className="boundary-note">Saved setup is separate from the fictional Rounds and Group previews. Invitations and score entry are not available. Ownership does not grant permission to create other events or manage the catalog.</p>
+      <p className="boundary-note">Open an event to see its Overview, Rounds and The Group. Setup and online scoring currently require event ownership. Signing in does not grant access or catalog permissions.</p>
     </>}
     <p role="status">{busy ? 'Working...' : notice}</p>
   </section>;

@@ -1,7 +1,7 @@
-import { lazy, Suspense, useEffect, useRef, useSyncExternalStore } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { demoTrip } from '../demo/trip';
 import { GroupView, RoundsView, TripOverview } from '../features/trip';
-import { navigation, readPage } from './navigation';
+import { eventTabHref, navigation, readEventRoute, readPage, readPreviewTab, readSelectedEvent } from './navigation';
 const EventsPage = lazy(async () => {
   const module = await import('./EventsPage');
   return { default: module.ConfiguredEventsPage };
@@ -15,19 +15,33 @@ function subscribeToNavigation(onChange: () => void) {
 function getHash() { return window.location.hash; }
 
 export function App() {
-  const hash = useSyncExternalStore(subscribeToNavigation, getHash);
+  const [selectedEvent, setSelectedEvent] = useState(() => readSelectedEvent(getHash()));
+  const subscribe = useCallback((onChange: () => void) => subscribeToNavigation(() => {
+    const eventId = readSelectedEvent(getHash());
+    if (eventId) setSelectedEvent(eventId);
+    onChange();
+  }), []);
+  const hash = useSyncExternalStore(subscribe, getHash);
   const page = readPage(hash, window.location.search);
+  const activePage = readEventRoute(hash).startsWith('score:') ? 'rounds' : page;
+  const eventInRoute = readSelectedEvent(hash);
+  const activeEvent = eventInRoute ?? selectedEvent;
+  const previewTab = readPreviewTab(hash);
   const mainRef = useRef<HTMLElement>(null);
   const previousPage = useRef(hash);
 
   useEffect(() => {
-    const label = navigation.find((item) => item.id === page)?.label ?? 'Overview';
+    const label = activePage === 'preview' ? 'Preview' : navigation.find((item) => item.id === activePage)?.label ?? 'Events';
     document.title = `${label} | Perly Golf Max`;
     if (previousPage.current !== hash) {
       mainRef.current?.focus();
       previousPage.current = hash;
     }
-  }, [hash, page]);
+  }, [hash, activePage]);
+  const clearSelection = useCallback(() => {
+    setSelectedEvent(null);
+    window.location.hash = '#events';
+  }, []);
 
   return (
     <div className="app">
@@ -36,26 +50,32 @@ export function App() {
         mainRef.current?.focus();
       }}>Skip to content</a>
       <header className="site-header">
-        <a className="brand" href="#overview" aria-label="Perly Golf Max home">
+        <a className="brand" href="#events" aria-label="Perly Golf Max home">
           <span className="brand-mark" aria-hidden="true">P<span>↗</span></span>
           <span>PERLY <span className="brand-secondary">GOLF MAX</span></span>
         </a>
         <span className="edition">The trip companion</span>
       </header>
-      {page !== 'events' && <div className="demo-banner"><span className="demo-dot" aria-hidden="true" /><strong>Demo clubhouse</strong><span>Fictional data. Nothing here is saved or synced.</span></div>}
+      {page === 'preview' && <div className="demo-banner"><span className="demo-dot" aria-hidden="true" /><strong>Demo clubhouse</strong><span>Fictional data. Nothing here is saved or synced.</span></div>}
       <nav className="navigation" aria-label="Main navigation">
         {navigation.map((item) => (
-          <a href={`#${item.id}`} key={item.id} aria-current={page === item.id ? 'page' : undefined}>{item.label}</a>
+          <a href={item.id === 'events' ? '#events' : eventTabHref(item.id, activeEvent)} key={item.id} aria-current={activePage === item.id ? 'page' : undefined}>{item.label}</a>
         ))}
-        <span className="navigation-note">12 golfers / 5 rounds</span>
       </nav>
       <main id="main-content" ref={mainRef} tabIndex={-1}>
-        {page === 'events' && <Suspense fallback={<p role="status">Loading event screen...</p>}><EventsPage /></Suspense>}
-        {page === 'overview' && <TripOverview trip={demoTrip} />}
-        {page === 'rounds' && <RoundsView rounds={demoTrip.rounds} />}
-        {page === 'group' && <GroupView golfers={demoTrip.golfers} />}
+        {page !== 'preview' && <Suspense fallback={<p role="status">Loading event screen...</p>}><EventsPage onSignedOut={clearSelection} /></Suspense>}
+        {page === 'preview' && <>
+          <nav className="event-actions" aria-label="Fictional preview">
+            <a href="#preview" aria-current={previewTab === 'overview' ? 'page' : undefined}>Demo overview</a>
+            <a href="#preview?view=rounds" aria-current={previewTab === 'rounds' ? 'page' : undefined}>Demo rounds</a>
+            <a href="#preview?view=group" aria-current={previewTab === 'group' ? 'page' : undefined}>Demo group</a>
+          </nav>
+          {previewTab === 'overview' && <TripOverview trip={demoTrip} />}
+          {previewTab === 'rounds' && <RoundsView rounds={demoTrip.rounds} />}
+          {previewTab === 'group' && <GroupView golfers={demoTrip.golfers} />}
+        </>}
       </main>
-      <footer className="site-footer"><span>PERLY GOLF MAX</span><p>Built for the trip. Still finding its swing.</p><span>Foundation preview</span></footer>
+      <footer className="site-footer"><span>PERLY GOLF MAX</span><p>Built for the trip. Still finding its swing.</p><a href="#preview">Preview</a></footer>
     </div>
   );
 }

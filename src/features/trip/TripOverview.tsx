@@ -15,7 +15,7 @@ export function TripOverview({ trip }: TripOverviewProps) {
           <h1 id="trip-title">{trip.name}</h1>
           <p className="hero-description">Five rounds, familiar faces, and a little friendly competition. Your trip, all in one place.</p>
           <p className="location">{trip.locationLabel} <span aria-hidden="true">/</span> {trip.dateLabel}</p>
-          <a className="primary-link" href="#rounds">Explore the rounds <span aria-hidden="true">↗</span></a>
+          <a className="primary-link" href="#preview?view=rounds">Explore the rounds <span aria-hidden="true">↗</span></a>
         </div>
         <div className="course-art" aria-hidden="true">
           <span className="art-sun" />
@@ -34,7 +34,7 @@ export function TripOverview({ trip }: TripOverviewProps) {
       </section>
       <div className="overview-grid">
         <section className="panel" aria-labelledby="first-round-title">
-          <div className="section-heading"><p className="eyebrow">The opening round</p><a href="#rounds">All rounds <span aria-hidden="true">→</span></a></div>
+          <div className="section-heading"><p className="eyebrow">The opening round</p><a href="#preview?view=rounds">All rounds <span aria-hidden="true">→</span></a></div>
           <h2 id="first-round-title">{firstRound?.courseName ?? 'No rounds scheduled'}</h2>
           {firstRound ? <p>{firstRound.dayLabel} <span aria-hidden="true">·</span> {firstRound.teeTimeLabel} <span aria-hidden="true">·</span> Sample tee time</p> : <p>A round will appear here when the itinerary is available.</p>}
           <div className="inset-note"><span className="note-mark" aria-hidden="true">01</span><p>Room for the whole group.<br /><span>Pairings and score entry are coming later.</span></p></div>

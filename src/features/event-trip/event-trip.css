@@ -1,0 +1,37 @@
+.event-trip, .event-trip-section { display: grid; gap: 20px; min-width: 0; }
+.event-trip { gap: 28px; overflow-wrap: anywhere; }
+.event-trip-header { background: var(--cp-bg-elevated); }
+.event-trip-header h1 { font-size: clamp(2rem, 5vw, 3.5rem); }
+.event-trip-location { margin-top: 16px; color: var(--cp-text-muted); }
+.event-trip-archive { margin-top: 16px; padding: 12px; border: 1px solid var(--cp-border-strong); border-radius: 8px; }
+.event-trip-links { display: flex; flex-wrap: wrap; gap: 8px 24px; margin-top: 20px; }
+.event-trip-links a, .event-trip-scorecard { display: inline-flex; align-items: center; min-height: 44px; gap: 8px; }
+.event-trip a:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; border-radius: 4px; }
+.event-trip-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 0; }
+.event-trip-stats > div { padding: 20px; background: var(--cp-surface); border: 1px solid var(--cp-border); border-radius: 12px; }
+.event-trip-stats dt, .event-trip-tee dt { color: var(--cp-text-muted); }
+.event-trip-stats dd { font-size: 2rem; margin: 4px 0 0; line-height: 1.2; }
+.event-trip-rounds, .event-trip-group-list, .event-trip-roster { list-style: none; padding: 0; margin: 0; display: grid; gap: 16px; min-width: 0; }
+.event-trip-round-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.event-trip-round-heading > div { min-width: 0; }
+.event-trip h3, .event-trip h4, .event-trip h5 { margin: 0 0 8px; line-height: 1.4; }
+.event-trip h3 { font-size: 1.25rem; }
+.event-trip h4 { font-size: 1rem; }
+.event-trip h5 { font-size: .9rem; }
+.event-trip-round p, .event-trip-section > p { color: var(--cp-text-muted); }
+.event-trip-scorecard { flex-shrink: 0; }
+.event-trip-tee { display: flex; flex-wrap: wrap; gap: 16px 32px; margin: 20px 0; }
+.event-trip-tee dd { margin: 4px 0 0; }
+.event-trip-groups { border-top: 1px solid var(--cp-border); padding-top: 20px; display: grid; gap: 12px; }
+.event-trip-group-list { grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); }
+.event-trip-group-list > li { background: var(--cp-bg-elevated); border: 1px solid var(--cp-border); border-radius: 8px; padding: 16px; min-width: 0; }
+.event-trip-groups ul ul, .event-trip-groups > div > ul { padding-left: 20px; }
+.event-trip-roster { grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); }
+.event-trip-roster > li { padding: 12px 16px; border: 1px solid var(--cp-border); border-radius: 8px; }
+
+@media (max-width: 600px) {
+  .event-trip .panel { padding: 20px; }
+  .event-trip-round-heading { flex-direction: column; }
+  .event-trip-stats { gap: 12px; }
+  .event-trip-stats > div { padding: 16px; }
+}

@@ -1,11 +1,11 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EventChangedError, SessionExpiredError } from '../../client/events';
 import { PrivateRequestError } from '../../client/private-request';
 import { fictionalChange, fictionalRoundScores, scoreResult } from '../../client/scoring.test-support';
 import { fictionalId } from '../../client/catalog.test-support';
-import type { ScoreWriteResult } from '../../domain/scoring';
+import type { RoundScores, ScoreWriteResult } from '../../domain/scoring';
 import { maximumExactHoleStrokes } from '../../domain/scoring';
 import { OwnerScoresView } from './OwnerScoresView';
 import { deferred, memoryScores } from './scoring.test-support';
@@ -13,26 +13,129 @@ import { deferred, memoryScores } from './scoring.test-support';
 function row(number = 1) {
   return within(screen.getByRole('article', { name: `Fictional Player ${String(number)} scorecard` }));
 }
-function input(number = 1) { return row(number).getByRole('textbox'); }
+function input(number = 1) {
+  const field = row(number).getByRole('textbox');
+  if (!(field instanceof HTMLInputElement)) throw new Error('Missing fictional score input');
+  return field;
+}
 async function enter(user: ReturnType<typeof userEvent.setup>, text: string, player = 1) {
   await user.clear(input(player));
   if (text) await user.type(input(player), text);
 }
 async function fourScores(user: ReturnType<typeof userEvent.setup>) {
-  for (let player = 1; player <= 4; player++) await user.click(row(player).getByRole('button', { name: `4 strokes for Fictional Player ${String(player)}` }));
+  for (let player = 1; player <= 4; player++) await enter(user, '4', player);
 }
 function mount(store = memoryScores()) {
   const onSessionExpired = vi.fn();
   return { ...store, onSessionExpired, ...render(<OwnerScoresView client={store.client} eventId={fictionalRoundScores.eventId}
     roundId={fictionalRoundScores.roundId} onSessionExpired={onSessionExpired} />) };
 }
-async function loaded() {
+async function loaded(user = userEvent.setup()) {
   await screen.findByRole('heading', { name: 'Round scorecard' });
-  await userEvent.setup().click(screen.getByRole('button', { name: 'Enter scores' }));
+  await user.click(screen.getByRole('button', { name: 'Enter scores' }));
   await screen.findByRole('textbox', { name: 'Fictional Player 1 score' });
 }
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); document.documentElement.scrollTop = 0; });
 
 describe('hole-first owner scoring', () => {
+  it('does not pulse status or disable entry during unchanged polls, preserving DOM, focus, caret and scroll while exposing real changes', async () => {
+    vi.useFakeTimers();
+    const store = memoryScores(scoreResult().round);
+    mount(store);
+    await act(async () => { await Promise.resolve(); });
+    fireEvent.click(screen.getByRole('button', { name: 'Enter scores' }));
+    const field = input();
+    field.focus();
+    field.setSelectionRange(0, 1);
+    document.documentElement.scrollTop = 180;
+    const status = screen.getByRole('status').textContent;
+    const poll = deferred<RoundScores>();
+    vi.mocked(store.client.load).mockReturnValueOnce(poll.promise);
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    expect(field).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Save & Next Hole' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Refresh saved round' })).toBeEnabled();
+    expect(screen.getByRole('status')).toHaveTextContent(status);
+    await act(async () => { poll.resolve(structuredClone(store.read())); await poll.promise; });
+    expect(input()).toBe(field);
+    expect(field).toHaveFocus();
+    expect(field.selectionStart).toBe(0);
+    expect(field.selectionEnd).toBe(1);
+    expect(document.documentElement.scrollTop).toBe(180);
+    expect(screen.getByRole('status')).toHaveTextContent(status);
+    const changed = scoreResult({ ...fictionalChange, playerId: fictionalId(2), after: { kind: 'strokes', strokes: 6 } }, store.read()).round;
+    vi.mocked(store.client.load).mockResolvedValueOnce(changed);
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    expect(input(2)).toHaveValue('6');
+    expect(input()).toBe(field);
+    expect(field).toHaveFocus();
+    expect(field.selectionStart).toBe(0);
+    expect(field.selectionEnd).toBe(1);
+    expect(document.documentElement.scrollTop).toBe(180);
+  });
+  it('preserves edits begun during a poll and does not adopt its changed card revision before an explicit conflict review', async () => {
+    vi.useFakeTimers();
+    const store = memoryScores();
+    mount(store);
+    await act(async () => { await Promise.resolve(); });
+    fireEvent.click(screen.getByRole('button', { name: 'Enter scores' }));
+    const poll = deferred<RoundScores>();
+    vi.mocked(store.client.load).mockReturnValueOnce(poll.promise);
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    const field = input();
+    field.focus();
+    fireEvent.change(field, { target: { value: '47' } });
+    field.setSelectionRange(1, 1);
+    const changed = scoreResult({ ...fictionalChange, after: { kind: 'strokes', strokes: 9 } }).round;
+    store.replace(changed);
+    await act(async () => { poll.resolve(changed); await poll.promise; });
+    expect(input()).toBe(field);
+    expect(field).toHaveValue('47');
+    expect(field).toHaveFocus();
+    expect(field.selectionStart).toBe(1);
+    expect(screen.getByRole('status')).toHaveTextContent('Saved data may be stale');
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save & Next Hole' })); await Promise.resolve(); });
+    expect(screen.getByText(/remaining not confirmed/)).toBeVisible();
+    expect(vi.mocked(store.client.save).mock.calls[0]?.[5]).toBeNull();
+    expect(field).toHaveValue('47');
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Refresh saved round' })); await Promise.resolve(); });
+    const review = row().getByRole('button', { name: 'Review my value for Fictional Player 1' });
+    expect(review).toBeEnabled();
+    expect(row().getByText(/Saved: 9 strokes · Intended: 47/)).toBeVisible();
+    fireEvent.click(review);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save & Next Hole' })); await Promise.resolve(); });
+    expect(screen.getByRole('heading', { name: 'Hole 2' })).toBeVisible();
+    expect(vi.mocked(store.client.save).mock.calls[1]?.[5]).toBe('card-v2');
+  });
+  it('lets a foreground group save wait for the pending poll without overlapping reads or losing the eventual acknowledgement', async () => {
+    vi.useFakeTimers();
+    const store = memoryScores();
+    mount(store);
+    await act(async () => { await Promise.resolve(); });
+    fireEvent.click(screen.getByRole('button', { name: 'Enter scores' }));
+    const poll = deferred<RoundScores>();
+    const write = deferred<ScoreWriteResult>();
+    vi.mocked(store.client.load).mockReturnValueOnce(poll.promise);
+    vi.mocked(store.client.save).mockReturnValueOnce(write.promise);
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    fireEvent.change(input(), { target: { value: '4' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
+    expect(store.client.save).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Save & Next Hole' })).toBeDisabled();
+    await act(async () => { poll.resolve(structuredClone(fictionalRoundScores)); await poll.promise; });
+    expect(store.client.save).toHaveBeenCalledOnce();
+    expect(row().getByText('Saving…')).toBeVisible();
+    const call = vi.mocked(store.client.save).mock.calls[0];
+    if (!call) throw new Error('Missing fictional queued write');
+    await act(async () => {
+      write.resolve(scoreResult({ ...fictionalChange, id: call[6] }));
+      await write.promise;
+    });
+    expect(screen.getByRole('heading', { name: 'Hole 2' })).toBeVisible();
+    expect(screen.getByText(/1 player changes acknowledged/)).toBeVisible();
+    expect(store.client.load).toHaveBeenCalledTimes(2);
+    expect(store.client.save).toHaveBeenCalledOnce();
+  });
   it('shows only one hole and at most four empty entry rows, with honest online and first-save warnings', async () => {
     const { client } = mount();
     await loaded();
@@ -47,7 +150,7 @@ describe('hole-first owner scoring', () => {
     expect(screen.queryByRole('heading', { name: /Group 2/ })).not.toBeInTheDocument();
     expect(client.save).not.toHaveBeenCalled();
   });
-  it('uses four explicit taps and one Save & Next to save a group, then uses persisted card baselines on the next hole', async () => {
+  it('uses four direct entries and one Save & Next to save a group, then uses persisted card baselines on the next hole', async () => {
     const { client } = mount();
     await loaded();
     const user = userEvent.setup();
@@ -74,7 +177,7 @@ describe('hole-first owner scoring', () => {
     await screen.findByRole('heading', { name: 'Hole 2' });
     expect(screen.getByText(/No changes sent; 4 unplayed/)).toBeVisible();
     expect(client.save).not.toHaveBeenCalled();
-    await user.click(row().getByRole('button', { name: '4 strokes for Fictional Player 1' }));
+    await enter(user, '4');
     await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     await screen.findByRole('heading', { name: 'Hole 3' });
     expect(client.save).toHaveBeenCalledOnce();
@@ -121,7 +224,7 @@ describe('hole-first owner scoring', () => {
     expect(input(2)).toHaveValue('5');
     await user.click(screen.getByRole('button', { name: 'Previous hole' }));
     expect(input()).toHaveValue('X7');
-    expect(screen.getByText(/3 unsaved \/ review values in this page/)).toBeVisible();
+    expect(screen.getByText('3 unsaved scores')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Scorecards' }));
     expect(screen.getByText(/3 unsaved scores are not included in this card/)).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Enter scores' }));
@@ -211,7 +314,7 @@ describe('hole-first owner scoring', () => {
     await user.click(screen.getByRole('button', { name: 'Refresh saved round' }));
     await screen.findByText(/Saved round refreshed/);
     expect(input()).toHaveValue('X7');
-    expect(row().getByText(/Saved: X7 — picked up/)).toBeVisible();
+    expect(row().queryByText(/Saved:/)).not.toBeInTheDocument();
     expect(row().getByText('Failed — retry')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     await screen.findByRole('heading', { name: 'Hole 2' });
@@ -386,7 +489,7 @@ describe('hole-first owner scoring', () => {
     await act(async () => { pending.resolve(scoreResult()); await pending.promise; });
     expect(store.client.save).toHaveBeenCalledOnce();
     expect(input()).toHaveValue('');
-    expect(screen.getByText(/0 unsaved \/ review values in this page/)).toBeVisible();
+    expect(screen.queryByText(/^\d+ unsaved scores?$/)).not.toBeInTheDocument();
   });
   it('removes previously acknowledged score details as well as entry rows on authoritative owner revocation', async () => {
     const store = memoryScores();

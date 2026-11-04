@@ -62,6 +62,9 @@
 - Present golfer scores as hole-ordered scorecards, not audit records. Keep
   operation IDs, actor GUIDs, revisions and raw timestamps out of player
   entry/view screens; preserve backend audit and conditional-save safeguards.
+- Main trip tabs use the explicitly selected saved event, never demo fallback.
+  Keep fictional views under Preview, clear private selection on sign-out and
+  preserve server access checks independently of navigation or catalog rights.
 - Keep limits effective across instances; fail closed on missing configuration
   or limit-store failure. CORS and Functions keys are not user authentication.
 - Read `docs/operations.md` before identity, infrastructure, deployment or

@@ -83,7 +83,6 @@ h2 { font-size: 1.5rem; line-height: 1.25; letter-spacing: -0.03em; font-weight:
 .navigation { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; border-bottom: 1px solid var(--cp-border); margin: 12px 0 40px; }
 .navigation a { padding: 18px 0 15px; border-bottom: 3px solid transparent; text-decoration: none; font-size: 0.9rem; color: var(--cp-text-muted); min-height: 48px; }
 .navigation a[aria-current="page"] { color: var(--cp-accent); border-color: var(--cp-accent); font-weight: 650; }
-.navigation-note { margin-left: auto; font-size: 0.75rem; color: var(--cp-text-muted); }
 main { min-height: 580px; padding-bottom: 56px; }
 main:focus { outline: none; }
 .hero { display: grid; grid-template-columns: 1.3fr 1fr; min-height: 360px; border: 1px solid var(--cp-border); background: var(--cp-bg-elevated); border-radius: 16px; overflow: hidden; }
@@ -149,7 +148,7 @@ main:focus { outline: none; }
 @media (max-width: 600px) {
   .app { padding: 0 20px; }
   .site-header { padding: 20px 0; }
-  .edition, .navigation-note { display: none; }
+  .edition { display: none; }
   .demo-banner { font-size: 0.7rem; gap: 2px 8px; }
   .demo-banner > span:last-child { flex-basis: 100%; }
   .navigation { justify-content: space-between; gap: 8px; margin-bottom: 24px; }

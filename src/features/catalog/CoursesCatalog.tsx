@@ -3,7 +3,7 @@ import type { CatalogClient } from '../../client/catalog';
 import { readCourseSource } from '../../contracts/course-import';
 import type { CourseCatalogEntry, CourseData, CourseImportSession, CourseVersion } from '../../domain/catalog';
 import { useOperation } from './useOperation';
-import { TeeProfilePreview } from './TeeProfilePreview';
+import { TeeProfileSelector } from './TeeProfilePreview';
 import './catalog.css';
 
 interface ImportDraft {
@@ -101,9 +101,7 @@ export function CoursesCatalog({ client }: { readonly client: CatalogClient }) {
       <p className="catalog-version">{inspected.id}</p>
       <p>Source: {inspected.provenance.source}. Export date: {inspected.provenance.exportedAt ?? 'unknown; freshness unknown'}.</p>
       <p>Imported at: {inspected.importedAt}. Import time does not establish source freshness.</p>
-      <ul className="tee-preview-list">{inspected.data.teeProfiles.map((profile) => <li key={profile.id}>
-        <TeeProfilePreview profile={profile} />
-      </li>)}</ul>
+      <TeeProfileSelector key={inspected.id} profiles={inspected.data.teeProfiles} />
       <p>Profiles are independent. This preview does not select a tee for any round.</p>
     </section>}
     <form className="panel catalog-form" onSubmit={(event) => {
@@ -156,9 +154,7 @@ export function CoursesCatalog({ client }: { readonly client: CatalogClient }) {
       {data && <div>
         <h3>{data.name} — {data.city}, {data.state}</h3>
         <p>{data.teeProfiles.length} independent tee profiles. Export date: {exportedAt || 'unknown; freshness unknown'}.</p>
-        <ul className="tee-preview-list">{data.teeProfiles.map((profile) => <li key={profile.id}>
-          <TeeProfilePreview profile={profile} />
-        </li>)}</ul>
+        <TeeProfileSelector key={fileRead.current} profiles={data.teeProfiles} />
         <p className="catalog-version">{current ? `Updating saved course; current revision ${current.etag}, version ${current.currentVersionId}.` : 'New saved course (no current revision).'}</p>
       </div>}
       {session && <p>Import {session.id}: {session.profilesReceived.length} profiles received. {session.publishedVersionId ? 'Already published; refresh catalog.' : 'Staged only.'}</p>}

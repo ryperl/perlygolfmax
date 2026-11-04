@@ -25,8 +25,8 @@ const round: RoundScores = {
   setupLocked: true, lastUpdatedAt: card.updatedAt,
 };
 
-test('one-hole group entry fits a narrow screen with usable touch targets', async ({ page }) => {
-  await page.setViewportSize({ width: 320, height: 740 });
+test('one-hole group entry fits a narrow screen with usable touch targets', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/#events');
   await expect(page.getByRole('heading', { level: 1, name: 'Events', exact: true })).toBeVisible();
   const stylesheets = await page.locator('link[rel="stylesheet"]').evaluateAll((links) =>
@@ -36,20 +36,40 @@ test('one-hole group entry fits a narrow screen with usable touch targets', asyn
   const noop = () => undefined;
   const entry = await renderComponentFixture('/src/features/scoring/GroupHoleEntry.tsx', 'GroupHoleEntry', {
     groups: round.groups, groupNumber: 1, layout: round.layout, hole,
-    rows: round.cards.map((item) => ({
+    rows: round.cards.map((item, index) => ({
       playerId: item.playerId, displayName: item.displayName, saved: { kind: 'unplayed' }, canReview: false,
+      draft: { text: String(index + 3), baseEtag: null, status: 'draft' },
     })),
-    busy: false, readOnly: false, unsavedCount: 0,
+    busy: false, readOnly: false, unsavedCount: 4,
     onGroupChange: noop, onHoleChange: noop, onEdit: noop, onReview: noop, onDiscard: noop, onSave: noop,
   });
   await page.setContent(`<html><head>${stylesheets.map((href) => `<link rel="stylesheet" href="${href}">`).join('')}</head>
     <body><div class="app"><main><section class="owner-scores">${entry}</section></main></div></body></html>`);
+  const panel = page.getByRole('region', { name: 'Group hole entry' });
+  const compact = await panel.boundingBox();
+  if (!compact) throw new Error('Group entry panel is missing.');
+  expect(compact.height).toBeLessThanOrEqual(650);
+  const lastPlayer = await page.getByRole('textbox').last().boundingBox();
+  if (!lastPlayer) throw new Error('Fourth player entry is missing.');
+  expect(lastPlayer.y + lastPlayer.height).toBeLessThanOrEqual(844);
+  await expect(page.getByRole('button', { name: 'Save & Next Hole', exact: true })).toBeVisible();
+  await expect(page.locator('.quick-scores')).toHaveCount(0);
+  if (testInfo.project.name === 'desktop-chromium') {
+    await panel.screenshot({ path: '.azure/compact-group-entry.png' });
+  }
+  await page.setViewportSize({ width: 320, height: 740 });
   await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
   await expect(page.getByRole('heading', { name: 'Hole 1', exact: true })).toBeVisible();
   await expect(page.getByRole('textbox')).toHaveCount(4);
-  for (const input of await page.getByRole('textbox').all()) {
-    await expect(input).toHaveValue('');
+  const inputs = await page.getByRole('textbox').all();
+  for (const [index, input] of inputs.entries()) {
+    await expect(input).toHaveValue(String(index + 3));
     const box = await input.boundingBox();
+    expect(box?.height).toBeGreaterThanOrEqual(44);
+    expect(box?.width).toBeGreaterThanOrEqual(44);
+  }
+  for (const button of await panel.locator('.entry-value button').all()) {
+    const box = await button.boundingBox();
     expect(box?.height).toBeGreaterThanOrEqual(44);
     expect(box?.width).toBeGreaterThanOrEqual(44);
   }

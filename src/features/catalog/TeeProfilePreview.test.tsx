@@ -2,9 +2,39 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { fictionalProfile } from '../../client/catalog.test-support';
-import { TeeProfilePreview } from './TeeProfilePreview';
+import { TeeProfilePreview, TeeProfileSelector } from './TeeProfilePreview';
 
 describe('tee profile hole preview', () => {
+  it('requires an explicit tee selection and renders only that profile, not every tee', async () => {
+    const second = { ...fictionalProfile, id: 905, category: 'Fictional B', totalYardage: 1800,
+      holes: fictionalProfile.holes.map((hole) => ({ ...hole, length: 200 })) };
+    const { container } = render(<TeeProfileSelector profiles={[fictionalProfile, second]} />);
+    expect(screen.getByLabelText('Preview tee')).toHaveValue('');
+    expect(container.querySelectorAll('.tee-preview')).toHaveLength(0);
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText('Preview tee'), '905');
+    expect(container.querySelectorAll('.tee-preview')).toHaveLength(1);
+    const summary = screen.getByText(/Fictional Teal \/ Fictional B/, { selector: 'summary' });
+    expect(summary).toHaveTextContent('1800 yards');
+    expect(summary).toHaveTextContent('Rating 36 / Slope 100');
+    await user.click(summary);
+    expect(within(screen.getByRole('table', { name: 'Hole yardage, par and stroke index' })).getAllByRole('cell')[0]).toHaveTextContent('200');
+    await user.selectOptions(screen.getByLabelText('Preview tee'), '901');
+    expect(container.querySelectorAll('.tee-preview')).toHaveLength(1);
+    expect(screen.getByText(/Fictional Teal \/ Fictional A/, { selector: 'summary' })).toHaveTextContent('900 yards');
+    expect(screen.queryByText(/Fictional Teal \/ Fictional B/, { selector: 'summary' })).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText('Preview tee'), '');
+    expect(container.querySelectorAll('.tee-preview')).toHaveLength(0);
+  });
+
+  it('does not retain an unavailable tee after the profile set changes, and handles an empty course', async () => {
+    const { rerender, container } = render(<TeeProfileSelector profiles={[fictionalProfile]} />);
+    await userEvent.setup().selectOptions(screen.getByLabelText('Preview tee'), String(fictionalProfile.id));
+    rerender(<TeeProfileSelector profiles={[]} />);
+    expect(screen.getByLabelText('Preview tee')).toHaveValue('');
+    expect(screen.getByText('No tee profiles available.')).toBeVisible();
+    expect(container.querySelectorAll('.tee-preview')).toHaveLength(0);
+  });
   it('opens an accessible preview with source yardage, par, allocation and all rating sections', async () => {
     const user = userEvent.setup();
     render(<TeeProfilePreview profile={fictionalProfile} />);

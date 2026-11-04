@@ -44,13 +44,13 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
   return <section className="group-hole-entry" aria-label="Group hole entry">
     <div className="score-selection">
       <label>View group<select value={groupNumber} disabled={busy} onChange={(event) => { onGroupChange(Number(event.target.value)); }}>
-        {groups.map((group) => <option value={group.number} key={group.number}>Group {group.number} · {group.playerIds.length} players</option>)}
+        {groups.map((group) => <option value={group.number} key={group.number}>Group {group.number}</option>)}
       </select></label>
       <label>Jump to hole<select value={hole.number} disabled={busy} onChange={(event) => { onHoleChange(Number(event.target.value)); }}>
         {layout.map((item) => <option value={item.number} key={item.number}>Hole {item.number}</option>)}
       </select></label>
     </div>
-    <p className="score-hint">View only · {unsavedCount} unsaved / review {unsavedCount === 1 ? 'value' : 'values'} in this page. Navigation keeps them.</p>
+    {unsavedCount > 0 && <p className="score-hint">{unsavedCount} unsaved {unsavedCount === 1 ? 'score' : 'scores'}</p>}
     <header className="hole-heading">
       <button type="button" aria-label="Previous hole" disabled={busy || !previous} onClick={() => { if (previous) onHoleChange(previous.number); }}>←</button>
       <div><h2>Hole {hole.number}</h2><p>Par {hole.par} · {hole.length} yards · Stroke index {hole.allocation}</p></div>
@@ -72,7 +72,7 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
             <button type="button" aria-label={`Decrease score for ${row.displayName}`} disabled={disabled || numeric === undefined || numeric <= 1} onClick={() => {
               if (numeric !== undefined && numeric > 1) onEdit(row.playerId, `${pickedUp ? 'X' : ''}${String(numeric - 1)}`);
             }}>−</button>
-            <label>{row.displayName} score<input inputMode="numeric" autoComplete="off" spellCheck={false} aria-invalid={score === null}
+            <input aria-label={`${row.displayName} score`} inputMode="numeric" autoComplete="off" spellCheck={false} aria-invalid={score === null}
               placeholder="—" disabled={disabled} value={text} ref={(element) => { scoreInputs.current[rowIndex] = element; }}
               onChange={(event) => { onEdit(row.playerId, event.target.value); }}
               onKeyDown={(event) => {
@@ -81,7 +81,7 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
                   const nextInput = scoreInputs.current[rowIndex + 1];
                   if (nextInput) nextInput.focus(); else primaryAction.current?.focus();
                 }
-              }} /></label>
+              }} />
             <button type="button" aria-label={`Increase score for ${row.displayName}`} disabled={disabled || numeric === undefined || numeric >= maximumExactHoleStrokes} onClick={() => {
               if (numeric !== undefined && numeric < maximumExactHoleStrokes) onEdit(row.playerId, `${pickedUp ? 'X' : ''}${String(numeric + 1)}`);
             }}>+</button>
@@ -89,15 +89,15 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
               onEdit(row.playerId, pickedUp ? numeric === undefined ? '' : String(numeric) : numeric === undefined ? 'X' : `X${String(numeric)}`);
             }}>X</button>
           </div>
-          <div className="quick-scores" aria-label={`Quick scores for ${row.displayName}`}>{quickScores.map((value) => <button type="button" key={value}
+          {rows.length === 1 && <div className="quick-scores" aria-label={`Quick scores for ${row.displayName}`}>{quickScores.map((value) => <button type="button" key={value}
             aria-label={`${pickedUp ? 'X' : ''}${String(value)} ${pickedUp ? 'pickup' : 'strokes'} for ${row.displayName}`}
             disabled={disabled} onClick={() => { onEdit(row.playerId, `${pickedUp ? 'X' : ''}${String(value)}`); }}>
             {pickedUp ? 'X' : ''}{value}{value === hole.par && <small>par</small>}
-          </button>)}</div>
-          <p className="entry-saved">Saved: {scoreLabel(row.saved)}{row.draft && score ? ` · Local: ${scoreEntryText(score) || 'unplayed'}${score.kind === 'picked-up' ? ' (pickup; incomplete)' : ''}` : ''}</p>
+          </button>)}</div>}
           {!score && <p className="entry-error" role="alert">Enter a valid whole-number score above zero, X or X with a number, or leave this blank.</p>}
           {row.draft?.status === 'conflict' && <div className="entry-conflict">
-            <p>Saved and intended values need review. Refresh saved round first, then choose your value or use the saved value.</p>
+            <p>Saved: {scoreLabel(row.saved)} · Intended: {score ? scoreEntryText(score) || 'unplayed' : row.draft.text}</p>
+            <p>Refresh saved round, then review your value or use the saved value.</p>
             <button type="button" disabled={disabled || !row.canReview} onClick={() => { onReview(row.playerId); }}>Review my value for {row.displayName}</button>
             <button type="button" disabled={disabled} onClick={() => { onDiscard(row.playerId); }}>Use saved value for {row.displayName}</button>
           </div>}

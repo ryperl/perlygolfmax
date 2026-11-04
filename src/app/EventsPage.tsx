@@ -12,12 +12,13 @@ import type { ScoresClient } from '../client/scoring';
 import { CoursesCatalog, PlayersCatalog } from '../features/catalog';
 import { EventWorkspaceView } from '../features/setup';
 import { OwnerScoresView } from '../features/scoring';
-import { readEventRoute } from './navigation';
+import { eventTabHref, isEventTab, readEventRoute } from './navigation';
+import { SavedEventPage } from './SavedEventPage';
 
 const configuredServices = configureEventServices(import.meta.env);
 
-export function ConfiguredEventsPage() {
-  return <EventsPage {...configuredServices} />;
+export function ConfiguredEventsPage({ onSignedOut }: { readonly onSignedOut?: () => void }) {
+  return <EventsPage {...configuredServices} onSignedOut={onSignedOut} />;
 }
 
 export interface EventServices {
@@ -34,7 +35,11 @@ function subscribe(onChange: () => void) {
 }
 function getRoute() { return readEventRoute(window.location.hash); }
 
-export function EventsPage({ services, configurationError }: { readonly services: EventServices | undefined; readonly configurationError?: string }) {
+export function EventsPage({ services, configurationError, onSignedOut }: {
+  readonly services: EventServices | undefined;
+  readonly configurationError?: string;
+  readonly onSignedOut?: (() => void) | undefined;
+}) {
   const route = useSyncExternalStore(subscribe, getRoute);
   const [state, setState] = useState<EventsState>({ kind: 'loading' });
   const [busy, setBusy] = useState(false);
@@ -62,13 +67,21 @@ export function EventsPage({ services, configurationError }: { readonly services
         }
       })
         .catch((error: unknown) => {
-          if (!controller.signal.aborted) setState(error instanceof SessionExpiredError
-            ? { kind: 'signed-out', message: error.message }
-            : { kind: 'error', message: 'Could not connect to your event services. No saved data was loaded.' });
+          if (!controller.signal.aborted) {
+            setState(error instanceof SessionExpiredError
+              ? { kind: 'signed-out', message: error.message }
+              : { kind: 'error', message: 'Could not connect to your event services. No saved data was loaded.' });
+            if (error instanceof SessionExpiredError) onSignedOut?.();
+          }
         });
     }
     return () => { mounted.current = false; controller.abort(); };
-  }, [services]);
+  }, [services, onSignedOut]);
+
+  function expire(message: string) {
+    setState({ kind: 'signed-out', message });
+    onSignedOut?.();
+  }
 
   async function run(operation: (service: EventServices, signal: AbortSignal) => Promise<void>) {
     if (!services || running.current) return false;
@@ -84,7 +97,7 @@ export function EventsPage({ services, configurationError }: { readonly services
     }
     catch (error) {
       if (mounted.current && !controller.signal.aborted) {
-        if (error instanceof SessionExpiredError) setState({ kind: 'signed-out', message: error.message });
+        if (error instanceof SessionExpiredError) expire(error.message);
         else if (error instanceof EventChangedError) setNotice(error.message);
         else setNotice('The operation failed. Nothing was confirmed saved. Refresh before retrying; an event creation retry uses the same request ID.');
       }
@@ -96,18 +109,32 @@ export function EventsPage({ services, configurationError }: { readonly services
   }
 
   if (services && state.kind === 'ready' && route) {
+    const [kind, eventId] = route.split(':');
     return <section>
-      <nav className="event-actions" aria-label="Saved event navigation"><a href="#events">Events</a>
+      {(kind === 'courses' || kind === 'players') && <nav className="event-actions" aria-label="Saved event navigation"><a href="#events">Events</a>
         {state.capabilities.canManageCatalog && <><a href="#events?catalog=courses">Course catalog</a><a href="#events?catalog=players">Player catalog</a></>}
-      </nav>
+      </nav>}
       <button disabled={busy} onClick={() => { void run(async ({ session }) => {
         setState({ kind: 'signed-out' });
+        onSignedOut?.();
         try { await session.signOut(); }
         catch { setNotice('Sign-out did not complete. The identity-provider session may still be active.'); }
       }); }}>Sign out</button>
       {route === 'invalid-score' ? <p role="alert">Invalid event or round identifier. No score request was made.</p>
+        : route === 'invalid-event' ? <p role="alert">Invalid event identifier. Choose an event from Events.</p>
+        : kind === 'select' && isEventTab(eventId) ? <section>
+          <h1>Choose an event</h1>
+          <p>Open a saved event to view its {eventId === 'group' ? 'group' : eventId}. No event is selected automatically.</p>
+          <ul className="round-list">{state.page.events.map((event) => <li className="panel" key={event.id}>
+            <a href={eventTabHref(eventId, event.id)}>{event.name}</a>
+          </li>)}</ul>
+          {state.page.events.length === 0 && <p>No events are available on this page.</p>}
+          <a href="#events">Browse your events</a>
+        </section>
+        : isEventTab(kind) && eventId ? <SavedEventPage key={eventId} eventId={eventId} view={kind}
+          client={services.setup} onSessionExpired={expire} />
         : route.startsWith('score:') ? <OwnerScoresView key={route} eventId={route.split(':')[1] ?? ''} roundId={route.split(':')[2] ?? ''}
-          client={services.scores} onSessionExpired={(message) => { setState({ kind: 'signed-out', message }); }} />
+          client={services.scores} onSessionExpired={expire} />
         : route.startsWith('event:') ? <EventWorkspaceView key={route} eventId={route.slice(6)}
         canManageCatalog={state.capabilities.canManageCatalog} setup={services.setup} catalog={services.catalog} />
         : state.capabilities.canManageCatalog
@@ -123,6 +150,7 @@ export function EventsPage({ services, configurationError }: { readonly services
     onSignIn={() => { void run(async ({ session }) => { await session.signIn(); }); }}
     onSignOut={() => { void run(async ({ session }) => {
       setState({ kind: 'signed-out' });
+      onSignedOut?.();
       try { await session.signOut(); }
       catch {
         setNotice('Sign-out did not complete. The identity-provider session may still be active.');

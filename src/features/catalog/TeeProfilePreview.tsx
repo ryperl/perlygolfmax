@@ -1,10 +1,28 @@
+import { useState } from 'react';
 import type { TeeProfile } from '../../domain/catalog';
+
+export function TeeProfileSelector({ profiles }: { readonly profiles: readonly TeeProfile[] }) {
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const selected = profiles.find((profile) => profile.id === selectedId);
+  return <section className="tee-selector" aria-label="Tee preview">
+    <label>Preview tee<select value={selected?.id ?? ''} onChange={(event) => {
+      setSelectedId(event.target.value ? Number(event.target.value) : null);
+    }}>
+      <option value="">Select a tee</option>
+      {profiles.map((profile) => <option value={profile.id} key={profile.id}>{profile.name} / {profile.category}</option>)}
+    </select></label>
+    {profiles.length === 0 && <p>No tee profiles available.</p>}
+    {selected && <TeeProfilePreview key={selected.id} profile={selected} />}
+  </section>;
+}
 
 export function TeeProfilePreview({ profile }: { readonly profile: TeeProfile }) {
   const holes = [...profile.holes].sort((left, right) => left.number - right.number);
+  const rating = profile.ratings.find((item) => item.type === 'Total');
   return <details className="tee-preview">
     <summary className="tee-preview-summary">
-      {profile.name} / {profile.category} / {profile.holeCount} holes / {profile.totalYardage} yards / {profile.totalMeters} meters / par {profile.totalPar} / profile {profile.id}
+      {profile.name} / {profile.category} · {profile.holeCount} holes · {profile.totalYardage} yards · par {profile.totalPar}
+      {rating && ` · Rating ${String(rating.course)} / Slope ${String(rating.slope)}`}
     </summary>
     <p>Stroke index is the source hole handicap allocation, not a golfer&apos;s Handicap Index. Viewing this profile does not select it for a round.</p>
     <table className="tee-preview-table">

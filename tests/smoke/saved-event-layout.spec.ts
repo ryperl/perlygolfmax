@@ -1,0 +1,49 @@
+import { expect, test } from '@playwright/test';
+import type { EventWorkspace } from '../../src/domain/setup';
+import { renderComponentFixture } from './render-fixture';
+
+const id = (number: number) => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
+const players = Array.from({ length: 8 }, (_, index) => ({ playerId: id(index + 1), displayName: `Fictional golfer ${String(index + 1)}` }));
+const workspace: EventWorkspace = {
+  event: { id: id(50), name: 'Fictional Coastal Event', role: 'owner', status: 'active', etag: 'fictional-v1', createdAt: '2026-01-01' },
+  location: 'Fictional County', roster: players, etag: 'fictional-v1',
+  rounds: [1, 2].map((number) => ({
+    id: id(70 + number), name: `Fictional round ${String(number)}`, courseId: 'ghin:301:302', courseVersionId: 'a'.repeat(64),
+    course: {
+      provider: 'usga-ghin', sourceId: 302, name: 'Fictional Dunes', status: 'Active', number: null, city: 'Fictional City', state: 'Fictional State',
+      facility: { id: 301, name: 'Fictional Club', status: 'Active', number: null, golfAssociationId: 303, address: 'Fictional address', longitude: 0, latitude: 0 },
+      season: { name: 'All year', start: '01/01', end: '12/31', allYear: true },
+    },
+    teeProfile: {
+      id: 901, name: 'Fictional Gold', category: 'Fictional category', holeCount: 9, totalYardage: 900, totalMeters: 823,
+      totalPar: 36, strokeAllocation: true, shorter: false, eligibleSides: 'All',
+      ratings: [{ type: 'Total', course: 36, slope: 100, bogey: 45 }, { type: 'Front', course: 36, slope: 100, bogey: 45 }, { type: 'Back', course: 36, slope: 100, bogey: 45 }],
+      holes: Array.from({ length: 9 }, (_, index) => ({ number: index + 1, sourceId: 400 + index, length: 100, par: 4, allocation: index + 1 })),
+    },
+    groups: [{ number: 1, playerIds: players.slice(0, 4).map((player) => player.playerId) }, { number: 2, playerIds: players.slice(4).map((player) => player.playerId) }],
+    players, scoringStarted: number === 1,
+  })),
+};
+
+for (const view of ['overview', 'rounds', 'group'] as const) {
+  test(`saved event ${view} remains readable and event-specific on narrow screens`, async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 740 });
+    await page.goto('/#events');
+    await expect(page.getByRole('heading', { name: 'Events', exact: true })).toBeVisible();
+    const stylesheets = await page.locator('link[rel="stylesheet"]').evaluateAll((links) =>
+      links.map((link) => link.getAttribute('href')).filter((href): href is string => href !== null));
+    const html = await renderComponentFixture('/src/features/event-trip/EventTripView.tsx', 'EventTripView', { workspace, view });
+    await page.setContent(`<html><head>${stylesheets.map((href) => `<link rel="stylesheet" href="${href}">`).join('')}</head>
+      <body><div class="app"><main>${html}</main></div></body></html>`);
+    await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(view === 'overview' ? workspace.event.name : view === 'rounds' ? 'Rounds' : 'The Group');
+    const open = page.getByRole('link', { name: 'Open scorecard for Fictional round 1' });
+    await expect(open).toHaveAttribute('href', `#events?event=${id(50)}&round=${id(71)}`);
+    await open.focus();
+    await expect(open).toBeFocused();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await expect(page.getByRole('link', { name: 'Configure event' })).toHaveAttribute('href', `#events?event=${id(50)}`);
+  });
+}

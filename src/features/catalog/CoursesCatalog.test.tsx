@@ -112,8 +112,10 @@ describe('manager course catalog', () => {
     expect(screen.getByText(/Import time does not establish source freshness/)).toBeVisible();
     expect(screen.getAllByText(/Fictional Teal/)).toHaveLength(2);
     expect(client.version).toHaveBeenCalledWith(fictionalVersion.courseId, fictionalVersion.id, expect.any(AbortSignal));
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-    const preview = screen.getByText(/Fictional Teal \/ Fictional A/);
+    expect(screen.getByLabelText('Preview tee')).toHaveValue('');
+    expect(screen.queryByText(/Fictional Teal/, { selector: 'summary' })).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText('Preview tee'), '901');
+    const preview = screen.getByText(/Fictional Teal \/ Fictional A/, { selector: 'summary' });
     await user.click(preview);
     const details = preview.closest('details');
     if (!details) throw new Error('Published profile preview is missing.');
@@ -151,7 +153,9 @@ describe('manager course catalog', () => {
     await user.upload(screen.getByLabelText('Course JSON file'), sourceFile());
     await screen.findByText(/2 independent tee profiles/);
     expect(screen.getAllByText(/Fictional Teal/)).toHaveLength(2);
-    const preview = screen.getByText(/Fictional Teal \/ Fictional B/);
+    expect(screen.queryByText(/Fictional Teal/, { selector: 'summary' })).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText('Preview tee'), '905');
+    const preview = screen.getByText(/Fictional Teal \/ Fictional B/, { selector: 'summary' });
     await user.click(preview);
     const details = preview.closest('details');
     if (!details) throw new Error('Staged profile preview is missing.');
@@ -172,7 +176,7 @@ describe('manager course catalog', () => {
     await user.click(publish);
     await screen.findByText(/Course version .* saved/);
     expect(client.publish).toHaveBeenCalledWith(fictionalImport.id, fictionalEntry.etag, expect.any(AbortSignal));
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Preview tee')).toHaveValue('905');
   });
 
   it('keeps manifest retry identity and requires refresh plus renewed approval after publication conflict', async () => {

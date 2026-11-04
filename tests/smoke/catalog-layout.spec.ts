@@ -20,13 +20,21 @@ test('catalog navigation gaps and actual hole preview fit narrow and enlarged la
   const stylesheets = await page.locator('link[rel="stylesheet"]').evaluateAll((links) =>
     links.map((link) => link.getAttribute('href')).filter((href): href is string => href !== null));
   const preview = await renderComponentFixture('/src/features/catalog/TeeProfilePreview.tsx', 'TeeProfilePreview', { profile });
+  const selector = await renderComponentFixture('/src/features/catalog/TeeProfilePreview.tsx', 'TeeProfileSelector', {
+    profiles: [profile, { ...profile, id: 902, category: 'Fictional alternate' }],
+  });
   await page.setContent(`<html><head>${stylesheets.map((href) => `<link rel="stylesheet" href="${href}">`).join('')}</head>
     <body><div class="app"><main><nav class="event-actions" aria-label="Catalog spacing fixture">
     <a href="#events">Events</a><a href="#courses">Course catalog</a><a href="#players">Player catalog</a>
     </nav><div class="event-card-actions" role="group" aria-label="Event card spacing fixture">
     <a href="#workspace">Open fictional ${'Event'.repeat(20)} workspace</a><button type="button">Archive event</button>
-    </div><section class="catalog-view">${preview}</section></main></div></body></html>`);
+    </div><section class="catalog-view">${selector}${preview}</section></main></div></body></html>`);
   await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
+  const tee = page.getByRole('combobox', { name: 'Preview tee' });
+  await expect(tee).toHaveValue('');
+  await tee.focus();
+  await expect(tee).toBeFocused();
+  await expect(page.getByRole('region', { name: 'Tee preview' }).locator('.tee-preview')).toHaveCount(0);
   const links = await page.getByRole('navigation', { name: 'Catalog spacing fixture' }).getByRole('link').all();
   for (let index = 1; index < links.length; index++) {
     const previous = await links[index - 1]?.boundingBox();

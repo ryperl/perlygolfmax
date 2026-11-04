@@ -33,7 +33,7 @@ describe('EventsView', () => {
     expect(screen.getByRole('heading', { name: 'Fictional Open' })).toBeVisible();
     const cardActions = screen.getByRole('group', { name: 'Actions for Fictional Open' });
     expect(cardActions).toHaveClass('event-card-actions');
-    expect(within(cardActions).getByRole('link', { name: 'Open Fictional Open workspace' })).toHaveAttribute('href', '#events?event=fictional');
+    expect(within(cardActions).getByRole('link', { name: 'Open Fictional Open' })).toHaveAttribute('href', '#overview?event=fictional');
     expect(within(cardActions).getByRole('button', { name: 'Archive Fictional Open' })).toBeEnabled();
     await user.type(screen.getByLabelText('Event name'), 'Another fictional event');
     await user.click(screen.getByRole('button', { name: 'Create event' }));

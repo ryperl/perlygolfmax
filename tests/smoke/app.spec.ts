@@ -4,17 +4,19 @@ test('production shell supports navigation, history, and keyboard access', async
   const errors: string[] = [];
   page.on('pageerror', (error) => { errors.push(error.message); });
   await page.goto('/');
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('The Coastal Classic');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Events');
   await page.keyboard.press('Tab');
   await expect(page.getByRole('link', { name: 'Skip to content' })).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('main')).toBeFocused();
+  await page.getByRole('link', { name: 'Preview', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('The Coastal Classic');
   await page.getByRole('link', { name: 'Explore the rounds' }).click();
   await expect(page.getByRole('listitem')).toHaveCount(5);
-  await page.getByRole('link', { name: 'The group' }).click();
+  await page.getByRole('link', { name: 'Demo group' }).click();
   await expect(page.getByRole('listitem')).toHaveCount(12);
   await page.goBack();
-  await expect(page.getByRole('link', { name: 'Rounds', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('link', { name: 'Demo rounds', exact: true })).toHaveAttribute('aria-current', 'page');
   await page.getByRole('link', { name: 'Events', exact: true }).click();
   if (process.env.EXPECT_EVENT_SERVICES_CONFIGURED === 'true') {
     await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
@@ -23,13 +25,13 @@ test('production shell supports navigation, history, and keyboard access', async
     await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toHaveCount(0);
   }
   await page.goto('/#unknown');
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('The Coastal Classic');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Events');
   expect(errors).toEqual([]);
 });
 
 test('every page fits a narrow viewport and enlarged text', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 740 });
-  for (const hash of ['events', 'overview', 'rounds', 'group']) {
+  for (const hash of ['events', 'overview', 'rounds', 'group', 'preview', 'preview?view=rounds', 'preview?view=group']) {
     await page.goto(`/#${hash}`);
     await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
