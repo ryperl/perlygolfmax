@@ -34,6 +34,45 @@ function source() {
 }
 
 describe('organizer course export boundary', () => {
+  it.each([null, false, true])('preserves IsShorter=%s and unknown EligibleSides through import and version validation', (shorter) => {
+    const input = source();
+    const parsed = readCourseSource({ ...input, TeeSets: input.TeeSets.map((tee) => ({ ...tee, IsShorter: shorter, EligibleSides: null })) });
+    for (const tee of parsed.teeProfiles) {
+      expect(tee.shorter).toBe(shorter);
+      expect(tee.eligibleSides).toBeNull();
+      expect(isTeeProfile(tee)).toBe(true);
+      expect(tee.holes).toHaveLength(18);
+      expect(tee.ratings).toHaveLength(3);
+    }
+    expect(isCourseVersion({
+      id: 'a'.repeat(64), courseId: 'ghin:801:803', data: parsed,
+      provenance: { source: 'Fictional export', exportedAt: null }, importedAt: '2026-01-01T00:00:00Z',
+    })).toBe(true);
+  });
+
+  it('still rejects missing or mistyped metadata and keeps required boolean flags strict', () => {
+    const input = source();
+    const tee = input.TeeSets[0];
+    if (!tee) throw new Error('Missing fictional tee.');
+    const valid = readCourseSource(input).teeProfiles[0];
+    if (!valid) throw new Error('Missing fictional parsed tee.');
+    for (const shorter of ['false', 0, 1, undefined, {}, []]) {
+      expect(() => readCourseSource({ ...input, TeeSets: [{ ...tee, IsShorter: shorter }] })).toThrow(/IsShorter.*true, false or null/);
+      expect(isTeeProfile({ ...valid, shorter })).toBe(false);
+    }
+    for (const eligibleSides of [false, 0, undefined, {}, [], '', ' ']) {
+      expect(() => readCourseSource({ ...input, TeeSets: [{ ...tee, EligibleSides: eligibleSides }] })).toThrow();
+      expect(isTeeProfile({ ...valid, eligibleSides })).toBe(false);
+    }
+    for (const field of ['IsShorter', 'EligibleSides']) {
+      const missing = Object.fromEntries(Object.entries(tee).filter(([key]) => key !== field));
+      expect(() => readCourseSource({ ...input, TeeSets: [missing] })).toThrow(/missing or unsupported fields/);
+    }
+    expect(() => readCourseSource({ ...input, TeeSets: [{ ...tee, IsShorter: null, EligibleSides: null, StrokeAllocation: null }] })).toThrow(/StrokeAllocation.*true or false/);
+    expect(isTeeProfile({ ...valid, shorter: null, eligibleSides: null, strokeAllocation: null })).toBe(false);
+    expect(() => readCourseSource({ ...input, Season: { ...input.Season, IsAllYear: null } })).toThrow(/IsAllYear.*true or false/);
+  });
+
   it('preserves independent profile categories, hole definitions, ratings, units and season metadata', () => {
     const input = source();
     const result = readCourseSource(input);

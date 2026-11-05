@@ -42,8 +42,8 @@ export interface TeeProfile {
   readonly totalMeters: number;
   readonly totalPar: number;
   readonly strokeAllocation: boolean;
-  readonly shorter: boolean;
-  readonly eligibleSides: string;
+  readonly shorter: boolean | null;
+  readonly eligibleSides: string | null;
   readonly ratings: readonly CourseRating[];
   readonly holes: readonly CourseHole[];
 }

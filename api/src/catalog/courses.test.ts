@@ -4,6 +4,21 @@ import { catalogFixture, identifier, manifest, tee } from '../../test/catalog-fi
 import { creator, member } from '../../test/fixtures.js';
 
 describe('manager-only staged course catalog', () => {
+  it('publishes and reads explicit unknown tee metadata without collapsing it into populated values', async () => {
+    const f = catalogFixture();
+    const unknown = { ...tee, shorter: null, eligibleSides: null };
+    const first = await f.publish(identifier(100), manifest, [unknown]);
+    expect(first.data.teeProfiles).toEqual([unknown]);
+    expect(isCourseVersion(first)).toBe(true);
+    expect(await f.courses.getVersion(creator, first.courseId, first.id)).toEqual(first);
+    const root = (await f.courses.list(creator)).courses[0];
+    if (!root) throw new Error('Missing fictional course root.');
+    const populated = await f.publish(identifier(101), manifest, [tee], root.etag);
+    expect(populated.id).not.toBe(first.id);
+    expect(populated.data.teeProfiles).toEqual([tee]);
+    expect((await f.courses.getVersion(creator, first.courseId, first.id)).data.teeProfiles).toEqual([unknown]);
+  });
+
   it('keeps partial imports invisible, requires every expected profile, and preserves each category and source field', async () => {
     const f = catalogFixture();
     const second = { ...tee, id: 102, category: 'Fictional category B', name: 'Fictional Red' };

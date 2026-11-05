@@ -290,6 +290,10 @@ or ratings. Repeating an import is idempotent; an authorized changed import
 creates a new version, not an overwrite of an existing round. Saved courses are
 reusable without the original file or a live provider. Source attribution and
 an unknown export date are not a claim that ratings were freshly verified.
+Explicit `null` values for `IsShorter` and `EligibleSides` are retained as
+unknown metadata, not changed to `false` or `"All"`. Other types, missing fields
+and invalid hole/rating totals remain validation errors. Older populated
+metadata remains valid; no saved-version migration is needed.
 Expand a tee profile in the import preview or saved-version view to inspect its
 hole yardage, par, stroke-index allocation and Total/Front/Back ratings after
 choosing **Preview tee**. Only the chosen profile is displayed; no tee is selected

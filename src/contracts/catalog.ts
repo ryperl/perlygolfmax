@@ -62,7 +62,8 @@ export function isTeeProfile(value: unknown): value is TeeProfile {
     || !positiveInteger(value.holeCount, 18) || ![9, 18].includes(value.holeCount)
     || !positiveInteger(value.totalYardage, 20_000) || !positiveInteger(value.totalMeters, 20_000)
     || !positiveInteger(value.totalPar, 150) || typeof value.strokeAllocation !== 'boolean'
-    || typeof value.shorter !== 'boolean' || !boundedText(value.eligibleSides, 40)
+    || (value.shorter !== null && typeof value.shorter !== 'boolean')
+    || (value.eligibleSides !== null && !boundedText(value.eligibleSides, 40))
     || value.holes.length !== value.holeCount || value.ratings.length !== 3) return false;
   const holes: unknown[] = value.holes;
   const ratings: unknown[] = value.ratings;

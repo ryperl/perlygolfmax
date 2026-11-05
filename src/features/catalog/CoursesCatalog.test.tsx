@@ -13,6 +13,24 @@ function sourceFile(value: unknown = fictionalSource()) {
 }
 
 describe('manager course catalog', () => {
+  it('validates and stages fictional nullable tee metadata without defaulting or auto-publishing', async () => {
+    const client = fakeCatalog();
+    const user = userEvent.setup();
+    const source = fictionalSource();
+    render(<CoursesCatalog client={client} />);
+    await user.upload(screen.getByLabelText('Course JSON file'), sourceFile({
+      ...source, TeeSets: source.TeeSets.map((tee) => ({ ...tee, IsShorter: null, EligibleSides: null })),
+    }));
+    await screen.findByText(/independent tee profiles/);
+    await user.click(screen.getByRole('button', { name: 'Stage import' }));
+    await waitFor(() => { expect(client.uploadProfile).toHaveBeenCalledTimes(2); });
+    for (const call of vi.mocked(client.uploadProfile).mock.calls) {
+      expect(call[1]).toMatchObject({ shorter: null, eligibleSides: null });
+      expect(call[1].holes).toHaveLength(9);
+    }
+    expect(client.publish).not.toHaveBeenCalled();
+  });
+
   it('waits for the initial list before allowing a refresh or staged write, and then retains the newer refreshed revision', async () => {
     const client = fakeCatalog();
     let finish: ((page: CourseCatalogPage) => void) | undefined;

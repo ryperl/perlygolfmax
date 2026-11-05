@@ -28,6 +28,11 @@ function flag(value: unknown, path: string): boolean {
   return value;
 }
 
+function nullableFlag(value: unknown, path: string): boolean | null {
+  if (value === null || typeof value === 'boolean') return value;
+  throw new CourseImportValidationError(`${path} must be true, false or null.`);
+}
+
 function sourceNumber(value: unknown, path: string): string | number | null {
   if (value !== null && typeof value !== 'string' && typeof value !== 'number') {
     throw new CourseImportValidationError(`${path} must be a source number, text identifier or null.`);
@@ -81,8 +86,8 @@ function profile(value: unknown, index: number): TeeProfile {
     totalMeters: numeric(item.TotalMeters, `${path}.TotalMeters`),
     totalPar: numeric(item.TotalPar, `${path}.TotalPar`),
     strokeAllocation: flag(item.StrokeAllocation, `${path}.StrokeAllocation`),
-    shorter: flag(item.IsShorter, `${path}.IsShorter`),
-    eligibleSides: text(item.EligibleSides, `${path}.EligibleSides`),
+    shorter: nullableFlag(item.IsShorter, `${path}.IsShorter`),
+    eligibleSides: item.EligibleSides === null ? null : text(item.EligibleSides, `${path}.EligibleSides`),
     ratings, holes,
   };
   if (!isTeeProfile(result)) {
