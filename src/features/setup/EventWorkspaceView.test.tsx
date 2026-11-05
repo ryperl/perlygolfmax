@@ -288,11 +288,13 @@ describe('saved event workspace', () => {
     const props = { eventId: fictionalEvent.id, canManageCatalog: true, setup, catalog: fakeCatalog(), scores };
     const view = render(<EventWorkspaceView {...props} />);
     await screen.findByRole('checkbox', { name: 'Enable overall leaderboard' });
+    await waitFor(() => { expect(scores.load).toHaveBeenCalledWith(fictionalEvent.id, fictionalId(70), expect.any(AbortSignal)); });
     const signal = vi.mocked(scores.load).mock.calls[0]?.[2];
+    if (!signal) throw new Error('The fictional game-options request did not start.');
     view.rerender(<EventWorkspaceView {...props} eventId={fictionalId(51)} />);
     expect(screen.queryByRole('checkbox', { name: 'Enable overall leaderboard' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Round 1 name')).not.toBeInTheDocument();
-    expect(signal?.aborted).toBe(true);
+    expect(signal.aborted).toBe(true);
     view.rerender(<EventWorkspaceView {...props} />);
     expect(screen.queryByRole('checkbox', { name: 'Enable overall leaderboard' })).not.toBeInTheDocument();
     await act(async () => { finish?.(workspace); await pending; });
