@@ -48,6 +48,8 @@ export function fakeTesterAccessClient(scores: ScoresClient = fakeTesterScores()
       Promise.resolve({ operationId, linkId: input.linkId, state: 'active' })),
     revoke: vi.fn<TesterAccessClient['revoke']>().mockImplementation((_event, input, _etag, operationId) =>
       Promise.resolve({ operationId, linkId: input.linkId, state: 'revoked' })),
+    renew: vi.fn<TesterAccessClient['renew']>().mockImplementation((_event, input, _etag, operationId) =>
+      Promise.resolve({ operationId, linkId: input.linkId, state: 'active' })),
     workspace: vi.fn<TesterAccessClient['workspace']>().mockResolvedValue(fictionalTesterWorkspace),
     bindScores: vi.fn<TesterAccessClient['bindScores']>().mockReturnValue(scores),
   };

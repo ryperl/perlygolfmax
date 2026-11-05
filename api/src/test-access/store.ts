@@ -2,10 +2,10 @@ import { odata } from '@azure/data-tables';
 import type { TableClient, TransactionAction } from '@azure/data-tables';
 import type { AccountIdentity } from '../../../src/domain/events.js';
 import type {
-  CreateTesterLink, EventTesterIdentity, RevokeTesterLink, TesterAccessManagement, TesterAccessResult, TesterLink,
+  CreateTesterLink, EventTesterIdentity, RenewTesterLink, RevokeTesterLink, TesterAccessManagement, TesterAccessResult, TesterLink,
 } from '../../../src/domain/test-access.js';
 import { testerLinkLifetimeMs } from '../../../src/domain/test-access.js';
-import { isCreateTesterLink, isRevokeTesterLink, isTesterAccessResult, isTesterLink } from '../../../src/contracts/test-access.js';
+import { isCreateTesterLink, isRenewTesterLink, isRevokeTesterLink, isTesterAccessResult, isTesterLink } from '../../../src/contracts/test-access.js';
 import { isEventRevision, isUuid } from '../../../src/contracts/events.js';
 import { maximumPrivateValueBytes } from '../../../src/contracts/private-values.js';
 import { canonical, decode, digest, isConflict, optionalRow, page, revision } from '../catalog/entities.js';
@@ -17,7 +17,8 @@ import { testerLinkKey, verifyTesterCredential } from './authority.js';
 
 function project(row: StoredRow): TesterLink {
   const result: unknown = { linkId: row.linkId, state: row.state, createdAt: row.createdAt,
-    expiresAt: row.expiresAt, revision: row.revision };
+    expiresAt: row.expiresAt, revision: row.revision,
+    ...(row.renewedAt === undefined ? {} : { renewedAt: row.renewedAt }) };
   if (!isTesterLink(result) || row.rowKey !== testerLinkKey(result.linkId)) throw new ApiError(503, 'INVALID_STORED_TESTER_LINK');
   return result;
 }
@@ -77,8 +78,8 @@ export class TableTesterAccessStore {
     ];
   }
 
-  private async mutate(identity: AccountIdentity, eventId: string, input: CreateTesterLink | RevokeTesterLink,
-    etag: string, requestId: string, action: 'create' | 'revoke'): Promise<TesterAccessResult> {
+  private async mutate(identity: AccountIdentity, eventId: string, input: CreateTesterLink | RevokeTesterLink | RenewTesterLink,
+    etag: string, requestId: string, action: 'create' | 'revoke' | 'renew'): Promise<TesterAccessResult> {
     if (!isUuid(requestId) || !isEventRevision(etag) || etag.includes(',')
       || (action === 'create' ? !isCreateTesterLink(input) : !isRevokeTesterLink(input))) throw new ApiError(400, 'INVALID_TESTER_REQUEST');
     const access = await this.owner(identity, eventId);
@@ -87,7 +88,8 @@ export class TableTesterAccessStore {
     if (replay) return replay;
     if (access.summary.etag !== etag) throw new ApiError(409, 'EVENT_CHANGED');
     const actions = this.checks(access, identity, requestId);
-    const result: TesterAccessResult = { operationId: requestId, linkId: input.linkId, state: action === 'create' ? 'active' : 'revoked' };
+    const result: TesterAccessResult = { operationId: requestId, linkId: input.linkId, state: action === 'revoke' ? 'revoked' : 'active' };
+    let renewal: { readonly previousExpiresAt: string; readonly renewedAt: string; readonly expiresAt: string } | undefined;
     if (action === 'create' && isCreateTesterLink(input)) {
       if (access.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
       const created = this.now().getTime();
@@ -97,12 +99,28 @@ export class TableTesterAccessStore {
     } else if (isRevokeTesterLink(input)) {
       const link = await optionalRow(this.table, eventId, testerLinkKey(input.linkId));
       if (!link || link.partitionKey !== eventId) throw new ApiError(404, 'TESTER_LINK_NOT_FOUND');
-      if (project(link).revision !== input.revision) throw new ApiError(409, 'TESTER_LINK_CHANGED');
-      actions.push(['update', { partitionKey: eventId, rowKey: testerLinkKey(input.linkId),
-        state: 'revoked', revision: requestId }, 'Merge', { etag: revision(link) }]);
+      const current = project(link);
+      if (current.revision !== input.revision) throw new ApiError(409, 'TESTER_LINK_CHANGED');
+      if (action === 'renew') {
+        if (access.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
+        if (current.state === 'revoked') throw new ApiError(409, 'TESTER_LINK_REVOKED');
+        const renewed = this.now().getTime();
+        renewal = { previousExpiresAt: current.expiresAt, renewedAt: new Date(renewed).toISOString(),
+          expiresAt: new Date(renewed + testerLinkLifetimeMs).toISOString() };
+        if (!isTesterLink({ ...current, renewedAt: renewal.renewedAt, expiresAt: renewal.expiresAt, revision: requestId })) {
+          throw new ApiError(503, 'INVALID_TESTER_RENEWAL_TIME');
+        }
+        actions.push(['update', { partitionKey: eventId, rowKey: testerLinkKey(input.linkId),
+          renewedAt: renewal.renewedAt, expiresAt: renewal.expiresAt, revision: requestId },
+        'Merge', { etag: revision(link) }]);
+      } else {
+        actions.push(['update', { partitionKey: eventId, rowKey: testerLinkKey(input.linkId),
+          state: 'revoked', revision: requestId }, 'Merge', { etag: revision(link) }]);
+      }
     }
     actions.push(['create', { partitionKey: eventId, rowKey: `tester-request:${requestId}`, fingerprint,
-      actorTenantId: identity.tenantId, actorObjectId: identity.objectId, action, at: this.now().toISOString(), content: canonical(result) }]);
+      actorTenantId: identity.tenantId, actorObjectId: identity.objectId, action, at: this.now().toISOString(),
+      ...(renewal ?? {}), content: canonical(result) }]);
     try { await this.table.submitTransaction(actions); }
     catch (error) {
       const committed = await this.replay(eventId, requestId, fingerprint);
@@ -119,5 +137,10 @@ export class TableTesterAccessStore {
 
   revoke(identity: AccountIdentity, eventId: string, input: RevokeTesterLink, etag: string, requestId: string): Promise<TesterAccessResult> {
     return this.mutate(identity, eventId, input, etag, requestId, 'revoke');
+  }
+
+  renew(identity: AccountIdentity, eventId: string, input: RenewTesterLink, etag: string, requestId: string): Promise<TesterAccessResult> {
+    if (!isRenewTesterLink(input)) throw new ApiError(400, 'INVALID_TESTER_REQUEST');
+    return this.mutate(identity, eventId, input, etag, requestId, 'renew');
   }
 }

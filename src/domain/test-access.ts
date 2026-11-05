@@ -13,6 +13,7 @@ export interface TesterLink {
   readonly state: 'active' | 'revoked';
   readonly createdAt: string;
   readonly expiresAt: string;
+  readonly renewedAt?: string;
   readonly revision: string;
 }
 
@@ -34,6 +35,11 @@ export interface RevokeTesterLink {
   readonly revision: string;
 }
 
+export interface RenewTesterLink {
+  readonly linkId: string;
+  readonly revision: string;
+}
+
 export interface TesterAccessResult {
   readonly operationId: string;
   readonly linkId: string;
@@ -46,4 +52,4 @@ export interface TesterCredential {
   readonly token: string;
 }
 
-export const testerLinkLifetimeMs = 24 * 60 * 60 * 1000;
+export const testerLinkLifetimeMs = 7 * 24 * 60 * 60 * 1000;

@@ -18,6 +18,34 @@ function mount() {
 }
 
 describe('no-account tester link management', () => {
+  it('renews the legacy link explicitly and updates its displayed expiry; list refresh never renews it', async () => {
+    const { client, container } = mount();
+    expect(screen.getByText(/New links expire 7 days after creation/)).toBeVisible();
+    const button = await screen.findByRole('button', { name: 'Renew tester link 1 for 7 days' });
+    const updated = { ...testerLink, revision: credential.linkId, renewedAt: '2026-11-07T00:00:00Z',
+      expiresAt: '2026-11-14T00:00:00Z' };
+    vi.mocked(client.list).mockResolvedValue({ ...management, links: [updated] });
+    fireEvent.click(button);
+    await screen.findByText('Tester link renewed for 7 days. The existing URL is unchanged.');
+    await waitFor(() => { expect(container.querySelector('time')).toHaveAttribute('datetime', updated.expiresAt); });
+    expect(client.renew).toHaveBeenCalledWith(credential.eventId, { linkId: testerLink.linkId, revision: testerLink.revision },
+      management.etag, expect.any(String), expect.any(AbortSignal));
+    expect(access.generateTesterSecret).not.toHaveBeenCalled();
+    expect(client.create).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh tester access' }));
+    await waitFor(() => { expect(client.list).toHaveBeenCalledTimes(3); });
+    expect(client.renew).toHaveBeenCalledOnce();
+  });
+
+  it('retries an uncertain renewal with the same operation and does not recreate its secret', async () => {
+    const { client } = mount();
+    vi.mocked(client.renew).mockRejectedValueOnce(new Error('Fictional interrupted renewal'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Renew tester link 1 for 7 days' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry original tester operation' }));
+    await screen.findByText('Tester link renewed for 7 days. The existing URL is unchanged.');
+    expect(vi.mocked(client.renew).mock.calls[1]?.slice(0, 4)).toEqual(vi.mocked(client.renew).mock.calls[0]?.slice(0, 4));
+    expect(access.generateTesterSecret).not.toHaveBeenCalled();
+  });
   it('creates an event-scoped secret only in a readonly password field and copies it explicitly', async () => {
     const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) };
     vi.stubGlobal('navigator', { clipboard });
@@ -101,11 +129,13 @@ describe('no-account tester link management', () => {
     vi.mocked(store.client.list).mockResolvedValue({ ...management, eventStatus: 'archived' });
     render(<TesterLinks client={store.client} eventId={credential.eventId} onSessionExpired={vi.fn()} />);
     expect(await screen.findByRole('button', { name: 'Create private tester link' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Renew tester link 1 for 7 days' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Revoke tester link 1' }));
     await screen.findByText('Tester link revoked. Saved scores are preserved.');
     expect(store.client.revoke).toHaveBeenCalledWith(credential.eventId,
       { linkId: testerLink.linkId, revision: testerLink.revision }, management.etag, expect.any(String), expect.any(AbortSignal));
     expect(store.client.create).not.toHaveBeenCalled();
+    expect(store.client.renew).not.toHaveBeenCalled();
   });
 
   it('retries uncertain revocation unchanged and clears private data on owner expiry', async () => {

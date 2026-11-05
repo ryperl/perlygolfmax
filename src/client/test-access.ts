@@ -4,10 +4,10 @@ import { generateInvitationSecret } from './admission';
 import { createPrivateRequest, PrivateRequestError, readPrivateValue } from './private-request';
 import type { EventWorkspace } from '../domain/setup';
 import type {
-  CreateTesterLink, RevokeTesterLink, TesterAccessManagement, TesterAccessResult, TesterCredential,
+  CreateTesterLink, RenewTesterLink, RevokeTesterLink, TesterAccessManagement, TesterAccessResult, TesterCredential,
 } from '../domain/test-access';
 import {
-  isCreateTesterLink, isEventTesterIdentity, isRevokeTesterLink, isTesterAccessManagement,
+  isCreateTesterLink, isEventTesterIdentity, isRenewTesterLink, isRevokeTesterLink, isTesterAccessManagement,
   isTesterAccessResult, isTesterCredential,
 } from '../contracts/test-access';
 import { isEventRevision, isUuid } from '../contracts/events';
@@ -17,6 +17,7 @@ export interface TesterAccessClient {
   readonly list: (eventId: string, signal: AbortSignal) => Promise<TesterAccessManagement>;
   readonly create: (eventId: string, input: CreateTesterLink, etag: string, requestId: string, signal: AbortSignal) => Promise<TesterAccessResult>;
   readonly revoke: (eventId: string, input: RevokeTesterLink, etag: string, requestId: string, signal: AbortSignal) => Promise<TesterAccessResult>;
+  readonly renew: (eventId: string, input: RenewTesterLink, etag: string, requestId: string, signal: AbortSignal) => Promise<TesterAccessResult>;
   readonly workspace: (credential: TesterCredential, signal: AbortSignal) => Promise<EventWorkspace>;
   readonly bindScores: (credential: TesterCredential) => ScoresClient;
 }
@@ -53,13 +54,14 @@ export function createTesterAccessClient(apiUrl: string, getToken: () => Promise
     const key = () => Promise.resolve(`${linkId}.${token}`);
     return { eventId, linkId, key, request: createPrivateRequest(`${apiUrl}/tester`, key, send, 4096, 'Tester') };
   }
-  async function mutate(eventId: string, action: 'create' | 'revoke', input: CreateTesterLink | RevokeTesterLink,
+  async function mutate(eventId: string, action: 'create' | 'revoke' | 'renew', input: CreateTesterLink | RevokeTesterLink | RenewTesterLink,
     etag: string, requestId: string, signal: AbortSignal): Promise<TesterAccessResult> {
     if (!isEventRevision(etag) || !isUuid(requestId)
-      || (action === 'create' ? !isCreateTesterLink(input) : !isRevokeTesterLink(input))) throw new Error('Invalid tester access operation.');
+      || (action === 'create' ? !isCreateTesterLink(input)
+        : action === 'renew' ? !isRenewTesterLink(input) : !isRevokeTesterLink(input))) throw new Error('Invalid tester access operation.');
     const value = await ownerRequest(`${ownerPath(eventId)}/${action}`, signal, { method: 'POST', body: input, etag, requestId });
     if (!isTesterAccessResult(value) || value.operationId !== requestId || value.linkId !== input.linkId
-      || value.state !== (action === 'create' ? 'active' : 'revoked')) throw new Error('Invalid tester access acknowledgement. Retry the original operation.');
+      || value.state !== (action === 'revoke' ? 'revoked' : 'active')) throw new Error('Invalid tester access acknowledgement. Retry the original operation.');
     return value;
   }
   return {
@@ -70,6 +72,7 @@ export function createTesterAccessClient(apiUrl: string, getToken: () => Promise
     },
     create: (eventId, input, etag, requestId, signal) => mutate(eventId, 'create', input, etag, requestId, signal),
     revoke: (eventId, input, etag, requestId, signal) => mutate(eventId, 'revoke', input, etag, requestId, signal),
+    renew: (eventId, input, etag, requestId, signal) => mutate(eventId, 'renew', input, etag, requestId, signal),
     async workspace(credential, signal) {
       const access = guest(credential);
       const value = await readPrivateValue(access.request, `events/${access.eventId}/workspace`, signal);

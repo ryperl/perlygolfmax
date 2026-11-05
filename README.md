@@ -137,7 +137,9 @@ of an account-based player invitation:
    playing group in **that event only**. No sign-in, account or approval follows.
 
 Anyone holding the link can view that event's round scorecards and enter scores
-for any group. Links expire after 24 hours and the owner can revoke them earlier.
+for any group. New links expire after seven days and the owner can revoke them
+earlier. Existing 24-hour links keep their recorded expiry until explicitly
+renewed.
 Keep them private. They do not grant other-event access, global catalogs, raw
 Handicap Index observations, score history, purse access or organizer management.
 Score changes are attributed to the **shared tester link**, not a verified
@@ -150,6 +152,13 @@ stay in the private URL fragment and request authorization header, never API
 query/path, normal UI text, logs or application persistent storage. Leaving the
 tester view clears its in-memory workspace and drafts; revocation/expiry ends
 access on subsequent reads/saves. Archived events reject tester access.
+
+An organizer can choose **Renew for 7 days** to keep the same URL and reset
+expiry to seven days from the server's renewal time, including for an expired
+but unrevoked link. Anyone holding that URL regains its existing event-scoring
+access. Refreshing the page or link list does not renew access. Revoked links
+cannot be renewed; create a new link instead. Retries of the same renewal
+confirm the original expiry rather than repeatedly extending it.
 
 ### Account-based player invitations
 

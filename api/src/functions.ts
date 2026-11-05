@@ -120,6 +120,7 @@ const testerRoutes: readonly { readonly action: TesterAction; readonly route: st
   { action: 'list', route: 'events/{id}/test-access', method: 'GET' },
   { action: 'create', route: 'events/{id}/test-access/create', method: 'POST' },
   { action: 'revoke', route: 'events/{id}/test-access/revoke', method: 'POST' },
+  { action: 'renew', route: 'events/{id}/test-access/renew', method: 'POST' },
   { action: 'workspace', route: 'tester/events/{id}/workspace', method: 'GET' },
   { action: 'scores', route: 'tester/events/{id}/rounds/{roundId}/scores', method: 'GET' },
   { action: 'score-hole', route: 'tester/events/{id}/rounds/{roundId}/players/{playerId}/holes/{holeNumber}', method: 'PUT' },

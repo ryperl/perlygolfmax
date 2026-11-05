@@ -14,6 +14,7 @@ export function activeTesterLink(row: StoredRow, identity: EventTesterIdentity, 
   return row.partitionKey === identity.eventId && row.rowKey === testerLinkKey(identity.linkId)
     && row.linkId === identity.linkId && isTesterLink({
       linkId: row.linkId, state: row.state, createdAt: row.createdAt, expiresAt: row.expiresAt, revision: row.revision,
+      ...(row.renewedAt === undefined ? {} : { renewedAt: row.renewedAt }),
     }) && row.state === 'active' && Date.parse(String(row.expiresAt)) > now;
 }
 

@@ -55,7 +55,7 @@ test('owner tester-link controls fit narrow/enlarged layouts and support private
       const panel = page.getByRole('region', { name: 'No-account tester access' });
       await expect(panel.getByRole('button', { name: 'Create private tester link', exact: true })).toBeEnabled();
       await expect(panel.getByText(/Anyone holding it can enter scores/)).toBeVisible();
-      await expect(panel.getByText(/Links expire 24 hours after creation/)).toBeVisible();
+      await expect(panel.getByText(/New links expire 7 days after creation/)).toBeVisible();
       await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
       await fitsViewport(page, width);
       const create = panel.getByRole('button', { name: 'Create private tester link', exact: true });
@@ -74,12 +74,18 @@ test('owner tester-link controls fit narrow/enlarged layouts and support private
       expect(await share.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe('none');
       await page.keyboard.press('Tab');
       await expect(panel.getByRole('button', { name: 'Copy private tester link', exact: true })).toBeFocused();
+      const renew = panel.getByRole('button', { name: 'Renew tester link 1 for 7 days', exact: true });
+      await renew.focus();
+      await page.keyboard.press('Enter');
+      await expect(panel.getByText('Tester link renewed for 7 days. The existing URL is unchanged.', { exact: true })).toBeVisible();
+      await expect(share).toHaveValue(secret);
       await fitsViewport(page, width);
       const revoke = panel.getByRole('button', { name: 'Revoke tester link 1', exact: true });
       await revoke.focus();
       await page.keyboard.press('Enter');
       await expect(panel.getByText('Tester link revoked. Saved scores are preserved.', { exact: true })).toBeVisible();
       await expect(revoke).toBeDisabled();
+      await expect(renew).toBeDisabled();
       await expect(share).toHaveCount(0);
       await fitsViewport(page, width);
     }

@@ -3,7 +3,7 @@ import type { TesterAccessClient } from '../../client/test-access';
 import { generateTesterSecret, testerUrl } from '../../client/test-access';
 import { EventChangedError, SessionExpiredError } from '../../client/events';
 import { PrivateRequestError } from '../../client/private-request';
-import type { CreateTesterLink, RevokeTesterLink, TesterAccessManagement, TesterLink } from '../../domain/test-access';
+import type { CreateTesterLink, RenewTesterLink, RevokeTesterLink, TesterAccessManagement, TesterLink } from '../../domain/test-access';
 import './test-access.css';
 
 export interface TesterLinksProps {
@@ -15,6 +15,7 @@ export interface TesterLinksProps {
 type Attempt = { readonly etag: string; readonly requestId: string } & (
   | { readonly kind: 'create'; readonly input: CreateTesterLink; readonly url: string }
   | { readonly kind: 'revoke'; readonly input: RevokeTesterLink }
+  | { readonly kind: 'renew'; readonly input: RenewTesterLink }
 );
 
 export function TesterLinks(props: TesterLinksProps) {
@@ -90,14 +91,17 @@ function TesterLinksSession({ client, eventId, onSessionExpired }: TesterLinksPr
       setAttempt(next);
       const result = next.kind === 'create'
         ? await client.create(eventId, next.input, next.etag, next.requestId, controller.signal)
-        : await client.revoke(eventId, next.input, next.etag, next.requestId, controller.signal);
+        : next.kind === 'renew' ? await client.renew(eventId, next.input, next.etag, next.requestId, controller.signal)
+          : await client.revoke(eventId, next.input, next.etag, next.requestId, controller.signal);
       if (!isCurrent(controller)) return;
       if (result.operationId !== next.requestId || result.linkId !== next.input.linkId
-        || result.state !== (next.kind === 'create' ? 'active' : 'revoked')) throw new Error('Unconfirmed operation.');
+        || result.state !== (next.kind === 'revoke' ? 'revoked' : 'active')) throw new Error('Unconfirmed operation.');
       setAttempt(undefined);
       if (next.kind === 'create') {
         setShare({ linkId: next.input.linkId, url: next.url });
         setNotice('Tester link created. Copy the private link and share it yourself.');
+      } else if (next.kind === 'renew') {
+        setNotice('Tester link renewed for 7 days. The existing URL is unchanged.');
       } else {
         if (shareNow.current?.linkId === next.input.linkId) setShare(undefined);
         setNotice('Tester link revoked. Saved scores are preserved.');
@@ -135,6 +139,11 @@ function TesterLinksSession({ client, eventId, onSessionExpired }: TesterLinksPr
     void run(() => Promise.resolve({ kind: 'revoke', input: { linkId: link.linkId, revision: link.revision },
       etag: value.etag, requestId: crypto.randomUUID() }));
   }
+  function renew(link: TesterLink) {
+    if (!value || value.eventStatus !== 'active' || link.state === 'revoked' || attempt) return;
+    void run(() => Promise.resolve({ kind: 'renew', input: { linkId: link.linkId, revision: link.revision },
+      etag: value.etag, requestId: crypto.randomUUID() }));
+  }
   async function copy() {
     const original = shareNow.current;
     if (!original) return;
@@ -151,7 +160,10 @@ function TesterLinksSession({ client, eventId, onSessionExpired }: TesterLinksPr
   return <section className="tester-access" aria-label="No-account tester access">
     <h2>No-account tester access</h2>
     <p>Create a private, revocable link for any playing group in this event only. Anyone holding it can enter scores.
-      No guest account, sign-in, claim or approval is needed. Links expire 24 hours after creation.</p>
+      No guest account, sign-in, claim or approval is needed. New links expire 7 days after creation.
+      Existing links keep their recorded expiry until explicitly renewed.</p>
+    <p>Renew for 7 days keeps the same URL and extends access for anyone holding it.
+      Page and list refreshes do not renew access. Revoked links cannot be renewed.</p>
     <p>Changes use a shared tester-link identity, not an individually verified person. No game or event setup edits are allowed.
       Nothing is emailed or messaged automatically. Account-based player invitations remain a separate option.</p>
     <p>Links cannot be recovered after reloading. If a link is lost, revoke it and create a fresh link.</p>
@@ -172,12 +184,14 @@ function TesterLinksSession({ client, eventId, onSessionExpired }: TesterLinksPr
       {copied && <p role="status">{copied}</p>}
     </div>}
     {value && <>
-      {value.eventStatus === 'archived' && <p>This event is archived. New tester links are disabled; security revocation remains available.</p>}
+      {value.eventStatus === 'archived' && <p>This event is archived. New tester links and renewals are disabled; security revocation remains available.</p>}
       <button disabled={locked || value.eventStatus !== 'active'} onClick={create}>Create private tester link</button>
       {value.links.length === 0 ? <p>No tester links created for this event.</p> : <ul>
         {value.links.map((link, index) => <li key={link.linkId}>
           <strong>Tester link {index + 1}</strong> · {link.state === 'revoked' ? 'Revoked' : Date.parse(link.expiresAt) <= Date.now() ? 'Expired' : 'Active'}
           <p>Expires <time dateTime={link.expiresAt}>{new Date(link.expiresAt).toLocaleString()}</time></p>
+          <button disabled={locked || value.eventStatus !== 'active' || link.state === 'revoked'} onClick={() => { renew(link); }}
+            aria-label={`Renew tester link ${String(index + 1)} for 7 days`}>Renew for 7 days</button>
           <button disabled={locked || link.state === 'revoked'} onClick={() => { revoke(link); }}
             aria-label={`Revoke tester link ${String(index + 1)}`}>Revoke link</button>
         </li>)}

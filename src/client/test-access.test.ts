@@ -27,6 +27,20 @@ function fixture(value: unknown = round, status = 200) {
 }
 
 describe('private no-account tester transport', () => {
+  it('renews an existing link through conditional owner authentication without sending its secret or selecting expiry', async () => {
+    const result = { operationId: fictionalId(912), linkId: credential.linkId, state: 'active' };
+    const f = fixture(result);
+    const input = { linkId: credential.linkId, revision: fictionalId(911) };
+    await f.client.renew(credential.eventId, input, 'event-etag', result.operationId, signal);
+    expect(f.send.mock.calls[0]?.[0]).toBe(`https://fictional.example.test/api/events/${credential.eventId}/test-access/renew`);
+    const init = f.send.mock.calls[0]?.[1];
+    expect(init).toMatchObject({ method: 'POST', body: JSON.stringify(input) });
+    expect(new Headers(init?.headers).get('authorization')).toBe('Bearer fictional-owner-token');
+    expect(new Headers(init?.headers).get('if-match')).toBe('event-etag');
+    expect(new Headers(init?.headers).get('idempotency-key')).toBe(result.operationId);
+    await expect(f.client.renew(credential.eventId, input, 'event-etag', fictionalId(999), signal))
+      .rejects.toThrow('Retry the original');
+  });
   it('generates strong secrets and parses only exact private fragment routes', async () => {
     const secret = await generateTesterSecret();
     expect(secret.token).toMatch(/^[a-zA-Z0-9_-]{43}$/);

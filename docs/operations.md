@@ -69,18 +69,29 @@ do not infer application authority from sign-in.
 
 ### Temporary no-account tester access
 
-An event owner can create a private 24-hour tester link without appointing an
+An event owner can create a private seven-day tester link without appointing an
 account or granting membership. Anyone holding it can read saved round setup/
 scorecards and enter scores for any playing group in that one active event.
 No account creation, sign-in or organizer approval is required for its holder.
 The owner still signs in for creation/revocation and all management.
 
-Owner endpoints `GET .../test-access`, `POST .../test-access/create` and
-`POST .../test-access/revoke` retain JWT, event-owner checks, exact event/link
+Owner endpoints `GET .../test-access`, `POST .../test-access/create`,
+`POST .../test-access/renew` and `POST .../test-access/revoke` retain JWT,
+event-owner checks, exact event/link
 revisions and UUID idempotency receipts. Creation stores only a SHA-256 digest
-of the browser-generated 32-byte secret, with a server-established 24-hour
+of the browser-generated 32-byte secret, with a server-established seven-day
 expiry. The raw secret cannot be recovered; explicitly revoke lost links and
 create new ones. Revocation does not delete scores.
+
+Existing one-day grants retain their persisted expiry. Explicit owner renewal
+keeps the original creation time, link ID and digest, adds a server `renewedAt`
+and sets expiry to exactly seven days from that instant. An expired unrevoked
+grant may be renewed; a revoked or archived grant may not. Renewal atomically
+checks event, owner and link revisions and records before/after expiry and actor
+in the immutable request receipt. An identical request retry never extends the
+expiry again. Listing/page refresh is read-only. Readers accept legacy one-day,
+new seven-day and explicitly renewed seven-day records without rewriting data;
+other lifetimes or renewal times before creation fail validation.
 
 Dedicated guest routes live under `/api/tester/events/<event-id>`: workspace,
 round scores and per-player hole writes only. They require

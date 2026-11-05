@@ -4,6 +4,7 @@ import { EventChangedError } from '../../src/client/events';
 import type { RoundScores } from '../../src/domain/scoring';
 import type { EventWorkspace } from '../../src/domain/setup';
 import type { TesterAccessManagement, TesterCredential } from '../../src/domain/test-access';
+import { testerLinkLifetimeMs } from '../../src/domain/test-access';
 import { calculateGameResults } from '../../src/domain/stableford';
 import { fictionalCapturedRound, fictionalGamesRound } from './games-fixture-data';
 
@@ -74,7 +75,7 @@ export function fictionalTesterClient(): TesterAccessClient {
       const now = Date.now();
       management = { ...management, etag: `"fictional-links-v${String(++revision)}"`, links: [...management.links, {
         linkId: input.linkId, state: 'active', revision: crypto.randomUUID(),
-        createdAt: new Date(now).toISOString(), expiresAt: new Date(now + 86400000).toISOString(),
+        createdAt: new Date(now).toISOString(), expiresAt: new Date(now + testerLinkLifetimeMs).toISOString(),
       }] };
       return Promise.resolve({ operationId, linkId: input.linkId, state: 'active' });
     },
@@ -86,6 +87,18 @@ export function fictionalTesterClient(): TesterAccessClient {
       management = { ...management, etag: `"fictional-links-v${String(++revision)}"`,
         links: management.links.map((link) => link.linkId === input.linkId ? { ...link, state: 'revoked', revision: crypto.randomUUID() } : link) };
       return Promise.resolve({ operationId, linkId: input.linkId, state: 'revoked' });
+    },
+    renew: (_eventId, input, etag, operationId, signal) => {
+      signal.throwIfAborted();
+      if (etag !== management.etag || !management.links.some((link) => link.linkId === input.linkId
+        && link.revision === input.revision && link.state === 'active')) {
+        return Promise.reject(new EventChangedError('Fictional link revision changed.'));
+      }
+      const now = Date.now();
+      management = { ...management, etag: `"fictional-links-v${String(++revision)}"`,
+        links: management.links.map((link) => link.linkId === input.linkId ? { ...link, revision: operationId,
+          renewedAt: new Date(now).toISOString(), expiresAt: new Date(now + testerLinkLifetimeMs).toISOString() } : link) };
+      return Promise.resolve({ operationId, linkId: input.linkId, state: 'active' });
     },
     workspace: (_credential, signal) => { signal.throwIfAborted(); return Promise.resolve(workspace); },
     bindScores: () => scores,

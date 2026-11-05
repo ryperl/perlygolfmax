@@ -25,7 +25,7 @@ async function fixture() {
     const guest = ['workspace', 'scores', 'score-hole'].includes(action);
     return new HttpRequest({
       url: `https://fictional.example.test/api/${guest ? 'tester/' : ''}events/${event.id}/${action}${query}`,
-      method: action === 'score-hole' ? 'PUT' : action === 'create' || action === 'revoke' ? 'POST' : 'GET',
+      method: action === 'score-hole' ? 'PUT' : ['create', 'revoke', 'renew'].includes(action) ? 'POST' : 'GET',
       params: { id: event.id, roundId: f.roundId, playerId: f.peerId, holeNumber: '1', ...params },
       headers: { authorization: guest ? f.header : 'Bearer fictional-owner-jwt',
         'Content-Type': 'application/json', 'If-Match': f.row('event').etag, 'Idempotency-Key': identifier(3200), ...headers },
@@ -38,6 +38,21 @@ async function fixture() {
 }
 
 describe('separate tester HTTP credential boundary', () => {
+  it('renews only through the owner POST with exact revisions and no caller-chosen expiry', async () => {
+    const f = await fixture();
+    const current = await f.testers.list(creator, event.id);
+    const link = current.links[0];
+    if (!link) throw new Error('Missing fictional tester link.');
+    const body = { linkId: f.linkId, revision: link.revision };
+    expect((await f.invoke('renew', body, { authorization: f.header })).status).toBe(401);
+    expect((await f.invoke('renew', { ...body, expiresAt: '2099-01-01T00:00:00Z' })).status).toBe(400);
+    expect((await f.invoke('renew', body, { 'If-Match': '*' })).status).toBe(400);
+    expect((await f.invoke('renew', body, { 'Idempotency-Key': 'invalid' })).status).toBe(400);
+    expect(await f.invoke('renew', body)).toMatchObject({ status: 200, jsonBody: {
+      state: 'active', linkId: f.linkId, operationId: identifier(3200),
+    } });
+    expect(await f.testers.verify(event.id, f.header)).toEqual(f.actor);
+  });
   it('executes owner create and guest workspace/read/all-group scoring without JWT, claim or approval', async () => {
     const f = await fixture();
     const created = await f.invoke('create', { linkId: identifier(3210), tokenHash: f.tokenHash });

@@ -40,7 +40,7 @@ describe('no-account tester HTTP/client/storage workflow', () => {
       } else {
         params = { id: parts[1] ?? '' };
         if (parts[2] !== 'test-access') throw new Error('Unregistered fictional owner route.');
-        if (parts[3] === 'create' || parts[3] === 'revoke') action = parts[3];
+        if (parts[3] === 'create' || parts[3] === 'revoke' || parts[3] === 'renew') action = parts[3];
         else if (parts.length === 3) action = 'list';
         else throw new Error('Unregistered fictional management action.');
       }
@@ -88,9 +88,17 @@ describe('no-account tester HTTP/client/storage workflow', () => {
     expect(members).toHaveLength(1);
     expect(members[0]).toMatchObject({ ...creator, role: 'owner' });
     await expect(client.workspace({ ...credential, eventId: identifier(999) }, signal)).rejects.toBeInstanceOf(SessionExpiredError);
+    const beforeRenewal = await client.list(event.id, signal);
+    const original = beforeRenewal.links.find((entry) => entry.linkId === credential.linkId);
+    if (!original) throw new Error('Missing saved fictional tester link.');
+    await client.renew(event.id, { linkId: original.linkId, revision: original.revision },
+      beforeRenewal.etag, identifier(4005), signal);
+    expect((await scores.load(event.id, stored.roundId, signal)).permissions?.role).toBe('tester');
     const latest = await client.list(event.id, signal);
     const link = latest.links.find((entry) => entry.linkId === credential.linkId);
     if (!link) throw new Error('Missing saved fictional tester link.');
+    expect(link.createdAt).toBe(original.createdAt);
+    expect(Date.parse(link.expiresAt) - Date.parse(link.renewedAt ?? '')).toBe(604_800_000);
     await client.revoke(event.id, { linkId: link.linkId, revision: link.revision }, latest.etag, identifier(4003), signal);
     await expect(scores.load(event.id, stored.roundId, signal)).rejects.toBeInstanceOf(SessionExpiredError);
     await expect(scores.save(event.id, stored.roundId, target, 2, { kind: 'strokes', strokes: 5 },

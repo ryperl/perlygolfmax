@@ -1,5 +1,5 @@
 import type { HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
-import { isCreateTesterLink, isRevokeTesterLink } from '../../../src/contracts/test-access.js';
+import { isCreateTesterLink, isRenewTesterLink, isRevokeTesterLink } from '../../../src/contracts/test-access.js';
 import { isEventRevision, isRecord, isUuid } from '../../../src/contracts/events.js';
 import { isHoleScore } from '../../../src/contracts/scoring.js';
 import { ApiError } from '../errors.js';
@@ -11,7 +11,7 @@ import type { TableWorkspaceStore } from '../setup/store.js';
 import type { TableScoreStore } from '../scoring/store.js';
 import type { TableTesterAccessStore } from './store.js';
 
-export type TesterAction = 'list' | 'create' | 'revoke' | 'workspace' | 'scores' | 'score-hole';
+export type TesterAction = 'list' | 'create' | 'revoke' | 'renew' | 'workspace' | 'scores' | 'score-hole';
 export interface TesterApi {
   readonly verify: VerifyIdentity;
   readonly limiter: RequestLimiter;
@@ -70,6 +70,10 @@ export function createTesterHandler(resolveApi: () => TesterApi, action: TesterA
       if (action === 'create') {
         if (!isCreateTesterLink(body)) throw new ApiError(400, 'INVALID_TESTER_LINK');
         return response(200, await api.testers.create(identity, eventId, body, etag, requestId));
+      }
+      if (action === 'renew') {
+        if (!isRenewTesterLink(body)) throw new ApiError(400, 'INVALID_TESTER_RENEWAL');
+        return response(200, await api.testers.renew(identity, eventId, body, etag, requestId));
       }
       if (!isRevokeTesterLink(body)) throw new ApiError(400, 'INVALID_TESTER_REVOCATION');
       return response(200, await api.testers.revoke(identity, eventId, body, etag, requestId));
