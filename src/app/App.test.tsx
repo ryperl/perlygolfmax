@@ -55,9 +55,11 @@ describe('App', () => {
     const testerAccess = fakeTesterAccessClient();
     testServices = { ...base, admissions: admissionsClient(), testerAccess };
     navigate(`#access?event=${fictionalEvent.id}`);
+    await import('./PlayerAccessPage');
     render(<App />);
+    await act(async () => { await vi.dynamicImportSettled(); });
     expect(await screen.findByRole('heading', { name: 'No-account tester access' })).toBeVisible();
-    expect(testerAccess.list).toHaveBeenCalledWith(fictionalEvent.id, expect.any(AbortSignal));
+    await waitFor(() => { expect(testerAccess.list).toHaveBeenCalledWith(fictionalEvent.id, expect.any(AbortSignal)); });
     expect(headerAccount('Sign out')).toBeEnabled();
     expect(testerAccess.workspace).not.toHaveBeenCalled();
     expect(screen.getByText('Account-based player invitations')).toBeVisible();
