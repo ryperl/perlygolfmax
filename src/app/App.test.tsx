@@ -9,7 +9,7 @@ import { fakeScores } from '../client/scoring.test-support';
 import { SessionExpiredError } from '../client/events';
 import type { EventPage } from '../domain/events';
 import { fictionalEventPurse } from '../client/purse.test-support';
-import { admissionId, admissionsClient, status } from '../features/admission/test-support';
+import { admissionId, admissionsClient, deferred, status } from '../features/admission/test-support';
 
 let testServices: EventServices | undefined;
 vi.mock('./EventsPage', async (importOriginal) => {
@@ -50,12 +50,16 @@ beforeEach(() => {
 describe('App', () => {
   it('keeps signed-out invitation landing private and uses the existing header sign-in action', async () => {
     const base = service();
-    vi.mocked(base.session.initialize).mockResolvedValue(false);
+    const account = deferred<boolean>();
+    vi.mocked(base.session.initialize).mockReturnValue(account.promise);
     const admissions = admissionsClient();
     testServices = { ...base, admissions };
     navigate(`#join?event=${admissionId(100)}&invite=${admissionId(200)}&token=${'A'.repeat(43)}`);
     render(<App />);
     expect(await screen.findByRole('heading', { name: 'Player invitation' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Checking account…' })).toBeDisabled();
+    await act(async () => { account.resolve(false); await account.promise; });
+    await within(screen.getByRole('banner', { name: 'Site header' })).findByRole('button', { name: 'Sign in' });
     await userEvent.setup().click(headerAccount('Sign in'));
     expect(base.session.signIn).toHaveBeenCalledOnce();
     expect(base.events.list).not.toHaveBeenCalled();
