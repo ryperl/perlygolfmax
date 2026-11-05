@@ -3,6 +3,7 @@ import { createSetupClient } from './setup';
 import { EventChangedError } from './events';
 import { fictionalEvent, fictionalId, fictionalSetup, fictionalWorkspace } from './catalog.test-support';
 import type { EventSetupInput } from '../domain/setup';
+import { maximumEventSetupBytes } from '../domain/setup';
 
 describe('event workspace client', () => {
   it('explicitly refreshes a saved round with a stable request ID, exact workspace revision and empty body', async () => {
@@ -35,7 +36,7 @@ describe('event workspace client', () => {
     await expect(client.refreshIndices(fictionalEvent.id, round.id, 'v1', fictionalId(250), signal)).rejects.toThrow('Invalid refreshed workspace');
     await expect(client.refreshIndices(fictionalEvent.id, round.id, 'v1', fictionalId(250), signal)).rejects.toBeInstanceOf(EventChangedError);
   });
-  it('reports an oversized multi-round draft explicitly without sending or broadening the request limit', async () => {
+  it('sends a bounded eight-round draft above4KiB using the dedicated setup budget', async () => {
     const send = vi.fn<typeof fetch>();
     const token = vi.fn().mockResolvedValue('fictional');
     const client = createSetupClient('https://fictional.example.test/api', token, send);
@@ -49,9 +50,33 @@ describe('event workspace client', () => {
         groups: [{ number: 1, playerIds: ids.slice(0, 4) }, { number: 2, playerIds: ids.slice(4) }],
       })),
     };
-    await expect(client.save(fictionalEvent.id, 'v1', input, new AbortController().signal)).rejects.toThrow('4096-byte UTF-8 service limit');
-    expect(send).not.toHaveBeenCalled();
-    expect(token).not.toHaveBeenCalled();
+    const bytes = new TextEncoder().encode(JSON.stringify(input)).byteLength;
+    expect(bytes).toBeGreaterThan(4096);
+    expect(bytes).toBeLessThanOrEqual(maximumEventSetupBytes);
+    const first = fictionalWorkspace.rounds[0];
+    if (!first) throw new Error('Missing fictional snapshot.');
+    const roster = ids.map((playerId, index) => ({ playerId, displayName: `Fictional Golfer ${String(index + 1)}` }));
+    const response = { ...fictionalWorkspace, roster, rounds: input.rounds.map((selected) => ({
+      ...first, id: selected.id, name: selected.name, groups: selected.groups,
+      players: roster.map((player) => ({ ...player, handicapIndex: null })),
+    })) };
+    send.mockResolvedValue(new Response(JSON.stringify(response)));
+    await expect(client.save(fictionalEvent.id, 'v1', input, new AbortController().signal)).resolves.toEqual(response);
+    expect(send.mock.calls[0]?.[1]?.body).toBe(JSON.stringify(input));
+    expect(token).toHaveBeenCalledOnce();
+  });
+  it('requires explicit competition settings to be confirmed and distinguishes disable from legacy omission', async () => {
+    const config = { kind: 'stroke-play' as const, basis: 'net' as const, handicapAllowancePercent: 95 };
+    const saved = { ...fictionalWorkspace, overallCompetition: config };
+    const send = vi.fn<typeof fetch>().mockImplementation(() => Promise.resolve(new Response(JSON.stringify(saved))));
+    const client = createSetupClient('https://fictional.example.test/api', () => Promise.resolve('fictional'), send);
+    const signal = new AbortController().signal;
+    await expect(client.save(fictionalEvent.id, 'v1', { ...fictionalSetup, overallCompetition: config }, signal)).resolves.toEqual(saved);
+    await expect(client.save(fictionalEvent.id, 'v1', fictionalSetup, signal)).resolves.toEqual(saved);
+    await expect(client.save(fictionalEvent.id, 'v1', { ...fictionalSetup, overallCompetition: null }, signal)).rejects.toThrow('saved workspace');
+    send.mockImplementation(() => Promise.resolve(new Response(JSON.stringify(fictionalWorkspace))));
+    await expect(client.save(fictionalEvent.id, 'v1', { ...fictionalSetup, overallCompetition: config }, signal)).rejects.toThrow('saved workspace');
+    await expect(client.save(fictionalEvent.id, 'v1', { ...fictionalSetup, overallCompetition: null }, signal)).resolves.toEqual(fictionalWorkspace);
   });
   it('loads the authorized event projection and conditionally saves explicit setup input', async () => {
     const send = vi.fn<typeof fetch>().mockImplementation(() => Promise.resolve(new Response(JSON.stringify(fictionalWorkspace))));

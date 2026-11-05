@@ -1,8 +1,9 @@
 import type { TableClient, TransactionAction } from '@azure/data-tables';
 import type { AccountIdentity, EventSummary } from '../../../src/domain/events.js';
-import type { EventRosterPlayer, EventSetupInput, EventWorkspace, RoundSnapshot } from '../../../src/domain/setup.js';
+import type { EventRosterPlayer, EventSetupInput, EventWorkspace, OverallCompetition, RoundSnapshot } from '../../../src/domain/setup.js';
+import { maximumEventSetupBytes } from '../../../src/domain/setup.js';
 import { isEventSummary, isRecord, isUuid } from '../../../src/contracts/events.js';
-import { isEventSetupInput, isEventWorkspace } from '../../../src/contracts/setup.js';
+import { isEventSetupInput, isEventWorkspace, isOverallCompetition } from '../../../src/contracts/setup.js';
 import { ApiError } from '../errors.js';
 import { canonical, decode, isConflict, optionalRow, revision, transaction } from '../catalog/entities.js';
 import { requireManager } from '../catalog/courses.js';
@@ -13,15 +14,18 @@ import { isIndexRefreshAudit } from './index-refresh.js';
 import type { IndexRefreshAudit } from './index-refresh.js';
 import { scoringLock } from '../scoring/lock.js';
 import type { ScoringLock } from '../scoring/lock.js';
+import { configuredGameRounds, readGameConfiguration } from '../scoring/games.js';
 
 interface WorkspaceHeader {
   readonly location: string;
   readonly roster: readonly EventRosterPlayer[];
   readonly roundIds: readonly string[];
+  readonly overallCompetition?: OverallCompetition;
 }
 
 function isHeader(value: unknown): value is WorkspaceHeader {
   return isRecord(value) && typeof value.location === 'string'
+    && (value.overallCompetition === undefined || isOverallCompetition(value.overallCompetition))
     && Array.isArray(value.roster) && value.roster.length >= 4 && value.roster.length <= 8
     && value.roster.every((player: unknown) => isRecord(player) && isUuid(player.playerId) && typeof player.displayName === 'string')
     && Array.isArray(value.roundIds) && value.roundIds.length >= 1 && value.roundIds.length <= 8
@@ -68,7 +72,8 @@ export class TableWorkspaceStore {
       void _ignored;
       rounds.push({ ...snapshot, ...(lock ? { scoringStarted: true } : {}) });
     }
-    const workspace = { event: { ...summary, role: 'owner' }, location: saved.location, roster: saved.roster, rounds, etag: summary.etag };
+    const workspace = { event: { ...summary, role: 'owner' }, location: saved.location, roster: saved.roster, rounds, etag: summary.etag,
+      ...(saved.overallCompetition ? { overallCompetition: saved.overallCompetition } : {}) };
     if (!isEventWorkspace(workspace)) throw new ApiError(503, 'INVALID_STORED_WORKSPACE');
     for (const round of workspace.rounds) {
       if (locks.get(round.id)?.writtenPlayerIds.some((id) => !round.players.some((player) => player.playerId === id))) {
@@ -86,6 +91,7 @@ export class TableWorkspaceStore {
     // Explicit allowlists prevent catalog/index/audit fields from leaking to event members.
     return {
       event: after.summary, location: workspace.location, etag: after.summary.etag,
+      ...(workspace.overallCompetition ? { overallCompetition: workspace.overallCompetition } : {}),
       roster: workspace.roster.map((player) => ({ playerId: player.playerId, displayName: player.displayName })),
       rounds: workspace.rounds.map((round) => ({
         id: round.id, name: round.name, courseId: round.courseId, courseVersionId: round.courseVersionId,
@@ -169,7 +175,17 @@ export class TableWorkspaceStore {
     requireManager(identity, this.allowed);
     if (access.summary.etag !== etag) throw new ApiError(409, 'EVENT_CHANGED');
     if (!isEventSetupInput(input)) throw new ApiError(400, 'INVALID_EVENT_SETUP');
+    if (Buffer.byteLength(JSON.stringify(input), 'utf8') > maximumEventSetupBytes) throw new ApiError(413, 'REQUEST_TOO_LARGE');
     const previous = await this.load(access.summary);
+    const overallCompetition = input.overallCompetition === undefined
+      ? previous.overallCompetition : input.overallCompetition ?? undefined;
+    if (overallCompetition?.kind === 'stableford') {
+      for (const binding of overallCompetition.roundGames) {
+        if (!input.rounds.some((round) => round.id === binding.roundId)) throw new ApiError(400, 'INVALID_OVERALL_ROUND');
+        const games = await readGameConfiguration(this.table, id, binding.roundId, configuredGameRounds(access.event.gameRoundIds));
+        if (!games?.games.some((game) => game.id === binding.gameId)) throw new ApiError(400, 'INVALID_OVERALL_GAME');
+      }
+    }
     if (previous.rounds.some((round) => !input.rounds.some((configured) => configured.id === round.id))) {
       throw new ApiError(409, 'ROUND_REMOVAL_NOT_SUPPORTED');
     }
@@ -212,7 +228,8 @@ export class TableWorkspaceStore {
         }),
       });
     }
-    const header: WorkspaceHeader = { location: input.location, roster, roundIds: rounds.map((round) => round.id) };
+    const header: WorkspaceHeader = { location: input.location, roster, roundIds: rounds.map((round) => round.id),
+      ...(overallCompetition ? { overallCompetition } : {}) };
     const actions: TransactionAction[] = [
       ['update', { partitionKey: id, rowKey: 'event', name: input.name }, 'Merge', { etag }],
       ['update', {

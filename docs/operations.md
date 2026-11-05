@@ -15,9 +15,11 @@ creation followed by a page reload. Runtime resource settings and narrow
 role scopes have been read back after foundation creation. Those checks do not
 prove all authorization, concurrency or recovery boundaries.
 Saved owner round setup and an owner-only gross-score simulation are implemented.
-Individual gross/net Stableford games and configurable point tables are
-implemented. No invitations, owner appointment UI, golfer/assigned-scorer
-access, team scoring, audit exports or backup job are shipped.
+Individual gross/net Stableford, explicit net team games and configurable point
+tables are implemented. Optional overall standings are configured in event
+setup: actual daily Stableford points with explicit member credit, or individual
+gross/net stroke play. No invitations, owner appointment UI, golfer/assigned-scorer
+access, purse distribution, audit exports or backup job are shipped.
 An unconfigured Events page says so explicitly, without fictional saved events.
 
 Main navigation starts at Events. Opening a saved event binds Overview, Rounds
@@ -93,8 +95,31 @@ round remains incomplete. This is not a completed seven-stroke hole, automatic
 maximum/penalty, handicap posting rule or invented Stableford treatment.
 Self-entry, invitation/account mapping and a round/foursome-assigned
 scorekeeper remain a later increment. Scorekeeper assignment is not event
-administration. Individual Stableford rules are configured per game; purse,
-team and financial rules remain undefined. Missing inputs never become zero.
+administration. Individual/team Stableford rules are configured per game;
+purse and financial rules remain undefined. Missing inputs never become zero.
+
+### Overall competition configuration and reads
+
+The optional competition is part of the existing conditional whole-event setup,
+with unchanged owner plus catalog-manager write authority. It is not a new
+membership grant. Legacy requests omitting the property retain saved settings;
+explicit null disables them. Configured Stableford bindings must reference a
+current event round and a saved game; incomplete configuration remains explicit.
+The setup PUT alone has a 12 KiB UTF-8 request budget, alongside the separate
+12 KiB game-configuration budget. Other ordinary writes remain bounded at 4 KiB.
+
+`GET /api/events/<event-id>/leaderboard` is bearer-authenticated and owner-only,
+including archives. Disabled events do not fetch scorecards. Enabled reads
+include every configured round with at most three parallel score reads and
+charge the existing score-read quota for each round, in addition to the request.
+The service checks the event and owner-grant revisions before returning the
+aggregate; concurrent changes fail explicitly instead of returning mixed data.
+It does not write cards, refresh handicap captures or manufacture missing scores.
+
+Stableford uses saved daily points unchanged; stroke play derives gross/net
+relative-to-par from numeric holes using captured inputs. Pickup/DNF invalidates
+a valid stroke total; unplayed holes stay pending. Neither mode provides
+finalization, a final tie-break, WHS posting or purse/payment operations.
 
 ### Owner scoring authority and persistence
 

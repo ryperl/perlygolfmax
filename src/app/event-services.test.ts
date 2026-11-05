@@ -18,7 +18,9 @@ describe('event service composition', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ canCreateEvents: true, canManageCatalog: true })))
       .mockResolvedValueOnce(new Response(JSON.stringify({ courses: [] })))
       .mockResolvedValueOnce(new Response(JSON.stringify(emptyWorkspace)))
-      .mockResolvedValueOnce(new Response(JSON.stringify(fictionalRoundScores)));
+      .mockResolvedValueOnce(new Response(JSON.stringify(fictionalRoundScores)))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ workspace: emptyWorkspace, roundScores: [],
+        standings: { status: 'disabled', rounds: [], players: [], staleRoundIds: [] } })));
     vi.stubGlobal('fetch', send);
     const { services } = configureEventServices({
       VITE_ENTRA_SPA_CLIENT_ID: '00000000-0000-4000-8000-000000000001',
@@ -33,7 +35,10 @@ describe('event service composition', () => {
     await services.catalog.courses(signal);
     await services.setup.load(fictionalEvent.id, signal);
     await services.scores.load(fictionalRoundScores.eventId, fictionalRoundScores.roundId, signal);
-    expect(token).toHaveBeenCalledTimes(4);
+    if (!services.leaderboard) throw new Error('Configured production services must include overall results.');
+    await services.leaderboard.load(fictionalEvent.id, signal);
+    expect(token).toHaveBeenCalledTimes(5);
+    expect(send.mock.calls[4]?.[0]).toBe(`https://fictional.example.test/api/events/${fictionalEvent.id}/leaderboard`);
     for (const [, request] of send.mock.calls) {
       expect(new Headers(request?.headers).get('Authorization')).toBe('Bearer fictional-token');
       expect(request).toMatchObject({ credentials: 'omit', cache: 'no-store', signal });

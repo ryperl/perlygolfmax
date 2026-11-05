@@ -1,8 +1,29 @@
-import type { EventSetupInput, EventWorkspace, RoundSnapshot } from '../domain/setup.js';
+import type { EventSetupInput, EventWorkspace, OverallCompetition, RoundSnapshot } from '../domain/setup.js';
 import {
   boundedText, isCourseId, isCourseMetadata, isIndexObservation, isTeeProfile, isVersionId,
 } from './catalog.js';
 import { isEventRevision, isEventSummary, isRecord, isUuid } from './events.js';
+
+export function isOverallCompetition(value: unknown): value is OverallCompetition {
+  if (!isRecord(value)) return false;
+  const keys = Object.keys(value);
+  if (value.kind === 'stroke-play') {
+    return value.basis === 'gross'
+      ? keys.length === 2 && keys.every((key) => key === 'kind' || key === 'basis')
+      : value.basis === 'net' && keys.length === 3
+        && keys.every((key) => ['kind', 'basis', 'handicapAllowancePercent'].includes(key))
+        && typeof value.handicapAllowancePercent === 'number' && Number.isSafeInteger(value.handicapAllowancePercent)
+        && value.handicapAllowancePercent >= 1 && value.handicapAllowancePercent <= 100;
+  }
+  return value.kind === 'stableford' && keys.length === 3
+    && keys.every((key) => ['kind', 'credit', 'roundGames'].includes(key))
+    && (value.credit === 'individual' || value.credit === 'team')
+    && Array.isArray(value.roundGames) && value.roundGames.length <= 8
+    && value.roundGames.every((binding: unknown) => isRecord(binding) && Object.keys(binding).length === 2
+      && Object.keys(binding).every((key) => key === 'roundId' || key === 'gameId')
+      && isUuid(binding.roundId) && isUuid(binding.gameId))
+    && new Set(value.roundGames.map((binding: { readonly roundId: string }) => binding.roundId)).size === value.roundGames.length;
+}
 
 function location(value: unknown): value is string {
   return value === '' || boundedText(value, 200);
@@ -26,6 +47,7 @@ function groups(value: unknown, playerIds: readonly string[]): boolean {
 
 export function isEventSetupInput(value: unknown): value is EventSetupInput {
   if (!isRecord(value) || !boundedText(value.name) || !location(value.location)
+    || value.overallCompetition !== undefined && value.overallCompetition !== null && !isOverallCompetition(value.overallCompetition)
     || !Array.isArray(value.playerIds) || value.playerIds.length < 4 || value.playerIds.length > 8
     || !value.playerIds.every(isUuid) || new Set(value.playerIds).size !== value.playerIds.length
     || !Array.isArray(value.rounds) || value.rounds.length < 1 || value.rounds.length > 8) return false;
@@ -51,6 +73,7 @@ function isRoundSnapshot(value: unknown, playerIds: readonly string[]): value is
 
 export function isEventWorkspace(value: unknown): value is EventWorkspace {
   if (!isRecord(value) || !isEventSummary(value.event) || !isEventRevision(value.etag)
+    || value.overallCompetition !== undefined && !isOverallCompetition(value.overallCompetition)
     || !location(value.location) || !Array.isArray(value.roster) || value.roster.length > 8
     || !value.roster.every((player: unknown) => isRecord(player) && isUuid(player.playerId) && boundedText(player.displayName))
     || !Array.isArray(value.rounds) || value.rounds.length > 8) return false;

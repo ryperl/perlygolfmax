@@ -31,6 +31,19 @@ function roundCard(name: string) {
 }
 
 describe('saved event overview', () => {
+  it('links enabled owner overall results from Overview and Rounds only, including archived read-only events', () => {
+    const enabled: EventWorkspace = { ...workspace, overallCompetition: { kind: 'stroke-play', basis: 'gross' } };
+    const view = render(<EventTripView workspace={enabled} view="overview" />);
+    expect(screen.getByRole('link', { name: 'Overall leaderboard' })).toHaveAttribute('href', `#leaderboard?${eventUrl}`);
+    view.rerender(<EventTripView workspace={{ ...enabled, event: { ...enabled.event, status: 'archived' } }} view="rounds" />);
+    expect(screen.getByRole('link', { name: 'Overall leaderboard' })).toBeVisible();
+    view.rerender(<EventTripView workspace={enabled} view="group" />);
+    expect(screen.queryByRole('link', { name: 'Overall leaderboard' })).not.toBeInTheDocument();
+    view.rerender(<EventTripView workspace={workspace} view="overview" />);
+    expect(screen.queryByRole('link', { name: 'Overall leaderboard' })).not.toBeInTheDocument();
+    view.rerender(<EventTripView workspace={{ ...enabled, event: { ...enabled.event, role: 'member' } }} view="overview" />);
+    expect(screen.queryByRole('link', { name: 'Overall leaderboard' })).not.toBeInTheDocument();
+  });
   it('uses the selected workspace, actual counts, and saved-round order and links', () => {
     render(<EventTripView workspace={workspace} view="overview" />);
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(workspace.event.name);

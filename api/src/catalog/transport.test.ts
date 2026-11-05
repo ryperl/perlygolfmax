@@ -102,6 +102,7 @@ describe('catalog and workspace SDK batch transport', () => {
       expect(requests.some((value) => decodeURIComponent(value).includes(`RowKey='version:${version.id}'`))).toBe(true);
       const saved = await workspace.save(creator, event.id, {
         name: 'Fictional Saved', location: 'Fictional Location', playerIds,
+        overallCompetition: { kind: 'stroke-play', basis: 'net', handicapAllowancePercent: 95 },
         rounds: [{
           id: identifier(500), name: 'Fictional Round', courseId: version.courseId, courseVersionId: version.id,
           teeProfileId: tee.id, groups: [{ number: 1, playerIds }],
@@ -109,9 +110,12 @@ describe('catalog and workspace SDK batch transport', () => {
       }, 'W/"fixture-v1"');
       expect(saved).toMatchObject({ event: { name: 'Fictional Saved' }, etag: 'W/"fixture-v3"' });
       expect(saved.rounds[0]?.teeProfile).toEqual(tee);
+      expect(saved.overallCompetition).toEqual({ kind: 'stroke-play', basis: 'net', handicapAllowancePercent: 95 });
+      expect((await workspace.get(creator, event.id)).overallCompetition).toEqual(saved.overallCompetition);
       expect(batches).toHaveLength(2);
       expect(batches[1]?.match(/if-match: W\/"fixture-v1"/gi)).toHaveLength(2);
       expect(batches[1]).toContain('"RowKey":"workspace"');
+      expect(batches[1]).toContain('overallCompetition');
       expect(batches[1]).toContain(`"RowKey":"round:${identifier(500)}"`);
       const initialIndex = { value: '+1.2', effectiveDate: '2026-03-01', source: 'Fictional initial manual source' };
       const initial = await players.create(creator, identifier(204), 'Fictional Initially Known', initialIndex);
@@ -129,6 +133,7 @@ describe('catalog and workspace SDK batch transport', () => {
       expect(refreshed.rounds[0]?.players[0]?.handicapIndex).toEqual(latest.currentIndex);
       expect(refreshed.rounds[0]?.players[1]?.handicapIndex).toBeNull();
       expect(refreshed.etag).not.toBe(saved.etag);
+      expect(refreshed.overallCompetition).toEqual(saved.overallCompetition);
       expect(batches[4]?.match(/if-match: W\/"fixture-v3"/gi)).toHaveLength(2);
       expect(batches[4]).toContain(`"RowKey":"index-refresh:${identifier(600)}"`);
       const audit = decode(stored.get(`${event.id}|index-refresh:${identifier(600)}`)?.content, isIndexRefreshAudit);

@@ -74,3 +74,7 @@ app.http('roundGames', {
   route: 'events/{id}/rounds/{roundId}/games', methods: ['PUT'], authLevel: 'anonymous',
   handler: createScoringHandler(resolveApi, 'round-games'),
 });
+app.http('eventLeaderboard', {
+  route: 'events/{id}/leaderboard', methods: ['GET'], authLevel: 'anonymous',
+  handler: createScoringHandler(resolveApi, 'event-leaderboard'),
+});

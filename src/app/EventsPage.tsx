@@ -10,11 +10,13 @@ import { configureEventServices } from './event-services';
 import type { CatalogClient } from '../client/catalog';
 import type { SetupClient } from '../client/setup';
 import type { ScoresClient } from '../client/scoring';
+import type { EventLeaderboardClient } from '../client/event-leaderboard';
 import { CoursesCatalog, PlayersCatalog } from '../features/catalog';
 import { EventWorkspaceView } from '../features/setup';
 import { OwnerScoresView } from '../features/scoring';
 import { eventTabHref, isEventTab, readEventRoute } from './navigation';
 import { SavedEventPage } from './SavedEventPage';
+import { EventLeaderboardPage } from './EventLeaderboardPage';
 
 const configuredServices = configureEventServices(import.meta.env);
 
@@ -34,6 +36,7 @@ export interface EventServices {
   readonly catalog: CatalogClient;
   readonly setup: SetupClient;
   readonly scores: ScoresClient;
+  readonly leaderboard?: EventLeaderboardClient;
 }
 
 function subscribe(onChange: () => void) {
@@ -221,12 +224,16 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
           {state.page.events.length === 0 && <p>No events are available on this page.</p>}
           <a href="#events">Browse your events</a>
         </section>
+        : kind === 'leaderboard' && eventId ? services.leaderboard
+          ? <EventLeaderboardPage key={eventId} eventId={eventId} client={services.leaderboard} onSessionExpired={expire} />
+          : <p role="alert">Overall results are unavailable in this connection. No scores were loaded.</p>
         : isEventTab(kind) && eventId ? <SavedEventPage key={eventId} eventId={eventId} view={kind}
           client={services.setup} scores={services.scores} onSessionExpired={expire} />
         : route.startsWith('score:') ? <OwnerScoresView key={route} eventId={route.split(':')[1] ?? ''} roundId={route.split(':')[2] ?? ''}
           client={services.scores} onSessionExpired={expire} />
         : route.startsWith('event:') ? <EventWorkspaceView key={route} eventId={route.slice(6)}
-        canManageCatalog={state.capabilities.canManageCatalog} setup={services.setup} catalog={services.catalog} />
+        canManageCatalog={state.capabilities.canManageCatalog} setup={services.setup} catalog={services.catalog}
+        scores={services.scores} onSessionExpired={expire} />
         : state.capabilities.canManageCatalog
           ? route === 'courses' ? <CoursesCatalog client={services.catalog} /> : <PlayersCatalog client={services.catalog} />
           : <p role="alert">Catalog access is restricted to the bootstrapped organizer. Event ownership does not grant catalog access.</p>}

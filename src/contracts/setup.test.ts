@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { isHandicapIndex, isIndexObservation, isManualIndexInput, isPlayerProfile } from './catalog';
-import { isEventSetupInput, isEventWorkspace } from './setup';
+import { isEventSetupInput, isEventWorkspace, isOverallCompetition } from './setup';
+import { maximumEventSetupBytes } from '../domain/setup.js';
 
 const ids = [1, 2, 3, 4].map((value) => `00000000-0000-4000-8000-${String(value).padStart(12, '0')}`);
 const input = {
@@ -13,6 +14,50 @@ const input = {
 };
 
 describe('private setup and index contracts', () => {
+  it('preserves legacy omission, accepts explicit disable only on writes and shares the setup byte cap', () => {
+    expect(maximumEventSetupBytes).toBe(12288);
+    expect(isEventSetupInput(input)).toBe(true);
+    expect(isEventSetupInput({ ...input, overallCompetition: null })).toBe(true);
+    const workspace = {
+      event: { id: ids[0], name: 'Fictional Event', createdAt: '2026-01-01', role: 'owner', status: 'active', etag: 'current' },
+      location: '', roster: [], rounds: [], etag: 'current',
+    };
+    expect(isEventWorkspace(workspace)).toBe(true);
+    expect(isEventWorkspace({ ...workspace, overallCompetition: null })).toBe(false);
+    expect(isEventWorkspace({ ...workspace, overallCompetition: { kind: 'stroke-play', basis: 'gross' } })).toBe(true);
+  });
+
+  it('strictly validates one overall competition, exact basis fields and bounded unique round bindings', () => {
+    const binding = { roundId: ids[0], gameId: ids[1] };
+    for (const overallCompetition of [
+      { kind: 'stableford', credit: 'individual', roundGames: [] },
+      { kind: 'stableford', credit: 'team', roundGames: [binding] },
+      { kind: 'stroke-play', basis: 'gross' },
+      { kind: 'stroke-play', basis: 'net', handicapAllowancePercent: 95 },
+      { kind: 'stroke-play', basis: 'net', handicapAllowancePercent: 100 },
+      { kind: 'stroke-play', basis: 'net', handicapAllowancePercent: 1 },
+    ]) {
+      expect(isOverallCompetition(overallCompetition)).toBe(true);
+      expect(isEventSetupInput({ ...input, overallCompetition })).toBe(true);
+    }
+    for (const overallCompetition of [
+      null, [], {}, { kind: 'stableford', credit: 'other', roundGames: [] },
+      { kind: 'stableford', credit: 'team', roundGames: [binding, binding] },
+      { kind: 'stableford', credit: 'team', roundGames: [{ ...binding, points: 2 }] },
+      { kind: 'stableford', credit: 'team', roundGames: [{ roundId: 'invalid', gameId: ids[1] }] },
+      { kind: 'stableford', credit: 'team', roundGames: [binding], points: [] },
+      { kind: 'stableford', credit: 'team', roundGames: Array.from({ length: 9 }, (_, index) => ({
+        roundId: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`, gameId: ids[1],
+      })) },
+      { kind: 'stroke-play', basis: 'gross', handicapAllowancePercent: 95 },
+      { kind: 'stroke-play', basis: 'gross', credit: 'team' },
+      { kind: 'stroke-play', basis: 'net' },
+      ...[0, 101, 95.5, '95', NaN].map((handicapAllowancePercent) => ({
+        kind: 'stroke-play', basis: 'net', handicapAllowancePercent,
+      })),
+    ]) expect(isOverallCompetition(overallCompetition)).toBe(false);
+  });
+
   it('accepts multiple explicit rounds without interpreting a handicap policy', () => {
     expect(isEventSetupInput(input)).toBe(true);
     expect(isEventSetupInput({ ...input, rounds: [...input.rounds, { ...input.rounds[0], id: '00000000-0000-4000-8000-000000000011' }] })).toBe(true);

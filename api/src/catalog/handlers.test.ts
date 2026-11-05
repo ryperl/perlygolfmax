@@ -6,6 +6,7 @@ import { canManageCatalog } from '../identity.js';
 import { ApiError } from '../errors.js';
 import { createCatalogHandler } from './handlers.js';
 import type { CatalogAction } from './handlers.js';
+import { maximumEventSetupBytes } from '../../../src/domain/setup.js';
 
 function fixture() {
   const f = catalogFixture();
@@ -27,6 +28,30 @@ function fixture() {
 }
 
 describe('bounded authorized catalog/setup HTTP handlers', () => {
+  it('scopes the larger exact UTF-8 budget to workspace PUT, not index refresh or catalogs', async () => {
+    const f = fixture();
+    const version = await f.publish();
+    const save = vi.spyOn(f.workspace, 'save').mockResolvedValue({
+      event: { ...event, role: 'owner', status: 'active', etag: 'fictional' },
+      location: '', roster: [], rounds: [], etag: 'fictional',
+    });
+    const ids = [200, 201, 202, 203].map(identifier);
+    const body = JSON.stringify({ name: 'Fictional 界 event', location: '', playerIds: ids,
+      rounds: [{ id: identifier(500), name: 'Fictional round', courseId: version.courseId,
+        courseVersionId: version.id, teeProfileId: tee.id, groups: [{ number: 1, playerIds: ids }] }],
+      overallCompetition: null,
+    });
+    const exact = body + ' '.repeat(maximumEventSetupBytes - Buffer.byteLength(body, 'utf8'));
+    expect(Buffer.byteLength(exact, 'utf8')).toBe(maximumEventSetupBytes);
+    expect(await f.call('workspace', 'PUT', exact, { id: event.id }, { 'If-Match': 'fictional' })).toMatchObject({ status: 200 });
+    expect(save).toHaveBeenCalledOnce();
+    expect(await f.call('workspace', 'PUT', `${exact} `, { id: event.id }, { 'If-Match': 'fictional' })).toMatchObject({ status: 413 });
+    expect(await f.call('workspace', 'PUT', body, { id: event.id },
+      { 'If-Match': 'fictional', 'Content-Length': String(maximumEventSetupBytes + 1) })).toMatchObject({ status: 413 });
+    expect(await f.call('round-indices-refresh', 'POST', ' '.repeat(4096) + '{}',
+      { id: event.id, roundId: identifier(500) }, { 'If-Match': 'fictional' })).toMatchObject({ status: 413 });
+    expect(await f.call('players', 'POST', ' '.repeat(4096) + '{}')).toMatchObject({ status: 413 });
+  });
   it('implements staged import/profile/publish/version discovery with the agreed body and IDs', async () => {
     const f = fixture();
     expect(await f.call('imports', 'POST', manifest)).toMatchObject({ status: 200, jsonBody: { id: identifier(100), profilesReceived: [] } });

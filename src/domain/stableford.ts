@@ -54,7 +54,7 @@ function rounded(value: Fraction): bigint {
   return floorDivide(2n * value.numerator + value.denominator, 2n * value.denominator);
 }
 
-function playingHandicap(index: string, tee: TeeProfile, allowance: number): number | GameUnavailableReason {
+export function calculatePlayingHandicap(index: string, tee: TeeProfile, allowance: number): number | GameUnavailableReason {
   if (!/^\+?(?:0|[1-9]\d?)(?:\.\d)?$/.test(index)) return 'invalid-handicap-index';
   const count = tee.holes.length;
   const rating = tee.ratings.find((candidate) => candidate.type === 'Total');
@@ -115,7 +115,7 @@ function playerResult(
   let handicap: number | null = null;
   if (game.basis === 'net') {
     if (player.handicapIndex == null) return unavailable(player, layout, 'missing-handicap-index');
-    const result = playingHandicap(player.handicapIndex.value, round.teeProfile, game.handicapAllowancePercent);
+    const result = calculatePlayingHandicap(player.handicapIndex.value, round.teeProfile, game.handicapAllowancePercent);
     if (typeof result === 'string') return unavailable(player, layout, result);
     handicap = result;
   }

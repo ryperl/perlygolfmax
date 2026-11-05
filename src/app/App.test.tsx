@@ -46,6 +46,27 @@ beforeEach(() => {
 });
 
 describe('App', () => {
+  it('opens refresh-safe overall routes and retains event context across navigation/history while leaving Preview private-free', async () => {
+    const base = service();
+    const leaderboard = { load: vi.fn().mockResolvedValue({ workspace: fictionalWorkspace, roundScores: [],
+      standings: { status: 'disabled', rounds: [], players: [], staleRoundIds: [] } }) };
+    testServices = { ...base, leaderboard };
+    window.history.replaceState(null, '', `#leaderboard?event=${fictionalEvent.id}`);
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: /not enabled/ })).toBeVisible();
+    expect(document.title).toBe('Overall leaderboard | Perly Golf Max');
+    expect(mainNavigation().getByRole('link', { name: 'Rounds' })).toHaveAttribute('href', `#rounds?event=${fictionalEvent.id}`);
+    expect(base.setup.load).not.toHaveBeenCalled();
+    expect(base.scores.load).not.toHaveBeenCalled();
+    navigate(`#rounds?event=${fictionalEvent.id}`);
+    expect(await screen.findByRole('heading', { level: 1, name: 'Rounds' })).toBeVisible();
+    navigate(`#leaderboard?event=${fictionalEvent.id}`);
+    expect(await screen.findByRole('heading', { name: /not enabled/ })).toBeVisible();
+    expect(leaderboard.load).toHaveBeenCalledTimes(2);
+    navigate('#preview');
+    expect(await screen.findByRole('heading', { name: 'The Coastal Classic' })).toBeVisible();
+    expect(leaderboard.load).toHaveBeenCalledTimes(2);
+  });
   it('starts on Events and keeps fictional data behind the explicit Preview link', async () => {
     render(<App />);
     expect(await screen.findByRole('heading', { name: 'Events' })).toBeVisible();

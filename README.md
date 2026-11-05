@@ -116,8 +116,8 @@ Production PWA capabilities require HTTPS and platform-specific verification.
 
 ### Future work, not implemented
 
-Golfer/self/assigned-foursome admission and scoring, aggregate event/trip results,
-owner appointment UI, offline synchronization and purse configuration remain
+Golfer/self/assigned-foursome admission and scoring, owner appointment UI,
+offline synchronization and purse configuration remain
 later increments. The selected design is Entra External ID
 email codes, a standalone Functions API and Table Storage, with SWA staying Free.
 Provisioning/deployment is separately approval-gated. Detailed scoring, betting,
@@ -253,7 +253,8 @@ the draft and require explicit refresh/review. Saved-game removal and a
 general administrative/history interface are not included. Technical budgets
 are 16 games and 32 points rows, also subject to a 12 KiB UTF-8 game-configuration
 request limit; an oversized request is refused explicitly, not partially saved.
-Other ordinary writes retain their 4 KiB limit. The bounded game budget also
+Whole-event setup also has a dedicated 12 KiB UTF-8 budget; other ordinary
+writes retain their 4 KiB limit. The bounded game budget also
 leaves space for both configurations in each immutable audit record.
 
 ### Team Stableford games
@@ -305,8 +306,42 @@ settings are not used in standings, and viewing never saves anything.
 
 The leaderboard uses the existing owner-only online score projection and its
 refresh/backoff/access checks. Archived rounds remain read-only. Participant
-sharing, multi-round/day aggregation and event-wide results
-remain separate milestones.
+sharing remains a separate milestone.
+
+### Optional overall event leaderboard
+
+Organizers can enable one **overall event leaderboard** in event setup, alongside
+the independent round leaderboards. It covers every configured round, not a
+fixed five. Existing events remain disabled until explicitly configured.
+Adding a round adds a standings column; missing setup is shown explicitly,
+never silently omitted or counted as zero.
+
+For **Stableford**, select one saved counting game per round. The event total
+sums those games' actual points unchanged, including Standard/Modified/custom
+rules. For team rounds choose either each golfer's individual component points
+or the full team's points credited to every member. Multiple daily games are
+never added together implicitly. Highest cumulative points leads.
+
+For **stroke play**, choose gross or net. Net allowance is configurable with the
+existing individual default of 95%; calculations use each round's captured
+tee and Handicap Index, not current catalog values. Live positions use cumulative
+score relative to par on completed numeric holes, lowest first, with progress
+shown. Raw incomplete stroke subtotals are not used to rank golfers.
+Pickup, reported pickup (`X7`) or DNF means no valid stroke-play total until
+corrected; no penalty strokes or maximum score are invented. Team-point credit
+does not apply to stroke play.
+
+Player rows show dynamic round results and the cumulative total. Known zero and
+negative results are retained; equal results share positions without countback.
+Unplayed holes are pending and live standings provisional. Missing configuration,
+unavailable net inputs, stale team assignments and arithmetic-range failures
+remain explicit rather than becoming zero or a fabricated valid rank.
+
+The overall view is currently owner-only and online. A bounded server read
+derives standings from saved cards/game results and verifies event consistency;
+each round consumes the existing score-read quota. Unsaved score/settings drafts
+are excluded. Archived owner views are read-only. This is not finalization,
+handicap posting, invitation access, purse allocation or automatic payout.
 
 ### Local catalog and round setup
 

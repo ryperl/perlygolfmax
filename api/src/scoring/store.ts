@@ -15,6 +15,8 @@ import type { TableWorkspaceStore } from '../setup/store.js';
 import { scoringLock } from './lock.js';
 import type { ScoringLock, StoredScoringLock } from './lock.js';
 import { configuredGameRounds, gameChangeKey, gameConfigurationContent, gameConfigurationKey, readGameConfiguration } from './games.js';
+import type { EventLeaderboardView } from '../../../src/domain/event-leaderboard.js';
+import { calculateEventStandings } from '../../../src/domain/event-leaderboard.js';
 
 function cardKey(roundId: string, playerId: string): string {
   return `score-card:${roundId}:${playerId}`;
@@ -116,6 +118,24 @@ export class TableScoreStore {
     const cards = await Promise.all(state.round.players.map((player) => this.card(eventId, state.round, player.playerId, state.lock)));
     await this.unchanged(identity, eventId, state.summary.etag, state.memberEtag);
     return this.projection(state.workspace, state.round, cards, state.games);
+  }
+
+  async leaderboard(identity: AccountIdentity, eventId: string, chargeRead: () => Promise<void>): Promise<EventLeaderboardView> {
+    const access = await this.access(identity, eventId);
+    const workspace = await this.workspace.get(identity, eventId);
+    if (workspace.etag !== access.summary.etag) throw new ApiError(409, 'EVENT_CHANGED');
+    const roundScores: RoundScores[] = [];
+    if (workspace.overallCompetition) {
+      for (let index = 0; index < workspace.rounds.length; index += 3) {
+        const batch = await Promise.all(workspace.rounds.slice(index, index + 3).map(async (round) => {
+          await chargeRead();
+          return this.get(identity, eventId, round.id);
+        }));
+        roundScores.push(...batch);
+      }
+    }
+    await this.unchanged(identity, eventId, access.summary.etag, access.memberEtag);
+    return { workspace, roundScores, standings: calculateEventStandings(workspace, roundScores) };
   }
 
   private async gameReceipt(eventId: string, roundId: string, requestId: string): Promise<GameChange | undefined> {

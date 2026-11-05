@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CatalogClient } from '../../client/catalog';
-import { EventChangedError } from '../../client/events';
+import { EventChangedError, SessionExpiredError } from '../../client/events';
+import { PrivateRequestError } from '../../client/private-request';
+import type { ScoresClient } from '../../client/scoring';
 import type { SetupClient } from '../../client/setup';
 import { isEventSetupInput } from '../../contracts/setup';
 import type { CourseCatalogEntry, IndexObservation, PlayerProfile } from '../../domain/catalog';
 import type { EventSetupInput, EventWorkspace, RoundSetupInput } from '../../domain/setup';
 import { RoundEditor } from './RoundEditor';
 import { SetupRoster } from './SetupRoster';
+import { OverallCompetitionEditor } from './OverallCompetitionEditor';
 import { inputFrom, roundInput, sameIds, sameRoundInput, sameSetupInput, setupProblems } from './setup-draft';
 import './setup.css';
 
@@ -37,11 +40,13 @@ async function readSetupCatalog(catalog: CatalogClient, signal: AbortSignal) {
   return { courses, players };
 }
 
-export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }: {
+export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, scores, onSessionExpired }: {
   readonly eventId: string;
   readonly canManageCatalog: boolean;
   readonly setup: SetupClient;
   readonly catalog: CatalogClient;
+  readonly scores?: ScoresClient;
+  readonly onSessionExpired?: (message: string) => void;
 }) {
   const [workspace, setWorkspace] = useState<EventWorkspace | null>(null);
   const [draft, setDraft] = useState<EventSetupInput | null>(null);
@@ -53,8 +58,9 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
   const [error, setError] = useState('');
   const [conflict, setConflict] = useState(false);
   const [catalogError, setCatalogError] = useState('');
-  const [settledWorkspace, setSettledWorkspace] = useState<{ readonly client: SetupClient; readonly eventId: string } | null>(null);
-  const initialPending = settledWorkspace?.client !== setup || settledWorkspace.eventId !== eventId;
+  const workspaceRequest = useMemo(() => ({ setup, eventId }), [setup, eventId]);
+  const [settledWorkspace, setSettledWorkspace] = useState<object | null>(null);
+  const initialPending = settledWorkspace !== workspaceRequest;
   const [settledCatalog, setSettledCatalog] = useState<{ readonly client: CatalogClient; readonly attempt: number } | null>(null);
   const [catalogAttempt, setCatalogAttempt] = useState(0);
   const [catalogRefreshing, setCatalogRefreshing] = useState(false);
@@ -64,6 +70,13 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
   const [versionPending, setVersionPending] = useState<ReadonlySet<string>>(new Set());
   const [selectedRoundId, setSelectedRoundId] = useState('');
   const active = useRef<AbortController | null>(null);
+  const expiryHandler = useRef(onSessionExpired);
+  useEffect(() => { expiryHandler.current = onSessionExpired; }, [onSessionExpired]);
+  const denyAccess = useCallback((failure: Error, expired: boolean) => {
+    active.current?.abort();
+    setWorkspace(null); setDraft(null); setCourses(null); setPlayers(null); setSupersededEdits([]); setError(failure.message);
+    if (expired) expiryHandler.current?.(failure.message);
+  }, []);
   const editing = workspace?.event.role === 'owner' && workspace.event.status === 'active' && canManageCatalog;
   const rosterLocked = workspace?.rounds.some((round) => round.scoringStarted === true) ?? false;
   const roundChoices = editing && draft ? draft.rounds : workspace?.rounds ?? [];
@@ -74,14 +87,18 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
   useEffect(() => {
     const controller = new AbortController();
     void setup.load(eventId, controller.signal).then((value) => {
-      if (!controller.signal.aborted) { setWorkspace(value); setDraft(inputFrom(value)); }
+      if (!controller.signal.aborted) { setWorkspace(value); setDraft(inputFrom(value)); setError(''); setConflict(false); }
     }).catch((failure: unknown) => {
-      if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : 'Could not load event workspace.');
+      if (!controller.signal.aborted) {
+        setWorkspace(null); setDraft(null); setCourses(null); setPlayers(null); setSupersededEdits([]);
+        setError(failure instanceof Error ? failure.message : 'Could not load event workspace.');
+        if (failure instanceof SessionExpiredError || failure instanceof PrivateRequestError && failure.status === 401) expiryHandler.current?.(failure.message);
+      }
     }).finally(() => {
-      if (!controller.signal.aborted) setSettledWorkspace({ client: setup, eventId });
+      if (!controller.signal.aborted) setSettledWorkspace(workspaceRequest);
     });
     return () => { controller.abort(); active.current?.abort(); };
-  }, [eventId, setup]);
+  }, [eventId, setup, workspaceRequest]);
 
   useEffect(() => {
     if (!editing) return;
@@ -106,6 +123,10 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
     try { await work(controller.signal); }
     catch (failure) {
       if (!controller.signal.aborted) {
+        if (failure instanceof SessionExpiredError || failure instanceof PrivateRequestError && [401, 403, 404].includes(failure.status)) {
+          denyAccess(failure, failure instanceof SessionExpiredError || failure.status === 401);
+          return;
+        }
         setNotice(failure instanceof Error ? failure.message : 'Save failed. Draft preserved; nothing was confirmed saved.');
         if (failure instanceof EventChangedError) setConflict(true);
       }
@@ -189,10 +210,13 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
       setNotice(`Workspace refreshed. ${draftNotice}`);
     }); }}>Refresh workspace</button>
     {error && <p role="alert">{error}</p>}
-    {!workspace && !error && <p role="status">Loading workspace...</p>}
-    {workspace && <>
+    {(initialPending || !workspace && !error) && <p role="status">Loading workspace...</p>}
+    {!initialPending && workspace && <>
       <h2>{workspace.event.name}</h2><p>{workspace.location || 'General location not supplied'}</p>
       <a href={`#overview?event=${eventId}`}>View event overview</a>
+      {editing && draft && <OverallCompetitionEditor workspace={workspace} draft={draft} scores={scores}
+        disabled={busy || conflict} onDenied={denyAccess}
+        onChange={(overallCompetition) => { editDraft({ ...draft, overallCompetition }); }} />}
       {!editing && <p>{workspace.event.status === 'archived' ? 'Archived event: read-only owner workspace.' : 'Read-only event projection. Catalog setup requires both catalog-manager and active event-owner permission.'}</p>}
       <div className="setup-overview">
         <span>{workspace.roster.length} saved players</span><span>{workspace.rounds.length} saved rounds</span>
@@ -236,7 +260,7 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
           {editing && <fieldset className="setup-index-refresh" disabled={round.scoringStarted === true}>
             <p>Review captured and current values above. Refresh replaces this unstarted saved round's captured setup inputs using catalog observations at refresh time and audits the previous values. It preserves saved course, tee and groups. Scored rounds are locked; this is not score recalculation.</p>
             <label className="setup-index-confirm"><input type="checkbox" checked={refreshConfirmed.has(round.id)}
-              disabled={busy || initialPending || catalogPending || catalogError !== '' || versionPending.size > 0 || conflict
+              disabled={busy || catalogPending || catalogError !== '' || versionPending.size > 0 || conflict
                 || !round.players.every((player) => players?.some((item) => item.id === player.playerId))}
               onChange={(event) => {
                 const checked = event.target.checked;
@@ -246,7 +270,7 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
                   return next;
                 });
               }} />I confirm replacing captured setup HI for {round.name} with the current catalog observations.</label>
-            <button disabled={busy || initialPending || catalogPending || catalogError !== '' || versionPending.size > 0 || conflict || !refreshConfirmed.has(round.id)
+            <button disabled={busy || catalogPending || catalogError !== '' || versionPending.size > 0 || conflict || !refreshConfirmed.has(round.id)
               || !round.players.every((player) => players?.some((item) => item.id === player.playerId))}
               onClick={() => { void run(async (signal) => {
                 const request = refreshRequests.current.get(round.id) ?? { id: crypto.randomUUID(), etag: workspace.etag };
@@ -271,7 +295,7 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
       </li>)}</ol>
       </details>}
     </>}
-    {supersededEdits.length > 0 && <section className="panel" aria-label="Superseded locked setup edits">
+    {!initialPending && workspace && supersededEdits.length > 0 && <section className="panel" aria-label="Superseded locked setup edits">
       <h2>Read-only review of superseded setup edits</h2>
       <p role="alert">Scoring locked saved setup inputs while you were editing. The editable form now uses the server-authoritative locked roster and rounds. Your prior local edits below were not applied and cannot change locked inputs. Event name/location edits remain available. These review copies live only in this page.</p>
       {supersededEdits.map((review, index) => <div key={index}>
@@ -280,13 +304,13 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
           <h3>Prior local round draft: {round.name || 'Unnamed round'}</h3>
           <p className="setup-version">Course: {round.courseId || 'Not selected'}; version: {round.courseVersionId || 'Not selected'}; tee profile: {round.teeProfileId || 'Not selected'}.</p>
           <ul>{round.groups.map((group) => <li key={group.number}>Prior group {group.number}: {group.playerIds.map((id) =>
-            `${players?.find((player) => player.id === id)?.displayName ?? workspace?.roster.find((player) => player.playerId === id)?.displayName ?? 'Unavailable'} (${id})`).join(', ')}</li>)}</ul>
+            `${players?.find((player) => player.id === id)?.displayName ?? workspace.roster.find((player) => player.playerId === id)?.displayName ?? 'Unavailable'} (${id})`).join(', ')}</li>)}</ul>
         </div>)}
       </div>)}
     </section>}
-    {editing && draft && <form className="panel setup-form" onSubmit={(event) => {
+    {!initialPending && editing && draft && <form className="panel setup-form" onSubmit={(event) => {
       event.preventDefault();
-      if (initialPending || catalogPending || catalogError !== '' || conflict || !isEventSetupInput(draft) || versionPending.size > 0) return;
+      if (catalogPending || catalogError !== '' || conflict || !isEventSetupInput(draft) || versionPending.size > 0) return;
       void run(async (signal) => {
         const saved = await setup.save(eventId, workspace.etag, draft, signal);
         if (!signal.aborted) {
@@ -303,7 +327,7 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
         }}>Retry catalog selections</button>
       </div>}
       {catalogPending && <p role="status">Loading saved catalog selections...</p>}
-      <fieldset className="setup-fields" disabled={busy || initialPending || catalogPending || catalogError !== '' || versionPending.size > 0 || courses === null || players === null}>
+      <fieldset className="setup-fields" disabled={busy || catalogPending || catalogError !== '' || versionPending.size > 0 || courses === null || players === null}>
         <details className="setup-section" open={workspace.rounds.length === 0}><summary>1. Event details</summary>
           <label>Workspace name<input required maxLength={100} value={draft.name} onChange={(event) => { editDraft({ ...draft, name: event.target.value }); }} /></label>
           <label>General location<input maxLength={200} value={draft.location} onChange={(event) => { editDraft({ ...draft, location: event.target.value }); }} /></label>
@@ -333,7 +357,7 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog }
       </aside>}
       <div className="setup-save-bar">
         <p role={conflict ? 'alert' : 'status'}>{busy ? 'Working...' : notice || (changed ? 'Unsaved changes across this event' : 'Selections match saved setup')}</p>
-        <button disabled={busy || conflict || initialPending || catalogPending || catalogError !== '' || versionPending.size > 0 || courses === null || players === null || !isEventSetupInput(draft)}>Save event workspace</button>
+        <button disabled={busy || conflict || catalogPending || catalogError !== '' || versionPending.size > 0 || courses === null || players === null || !isEventSetupInput(draft)}>Save event workspace</button>
       </div>
     </form>}
     {!editing && <p role={conflict ? 'alert' : 'status'}>{busy ? 'Working...' : notice}</p>}

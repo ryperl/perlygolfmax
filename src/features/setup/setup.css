@@ -44,3 +44,7 @@
   .setup-save-bar { padding: 8px; }
   .setup-save-bar button { width: 100%; }
 }
+.overall-setup { min-width: 0; display: grid; gap: 12px; margin-block: 16px; }
+.overall-setup label { display: grid; gap: 8px; min-width: 0; }
+.overall-setup :is(select, input[type="number"]) { min-width: 0; max-width: 100%; width: 100%; font: inherit; padding: 10px; color: var(--cp-text); background: var(--cp-surface); border: 1px solid var(--cp-border-strong); border-radius: .625rem; }
+.overall-setup :is(input, select, button):focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }

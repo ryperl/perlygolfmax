@@ -5,7 +5,7 @@ import { EventsPage } from './EventsPage';
 import type { EventServices } from './EventsPage';
 import type { EventPage, EventSummary } from '../domain/events';
 import { EventChangedError, SessionExpiredError } from '../client/events';
-import { fakeCatalog, fakeSetup, fictionalEvent } from '../client/catalog.test-support';
+import { fakeCatalog, fakeSetup, fictionalEvent, fictionalWorkspace } from '../client/catalog.test-support';
 import { fakeScores, fictionalRoundScores, scoreResult } from '../client/scoring.test-support';
 
 const saved: EventSummary = { id: '00000000-0000-4000-8000-000000000001', name: 'Fictional Open', createdAt: '2026-01-01', role: 'owner', status: 'active', etag: 'fictional-v1' };
@@ -18,6 +18,34 @@ function service(): EventServices {
 }
 beforeEach(() => { window.history.replaceState(null, '', '/'); });
 describe('EventsPage composition', () => {
+  it('uses the aggregate-only overall route, never starts saved-event progress workers, and makes no Preview prefetch', async () => {
+    const leaderboard = { load: vi.fn().mockResolvedValue({ workspace: fictionalWorkspace, roundScores: [],
+      standings: { status: 'disabled', rounds: [], players: [], staleRoundIds: [] } }) };
+    const services = { ...service(), leaderboard };
+    window.history.replaceState(null, '', `#leaderboard?event=${fictionalEvent.id}`);
+    const view = render(<EventsPage services={services} />);
+    expect(await screen.findByRole('heading', { name: /not enabled/ })).toBeVisible();
+    expect(leaderboard.load).toHaveBeenCalledOnce();
+    expect(services.setup.load).not.toHaveBeenCalled();
+    expect(services.scores.load).not.toHaveBeenCalled();
+    expect(services.catalog.courses).not.toHaveBeenCalled();
+    view.unmount();
+    vi.clearAllMocks();
+    render(<EventsPage services={services} preview />);
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Sign out' })).toBeEnabled(); });
+    expect(leaderboard.load).not.toHaveBeenCalled();
+    expect(services.setup.load).not.toHaveBeenCalled();
+    expect(services.scores.load).not.toHaveBeenCalled();
+    expect(services.catalog.courses).not.toHaveBeenCalled();
+  });
+  it('keeps an optional missing overall capability honest without falling back to round/demo results', async () => {
+    const services = service();
+    window.history.replaceState(null, '', `#leaderboard?event=${fictionalEvent.id}`);
+    render(<EventsPage services={services} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Overall results are unavailable in this connection');
+    expect(services.scores.load).not.toHaveBeenCalled();
+    expect(services.setup.load).not.toHaveBeenCalled();
+  });
   it('disables the account control during initialization and sign-out, then reports incomplete provider sign-out', async () => {
     const services = service();
     let initialize: ((value: boolean) => void) | undefined;

@@ -3,6 +3,21 @@ import { fictionalId, fictionalSetup, fictionalWorkspace } from '../../client/ca
 import { inputFrom, sameRoundInput, sameSetupInput, setupProblems } from './setup-draft';
 
 describe('setup draft presentation', () => {
+  it('uses explicit null for disabled saves, preserves saved competition and compares bindings without order sensitivity', () => {
+    const disabled = inputFrom(fictionalWorkspace);
+    expect(disabled.overallCompetition).toBeNull();
+    const competition = { kind: 'stableford', credit: 'team', roundGames: [
+      { roundId: fictionalId(70), gameId: fictionalId(500) }, { roundId: fictionalId(71), gameId: fictionalId(501) },
+    ] } as const;
+    const enabled = inputFrom({ ...fictionalWorkspace, overallCompetition: competition });
+    expect(enabled.overallCompetition).toEqual(competition);
+    expect(sameSetupInput(disabled, enabled)).toBe(false);
+    expect(sameSetupInput(enabled, { ...enabled, overallCompetition: { ...competition, roundGames: [...competition.roundGames].reverse() } })).toBe(true);
+    expect(sameSetupInput(enabled, { ...enabled, overallCompetition: { ...competition, credit: 'individual' } })).toBe(false);
+    expect(sameSetupInput(disabled, { ...disabled, overallCompetition: { kind: 'stroke-play', basis: 'gross' } })).toBe(false);
+    expect(setupProblems({ ...enabled, overallCompetition: { kind: 'stroke-play', basis: 'net', handicapAllowancePercent: 0 } }))
+      .toContain('Review the overall competition settings. Net allowance must be a whole percentage from 1 to 100.');
+  });
   it('compares editable inputs, not scoring locks or captured-index observations', () => {
     const saved = inputFrom(fictionalWorkspace);
     expect(sameSetupInput(saved, fictionalSetup)).toBe(true);

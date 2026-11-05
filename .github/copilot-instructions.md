@@ -69,7 +69,7 @@
   totals. Mixed progress is provisional with holes shown. Equal points share
   positions without a tie-break; unplayed/unavailable golfers are not ranked
   as zero-point scores. Team games rank teams, never individual fallback.
-  Do not imply round finalization or event/trip aggregation.
+  Do not imply round finalization.
 - Competition teams are explicit per round/game, separate from playing groups.
   Require every round golfer exactly once in full teams; count best one of two,
   both of two, or best two of four net point contributions per hole. Wait for
@@ -77,8 +77,17 @@
   Stale assignments after an unscored roster change remain visible but produce
   no team results until repaired; unchanged stale peer games may be retained
   while another game is repaired. Keep legacy individual definitions valid.
-  Game-configuration writes alone allow 12 KiB UTF-8; ordinary writes retain
-  4 KiB. Preserve audit before/after string-size headroom and explicit failures.
+  Game-configuration and whole-event setup writes allow 12 KiB UTF-8; other
+  ordinary writes retain 4 KiB. Preserve audit before/after string-size
+  headroom and explicit failures.
+- Overall standings are an optional setup competition covering every configured
+  round dynamically. Stableford sums one selected game's actual points per round;
+  team-member credit is explicit. Stroke play ranks cumulative relative-to-par
+  on numeric holes, gross/net with captured inputs; pickup/DNF invalidates a
+  valid stroke total, never invent a penalty. Keep pending/unavailable distinct.
+  Undefined competition in a legacy setup request preserves saved settings;
+  explicit null disables. Overall reads remain owner-only, bounded, quota-charged
+  per round and checked for consistent event revisions. No purse/finalization.
 - Present golfer scores as hole-ordered scorecards, not audit records. Keep
   operation IDs, actor GUIDs, revisions and raw timestamps out of player
   entry/view screens; preserve backend audit and conditional-save safeguards.

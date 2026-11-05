@@ -1,6 +1,31 @@
 import type { CourseMetadata, IndexObservation, TeeProfile } from './catalog.js';
 import type { EventSummary } from './events.js';
 
+export type OverallCompetition =
+  | {
+    readonly kind: 'stableford';
+    readonly credit: 'individual' | 'team';
+    readonly roundGames: readonly { readonly roundId: string; readonly gameId: string }[];
+  }
+  | { readonly kind: 'stroke-play'; readonly basis: 'gross' }
+  | { readonly kind: 'stroke-play'; readonly basis: 'net'; readonly handicapAllowancePercent: number };
+
+export const maximumEventSetupBytes = 12 * 1024;
+
+export function sameOverallCompetition(
+  left?: OverallCompetition | null, right?: OverallCompetition | null,
+): boolean {
+  if (left == null || right == null) return left == null && right == null;
+  if (left.kind === 'stableford') {
+    return right.kind === 'stableford' && left.credit === right.credit
+      && left.roundGames.length === right.roundGames.length
+      && left.roundGames.every((binding) => right.roundGames.some((other) =>
+        binding.roundId === other.roundId && binding.gameId === other.gameId));
+  }
+  return right.kind === 'stroke-play' && left.basis === right.basis
+    && (left.basis === 'gross' || right.basis === 'net' && left.handicapAllowancePercent === right.handicapAllowancePercent);
+}
+
 export interface RoundGroup {
   readonly number: number;
   readonly playerIds: readonly string[];
@@ -20,6 +45,7 @@ export interface EventSetupInput {
   readonly location: string;
   readonly playerIds: readonly string[];
   readonly rounds: readonly RoundSetupInput[];
+  readonly overallCompetition?: OverallCompetition | null;
 }
 
 export interface EventRosterPlayer {
@@ -49,4 +75,5 @@ export interface EventWorkspace {
   readonly roster: readonly EventRosterPlayer[];
   readonly rounds: readonly RoundSnapshot[];
   readonly etag: string;
+  readonly overallCompetition?: OverallCompetition;
 }

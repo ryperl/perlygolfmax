@@ -1,10 +1,12 @@
 import { createRoot } from 'react-dom/client';
 import type { CatalogClient } from '../../src/client/catalog';
 import type { SetupClient } from '../../src/client/setup';
+import type { ScoresClient } from '../../src/client/scoring';
 import type { CourseVersion, PlayerProfile, TeeProfile } from '../../src/domain/catalog';
 import type { EventWorkspace } from '../../src/domain/setup';
 import { EventWorkspaceView } from '../../src/features/setup';
 import '../../src/app/styles.css';
+import { fictionalGamesRound } from './games-fixture-data';
 
 const id = (value: number) => `00000000-0000-4000-8000-${String(value).padStart(12, '0')}`;
 const players: readonly PlayerProfile[] = Array.from({ length: 5 }, (_, i) => ({
@@ -51,8 +53,11 @@ const setup: SetupClient = {
   save: (_eventId, _etag, input) => {
     revision += 1;
     const etag = `fixture-v${String(revision)}`;
+    const { overallCompetition: previousCompetition, ...previous } = workspace;
+    const competition = input.overallCompetition === undefined ? previousCompetition : input.overallCompetition;
     workspace = {
-      ...workspace, etag, event: { ...workspace.event, etag, name: input.name }, location: input.location,
+      ...previous, ...(competition == null ? {} : { overallCompetition: competition }),
+      etag, event: { ...workspace.event, etag, name: input.name }, location: input.location,
       roster: input.playerIds.map((playerId) => {
         const player = players.find((item) => item.id === playerId);
         if (!player) throw new Error('Unknown fictional player.');
@@ -72,8 +77,20 @@ const setup: SetupClient = {
   },
   refreshIndices: unavailable,
 };
+const scores: ScoresClient = {
+  load: (_eventId, roundId) => {
+    const round = workspace.rounds.find((entry) => entry.id === roundId);
+    if (!round) return unavailable();
+    return Promise.resolve({
+      ...fictionalGamesRound, roundId, roundName: round.name,
+      ...(fictionalGamesRound.games ? { games: { ...fictionalGamesRound.games,
+        configuration: { ...fictionalGamesRound.games.configuration, roundId } } } : {}),
+    });
+  },
+  save: unavailable, saveGames: unavailable, history: unavailable,
+};
 const root = document.getElementById('setup-fixture');
 if (!root) throw new Error('Missing fictional setup fixture root.');
 createRoot(root).render(<div className="app"><main>
-  <EventWorkspaceView eventId={workspace.event.id} canManageCatalog setup={setup} catalog={catalog} />
+  <EventWorkspaceView eventId={workspace.event.id} canManageCatalog setup={setup} catalog={catalog} scores={scores} />
 </main></div>);

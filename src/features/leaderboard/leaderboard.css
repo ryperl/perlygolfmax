@@ -1,4 +1,13 @@
 .round-leaderboard { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; min-width: 0; overflow-wrap: anywhere; }
+.overall-leaderboard { min-width: 0; overflow-wrap: anywhere; }
+.overall-table-scroll { max-width: 100%; overflow-x: auto; border: 1px solid var(--cp-border); border-radius: .625rem; }
+.overall-table-scroll:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
+.overall-table { width: 100%; border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; }
+.overall-table caption { text-align: left; padding: 12px; }
+.overall-table :is(th, td) { min-width: 10rem; padding: 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--cp-border); background: var(--cp-surface); }
+.overall-table tr > :first-child { position: sticky; left: 0; z-index: 1; min-width: 7rem; max-width: 10rem; border-right: 1px solid var(--cp-border-strong); }
+.overall-table :is(strong, small) { display: block; }
+.overall-table small { color: var(--cp-text-muted); margin-top: 4px; }
 .leaderboard-heading { display: grid; gap: 4px; min-width: 0; }
 .round-leaderboard h3 { margin: 0 0 8px; font-size: 1rem; }
 .leaderboard-heading p, .leaderboard-format, .leaderboard-hint { color: var(--cp-text-muted); font-size: .9rem; }

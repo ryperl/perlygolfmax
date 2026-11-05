@@ -1,6 +1,7 @@
 import { boundedText, isCourseId, isVersionId } from '../../contracts/catalog';
-import { isEventSetupInput } from '../../contracts/setup';
+import { isEventSetupInput, isOverallCompetition } from '../../contracts/setup';
 import type { EventSetupInput, EventWorkspace, RoundSetupInput, RoundSnapshot } from '../../domain/setup';
+import { sameOverallCompetition } from '../../domain/setup';
 
 export function roundInput(round: RoundSnapshot): RoundSetupInput {
   return {
@@ -14,6 +15,7 @@ export function inputFrom(workspace: EventWorkspace): EventSetupInput {
     name: workspace.event.name, location: workspace.location,
     playerIds: workspace.roster.map((player) => player.playerId),
     rounds: workspace.rounds.map(roundInput),
+    overallCompetition: workspace.overallCompetition ?? null,
   };
 }
 
@@ -32,6 +34,7 @@ export function sameRoundInput(left: RoundSetupInput, right: RoundSetupInput): b
 
 export function sameSetupInput(left: EventSetupInput, right: EventSetupInput): boolean {
   return left.name === right.name && left.location === right.location && sameIds(left.playerIds, right.playerIds)
+    && sameOverallCompetition(left.overallCompetition, right.overallCompetition)
     && left.rounds.length === right.rounds.length
     && left.rounds.every((round, index) => {
       const other = right.rounds[index];
@@ -41,6 +44,9 @@ export function sameSetupInput(left: EventSetupInput, right: EventSetupInput): b
 
 export function setupProblems(draft: EventSetupInput): readonly string[] {
   const problems: string[] = [];
+  if (draft.overallCompetition != null && !isOverallCompetition(draft.overallCompetition)) {
+    problems.push('Review the overall competition settings. Net allowance must be a whole percentage from 1 to 100.');
+  }
   if (!boundedText(draft.name)) problems.push('Enter an event name.');
   if (draft.location !== '' && !boundedText(draft.location, 200)) problems.push('Review the general location.');
   if (draft.playerIds.length < 4 || draft.playerIds.length > 8) problems.push('Choose 4–8 players.');

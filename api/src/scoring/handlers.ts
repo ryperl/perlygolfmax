@@ -16,7 +16,7 @@ export interface ScoringApi {
   readonly scores: TableScoreStore;
 }
 
-export type ScoringAction = 'scores' | 'score-hole' | 'score-history' | 'round-games';
+export type ScoringAction = 'scores' | 'score-hole' | 'score-history' | 'round-games' | 'event-leaderboard';
 
 function uuid(value: unknown): string {
   if (!isUuid(value)) throw new ApiError(400, 'INVALID_REQUEST_ID');
@@ -40,6 +40,9 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
       await api.limiter.check(identity, write ? 'scores-write' : 'scores-read');
       if (request.method !== (write ? 'PUT' : 'GET')) return response(405, { code: 'METHOD_NOT_ALLOWED' });
       const eventId = uuid(request.params.id);
+      if (action === 'event-leaderboard') {
+        return response(200, await api.scores.leaderboard(identity, eventId, () => api.limiter.check(identity, 'scores-read')));
+      }
       const roundId = uuid(request.params.roundId);
       if (action === 'scores') return response(200, await api.scores.get(identity, eventId, roundId));
       if (action === 'round-games') {

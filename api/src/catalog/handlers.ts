@@ -5,6 +5,7 @@ import {
 } from '../../../src/contracts/catalog.js';
 import { isEventRevision, isRecord, isUuid } from '../../../src/contracts/events.js';
 import { isEventSetupInput } from '../../../src/contracts/setup.js';
+import { maximumEventSetupBytes } from '../../../src/domain/setup.js';
 import { ApiError } from '../errors.js';
 import { failureDiagnostics } from '../diagnostics.js';
 import { readCursor, readJson, response } from '../http.js';
@@ -68,7 +69,7 @@ export function createCatalogHandler(resolveApi: () => CatalogSetupApi, action: 
         const id = uuid(request.params.id);
         if (!write) return response(200, await api.workspace.get(identity, id));
         const expected = etag(request);
-        const body = await readJson(request);
+        const body = await readJson(request, maximumEventSetupBytes);
         if (!isEventSetupInput(body)) throw new ApiError(400, 'INVALID_EVENT_SETUP');
         return response(200, await api.workspace.save(identity, id, body, expected));
       }

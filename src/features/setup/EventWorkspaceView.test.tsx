@@ -2,6 +2,8 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { EventChangedError } from '../../client/events';
+import { PrivateRequestError } from '../../client/private-request';
+import { fakeScores } from '../../client/scoring.test-support';
 import {
   emptyWorkspace, fakeCatalog, fakeSetup, fictionalEvent, fictionalPlayers, fictionalManifest,
   fictionalProfile, fictionalVersion, fictionalWorkspace, fictionalId, fictionalEntry, fictionalSetup,
@@ -36,6 +38,7 @@ function savedInput(input: EventSetupInput): EventWorkspace {
   return {
     ...fictionalWorkspace, event: { ...fictionalEvent, name: input.name, etag: 'workspace-v2' },
     etag: 'workspace-v2', location: input.location,
+    ...(input.overallCompetition == null ? {} : { overallCompetition: input.overallCompetition }),
     rounds: input.rounds.map((round) => ({
       id: round.id, name: round.name, courseId: round.courseId, courseVersionId: round.courseVersionId,
       teeProfile: fictionalVersion.data.teeProfiles.find((profile) => profile.id === round.teeProfileId) ?? fictionalProfile,
@@ -67,6 +70,95 @@ async function openSetupSections(user = userEvent.setup()) {
 }
 
 describe('saved event workspace', () => {
+  it('hides the entire previous setup and aborts option reads on source changes, including A→B→A', async () => {
+    const setup = fakeSetup();
+    const workspace: EventWorkspace = { ...fictionalWorkspace,
+      overallCompetition: { kind: 'stableford', credit: 'team', roundGames: [] } };
+    let finish: ((value: EventWorkspace) => void) | undefined;
+    const pending = new Promise<EventWorkspace>((resolve) => { finish = resolve; });
+    vi.mocked(setup.load).mockResolvedValueOnce(workspace).mockReturnValueOnce(pending).mockReturnValueOnce(pending);
+    const scores = fakeScores();
+    vi.mocked(scores.load).mockImplementation(() => new Promise(() => undefined));
+    const props = { eventId: fictionalEvent.id, canManageCatalog: true, setup, catalog: fakeCatalog(), scores };
+    const view = render(<EventWorkspaceView {...props} />);
+    await screen.findByRole('checkbox', { name: 'Enable overall leaderboard' });
+    const signal = vi.mocked(scores.load).mock.calls[0]?.[2];
+    view.rerender(<EventWorkspaceView {...props} eventId={fictionalId(51)} />);
+    expect(screen.queryByRole('checkbox', { name: 'Enable overall leaderboard' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Round 1 name')).not.toBeInTheDocument();
+    expect(signal?.aborted).toBe(true);
+    view.rerender(<EventWorkspaceView {...props} />);
+    expect(screen.queryByRole('checkbox', { name: 'Enable overall leaderboard' })).not.toBeInTheDocument();
+    await act(async () => { finish?.(workspace); await pending; });
+    expect(screen.getByRole('checkbox', { name: 'Enable overall leaderboard' })).toBeVisible();
+    expect(scores.load).toHaveBeenCalledTimes(2);
+  });
+  it('saves enabled competition and explicit disable independently of scored roster/round locks', async () => {
+    const setup = fakeSetup();
+    const scored: EventWorkspace = { ...fictionalWorkspace, rounds: fictionalWorkspace.rounds.map((round) => ({ ...round, scoringStarted: true })) };
+    vi.mocked(setup.load).mockResolvedValue(scored);
+    vi.mocked(setup.save).mockImplementation((_id, _etag, input) => Promise.resolve({ ...savedInput(input), rounds: scored.rounds }));
+    const scores = fakeScores();
+    render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={fakeCatalog()} scores={scores} />);
+    const user = userEvent.setup();
+    const enable = await screen.findByRole('checkbox', { name: 'Enable overall leaderboard' });
+    await user.click(enable);
+    await user.selectOptions(screen.getByLabelText('Competition'), 'stroke-play');
+    await user.selectOptions(screen.getByLabelText('Stroke basis'), 'net');
+    const save = screen.getByRole('button', { name: 'Save event workspace' });
+    await waitFor(() => { expect(save).toBeEnabled(); });
+    await user.click(save);
+    await screen.findByText(/Event workspace saved/);
+    expect(setup.save).toHaveBeenLastCalledWith(fictionalEvent.id, scored.etag, {
+      ...fictionalSetup, overallCompetition: { kind: 'stroke-play', basis: 'net', handicapAllowancePercent: 95 },
+    }, expect.any(AbortSignal));
+    expect(screen.getByLabelText('Round 1 name')).toBeDisabled();
+    await user.click(enable);
+    await user.click(save);
+    await waitFor(() => { expect(setup.save).toHaveBeenCalledTimes(2); });
+    expect(vi.mocked(setup.save).mock.calls[1]?.[2].overallCompetition).toBeNull();
+    expect(screen.getByLabelText('Round 1 name')).toBeDisabled();
+  });
+  it('retains the saved configuration and a changed allowance across conflict review/refresh without unlocking scored inputs', async () => {
+    const setup = fakeSetup();
+    const workspace: EventWorkspace = { ...fictionalWorkspace,
+      overallCompetition: { kind: 'stroke-play', basis: 'net', handicapAllowancePercent: 90 },
+      rounds: fictionalWorkspace.rounds.map((round) => ({ ...round, scoringStarted: true })),
+    };
+    vi.mocked(setup.load).mockResolvedValue(workspace);
+    vi.mocked(setup.save).mockRejectedValueOnce(new EventChangedError('Refresh and review the current event.'));
+    render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={fakeCatalog()} scores={fakeScores()} />);
+    const user = userEvent.setup();
+    const allowance = await screen.findByLabelText('Net handicap allowance (%)');
+    expect(allowance).toHaveValue(90);
+    await user.clear(allowance);
+    await user.type(allowance, '85');
+    const save = screen.getByRole('button', { name: 'Save event workspace' });
+    await waitFor(() => { expect(save).toBeEnabled(); });
+    await user.click(save);
+    await screen.findByText('Refresh and review the current event.');
+    expect(save).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Refresh workspace' }));
+    await screen.findByText(/Workspace refreshed\./);
+    expect(allowance).toHaveValue(85);
+    expect(screen.getByLabelText('Round 1 name')).toBeDisabled();
+    expect(save).toBeEnabled();
+  });
+  it.each([401, 403, 404])('clears and locks private setup when saved-game options return %s', async (status) => {
+    const setup = fakeSetup();
+    vi.mocked(setup.load).mockResolvedValue({ ...fictionalWorkspace,
+      overallCompetition: { kind: 'stableford', credit: 'individual', roundGames: [] },
+    });
+    const scores = fakeScores();
+    vi.mocked(scores.load).mockRejectedValue(new PrivateRequestError(status, 'Protected game selections unavailable'));
+    const expired = vi.fn();
+    render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={fakeCatalog()} scores={scores} onSessionExpired={expired} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Protected game selections unavailable');
+    expect(screen.queryByRole('checkbox', { name: 'Enable overall leaderboard' })).not.toBeInTheDocument();
+    expect(screen.queryByText(fictionalWorkspace.event.name)).not.toBeInTheDocument();
+    expect(expired).toHaveBeenCalledTimes(status === 401 ? 1 : 0);
+    expect(setup.save).not.toHaveBeenCalled();
+  });
   it('focuses one round, distinguishes unsaved changes and retains drafts when switching or adding rounds', async () => {
     const setup = fakeSetup();
     vi.mocked(setup.load).mockResolvedValue(fictionalWorkspace);
@@ -235,7 +327,7 @@ describe('saved event workspace', () => {
     await user.click(save);
     await screen.findByText(/Event workspace saved/);
     expect(setup.save).toHaveBeenCalledWith(fictionalEvent.id, scored.etag, {
-      ...fictionalSetup, name: 'Fictional updated event name', location: 'Fictional changed location',
+      ...fictionalSetup, overallCompetition: null, name: 'Fictional updated event name', location: 'Fictional changed location',
     }, expect.any(AbortSignal));
     expect(screen.getByRole('region', { name: 'Superseded locked setup edits' })).toHaveTextContent('Unsaved fictional round name');
   });
