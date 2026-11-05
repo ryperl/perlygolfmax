@@ -116,8 +116,8 @@ Production PWA capabilities require HTTPS and platform-specific verification.
 
 ### Future work, not implemented
 
-Golfer/self/assigned-foursome admission and scoring, owner appointment UI,
-offline synchronization and purse configuration remain
+Golfer/self/assigned-foursome admission and scoring, owner appointment UI and
+offline synchronization remain
 later increments. The selected design is Entra External ID
 email codes, a standalone Functions API and Table Storage, with SWA staying Free.
 Provisioning/deployment is separately approval-gated. Detailed scoring, betting,
@@ -251,11 +251,13 @@ before/after audit records. Active-event games can be added or adjusted on
 existing stroke cards; archived events remain read-only. Conflicts preserve
 the draft and require explicit refresh/review. Saved-game removal and a
 general administrative/history interface are not included. Technical budgets
-are 16 games and 32 points rows, also subject to a 12 KiB UTF-8 game-configuration
-request limit; an oversized request is refused explicitly, not partially saved.
-Whole-event setup also has a dedicated 12 KiB UTF-8 budget; other ordinary
-writes retain their 4 KiB limit. The bounded game budget also
-leaves space for both configurations in each immutable audit record.
+are 16 games and 32 points rows. Ordinary game, whole-event setup and purse
+requests allow 12 KiB UTF-8; other ordinary writes retain their 4 KiB limit.
+Larger configurations use bounded immutable upload parts and conditional
+publication, not partially active saves. Stored values exceeding an inline
+Table property use verified immutable fragments. Large reads are digest-bound
+pages reassembled before a complete result is exposed. Quota waits retain
+progress and can be cancelled.
 
 ### Team Stableford games
 
@@ -387,7 +389,7 @@ update the global players, calculate handicaps or select a future scored-round
 correction policy.
 
 Owner setup selects saved players and an explicit course version/tee for one
-or more rounds, with manual groups numbered 1–4 and at most four players per
+or more rounds, with positive numbered manual groups and at most four players per
 group. Every selected player must be assigned once per round. Group choices
 show their current counts and are disabled for additional players when full;
 moving or unassigning a player frees a place without moving anyone else.
@@ -403,9 +405,57 @@ only the visible round; incomplete hidden rounds still prevent saving and are
 identified in the checklist. Saved inputs and captured/current index comparison
 are in a separate expandable review, never a preview of unsaved choices.
 Saved, unsaved and scoring-locked round labels do not imply offline persistence.
-The current pilot remains limited to eight players and eight rounds.
+Events require at least four golfers, with no application-imposed upper
+golfer/team/group-count ceiling. Teams remain two or four, not larger Ryder Cup
+sides. Editors and results use search/paging without dropping off-screen
+selections. Separate budgets of eight rounds, 16 games per round and 32 points
+rows remain. Finite service safeguards still apply: staged logical writes are
+limited to 4 MiB and private values to 32 MiB; oversized work fails explicitly.
+This is not a promise of infinite memory, throughput or offline durability.
 The local implementation and validation are not authorization for a deployment
 or an actual private-source seed. Those remain separate release/import steps.
+
+### Organizer-assigned per-golfer tees
+
+The organizer can enable per-golfer tees at event level and assign a captured
+tee for each golfer in each round. The common round tee is the default.
+Choices come from the selected immutable course version and must have matching
+hole numbers and 9/18-hole layout; par, distance, rating, slope and stroke index
+may differ. There is no golfer self-selection or new participant permission.
+
+Personal scorecards, stroke-to-par marks, blank-score par nudges, playing
+handicaps, Stableford/team points and overall stroke standings use that golfer's
+captured tee. Group views identify mixed tees rather than pretending common
+metadata belongs to everyone. Once scoring starts, assignments stay locked;
+the option cannot be disabled to reinterpret a scored mixed-tee round. Legacy
+setup requests preserve existing choices, not silently reset them.
+
+### Organizer purse and individual winnings
+
+Open **Purse and winnings** from the event overview or setup. Configure planned
+fixed funding or a buy-in multiplied by the current roster, choose the event
+currency, and add round/game place awards, overall place awards or manual
+side-pot recipients. Supported currencies are USD, CAD, EUR, GBP and AUD with
+two decimal places and no currency conversion.
+
+All winnings are attributed to individuals. A team pot is divided among winning
+teams and their two/four members; an explicitly per-golfer team amount is labelled
+and budgeted differently. Pooled ties split the combined occupied-place prizes,
+or the organizer can resolve a tied entrant order for that award pool without
+changing leaderboard positions. Indivisible cents remain explicitly unallocated,
+never awarded through roster order.
+
+Exact minor-unit arithmetic reconciles scheduled awards, calculated/projected
+allocations, reserves, remainders, remaining budget and overcommitment.
+Incomplete play stays projected. Missing sources, stale decisions and unavailable
+results are not fabricated winners or zero balances; known partial shares remain
+visible and invalid decisions can be repaired. The editor preserves drafts and
+requires explicit conflict review. Configuration saves are conditional,
+idempotent and audited; archived owner views are read-only.
+
+Budgets are planned, not collected. Calculated awards are not payments,
+transfers or round finalization. Closest-to-pin measurements, larger competition
+sides, payment processing and participant access are not implemented.
 
 A later UI migration is planned to **Fluent UI v9 and Griffel**, using
 component-owned classes and named slots instead of generic tag selectors or

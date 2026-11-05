@@ -5,6 +5,22 @@ import { teamLeaderboardGame, teamLeaderboardRound } from '../../client/leaderbo
 import { addBand, buildGame, draftFromGame, newGameDraft, replaceGame, resetTeamAssignments, setFormat, setPreset, teamDraftFeedback } from './game-draft';
 
 describe('game drafts', () => {
+  it.each([2, 12, 40])('builds exact two-person teams for a %i-golfer full roster without an arbitrary cap', (count) => {
+    const ids = Array.from({ length: count }, (_, index) => fictionalId(index + 1));
+    const draft = setFormat(newGameDraft(), 'two-net-better-ball', count);
+    const complete = { ...draft, teams: draft.teams?.map((team, index) => ({ ...team, playerIds: ids.slice(index * 2, index * 2 + 2) })) };
+    expect(teamDraftFeedback(complete, ids)).toBeNull();
+    expect(buildGame(complete, ids)).not.toBeNull();
+    expect(teamDraftFeedback(complete, [...ids, fictionalId(count + 1)])).toContain('cannot form full 2-person teams');
+  });
+  it.each([4, 12, 40])('builds exact four-person teams for a %i-golfer full roster', (count) => {
+    const ids = Array.from({ length: count }, (_, index) => fictionalId(index + 1));
+    const draft = setFormat(newGameDraft(), 'four-two-net', count);
+    const complete = { ...draft, teams: draft.teams?.map((team, index) => ({ ...team, playerIds: ids.slice(index * 4, index * 4 + 4) })) };
+    expect(teamDraftFeedback(complete, ids)).toBeNull();
+    expect(buildGame(complete, ids)).not.toBeNull();
+    expect(teamDraftFeedback(complete, ids.slice(1))).toContain('cannot form full 4-person teams');
+  });
   it('creates a fresh standard seed with 95% allowance and independent points rows', () => {
     const first = newGameDraft();
     const second = newGameDraft();

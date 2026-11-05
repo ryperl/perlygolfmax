@@ -8,6 +8,7 @@ import { fakeCatalog, fakeSetup, fictionalEvent, fictionalWorkspace } from '../c
 import { fakeScores } from '../client/scoring.test-support';
 import { SessionExpiredError } from '../client/events';
 import type { EventPage } from '../domain/events';
+import { fictionalEventPurse } from '../client/purse.test-support';
 
 let testServices: EventServices | undefined;
 vi.mock('./EventsPage', async (importOriginal) => {
@@ -46,6 +47,25 @@ beforeEach(() => {
 });
 
 describe('App', () => {
+  it('opens private purse deep links and preserves event navigation without prefetching in Preview', async () => {
+    const base = service();
+    const value = fictionalEventPurse();
+    const purse = { load: vi.fn().mockResolvedValue(value), save: vi.fn() };
+    testServices = { ...base, purse };
+    window.history.replaceState(null, '', `#purse?event=${fictionalEvent.id}`);
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Event purse' })).toBeVisible();
+    expect(document.title).toBe('Purse and winnings | Perly Golf Max');
+    expect(mainNavigation().getByRole('link', { name: 'Rounds' })).toHaveAttribute('href', `#rounds?event=${fictionalEvent.id}`);
+    expect(base.setup.load).not.toHaveBeenCalled();
+    expect(base.scores.load).not.toHaveBeenCalled();
+    navigate('#preview');
+    expect(await screen.findByRole('heading', { name: 'The Coastal Classic' })).toBeVisible();
+    expect(purse.load).toHaveBeenCalledOnce();
+    navigate(`#purse?event=${fictionalEvent.id}`);
+    expect(await screen.findByRole('heading', { name: 'Event purse' })).toBeVisible();
+    expect(purse.load).toHaveBeenCalledTimes(2);
+  });
   it('opens refresh-safe overall routes and retains event context across navigation/history while leaving Preview private-free', async () => {
     const base = service();
     const leaderboard = { load: vi.fn().mockResolvedValue({ workspace: fictionalWorkspace, roundScores: [],

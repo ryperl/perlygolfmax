@@ -9,6 +9,7 @@ import { readCursor, readJson, response } from '../http.js';
 import type { VerifyIdentity } from '../identity.js';
 import type { RequestLimiter } from '../limits.js';
 import type { TableScoreStore } from './store.js';
+import { privateReadResponse } from '../private-transport.js';
 
 export interface ScoringApi {
   readonly verify: VerifyIdentity;
@@ -41,14 +42,19 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
       if (request.method !== (write ? 'PUT' : 'GET')) return response(405, { code: 'METHOD_NOT_ALLOWED' });
       const eventId = uuid(request.params.id);
       if (action === 'event-leaderboard') {
-        return response(200, await api.scores.leaderboard(identity, eventId, () => api.limiter.check(identity, 'scores-read')));
+        return response(200, privateReadResponse(request, await api.scores.leaderboard(identity, eventId, () => api.limiter.check(identity, 'scores-read'))));
       }
       const roundId = uuid(request.params.roundId);
-      if (action === 'scores') return response(200, await api.scores.get(identity, eventId, roundId));
+      if (action === 'scores') return response(200, privateReadResponse(request, await api.scores.get(identity, eventId, roundId)));
       if (action === 'round-games') {
         const requestId = uuid(request.headers.get('Idempotency-Key'));
         const expectedEtag = precondition(request, 'GAME_REVISION_REQUIRED');
-        const body = await readJson(request, maximumGameConfigurationBytes);
+        let body = await readJson(request, maximumGameConfigurationBytes);
+        if (isRecord(body) && (Object.hasOwn(body, 'privateUpload') || Object.hasOwn(body, 'privateCommit'))) {
+          const received = await api.scores.receiveGames(identity, eventId, roundId, body, expectedEtag, requestId);
+          if (received.kind === 'part') return response(200, { privateStaged: { id: received.id, index: received.index } });
+          body = received.value;
+        }
         if (!isRecord(body) || Object.keys(body).length !== 1 || !isRoundGameDefinitions(body.games) || body.games.length === 0) {
           throw new ApiError(400, 'INVALID_GAME_SETUP');
         }

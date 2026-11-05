@@ -68,7 +68,7 @@ export function setFormat(draft: GameDraft, format: TeamGameFormat | undefined, 
 export function teamDraftFeedback(draft: GameDraft, playerIds: readonly string[]): string | null {
   if (!draft.format) return null;
   const size = teamSize(draft.format);
-  if (playerIds.length < 4 || playerIds.length > 8 || playerIds.length % size !== 0) {
+  if (playerIds.length < size || playerIds.length % size !== 0) {
     return `${String(playerIds.length)} golfers cannot form full ${String(size)}-person teams. Choose a compatible format or update the round roster.`;
   }
   const assigned = (draft.teams ?? []).flatMap((team) => team.playerIds);

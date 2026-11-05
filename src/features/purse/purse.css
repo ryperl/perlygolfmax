@@ -1,0 +1,37 @@
+.purse-panel, .purse-results, .purse-settings, .purse-pool-editor, .purse-recipients { display: grid; gap: 1rem; min-width: 0; max-width: 100%; }
+.purse-panel { color: var(--cp-text); overflow-wrap: anywhere; }
+.purse-panel header p, .purse-panel h2, .purse-panel h3 { margin: 0; }
+.purse-panel label { display: grid; gap: .375rem; min-width: 0; }
+.purse-panel :is(input, select, button) { box-sizing: border-box; min-width: 0; min-height: 44px; max-width: 100%; padding: .5rem .75rem; font: inherit; color: var(--cp-text); background: var(--cp-surface); border: 1px solid var(--cp-border-strong); border-radius: .625rem; }
+.purse-panel :is(input, select) { width: 100%; }
+.purse-panel button { cursor: pointer; white-space: normal; overflow-wrap: anywhere; }
+.purse-panel :is(button:disabled, input:disabled, select:disabled) { color: var(--cp-text-muted); cursor: not-allowed; }
+.purse-panel :is(button, input, select, summary, .purse-scroll):focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
+.purse-settings, .purse-panel fieldset { margin: 0; padding: 1rem; min-width: 0; border: 1px solid var(--cp-border-strong); border-radius: .625rem; }
+.purse-panel legend { max-width: 100%; padding-inline: .25rem; }
+.purse-pool-editor, .purse-pool-results details { padding: .75rem; border: 1px solid var(--cp-border); border-radius: .625rem; background: var(--cp-surface); }
+.purse-panel summary { cursor: pointer; padding-block: .5rem; }
+.purse-pool-editor > :not(summary) { margin-top: .75rem; }
+.purse-fields, .purse-prize, .purse-actions { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; min-width: 0; }
+.purse-fields > *, .purse-prize > * { flex: 1 1 12rem; }
+.purse-actions { align-items: center; }
+.purse-checks { display: grid; gap: .5rem; }
+.purse-checks label { display: flex; align-items: center; }
+.purse-checks input { width: 1.25rem; flex: 0 0 1.25rem; accent-color: var(--cp-accent); }
+.purse-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: .75rem; margin: 0; }
+.purse-metrics > div { padding: .75rem; border: 1px solid var(--cp-border); border-radius: .625rem; background: var(--cp-surface); }
+.purse-metrics dt { color: var(--cp-text-muted); }
+.purse-metrics dd { margin: .25rem 0 0; font-variant-numeric: tabular-nums; }
+.purse-hint { color: var(--cp-text-muted); }
+.purse-notice, .purse-warning { padding: .75rem; background: var(--cp-accent-soft); border-left: 3px solid var(--cp-accent); }
+.purse-warning { border-left-color: var(--cp-warning); }
+.purse-scroll { max-width: 100%; min-width: 0; overflow-x: auto; }
+.purse-panel table { width: 100%; min-width: 45rem; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.purse-panel caption { text-align: left; padding-block: .5rem; }
+.purse-panel th, .purse-panel td { padding: .75rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--cp-border); }
+.purse-panel td:not(:last-child) { white-space: nowrap; }
+.purse-panel td ul { margin: 0; padding-inline-start: 1rem; min-width: 13rem; }
+@media (max-width: 480px) {
+  .purse-panel fieldset { padding: .75rem; }
+  .purse-actions > button { flex: 1 1 10rem; }
+}

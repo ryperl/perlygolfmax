@@ -1,6 +1,7 @@
 import { scoreEntryText } from '../../contracts/scoring';
 import type { CourseHole } from '../../domain/catalog';
 import type { HoleScore, Scorecard } from '../../domain/scoring';
+import type { PlayerTeeProfile } from '../../domain/tees';
 import { cardTotalText, pointsTotalText } from './scorecard-presentation';
 import type { ScorecardGame } from './scorecard-presentation';
 import { gameUnavailableMessage } from '../games';
@@ -16,7 +17,23 @@ function scoreMark(score: HoleScore | undefined, par: number) {
     : { className: 'score-double', description: 'double bogey or more' };
 }
 
-export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game, onPlayerSelect }: {
+function CourseRows({ layout, fullLayout, showTotal, prefix = '' }: {
+  readonly layout: readonly CourseHole[];
+  readonly fullLayout: readonly CourseHole[];
+  readonly showTotal: boolean;
+  readonly prefix?: string;
+}) {
+  return <>
+    <tr className="recap-par"><th scope="row">{prefix}Par</th>{layout.map((hole) => <td key={hole.number}>{hole.par}</td>)}
+      <td>{layout.reduce((sum, hole) => sum + hole.par, 0)}</td>{showTotal && <td>{fullLayout.reduce((sum, hole) => sum + hole.par, 0)}</td>}</tr>
+    <tr className="recap-course-row"><th scope="row">{prefix}Yards</th>{layout.map((hole) => <td key={hole.number}>{hole.length}</td>)}
+      <td>{layout.reduce((sum, hole) => sum + hole.length, 0)}</td>{showTotal && <td>{fullLayout.reduce((sum, hole) => sum + hole.length, 0)}</td>}</tr>
+    <tr className="recap-course-row"><th scope="row">{prefix}Stroke index</th>{layout.map((hole) => <td key={hole.number}>{hole.allocation}</td>)}
+      <td>—</td>{showTotal && <td>—</td>}</tr>
+  </>;
+}
+
+export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game, onPlayerSelect, playerTees, defaultTeeLabel }: {
   readonly label: string;
   readonly subtotal: 'Out' | 'In';
   readonly layout: readonly CourseHole[];
@@ -24,8 +41,11 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
   readonly cards: readonly Scorecard[];
   readonly game?: ScorecardGame | undefined;
   readonly onPlayerSelect?: (playerId: string) => void;
+  readonly playerTees?: readonly PlayerTeeProfile[] | undefined;
+  readonly defaultTeeLabel?: string;
 }) {
   const showTotal = subtotal === 'In' || fullLayout.length === layout.length;
+  const mixed = (playerTees?.length ?? 0) > 0;
   return <section className="recap-nine">
     <h4>{label}</h4>
     <div className="recap-scroll" role="region" aria-label={`${label} scorecard`} tabIndex={0}>
@@ -34,22 +54,25 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
         <thead><tr><th scope="col">Hole</th>{layout.map((hole) => <th scope="col" key={hole.number}>{hole.number}</th>)}
           <th scope="col">{subtotal}</th>{showTotal && <th scope="col">Total</th>}</tr></thead>
         <tbody>
-          <tr className="recap-par"><th scope="row">Par</th>{layout.map((hole) => <td key={hole.number}>{hole.par}</td>)}
-            <td>{layout.reduce((sum, hole) => sum + hole.par, 0)}</td>{showTotal && <td>{fullLayout.reduce((sum, hole) => sum + hole.par, 0)}</td>}</tr>
-          <tr className="recap-course-row"><th scope="row">Yards</th>{layout.map((hole) => <td key={hole.number}>{hole.length}</td>)}
-            <td>{layout.reduce((sum, hole) => sum + hole.length, 0)}</td>{showTotal && <td>{fullLayout.reduce((sum, hole) => sum + hole.length, 0)}</td>}</tr>
-          <tr className="recap-course-row"><th scope="row">Stroke index</th>{layout.map((hole) => <td key={hole.number}>{hole.allocation}</td>)}
-            <td>—</td>{showTotal && <td>—</td>}</tr>
+          {!mixed && <CourseRows layout={layout} fullLayout={fullLayout} showTotal={showTotal} />}
           {cards.map((card) => {
+            const tee = playerTees?.find((entry) => entry.playerId === card.playerId)?.profile;
+            const playerFullLayout = tee?.holes ?? fullLayout;
+            const playerLayout = layout.map((hole) => playerFullLayout.find((item) => item.number === hole.number) ?? hole);
             const saved = new Map(card.holes.map((hole) => [hole.number, hole.score]));
             const player = game?.result?.players.find((entry) => entry.playerId === card.playerId);
             const holePoints = new Map(player?.holes.map((hole) => [hole.number, hole.points]));
             const available = player !== undefined && player.status !== 'unavailable';
             const completeNine = layout.every((hole) => typeof holePoints.get(hole.number) === 'number');
-            return <Fragment key={card.playerId}><tr className={`recap-score-row${game ? ' recap-has-game' : ''}`}>
+            return <Fragment key={card.playerId}>
+              {mixed && <tr><th colSpan={layout.length + (showTotal ? 3 : 2)} scope="rowgroup">
+                {card.displayName} · {tee ? `${tee.name} / ${tee.category} · personal tee` : `${defaultTeeLabel ?? 'Common tee'} · default tee`}
+              </th></tr>}
+              {mixed && <CourseRows layout={playerLayout} fullLayout={playerFullLayout} showTotal={showTotal} prefix={`${card.displayName} · `} />}
+              <tr className={`recap-score-row${game ? ' recap-has-game' : ''}`}>
               <th scope="row">{onPlayerSelect ? <button type="button" className="scorecard-player-link"
                 aria-label={`Open scorecard for ${card.displayName}`} onClick={() => { onPlayerSelect(card.playerId); }}>{card.displayName}</button> : card.displayName}</th>
-              {layout.map((hole) => {
+              {playerLayout.map((hole) => {
                 const score = saved.get(hole.number);
                 const mark = scoreMark(score, hole.par);
                 const text = score ? scoreEntryText(score) || '—' : '?';

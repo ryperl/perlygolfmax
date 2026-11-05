@@ -1,5 +1,6 @@
 import type { CourseMetadata, IndexObservation, TeeProfile } from './catalog.js';
 import type { EventSummary } from './events.js';
+import type { PlayerTeeProfile, PlayerTeeSelection } from './tees.js';
 
 export type OverallCompetition =
   | {
@@ -38,6 +39,7 @@ export interface RoundSetupInput {
   readonly courseVersionId: string;
   readonly teeProfileId: number;
   readonly groups: readonly RoundGroup[];
+  readonly playerTeeSelections?: readonly PlayerTeeSelection[];
 }
 
 export interface EventSetupInput {
@@ -46,6 +48,7 @@ export interface EventSetupInput {
   readonly playerIds: readonly string[];
   readonly rounds: readonly RoundSetupInput[];
   readonly overallCompetition?: OverallCompetition | null;
+  readonly allowPerGolferTees?: boolean;
 }
 
 export interface EventRosterPlayer {
@@ -67,6 +70,7 @@ export interface RoundSnapshot {
   readonly groups: readonly RoundGroup[];
   readonly players: readonly RoundPlayerSnapshot[];
   readonly scoringStarted?: boolean;
+  readonly playerTees?: readonly PlayerTeeProfile[];
 }
 
 export interface EventWorkspace {
@@ -76,4 +80,5 @@ export interface EventWorkspace {
   readonly rounds: readonly RoundSnapshot[];
   readonly etag: string;
   readonly overallCompetition?: OverallCompetition;
+  readonly allowPerGolferTees?: boolean;
 }

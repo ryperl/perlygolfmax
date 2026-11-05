@@ -5,7 +5,7 @@ import type { RoundGameDefinition } from '../domain/games';
 import { maximumGameConfigurationBytes, sameGameDefinitions } from '../domain/games';
 import type { GameWriteResult, HoleScore, RoundScores, ScoreHistoryPage, ScoreWriteResult } from '../domain/scoring';
 import { sameHoleScore } from '../domain/scoring';
-import { createPrivateRequest } from './private-request';
+import { createPrivateRequest, readPrivateValue, writePrivateValue } from './private-request';
 
 export interface ScoresClient {
   readonly load: (eventId: string, roundId: string, signal: AbortSignal) => Promise<RoundScores>;
@@ -25,7 +25,7 @@ export function createScoresClient(apiUrl: string, getToken: () => Promise<strin
   }
   return {
     async load(eventId, roundId, signal) {
-      const value = await request(`${path(eventId, roundId)}/scores`, signal);
+      const value = await readPrivateValue(request, `${path(eventId, roundId)}/scores`, signal);
       if (!isRoundScores(value) || value.eventId !== eventId || value.roundId !== roundId
         || value.cards.some((card) => card.etag !== null) && (!value.setupLocked || value.lastUpdatedAt === null)) throw new Error('Invalid owner scorecards response. Nothing was loaded.');
       return value;
@@ -60,9 +60,9 @@ export function createScoresClient(apiUrl: string, getToken: () => Promise<strin
       const base = path(eventId, roundId);
       if (!isRoundGameDefinitions(games) || games.length === 0 || !isUuid(requestId)
         || etag !== null && !isEventRevision(etag)) throw new Error('Check the game settings. Nothing was sent.');
-      const value = await gameRequest(`${base}/games`, signal, {
+      const value = await writePrivateValue(gameRequest, `${base}/games`, signal, {
         method: 'PUT', body: { games }, requestId, ...(etag === null ? { createOnly: true } : { etag }),
-      });
+      }, maximumGameConfigurationBytes);
       if (!isGameWriteResult(value) || value.round.eventId !== eventId || value.round.roundId !== roundId
         || value.change.id !== requestId || value.change.expectedEtag !== etag
         || !sameGameDefinitions(value.change.after, games)) {

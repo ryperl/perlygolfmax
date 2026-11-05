@@ -45,6 +45,9 @@ describe('team game definitions', () => {
     expect(teamCountingSize(format)).toBe(counting);
     expect(maximumExactPointsForGame(game)).toBe(Math.floor(Number.MAX_SAFE_INTEGER / (18 * counting)));
     expect(gameTeamsMatchRoster(game, [...roster].reverse())).toBe(true);
+    const first = game.teams[0];
+    if (!first) throw new Error('Missing fictional team');
+    expect(gameTeamsMatchRoster({ ...game, teams: [first] }, first.playerIds)).toBe(true);
     for (const players of [[], roster.slice(1), [...roster, id(5)], [id(1), id(1), id(3), id(4)], [id(1), id(2), id(3), id(9)]]) {
       expect(gameTeamsMatchRoster(game, players)).toBe(false);
     }

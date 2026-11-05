@@ -91,6 +91,37 @@ function first<T>(values: readonly T[]): T {
 }
 
 describe('optional event standings over all configured rounds', () => {
+  it('compares gross strokes against each golfer captured par, not the shared default tee', () => {
+    const f = fixture();
+    const round = first(f.workspace.rounds);
+    const selected = first(round.players);
+    const alternate = { ...round.teeProfile, id: 701, totalPar: 37,
+      holes: round.teeProfile.holes.map((hole) => hole.number === 1 ? { ...hole, par: 5 } : hole) };
+    const workspace = { ...f.workspace, overallCompetition: { kind: 'stroke-play' as const, basis: 'gross' as const },
+      rounds: [{ ...round, playerTees: [{ playerId: selected.playerId, profile: alternate }] }] };
+    const result = calculateEventStandings(workspace, f.scores);
+    expect(result.players.find((player) => player.playerId === selected.playerId)).toMatchObject({
+      subtotal: 36, relativeToPar: -1, rank: 1,
+    });
+    expect(result.players.filter((player) => player.playerId !== selected.playerId)
+      .every((player) => player.relativeToPar === 0)).toBe(true);
+  });
+  it('uses personal captured ratings for net stroke standings independently of other golfers', () => {
+    const f = fixture(1, 18);
+    const round = first(f.workspace.rounds);
+    const selected = first(round.players);
+    const alternate = { ...round.teeProfile, id: 701, ratings: round.teeProfile.ratings.map((rating) =>
+      rating.type === 'Total' ? { ...rating, course: 78 } : rating) };
+    const workspace = { ...f.workspace, overallCompetition: {
+      kind: 'stroke-play' as const, basis: 'net' as const, handicapAllowancePercent: 100,
+    }, rounds: [{ ...round, playerTees: [{ playerId: selected.playerId, profile: alternate }] }] };
+    const result = calculateEventStandings(workspace, f.scores);
+    expect(result.players.find((player) => player.playerId === selected.playerId)).toMatchObject({
+      subtotal: 66, relativeToPar: -6, rank: 1,
+    });
+    expect(result.players.filter((player) => player.playerId !== selected.playerId)
+      .every((player) => player.relativeToPar === 0)).toBe(true);
+  });
   it('disables without fetching scores and supports an enabled unsaved empty workspace', () => {
     const f = fixture();
     const { overallCompetition: omitted, ...workspace } = f.workspace;

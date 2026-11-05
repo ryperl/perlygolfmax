@@ -7,6 +7,7 @@ import type { SetupClient } from '../../client/setup';
 import { isEventSetupInput } from '../../contracts/setup';
 import type { CourseCatalogEntry, IndexObservation, PlayerProfile } from '../../domain/catalog';
 import type { EventSetupInput, EventWorkspace, RoundSetupInput } from '../../domain/setup';
+import { playerTee } from '../../domain/tees';
 import { RoundEditor } from './RoundEditor';
 import { SetupRoster } from './SetupRoster';
 import { OverallCompetitionEditor } from './OverallCompetitionEditor';
@@ -17,6 +18,28 @@ interface SupersededSetupEdits {
   readonly roster: EventWorkspace['roster'] | null;
   readonly rounds: readonly RoundSetupInput[];
 }
+async function readCatalogPage<T>(read: () => Promise<T>, signal: AbortSignal): Promise<T> {
+  for (;;) {
+    signal.throwIfAborted();
+    try { return await read(); }
+    catch (failure) {
+      if (!(failure instanceof PrivateRequestError) || failure.status !== 429) throw failure;
+      signal.throwIfAborted();
+      await new Promise<void>((resolve, reject) => {
+        const abort = () => {
+          clearTimeout(timer);
+          signal.removeEventListener('abort', abort);
+          reject(signal.reason instanceof Error ? signal.reason : new DOMException('Aborted', 'AbortError'));
+        };
+        const timer = setTimeout(() => {
+          signal.removeEventListener('abort', abort);
+          resolve();
+        }, Math.max(1, failure.retryAfterSeconds ?? 60) * 1000);
+        signal.addEventListener('abort', abort, { once: true });
+      });
+    }
+  }
+}
 async function readSetupCatalog(catalog: CatalogClient, signal: AbortSignal) {
   const courses: CourseCatalogEntry[] = [];
   const players: PlayerProfile[] = [];
@@ -24,14 +47,14 @@ async function readSetupCatalog(catalog: CatalogClient, signal: AbortSignal) {
   const playerCursors = new Set<string>();
   let cursor: string | undefined;
   do {
-    const page = await catalog.courses(signal, cursor);
+    const page = await readCatalogPage(() => catalog.courses(signal, cursor), signal);
     signal.throwIfAborted();
     courses.push(...page.courses); cursor = page.continuationToken;
     if (cursor && courseCursors.has(cursor)) throw new Error('Invalid course paging response.');
     if (cursor) courseCursors.add(cursor);
   } while (cursor);
   do {
-    const page = await catalog.players(signal, cursor);
+    const page = await readCatalogPage(() => catalog.players(signal, cursor), signal);
     signal.throwIfAborted();
     players.push(...page.players); cursor = page.continuationToken;
     if (cursor && playerCursors.has(cursor)) throw new Error('Invalid player paging response.');
@@ -79,6 +102,7 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
   }, []);
   const editing = workspace?.event.role === 'owner' && workspace.event.status === 'active' && canManageCatalog;
   const rosterLocked = workspace?.rounds.some((round) => round.scoringStarted === true) ?? false;
+  const personalTeesLocked = workspace?.rounds.some((round) => round.scoringStarted && (round.playerTees?.length ?? 0) > 0) ?? false;
   const roundChoices = editing && draft ? draft.rounds : workspace?.rounds ?? [];
   const selectedRound = roundChoices.find((round) => round.id === selectedRoundId) ?? roundChoices[0];
   const changed = workspace !== null && draft !== null && !sameSetupInput(draft, inputFrom(workspace));
@@ -108,13 +132,17 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
         const result = await readSetupCatalog(catalog, controller.signal);
         if (!controller.signal.aborted) { setCourses(result.courses); setPlayers(result.players); setCatalogError(''); setRefreshConfirmed(new Set()); }
       } catch (failure) {
-        if (!controller.signal.aborted) setCatalogError(failure instanceof Error ? failure.message : 'Could not load catalog selections.');
+        if (!controller.signal.aborted) {
+          if (failure instanceof SessionExpiredError || failure instanceof PrivateRequestError && [401, 403, 404].includes(failure.status)) {
+            denyAccess(failure, failure instanceof SessionExpiredError || failure.status === 401);
+          } else setCatalogError(failure instanceof Error ? failure.message : 'Could not load catalog selections.');
+        }
       } finally {
         if (!controller.signal.aborted) setSettledCatalog({ client: catalog, attempt: catalogAttempt });
       }
     })();
     return () => { controller.abort(); };
-  }, [catalog, catalogAttempt, editing]);
+  }, [catalog, catalogAttempt, denyAccess, editing]);
 
   async function run(work: (signal: AbortSignal) => Promise<void>) {
     if (active.current) return;
@@ -157,13 +185,15 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
       const review: SupersededSetupEdits = {
         roster: rosterSuperseded ? draft.playerIds.map((playerId) => ({
           playerId, displayName: players?.find((player) => player.id === playerId)?.displayName
-            ?? workspace?.roster.find((player) => player.playerId === playerId)?.displayName ?? playerId,
+            ?? workspace?.roster.find((player) => player.playerId === playerId)?.displayName ?? 'Unavailable player',
         })) : null,
         rounds: roundsSuperseded,
       };
       setSupersededEdits((previous) => [...previous, review]);
     }
     setDraft({ ...draft,
+      allowPerGolferTees: value.rounds.some((round) => round.scoringStarted && (round.playerTees?.length ?? 0) > 0)
+        ? true : draft.allowPerGolferTees ?? false,
       playerIds: lockedRounds.size > 0 ? savedRosterIds : draft.playerIds,
       rounds: [
         ...draft.rounds.map((round) => lockedRounds.get(round.id) ?? round),
@@ -199,6 +229,7 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
           setCourses(result.courses); setPlayers(result.players); setCatalogError('');
         } catch (failure) {
           if (!signal.aborted) {
+            if (failure instanceof SessionExpiredError || failure instanceof PrivateRequestError && [401, 403, 404].includes(failure.status)) throw failure;
             setCatalogError(failure instanceof Error ? failure.message : 'Current catalog values are unavailable.');
             setNotice(`Workspace refreshed, but current catalog values are unavailable. ${draftNotice} Retry catalog selections before changing captured setup inputs.`);
           }
@@ -214,6 +245,9 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
     {!initialPending && workspace && <>
       <h2>{workspace.event.name}</h2><p>{workspace.location || 'General location not supplied'}</p>
       <a href={`#overview?event=${eventId}`}>View event overview</a>
+      {workspace.event.role === 'owner' && <a href={`#purse?event=${encodeURIComponent(eventId)}`}>
+        {workspace.event.status === 'archived' ? 'View purse and winnings' : 'Configure purse and winnings'}
+      </a>}
       {editing && draft && <OverallCompetitionEditor workspace={workspace} draft={draft} scores={scores}
         disabled={busy || conflict} onDenied={denyAccess}
         onChange={(overallCompetition) => { editDraft({ ...draft, overallCompetition }); }} />}
@@ -240,8 +274,13 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
         <h3>{round.name} — {round.course.name}</h3>
         {workspace.event.role === 'owner' && <a href={`#events?event=${eventId}&round=${round.id}`}>Open owner scorecards for {round.name}</a>}
         {round.scoringStarted && <p>Scoring started: course, tee, players, groups and captured indices are locked. Clearing scores cannot unlock setup. Event name/location and unstarted new rounds remain editable.</p>}
-        <details><summary>Course version details</summary><p className="setup-version">Saved course version: {round.courseVersionId}</p></details>
+        <p>Immutable saved course version; catalog edits do not replace these inputs.</p>
         <p>Tee: {round.teeProfile.name} / {round.teeProfile.category} / {round.teeProfile.holeCount} holes</p>
+        <ul aria-label={`${round.name} assigned tees`}>{round.players.map((player) => {
+          const tee = playerTee(round, player.playerId);
+          return <li key={player.playerId}>{player.displayName}: {tee.name} / {tee.category}
+            {round.playerTees?.some((entry) => entry.playerId === player.playerId) ? ' · personal tee' : ' · default tee'}</li>;
+        })}</ul>
         <ul>{round.groups.map((group) => <li key={group.number}>Group {group.number}: {group.playerIds.map((id) => round.players.find((player) => player.playerId === id)?.displayName ?? 'Unavailable').join(', ')}</li>)}</ul>
         {workspace.event.role === 'owner' && <div>
           <ul className="setup-index-list">{round.players.map((player) => {
@@ -299,12 +338,12 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
       <h2>Read-only review of superseded setup edits</h2>
       <p role="alert">Scoring locked saved setup inputs while you were editing. The editable form now uses the server-authoritative locked roster and rounds. Your prior local edits below were not applied and cannot change locked inputs. Event name/location edits remain available. These review copies live only in this page.</p>
       {supersededEdits.map((review, index) => <div key={index}>
-        {review.roster && <div><h3>Prior local roster selection</h3><ul>{review.roster.map((player) => <li key={player.playerId}>{player.displayName} ({player.playerId})</li>)}</ul></div>}
+        {review.roster && <div><h3>Prior local roster selection</h3><ul>{review.roster.map((player) => <li key={player.playerId}>{player.displayName}</li>)}</ul></div>}
         {review.rounds.map((round) => <div key={round.id}>
           <h3>Prior local round draft: {round.name || 'Unnamed round'}</h3>
-          <p className="setup-version">Course: {round.courseId || 'Not selected'}; version: {round.courseVersionId || 'Not selected'}; tee profile: {round.teeProfileId || 'Not selected'}.</p>
+          <p className="setup-version">Course: {courses?.find((course) => course.id === round.courseId)?.name ?? 'Previously selected course'}; personal tee assignments: {round.playerTeeSelections?.length ?? 0}. Review the locked saved tee labels above.</p>
           <ul>{round.groups.map((group) => <li key={group.number}>Prior group {group.number}: {group.playerIds.map((id) =>
-            `${players?.find((player) => player.id === id)?.displayName ?? workspace.roster.find((player) => player.playerId === id)?.displayName ?? 'Unavailable'} (${id})`).join(', ')}</li>)}</ul>
+            players?.find((player) => player.id === id)?.displayName ?? workspace.roster.find((player) => player.playerId === id)?.displayName ?? 'Unavailable').join(', ')}</li>)}</ul>
         </div>)}
       </div>)}
     </section>}
@@ -331,12 +370,22 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
         <details className="setup-section" open={workspace.rounds.length === 0}><summary>1. Event details</summary>
           <label>Workspace name<input required maxLength={100} value={draft.name} onChange={(event) => { editDraft({ ...draft, name: event.target.value }); }} /></label>
           <label>General location<input maxLength={200} value={draft.location} onChange={(event) => { editDraft({ ...draft, location: event.target.value }); }} /></label>
+          <label className="setup-check"><input type="checkbox" checked={draft.allowPerGolferTees ?? false} disabled={personalTeesLocked}
+            onChange={(event) => {
+              const enabled = event.target.checked;
+              editDraft({ ...draft, allowPerGolferTees: enabled,
+                rounds: enabled ? draft.rounds : draft.rounds.map((round) => ({ ...round, playerTeeSelections: [] })),
+              });
+            }} />Allow organizer-assigned personal tees</label>
+          <p>{personalTeesLocked ? 'Personal tees cannot be disabled: a scored round has captured personal assignments. Unscored rounds remain editable.'
+            : 'When enabled, assign compatible tees to golfers independently in each round. Disabling clears unscored personal selections; every golfer uses the default tee.'}</p>
         </details>
         <details className="setup-section" open={workspace.roster.length === 0}><summary>2. Players ({draft.playerIds.length} selected)</summary>
           <SetupRoster players={players ?? []} selectedIds={draft.playerIds} savedRoster={workspace.roster} locked={rosterLocked}
             onChange={(ids) => {
               editDraft({ ...draft, playerIds: ids, rounds: draft.rounds.map((round) => ({
                   ...round, groups: round.groups.map((group) => ({ ...group, playerIds: group.playerIds.filter((id) => ids.includes(id)) })).filter((group) => group.playerIds.length > 0),
+                  playerTeeSelections: (round.playerTeeSelections ?? []).filter((entry) => ids.includes(entry.playerId)),
               })) });
             }} />
         </details>
@@ -345,7 +394,8 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
         {draft.rounds.map((round, index) => <div key={round.id} hidden={round.id !== selectedRound?.id}><RoundEditor round={round} number={index + 1}
           saved={workspace.rounds.find((item) => item.id === round.id)} courses={courses ?? []}
           players={(players ?? []).filter((player) => draft.playerIds.includes(player.id))}
-          rosterIds={draft.playerIds} client={catalog} onChange={changeRound} onPending={onVersionPending} /></div>)}
+          rosterIds={draft.playerIds} client={catalog} allowPerGolferTees={draft.allowPerGolferTees ?? false}
+          onChange={changeRound} onPending={onVersionPending} onDenied={denyAccess} /></div>)}
         <button type="button" disabled={draft.rounds.length >= 8} onClick={() => {
           const id = crypto.randomUUID();
           editDraft({ ...draft, rounds: [...draft.rounds, { id, name: '', courseId: '', courseVersionId: '', teeProfileId: 0, groups: [] }] });
@@ -361,7 +411,7 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
       </div>
     </form>}
     {!editing && <p role={conflict ? 'alert' : 'status'}>{busy ? 'Working...' : notice}</p>}
-    <p>Catalog edits do not automatically change captured handicap inputs. Review saved round inputs to confirm an eligible unstarted round's index refresh. Stroke scorecards and configured Stableford games are separate. Invitations, team formats, randomization and offline synchronization are not included.</p>
+    <p>Catalog edits do not automatically change captured handicap inputs. Review saved round inputs to confirm an eligible unstarted round's index refresh. Stroke scorecards and configured Stableford games are separate. Invitations, randomization and offline synchronization are not included.</p>
   </section>;
 }
 

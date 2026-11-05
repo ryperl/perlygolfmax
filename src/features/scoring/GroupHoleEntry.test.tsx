@@ -41,6 +41,29 @@ function typeScore(index: number, value: string) {
 function pause(ms = 900) { act(() => { vi.advanceTimersByTime(ms); }); }
 afterEach(() => { vi.useRealTimers(); });
 describe('pure mobile group hole entry', () => {
+  it('uses each golfer’s own hole par for blank nudges and single-golfer quick scores without autosaving', async () => {
+    const input = props();
+    const rows = input.rows.map((row, index) => ({ ...row,
+      hole: { ...input.hole, par: index === 0 ? 5 : 3, length: 210, allocation: 9 },
+      teeLabel: index === 0 ? 'Fictional Gold / Personal category' : 'Fictional Teal / Default category',
+    }));
+    const first = rows[0];
+    if (!first) throw new Error('Missing fictional golfer.');
+    const { rerender } = render(<GroupHoleEntry {...input} rows={rows} />);
+    const user = userEvent.setup();
+    expect(screen.queryByText('Par 4 · 100 yards · Stroke index 1')).not.toBeInTheDocument();
+    expect(screen.getByText('Fictional Gold / Personal category · Par 5 · 210 yards · Stroke index 9')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Increase score for Fictional Player 1' }));
+    expect(input.onEdit).toHaveBeenLastCalledWith(first.playerId, '5');
+    await user.click(screen.getByRole('button', { name: 'Decrease score for Fictional Player 2' }));
+    expect(input.onEdit).toHaveBeenLastCalledWith(rows[1]?.playerId, '3');
+    rerender(<GroupHoleEntry {...input} rows={[first]} />);
+    expect(screen.getByRole('button', { name: '5 strokes for Fictional Player 1' })).toHaveTextContent('par');
+    expect(screen.queryByRole('button', { name: '3 strokes for Fictional Player 1' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '6 strokes for Fictional Player 1' }));
+    expect(input.onEdit).toHaveBeenLastCalledWith(first.playerId, '6');
+    expect(input.onSave).not.toHaveBeenCalled();
+  });
   it('supports SSR with blank boxes, one form and no more than four player rows, without auto-par', () => {
     const input = props();
     const markup = renderToStaticMarkup(<GroupHoleEntry {...input} />);

@@ -6,6 +6,7 @@ import type { RoundGameDefinition } from '../../domain/games';
 import { RoundGamesPanel } from '../games';
 import { RoundLeaderboard } from '../leaderboard';
 import { sameHoleScore } from '../../domain/scoring';
+import { scorecardHoles, scorecardTee } from '../../domain/tees';
 import { useOwnerScores } from './useOwnerScores';
 import { GroupHoleEntry } from './GroupHoleEntry';
 import { SavedScorecards } from './SavedScorecards';
@@ -174,14 +175,21 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired }: O
     </p>}
     {!round && !error && <p>Loading owner-only scorecards…</p>}
     {round && <>
-      {screen === 'entry' && <p className="score-context">{round.roundName} · {round.courseName} / {round.teeName}</p>}
+      {screen === 'entry' && <p className="score-context">{round.roundName} · {round.courseName} / {(round.playerTees?.length ?? 0) > 0 ? 'Default tee: ' : ''}{round.teeName}
+        {(round.playerTees?.length ?? 0) > 0 && ' · Personal tees assigned'}</p>}
       {round.eventStatus === 'archived' && <p role="status">Archived event: owner read-only. Drafts cannot be saved.</p>}
       {screen === 'entry' && group && hole && <GroupHoleEntry groups={round.groups} groupNumber={group.number} layout={round.layout} hole={hole}
         rows={group.playerIds.map((playerId) => {
           const card = cardFor(round, playerId);
           const local = drafts.get(entryKey(playerId, hole.number));
+          const personal = scorecardTee(round, playerId);
+          const playerHole = scorecardHoles(round, playerId).find((item) => item.number === hole.number);
           return {
             playerId, displayName: card.displayName, saved: savedHole(card, hole.number),
+            ...(playerHole ? { hole: playerHole } : {}),
+            ...((round.playerTees?.length ?? 0) > 0 ? {
+              teeLabel: `${personal?.name ?? round.teeName} / ${personal?.category ?? round.teeCategory} · ${personal ? 'personal' : 'default'} tee`,
+            } : {}),
             ...(local ? { draft: local } : {}),
             canReview: local?.conflictAt !== undefined && refreshVersion > local.conflictAt,
           };

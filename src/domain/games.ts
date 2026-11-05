@@ -60,12 +60,13 @@ export function gameTeamsMatchRoster(game: RoundGameDefinition, playerIds: reado
   if (!isTeamGameDefinition(game)) return true;
   const size = teamSize(game.format);
   const assigned = game.teams.flatMap((team) => team.playerIds);
-  return playerIds.length >= 4 && playerIds.length <= 8 && playerIds.length % size === 0
+  const roster = new Set(playerIds);
+  return playerIds.length >= size && playerIds.length % size === 0
     && new Set(playerIds).size === playerIds.length
     && game.teams.every((team) => team.playerIds.length === size)
     && new Set(game.teams.map((team) => team.id)).size === game.teams.length
     && assigned.length === playerIds.length && new Set(assigned).size === assigned.length
-    && assigned.every((id) => playerIds.includes(id));
+    && assigned.every((id) => roster.has(id));
 }
 
 export interface GameConfiguration {

@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { mixedTeeRound } from './tees.test-support';
 import { fictionalChange, fictionalRoundScores, scoreResult } from '../../client/scoring.test-support';
 import { SavedScorecards } from './SavedScorecards';
 import { scorecardGamesFixture } from './scorecard-games.test-support';
@@ -12,6 +13,20 @@ function props() {
   return { round: fictionalRoundScores, groupNumber: 1, busy: false, onGroupChange: vi.fn(), onEnterScores: vi.fn() };
 }
 describe('golfer-facing round scorecards', () => {
+  it('shows personal and default source rows per golfer and marks identical strokes relative to their own pars', () => {
+    const round = mixedTeeRound();
+    render(<SavedScorecards {...props()} round={round} />);
+    expect(screen.getByText(/Default tee: Fictional Teal/)).toBeVisible();
+    expect(screen.getByRole('rowheader', { name: 'Fictional Player 1 · Fictional Gold / Fictional personal category · personal tee' })).toBeVisible();
+    expect(screen.getByRole('rowheader', { name: 'Fictional Player 2 · Fictional Teal / Fictional A · default tee' })).toBeVisible();
+    const firstPar = screen.getByRole('rowheader', { name: 'Fictional Player 1 · Par' }).closest('tr');
+    const otherPar = screen.getByRole('rowheader', { name: 'Fictional Player 2 · Par' }).closest('tr');
+    if (!firstPar || !otherPar) throw new Error('Missing fictional source rows.');
+    expect(within(firstPar).getAllByRole('cell')[0]).toHaveTextContent('5');
+    expect(within(otherPar).getAllByRole('cell')[0]).toHaveTextContent('4');
+    expect(screen.getAllByLabelText('Hole 1: 4, birdie')).toHaveLength(1);
+    expect(screen.getAllByLabelText('Hole 1: 4, par')).toHaveLength(3);
+  });
   it('automatically adds the first saved game, switches games for both group and individual cards, and supports strokes-only viewing', async () => {
     const { round, games } = scorecardGamesFixture(9);
     const { rerender } = render(<SavedScorecards {...props()} />);

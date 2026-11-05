@@ -122,6 +122,7 @@ export function EventTripView({ workspace, view, progress }: EventTripViewProps)
         {event.role === 'owner' && <nav className="event-trip-links" aria-label="Event setup">
             <a href={setupLink(event.id)}>{archived ? 'View event setup' : 'Configure event'}</a>
             {workspace.overallCompetition && view !== 'group' && <a href={`#leaderboard?event=${encodeURIComponent(event.id)}`}>Overall leaderboard</a>}
+            {view !== 'group' && <a href={`#purse?event=${encodeURIComponent(event.id)}`}>{archived ? 'View purse and winnings' : 'Purse and winnings'}</a>}
         </nav>}
       </header>
       {view === 'overview' && (

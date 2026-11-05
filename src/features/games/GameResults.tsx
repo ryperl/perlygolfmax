@@ -20,6 +20,8 @@ export function GameResults({ game, result, holeNumbers }: {
   readonly holeNumbers: readonly number[];
 }) {
   const [nine, setNine] = useState<'front' | 'back'>('front');
+  const [query, setQuery] = useState('');
+  const [pageIndex, setPageIndex] = useState(0);
   const scroll = useRef<HTMLDivElement | null>(null);
   const layout = [...holeNumbers].sort((left, right) => left - right);
   const front = layout.filter((number) => number <= 9);
@@ -30,7 +32,12 @@ export function GameResults({ game, result, holeNumbers }: {
   const unavailable = new Map<string, string[]>();
   const teamGame = isTeamGameDefinition(game);
   const rows = teamGame ? result?.teams ?? [] : result?.players ?? [];
-  for (const player of rows) {
+  const matching = rows.filter((player) => `${player.displayName} ${'playerIds' in player
+    ? player.playerIds.map((id) => result?.players.find((member) => member.playerId === id)?.displayName ?? '').join(' ') : ''}`
+    .toLowerCase().includes(query.trim().toLowerCase()));
+  const pageSize = 12;
+  const page = Math.min(pageIndex, Math.max(0, Math.ceil(matching.length / pageSize) - 1));
+  for (const player of matching.slice(page * pageSize, (page + 1) * pageSize)) {
     if (player.status !== 'unavailable') continue;
     const reason = gameUnavailableMessage(player.unavailableReason);
     unavailable.set(reason, [...(unavailable.get(reason) ?? []), player.displayName]);
@@ -47,6 +54,17 @@ export function GameResults({ game, result, holeNumbers }: {
       {teamGame && <p className="game-hint">Team-hole points wait for every teammate&apos;s saved individual points. Blank means pending; zero is a saved points score.</p>}
       {teamGame && result?.teamSetupRequired ? <p>Update team assignments. The saved teams no longer match this round&apos;s golfers. Edit this game to repair assignments.</p>
         : !result || rows.length === 0 ? <p>Results are unavailable.</p> : <>
+        {rows.length > pageSize && <div>
+          <label>Find {teamGame ? 'teams or golfers' : 'golfers'} in {game.name}<input type="search" value={query} onChange={(event) => {
+            setQuery(event.target.value); setPageIndex(0);
+          }} /></label>
+          <p>{matching.length} of {rows.length} {teamGame ? 'teams' : 'golfers'} · Page {page + 1} of {Math.max(1, Math.ceil(matching.length / pageSize))}</p>
+          <div className="game-actions" aria-label={`${game.name} result pages`}>
+            <button type="button" disabled={page === 0} onClick={() => { setPageIndex(page - 1); }}>Previous results</button>
+            <button type="button" disabled={(page + 1) * pageSize >= matching.length} onClick={() => { setPageIndex(page + 1); }}>Next results</button>
+          </div>
+        </div>}
+        {matching.length === 0 && <p>No results match your search.</p>}
         {front.length > 0 && back.length > 0 && <div className="game-card-nines" role="group" aria-label={`${game.name} holes to display`}>
           <button type="button" aria-pressed={!showBack} onClick={() => { showNine('front'); }}>Front 9</button>
           <button type="button" aria-pressed={showBack} onClick={() => { showNine('back'); }}>Back 9</button>
@@ -58,7 +76,7 @@ export function GameResults({ game, result, holeNumbers }: {
               {visible.map((number) => <th scope="col" key={number}>{number}</th>)}
               <th scope="col">Out</th><th scope="col">In</th><th scope="col">Total</th>
             </tr></thead>
-            <tbody>{rows.map((player) => <tr key={'teamId' in player ? player.teamId : player.playerId}>
+            <tbody>{matching.slice(page * pageSize, (page + 1) * pageSize).map((player) => <tr key={'teamId' in player ? player.teamId : player.playerId}>
               <th scope="row"><span className="game-player-name">{player.displayName}</span>
                 {'playerIds' in player && <small className="game-player-meta">{player.playerIds.map((id) =>
                   result.players.find((member) => member.playerId === id)?.displayName ?? 'Golfer unavailable').join(' · ')}</small>}

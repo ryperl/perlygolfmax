@@ -4,8 +4,36 @@ import { describe, expect, it, vi } from 'vitest';
 import { RoundLeaderboard } from './RoundLeaderboard';
 import { fictionalStanding, leaderboardGames, leaderboardRound, teamLeaderboardGame, teamLeaderboardRound } from '../../client/leaderboard.test-support';
 import { fictionalRoundScores } from '../../client/scoring.test-support';
+import { fictionalId, fictionalProfile } from '../../client/catalog.test-support';
 
 describe('round leaderboard', () => {
+  it('searches and pages a large field while retaining full-field positions and personal tee context', async () => {
+    if (!leaderboardRound.games) throw new Error('Missing fictional games.');
+    const first = leaderboardRound.games.configuration.games[0];
+    if (!first) throw new Error('Missing fictional game.');
+    const players = Array.from({ length: 40 }, (_, index) => ({
+      ...fictionalStanding(index + 1, 100 - index, 9), playerId: fictionalId(index + 1),
+      displayName: `Fictional golfer ${String(index + 1).padStart(2, '0')}`,
+    }));
+    const round = { ...leaderboardRound,
+      playerTees: [{ playerId: fictionalId(40), profile: { ...fictionalProfile, name: 'Fictional personal Silver' } }],
+      games: { ...leaderboardRound.games, results: [{ gameId: first.id, players }] },
+    };
+    const { rerender } = render(<RoundLeaderboard round={round} busy={false} onManageGames={vi.fn()} />);
+    const user = userEvent.setup();
+    expect(within(screen.getByRole('list', { name: 'Standings' })).getAllByRole('listitem')).toHaveLength(12);
+    await user.click(screen.getByRole('button', { name: 'Next standings' }));
+    expect(screen.getByLabelText('Position 13')).toBeVisible();
+    await user.type(screen.getByRole('searchbox'), '40');
+    expect(screen.getByLabelText('Position 40')).toBeVisible();
+    expect(screen.getByText('Fictional personal Silver / Fictional A')).toBeVisible();
+    rerender(<RoundLeaderboard round={{ ...round }} busy={false} onManageGames={vi.fn()} />);
+    expect(screen.getByRole('searchbox')).toHaveValue('40');
+    await user.clear(screen.getByRole('searchbox'));
+    expect(screen.getByLabelText('Position 1')).toBeVisible();
+    await user.type(screen.getByRole('searchbox'), 'no such fictional golfer');
+    expect(screen.getByText('No leaderboard entries match your search.')).toBeVisible();
+  });
   it('shows tied live positions, signed saved points, holes played and explicit unranked reasons', () => {
     const { container } = render(<RoundLeaderboard round={leaderboardRound} busy={false} onManageGames={vi.fn()} />);
     const rows = within(screen.getByRole('list', { name: 'Standings' })).getAllByRole('listitem');

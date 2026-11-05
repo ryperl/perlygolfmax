@@ -29,6 +29,8 @@
 .setup-section[open] > :not(summary) { margin-top: 16px; }
 .setup-player-list { display: grid; gap: 4px; }
 .setup-player-list:empty { display: none; }
+.setup-pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; }
+.setup-pagination span { overflow-wrap: anywhere; }
 .setup-form .setup-save-state { margin: 0; padding: 12px; border-left: 4px solid var(--cp-border-strong); background: var(--cp-surface-soft); color: var(--cp-text); }
 .setup-form .setup-save-state[data-state="draft"] { border-color: var(--cp-accent); background: var(--cp-accent-soft); }
 .setup-tee-summary { color: var(--cp-text-muted); }

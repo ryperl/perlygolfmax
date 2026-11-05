@@ -2,6 +2,7 @@ import type { CourseHole, CourseRating } from './catalog.js';
 import type { AccountIdentity, EventStatus } from './events.js';
 import type { RoundGroup } from './setup.js';
 import type { GameChange, RoundGamesView } from './games.js';
+import type { PlayerTeeProfile } from './tees.js';
 
 export type HoleScore =
   | { readonly kind: 'unplayed' }
@@ -38,6 +39,7 @@ export interface RoundScores {
   readonly setupLocked: boolean;
   readonly lastUpdatedAt: string | null;
   readonly games?: RoundGamesView;
+  readonly playerTees?: readonly PlayerTeeProfile[];
 }
 
 export interface ScoreChange {

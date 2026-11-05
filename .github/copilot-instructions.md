@@ -77,9 +77,11 @@
   Stale assignments after an unscored roster change remain visible but produce
   no team results until repaired; unchanged stale peer games may be retained
   while another game is repaired. Keep legacy individual definitions valid.
-  Game-configuration and whole-event setup writes allow 12 KiB UTF-8; other
-  ordinary writes retain 4 KiB. Preserve audit before/after string-size
-  headroom and explicit failures.
+  Remove artificial golfer/team/group-count ceilings, not safeguards. Keep
+  team sizes 2/4, playing groups max4, min4 event golfers and separate round/game
+  budgets. Bounded staged writes publish immutable fragments atomically;
+  legacy inline data stays readable. Digest-bound read pages must never be
+  mixed or exposed partially. Retain progress across quota waits; abort safely.
 - Overall standings are an optional setup competition covering every configured
   round dynamically. Stableford sums one selected game's actual points per round;
   team-member credit is explicit. Stroke play ranks cumulative relative-to-par
@@ -87,7 +89,16 @@
   valid stroke total, never invent a penalty. Keep pending/unavailable distinct.
   Undefined competition in a legacy setup request preserves saved settings;
   explicit null disables. Overall reads remain owner-only, bounded, quota-charged
-  per round and checked for consistent event revisions. No purse/finalization.
+  per round and checked for consistent event revisions. No finalization.
+- Per-golfer tees are organizer-enabled/assigned per round, common tee default.
+  Capture only compatible layouts from the selected immutable course version.
+  Use each golfer's par/yardage/rating/slope/allocation throughout entry,
+  scorecards, handicap/points and stroke standings; never unlock scored captures.
+- Purse plans/winnings remain owner-only, conditional/idempotent/audited and
+  planned, never collected/paid. Use exact minor units. Attribute team pots to
+  individual members; pool occupied-place ties or explicit organizer resolution.
+  Keep remainders unallocated, partial results projected, unavailable totals
+  distinct from zero, and stale decisions readable for repair. No money transfers.
 - Present golfer scores as hole-ordered scorecards, not audit records. Keep
   operation IDs, actor GUIDs, revisions and raw timestamps out of player
   entry/view screens; preserve backend audit and conditional-save safeguards.

@@ -28,6 +28,7 @@ const snapshot: RoundSnapshot = {
   }),
   groups: [{ number: 1, playerIds: [1, 2, 3, 4].map(id) }], scoringStarted: true,
 };
+export { snapshot as fictionalCapturedRound };
 const definitions: readonly RoundGameDefinition[] = [
   { id: id(700), name: 'Fictional standard net', preset: 'standard', basis: 'net', handicapAllowancePercent: 95, points: stablefordPoints('standard') },
   { id: id(701), name: 'Fictional modified gross', preset: 'modified', basis: 'gross', handicapAllowancePercent: 95, points: stablefordPoints('modified') },

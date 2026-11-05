@@ -38,11 +38,16 @@ function savedInput(input: EventSetupInput): EventWorkspace {
   return {
     ...fictionalWorkspace, event: { ...fictionalEvent, name: input.name, etag: 'workspace-v2' },
     etag: 'workspace-v2', location: input.location,
+    allowPerGolferTees: input.allowPerGolferTees ?? false,
     ...(input.overallCompetition == null ? {} : { overallCompetition: input.overallCompetition }),
     rounds: input.rounds.map((round) => ({
       id: round.id, name: round.name, courseId: round.courseId, courseVersionId: round.courseVersionId,
       teeProfile: fictionalVersion.data.teeProfiles.find((profile) => profile.id === round.teeProfileId) ?? fictionalProfile,
       course: fictionalManifest.course, groups: round.groups,
+      playerTees: (round.playerTeeSelections ?? []).map((entry) => ({
+        playerId: entry.playerId,
+        profile: fictionalVersion.data.teeProfiles.find((profile) => profile.id === entry.teeProfileId) ?? fictionalProfile,
+      })),
       players: fictionalPlayers.map((player) => ({ playerId: player.id, displayName: player.displayName, handicapIndex: null })),
     })),
   };
@@ -70,6 +75,179 @@ async function openSetupSections(user = userEvent.setup()) {
 }
 
 describe('saved event workspace', () => {
+  it('retains accumulated course and player pages across quota waits and retries only the throttled page', async () => {
+    vi.useFakeTimers();
+    const catalog = fakeCatalog();
+    const otherCourse = { ...fictionalEntry, id: 'ghin:902:904', name: 'Fictional later course' };
+    vi.mocked(catalog.courses).mockResolvedValueOnce({ courses: [fictionalEntry], continuationToken: 'course-next' })
+      .mockRejectedValueOnce(new PrivateRequestError(429, 'Course quota reached.', 2))
+      .mockResolvedValueOnce({ courses: [otherCourse] });
+    vi.mocked(catalog.players).mockResolvedValueOnce({ players: fictionalPlayers.slice(0, 2), continuationToken: 'player-next' })
+      .mockRejectedValueOnce(new PrivateRequestError(429, 'Player quota reached.', 3))
+      .mockResolvedValueOnce({ players: fictionalPlayers.slice(2) });
+    const view = render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={fakeSetup()} catalog={catalog} />);
+    try {
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(catalog.courses).toHaveBeenCalledTimes(2);
+      expect(catalog.players).not.toHaveBeenCalled();
+      expect(screen.getByText('Loading saved catalog selections...')).toBeVisible();
+      expect(screen.getByLabelText('Workspace name')).toBeDisabled();
+      expect(screen.queryByRole('checkbox', { name: /Fictional Player/ })).not.toBeInTheDocument();
+      await act(async () => { await vi.advanceTimersByTimeAsync(1999); });
+      expect(catalog.courses).toHaveBeenCalledTimes(2);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(vi.mocked(catalog.courses).mock.calls.map((call) => call[1])).toEqual([undefined, 'course-next', 'course-next']);
+      expect(vi.mocked(catalog.players).mock.calls.map((call) => call[1])).toEqual([undefined, 'player-next']);
+      expect(screen.getByLabelText('Workspace name')).toBeDisabled();
+      expect(screen.queryByRole('checkbox', { name: /Fictional Player/ })).not.toBeInTheDocument();
+      await act(async () => { await vi.advanceTimersByTimeAsync(2999); });
+      expect(catalog.players).toHaveBeenCalledTimes(2);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(vi.mocked(catalog.players).mock.calls.map((call) => call[1])).toEqual([undefined, 'player-next', 'player-next']);
+      expect(catalog.courses).toHaveBeenCalledTimes(3);
+      expect(screen.getByLabelText('Workspace name')).toBeEnabled();
+      for (const player of fictionalPlayers) expect(screen.getByLabelText(`${player.displayName} — HI Unknown`)).toBeVisible();
+      act(() => { screen.getByRole('button', { name: 'Add Round' }).click(); });
+      const courses = screen.getByLabelText('Round 1 course');
+      expect(within(courses).getByRole('option', { name: /Fictional Meadows/ })).toBeVisible();
+      expect(within(courses).getByRole('option', { name: /Fictional later course/ })).toBeVisible();
+      expect(screen.queryByText('Loading saved catalog selections...')).not.toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    } finally { view.unmount(); vi.useRealTimers(); }
+  });
+
+  it.each(['courses', 'players'] as const)('cancels a quota wait between %s pages without retrying or publishing partial selections', async (kind) => {
+    vi.useFakeTimers();
+    const scheduled = vi.spyOn(globalThis, 'setTimeout');
+    const cancelled = vi.spyOn(globalThis, 'clearTimeout');
+    const catalog = fakeCatalog();
+    if (kind === 'courses') {
+      vi.mocked(catalog.courses).mockResolvedValueOnce({ courses: [fictionalEntry], continuationToken: 'course-next' })
+        .mockRejectedValue(new PrivateRequestError(429, 'Course quota reached.', 2));
+    } else {
+      vi.mocked(catalog.players).mockResolvedValueOnce({ players: fictionalPlayers.slice(0, 2), continuationToken: 'player-next' })
+        .mockRejectedValue(new PrivateRequestError(429, 'Player quota reached.', 2));
+    }
+    const view = render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={fakeSetup()} catalog={catalog} />);
+    try {
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(catalog[kind]).toHaveBeenCalledTimes(2);
+      const signal = vi.mocked(catalog[kind]).mock.calls[1]?.[0];
+      expect(signal?.aborted).toBe(false);
+      expect(screen.getByLabelText('Workspace name')).toBeDisabled();
+      expect(screen.queryByRole('checkbox', { name: /Fictional Player/ })).not.toBeInTheDocument();
+      const waitIndex = scheduled.mock.calls.findIndex((call) => call[1] === 2000);
+      expect(waitIndex).toBeGreaterThanOrEqual(0);
+      const waitTimer = scheduled.mock.results[waitIndex];
+      if (!waitTimer || waitTimer.type !== 'return') throw new Error('Missing catalog quota wait timer.');
+      view.unmount();
+      expect(signal?.aborted).toBe(true);
+      expect(cancelled).toHaveBeenCalledWith(waitTimer.value);
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+      expect(catalog[kind]).toHaveBeenCalledTimes(2);
+    } finally { view.unmount(); scheduled.mockRestore(); cancelled.mockRestore(); vi.useRealTimers(); }
+  });
+
+  it('keeps ordinary page errors explicit instead of publishing accumulated partial catalogues or retrying them automatically', async () => {
+    const catalog = fakeCatalog();
+    vi.mocked(catalog.players).mockResolvedValueOnce({ players: fictionalPlayers.slice(0, 2), continuationToken: 'player-next' })
+      .mockRejectedValueOnce(new PrivateRequestError(503, 'Later player page unavailable.', 3));
+    render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={fakeSetup()} catalog={catalog} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Later player page unavailable.');
+    expect(vi.mocked(catalog.players).mock.calls.map((call) => call[1])).toEqual([undefined, 'player-next']);
+    expect(screen.getByLabelText('Workspace name')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Retry catalog selections' })).toBeEnabled();
+    expect(screen.queryByRole('checkbox', { name: /Fictional Player/ })).not.toBeInTheDocument();
+  });
+
+  it('saves explicit personal-tee permission and all round selections across round switches and a conflict refresh', async () => {
+    const first = fictionalWorkspace.rounds[0];
+    if (!first) throw new Error('Missing fictional round.');
+    const second = { ...first, id: fictionalId(71), name: 'Fictional later round' };
+    const workspace: EventWorkspace = { ...fictionalWorkspace, rounds: [first, second] };
+    const setup = fakeSetup();
+    vi.mocked(setup.load).mockResolvedValue(workspace);
+    vi.mocked(setup.save).mockRejectedValueOnce(new EventChangedError('Refresh and review personal tees.'))
+      .mockImplementation((_id, _etag, input) => Promise.resolve(savedInput(input)));
+    const user = userEvent.setup();
+    render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={fakeCatalog()} />);
+    await openSetupSections(user);
+    await waitFor(() => { expect(screen.getByLabelText('Allow organizer-assigned personal tees')).toBeEnabled(); });
+    expect(screen.queryByLabelText('Fictional Player 1 — round 1 tee')).not.toBeInTheDocument();
+    await user.click(screen.getByLabelText('Allow organizer-assigned personal tees'));
+    await user.selectOptions(screen.getByLabelText('Fictional Player 1 — round 1 tee'), '905');
+    await user.selectOptions(screen.getByLabelText('Selected round'), second.id);
+    await user.selectOptions(screen.getByLabelText('Fictional Player 2 — round 2 tee'), '905');
+    await user.selectOptions(screen.getByLabelText('Selected round'), first.id);
+    expect(screen.getByLabelText('Fictional Player 1 — round 1 tee')).toHaveValue('905');
+    await user.click(screen.getByRole('button', { name: 'Save event workspace' }));
+    await screen.findByText('Refresh and review personal tees.');
+    await user.click(screen.getByRole('button', { name: 'Refresh workspace' }));
+    await screen.findByText(/Workspace refreshed/);
+    expect(screen.getByLabelText('Allow organizer-assigned personal tees')).toBeChecked();
+    expect(screen.getByLabelText('Fictional Player 1 — round 1 tee')).toHaveValue('905');
+    await user.click(screen.getByRole('button', { name: 'Save event workspace' }));
+    await screen.findByText(/Event workspace saved/);
+    const input = vi.mocked(setup.save).mock.calls[1]?.[2];
+    expect(input?.allowPerGolferTees).toBe(true);
+    expect(input?.rounds[0]?.playerTeeSelections).toEqual([{ playerId: fictionalId(1), teeProfileId: 905 }]);
+    expect(input?.rounds[1]?.playerTeeSelections).toEqual([{ playerId: fictionalId(2), teeProfileId: 905 }]);
+    expect(screen.getByRole('list', { name: `${first.name} assigned tees` })).toHaveTextContent('Fictional Player 1: Fictional Teal / Fictional B · personal tee');
+    await user.click(screen.getByLabelText('Allow organizer-assigned personal tees'));
+    await user.click(screen.getByRole('button', { name: 'Save event workspace' }));
+    await waitFor(() => { expect(setup.save).toHaveBeenCalledTimes(3); });
+    expect(vi.mocked(setup.save).mock.calls[2]?.[2]).toMatchObject({
+      allowPerGolferTees: false, rounds: [{ playerTeeSelections: [] }, { playerTeeSelections: [] }],
+    });
+  });
+
+  it('prevents disabling captured personal tees after scoring, while unscored round choices remain editable', async () => {
+    const first = fictionalWorkspace.rounds[0];
+    if (!first) throw new Error('Missing fictional round.');
+    const workspace: EventWorkspace = { ...fictionalWorkspace, allowPerGolferTees: true, rounds: [
+      { ...first, scoringStarted: true, playerTees: [{ playerId: fictionalId(1), profile: fictionalVersion.data.teeProfiles[1] ?? fictionalProfile }] },
+      { ...first, id: fictionalId(71), name: 'Fictional unscored round' },
+    ] };
+    const setup = fakeSetup();
+    vi.mocked(setup.load).mockResolvedValue(workspace);
+    render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={fakeCatalog()} />);
+    const user = userEvent.setup();
+    await openSetupSections(user);
+    const flag = screen.getByLabelText('Allow organizer-assigned personal tees');
+    expect(flag).toBeChecked();
+    expect(flag).toBeDisabled();
+    expect(screen.getByText(/Personal tees cannot be disabled/)).toBeVisible();
+    expect(screen.getByLabelText('Fictional Player 1 — round 1 tee')).toBeDisabled();
+    await user.selectOptions(screen.getByLabelText('Selected round'), fictionalId(71));
+    expect(screen.getByLabelText('Fictional Player 1 — round 2 tee')).toBeEnabled();
+    await user.selectOptions(screen.getByLabelText('Fictional Player 1 — round 2 tee'), '905');
+    expect(screen.getByLabelText('Fictional Player 1 — round 2 tee')).toHaveValue('905');
+  });
+
+  it.each([401, 403, 404])('clears private setup after a course-version option read denies access with %i', async (status) => {
+    const setup = fakeSetup();
+    vi.mocked(setup.load).mockResolvedValue(fictionalWorkspace);
+    const catalog = fakeCatalog();
+    vi.mocked(catalog.version).mockRejectedValue(new PrivateRequestError(status, 'Protected course version unavailable'));
+    const expired = vi.fn();
+    render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={catalog} onSessionExpired={expired} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Protected course version unavailable');
+    expect(screen.queryByLabelText('Round 1 name')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Workspace name')).not.toBeInTheDocument();
+    expect(expired).toHaveBeenCalledTimes(status === 401 ? 1 : 0);
+  });
+  it.each([401, 403, 404])('clears private setup after the player catalog denies access with %i', async (status) => {
+    const setup = fakeSetup();
+    vi.mocked(setup.load).mockResolvedValue(fictionalWorkspace);
+    const catalog = fakeCatalog();
+    vi.mocked(catalog.players).mockRejectedValue(new PrivateRequestError(status, 'Protected golfers unavailable'));
+    const expired = vi.fn();
+    render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={catalog} onSessionExpired={expired} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Protected golfers unavailable');
+    expect(screen.queryByLabelText('Workspace name')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Round 1 name')).not.toBeInTheDocument();
+    expect(expired).toHaveBeenCalledTimes(status === 401 ? 1 : 0);
+  });
   it('hides the entire previous setup and aborts option reads on source changes, including A→B→A', async () => {
     const setup = fakeSetup();
     const workspace: EventWorkspace = { ...fictionalWorkspace,
@@ -110,7 +288,9 @@ describe('saved event workspace', () => {
     await user.click(save);
     await screen.findByText(/Event workspace saved/);
     expect(setup.save).toHaveBeenLastCalledWith(fictionalEvent.id, scored.etag, {
-      ...fictionalSetup, overallCompetition: { kind: 'stroke-play', basis: 'net', handicapAllowancePercent: 95 },
+      ...fictionalSetup, allowPerGolferTees: false,
+      rounds: fictionalSetup.rounds.map((round) => ({ ...round, playerTeeSelections: [] })),
+      overallCompetition: { kind: 'stroke-play', basis: 'net', handicapAllowancePercent: 95 },
     }, expect.any(AbortSignal));
     expect(screen.getByLabelText('Round 1 name')).toBeDisabled();
     await user.click(enable);
@@ -311,14 +491,14 @@ describe('saved event workspace', () => {
     const review = await screen.findByRole('region', { name: 'Superseded locked setup edits' });
     expect(review).toHaveTextContent('Scoring locked saved setup inputs while you were editing');
     expect(review).toHaveTextContent('Prior local round draft: Unsaved fictional round name');
-    expect(review).toHaveTextContent('tee profile: 905');
+    expect(review).toHaveTextContent('personal tee assignments: 0');
     expect(review).toHaveTextContent('Prior group 2: Fictional Player 1');
     expect(within(review).getByRole('heading', { name: 'Prior local roster selection' })).toBeVisible();
     expect(within(review).queryByRole('textbox')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Round 1 name')).toHaveValue('Fictional opening round');
     expect(screen.getByLabelText('Round 1 name')).toBeDisabled();
     expect(screen.getByLabelText('Round 1 tee profile')).toHaveValue('901');
-    expect(screen.getByRole('group', { name: 'Saved player roster (4/8)' })).toBeDisabled();
+    expect(screen.getByRole('group', { name: 'Saved player roster (4 selected)' })).toBeDisabled();
     expect(screen.getByLabelText('Workspace name')).toHaveValue('Fictional updated event name');
     expect(screen.getByLabelText('General location')).toHaveValue('Fictional changed location');
     const save = screen.getByRole('button', { name: 'Save event workspace' });
@@ -327,7 +507,9 @@ describe('saved event workspace', () => {
     await user.click(save);
     await screen.findByText(/Event workspace saved/);
     expect(setup.save).toHaveBeenCalledWith(fictionalEvent.id, scored.etag, {
-      ...fictionalSetup, overallCompetition: null, name: 'Fictional updated event name', location: 'Fictional changed location',
+      ...fictionalSetup, allowPerGolferTees: false,
+      rounds: fictionalSetup.rounds.map((round) => ({ ...round, playerTeeSelections: [] })),
+      overallCompetition: null, name: 'Fictional updated event name', location: 'Fictional changed location',
     }, expect.any(AbortSignal));
     expect(screen.getByRole('region', { name: 'Superseded locked setup edits' })).toHaveTextContent('Unsaved fictional round name');
   });
@@ -578,7 +760,7 @@ describe('saved event workspace', () => {
     expect(setup.load).toHaveBeenCalledTimes(1);
     expect(setup.save).not.toHaveBeenCalled();
   });
-  it('leaves roster additions unassigned, bounds roster at eight, and prevents adding a fifth player to a group', async () => {
+  it('leaves roster additions unassigned, permits more than eight, and prevents adding a fifth player to a group', async () => {
     const catalog = fakeCatalog();
     const setup = fakeSetup();
     const players = Array.from({ length: 9 }, (_, i) => ({
@@ -589,7 +771,7 @@ describe('saved event workspace', () => {
     const user = userEvent.setup();
     render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={catalog} />);
     for (const player of players.slice(0, 8)) await user.click(await screen.findByLabelText(`${player.displayName} — HI Unknown`));
-    expect(screen.getByLabelText('Fictional Player 9 — HI Unknown')).toBeDisabled();
+    expect(screen.getByLabelText('Fictional Player 9 — HI Unknown')).toBeEnabled();
     await user.click(screen.getByRole('button', { name: 'Add Round' }));
     await user.type(screen.getByLabelText('Round 1 name'), 'Fictional round');
     await user.selectOptions(screen.getByLabelText('Round 1 course'), fictionalVersion.courseId);
@@ -658,7 +840,7 @@ describe('saved event workspace', () => {
       courseId: fictionalVersion.courseId, courseVersionId: fictionalVersion.id, teeProfileId: 905,
       groups: fictionalPlayers.map((player, index) => ({ number: index + 1, playerIds: [player.id] })),
     });
-    expect(screen.getAllByText(/Saved course version:/)).toHaveLength(2);
+    expect(screen.getAllByText(/Immutable saved course version/)).toHaveLength(2);
     expect(screen.getAllByText(/Tee: Fictional Teal \/ Fictional B/)).toHaveLength(2);
     expect(screen.queryByRole('button', { name: /delete|remove round/i })).not.toBeInTheDocument();
   });

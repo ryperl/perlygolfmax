@@ -5,10 +5,28 @@ import { ScorecardNine } from './ScorecardNine';
 import { scorecardGame } from './scorecard-presentation';
 import { scorecardGamesFixture } from './scorecard-games.test-support';
 import { withGameResults } from '../../client/scoring.test-support';
+import { mixedTeeRound } from './tees.test-support';
 
 const card = fictionalRoundScores.cards[0];
 if (!card) throw new Error('Missing fictional card.');
 describe('traditional scorecard nine', () => {
+  it('keeps mixed-tee source rows and raw gross marks golfer-specific without recalculating saved points', () => {
+    const mixed = mixedTeeRound();
+    const { round } = scorecardGamesFixture(9);
+    const tee = mixed.playerTees?.[0];
+    if (!tee) throw new Error('Missing fictional personal tee.');
+    render(<ScorecardNine label="Front nine" subtotal="Out" layout={round.layout} fullLayout={round.layout}
+      cards={mixed.cards} game={scorecardGame(round)} playerTees={[tee]} defaultTeeLabel="Fictional default / Fictional category" />);
+    const first = screen.getByRole('rowheader', { name: 'Fictional Player 1' }).closest('tr');
+    const second = screen.getByRole('rowheader', { name: 'Fictional Player 2' }).closest('tr');
+    if (!first || !second) throw new Error('Missing fictional stroke rows.');
+    expect(within(first).getByLabelText('Hole 1: 4, birdie')).toHaveClass('score-birdie');
+    expect(within(second).getByLabelText('Hole 1: 4, par')).not.toHaveClass('score-birdie');
+    expect(screen.getByRole('row', { name: 'Fictional Player 1 · Fictional standard points' })).toHaveTextContent('18');
+    const par = screen.getByRole('rowheader', { name: 'Fictional Player 1 · Par' }).closest('tr');
+    if (!par) throw new Error('Missing fictional par row.');
+    expect(within(par).getAllByRole('cell').at(-1)).toHaveTextContent('45');
+  });
   it('shows server-derived points immediately beneath strokes, with front/back/game totals and valid zero/negative points', () => {
     const { round, games } = scorecardGamesFixture();
     const game = scorecardGame(round, games[1]?.id);

@@ -7,6 +7,7 @@ import { isEventRevision, isEventStatus, isRecord, isUuid } from './events.js';
 import { isGameChange, isRoundGamesView } from './games.js';
 import { handicapStrokesForHole, stablefordScorePoints } from '../domain/stableford.js';
 import type { CourseHole } from '../domain/catalog.js';
+import { isPlayerTeeProfiles } from './tees.js';
 
 function instant(value: unknown): value is string {
   return typeof value === 'string' && value.length <= 40 && Number.isFinite(Date.parse(value));
@@ -66,8 +67,8 @@ export function isRoundScores(value: unknown): value is RoundScores {
     || typeof value.setupLocked !== 'boolean'
     || value.lastUpdatedAt !== null && !instant(value.lastUpdatedAt)
     || !Array.isArray(value.layout) || ![9, 18].includes(value.layout.length)
-    || !Array.isArray(value.cards) || value.cards.length < 4 || value.cards.length > 8 || !value.cards.every(isScorecard)
-    || !Array.isArray(value.groups) || value.groups.length < 1 || value.groups.length > 4) return false;
+    || !Array.isArray(value.cards) || value.cards.length < 4 || !value.cards.every(isScorecard)
+    || !Array.isArray(value.groups) || value.groups.length < 1) return false;
   if (value.teeRatings !== undefined) {
     if (!Array.isArray(value.teeRatings) || value.teeRatings.length !== 3
       || !value.teeRatings.every((rating: unknown) => isRecord(rating)
@@ -85,16 +86,20 @@ export function isRoundScores(value: unknown): value is RoundScores {
   if (new Set(value.layout.map((hole: { readonly sourceId: number }) => hole.sourceId)).size !== count
     || new Set(value.layout.map((hole: { readonly allocation: number }) => hole.allocation)).size !== count) return false;
   const cards: Scorecard[] = value.cards;
+  const cardsById = new Map(cards.map((card) => [card.playerId, card]));
   const layout = value.layout;
   const persisted = cards.some((card) => card.etag !== null);
   if (value.setupLocked !== persisted || (persisted ? value.lastUpdatedAt === null : value.lastUpdatedAt !== null)) return false;
   const ids = cards.map((card) => card.playerId);
+  const roster = new Set(ids);
   if (new Set(ids).size !== ids.length || cards.some((card) => card.holes.length !== count)) return false;
+  if (value.playerTees !== undefined && !isPlayerTeeProfiles(value.playerTees, { holeCount: count, holes: layout }, ids)) return false;
+  const playerLayouts = new Map(value.playerTees?.map((entry) => [entry.playerId, entry.profile.holes]));
   if (value.games !== undefined) {
     if (!isRoundGamesView(value.games) || value.games.configuration.eventId !== value.eventId
       || value.games.configuration.roundId !== value.roundId
       || value.games.results.some((result) => result.players.length !== cards.length || result.players.some((player) => {
-        const card = cards.find((entry) => entry.playerId === player.playerId);
+        const card = cardsById.get(player.playerId);
         return !card || card.displayName !== player.displayName || player.totalHoles !== count
           || !player.holes.every((hole) => card.holes.some((entry) => entry.number === hole.number));
       }))) return false;
@@ -104,10 +109,10 @@ export function isRoundScores(value: unknown): value is RoundScores {
       const minimum = Math.min(game.points.betterScorePoints, game.points.worseScorePoints, ...game.points.rows.map((row) => row.points));
       for (const player of result.players) {
         if (player.status === 'unavailable') continue;
-        const card = cards.find((entry) => entry.playerId === player.playerId);
+        const card = cardsById.get(player.playerId);
         if (!card) return false;
         for (const hole of player.holes) {
-          const sourceHole = layout.find((entry) => entry.number === hole.number);
+          const sourceHole = (playerLayouts.get(player.playerId) ?? layout).find((entry) => entry.number === hole.number);
           const saved = card.holes.find((entry) => entry.number === hole.number);
           if (!sourceHole || !saved) return false;
           const received = handicapStrokesForHole(player.playingHandicap ?? 0, sourceHole.allocation, count);
@@ -121,10 +126,10 @@ export function isRoundScores(value: unknown): value is RoundScores {
   const assigned: string[] = [];
   const groupNumbers = new Set<number>();
   for (const group of value.groups) {
-    if (!isRecord(group) || !positiveInteger(group.number, 4) || !Array.isArray(group.playerIds)
+    if (!isRecord(group) || !positiveInteger(group.number, Number.MAX_SAFE_INTEGER) || !Array.isArray(group.playerIds)
       || group.playerIds.length < 1 || group.playerIds.length > 4) return false;
     const players: unknown[] = group.playerIds;
-    if (!players.every((id): id is string => isUuid(id) && ids.includes(id))) return false;
+    if (!players.every((id): id is string => isUuid(id) && roster.has(id))) return false;
     assigned.push(...players);
     groupNumbers.add(group.number);
   }

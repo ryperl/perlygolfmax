@@ -15,6 +15,7 @@ import type { TableWorkspaceStore } from '../setup/store.js';
 import { requireManager } from './courses.js';
 import type { TableCourseCatalog } from './courses.js';
 import type { TablePlayerCatalog } from './players.js';
+import { privateReadResponse } from '../private-transport.js';
 
 export interface CatalogSetupApi {
   readonly verify: VerifyIdentity;
@@ -67,11 +68,20 @@ export function createCatalogHandler(resolveApi: () => CatalogSetupApi, action: 
       }
       if (action === 'workspace') {
         const id = uuid(request.params.id);
-        if (!write) return response(200, await api.workspace.get(identity, id));
+        if (!write) return response(200, privateReadResponse(request, await api.workspace.get(identity, id)));
         const expected = etag(request);
-        const body = await readJson(request, maximumEventSetupBytes);
+        let body = await readJson(request, maximumEventSetupBytes);
+        let publication;
+        if (isRecord(body) && (Object.hasOwn(body, 'privateUpload') || Object.hasOwn(body, 'privateCommit'))) {
+          const received = await api.workspace.receive(identity, id, body, expected);
+          if (received.kind === 'part') return response(200, { privateStaged: { id: received.id, index: received.index } });
+          body = received.value;
+          publication = received.publication;
+        }
         if (!isEventSetupInput(body)) throw new ApiError(400, 'INVALID_EVENT_SETUP');
-        return response(200, await api.workspace.save(identity, id, body, expected));
+        return response(200, publication
+          ? await api.workspace.save(identity, id, body, expected, publication)
+          : await api.workspace.save(identity, id, body, expected));
       }
       if (action === 'courses') return response(200, await api.courses.list(identity, readCursor(request)));
       if (action === 'course-version') {

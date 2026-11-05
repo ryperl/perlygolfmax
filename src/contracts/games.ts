@@ -57,7 +57,7 @@ export function isRoundGameDefinition(value: unknown): value is RoundGameDefinit
       members.add(id);
     }
   }
-  return members.size >= 4 && members.size <= 8
+  return members.size >= size
     && pointsTable(value.points, Math.floor(Number.MAX_SAFE_INTEGER / (18 * teamCountingSize(value.format))));
 }
 
@@ -166,7 +166,7 @@ export function isRoundGamesView(value: unknown): value is RoundGamesView {
     const game = value.configuration.games.find((candidate) => candidate.id === result.gameId);
     if (!game || !keys(result, isTeamGameDefinition(game) ? ['gameId', 'players', 'teams'] : ['gameId', 'players'],
       isTeamGameDefinition(game) ? ['teamSetupRequired'] : [])
-      || !Array.isArray(result.players) || result.players.length < 4 || result.players.length > 8) return false;
+      || !Array.isArray(result.players) || result.players.length < 4) return false;
     const ids = new Set<string>();
     const components: GamePlayerResult[] = [];
     for (const player of result.players) {

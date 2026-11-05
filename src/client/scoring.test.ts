@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { isRecord } from '../contracts/events';
 import { createScoresClient } from './scoring';
 import { fictionalChange, fictionalRoundScores, gameResult, scoreResult, withGameResults } from './scoring.test-support';
 import { fictionalId } from './catalog.test-support';
@@ -86,9 +87,21 @@ describe('owner scoring transport', () => {
       points: { ...game.points, rows: Array.from({ length: 32 }, (_, row) => ({ scoreToPar: row, points: 1_000_000_000_000 })) },
     }));
     expect(new TextEncoder().encode(JSON.stringify({ games: oversized })).byteLength).toBeGreaterThan(maximumGameConfigurationBytes);
-    await expect(client.saveGames(eventId, roundId, oversized, null, id, signal)).rejects.toThrow(`${String(maximumGameConfigurationBytes)}-byte UTF-8`);
     expect(token).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
+    const result = gameResult(oversized, null, id);
+    send.mockImplementation((_url, init) => {
+      if (typeof init?.body !== 'string') throw new Error('Missing fictional game body');
+      const body: unknown = JSON.parse(init.body);
+      if (isRecord(body) && isRecord(body.privateUpload)) return Promise.resolve(new Response(JSON.stringify({
+        privateStaged: { id: body.privateUpload.id, index: body.privateUpload.index },
+      })));
+      return Promise.resolve(new Response(JSON.stringify(result)));
+    });
+    await expect(client.saveGames(eventId, roundId, oversized, null, id, signal)).resolves.toEqual(result);
+    expect(send.mock.calls.length).toBeGreaterThan(2);
+    expect(send.mock.calls.every((call) => typeof call[1]?.body === 'string'
+      && new TextEncoder().encode(call[1].body).length <= maximumGameConfigurationBytes)).toBe(true);
   });
   it('sends a complete bounded game set above the ordinary write cap and validates its acknowledgement', async () => {
     const definitions = Array.from({ length: 16 }, (_, index) => ({ ...game, id: fictionalId(700 + index), name: 'F'.repeat(100) }));

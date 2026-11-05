@@ -70,7 +70,7 @@ describe('private setup and index contracts', () => {
     expect(isEventSetupInput({ ...input, playerIds: ids.slice(0, 3) })).toBe(false);
     expect(isEventSetupInput({ ...input, playerIds: [...ids, ids[0]] })).toBe(false);
     expect(isEventSetupInput({ ...input, rounds: [{ ...round, teeProfileId: undefined }] })).toBe(false);
-    expect(isEventSetupInput({ ...input, rounds: [{ ...round, groups: [{ number: 5, playerIds: ids }] }] })).toBe(false);
+    expect(isEventSetupInput({ ...input, rounds: [{ ...round, groups: [{ number: 5, playerIds: ids }] }] })).toBe(true);
     expect(isEventSetupInput({ ...input, rounds: [{ ...round, groups: [{ number: 1, playerIds: [...ids, ids[0]] }] }] })).toBe(false);
     expect(isEventSetupInput({ ...input, rounds: [{ ...round, groups: [{ number: 1, playerIds: ids.slice(0, 3) }] }] })).toBe(false);
   });

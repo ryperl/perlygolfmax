@@ -45,7 +45,7 @@ describe('setup roster selection', () => {
     expect(screen.getByRole('checkbox')).toBeChecked();
   });
 
-  it('allows deselection at capacity but prevents a ninth player', async () => {
+  it('allows a ninth player without imposing a roster cap', async () => {
     const players = Array.from({ length: 9 }, (_, i) => ({
       id: fictionalId(i + 1), displayName: `Fictional Player ${String(i + 1)}`,
       currentIndex: null, etag: 'player-v1', createdAt: '2026-01-01',
@@ -53,12 +53,30 @@ describe('setup roster selection', () => {
     renderRoster(players.slice(0, 8).map((player) => player.id), players);
     const user = userEvent.setup();
     const ninth = screen.getByLabelText('Fictional Player 9 — HI Unknown');
-    expect(ninth).toBeDisabled();
-    await user.click(screen.getByLabelText('Fictional Player 1 — HI Unknown'));
     expect(ninth).toBeEnabled();
     await user.click(ninth);
     expect(ninth).toBeChecked();
-    expect(screen.getByLabelText('Fictional Player 1 — HI Unknown')).toBeDisabled();
+    expect(screen.getByLabelText('Fictional Player 1 — HI Unknown')).toBeEnabled();
+    expect(screen.getByText('Saved player roster (9 selected)')).toBeVisible();
+  });
+
+  it('pages a large roster without losing selected players when searching or changing pages', async () => {
+    const players = Array.from({ length: 40 }, (_, i) => ({
+      ...fictionalPlayers[0], id: fictionalId(i + 1), displayName: `Fictional golfer ${String(i + 1).padStart(2, '0')}`,
+      currentIndex: null, etag: 'player-v1', createdAt: '2026-01-01',
+    }));
+    const changed = renderRoster(players.slice(0, 20).map((player) => player.id), players);
+    const user = userEvent.setup();
+    expect(screen.getAllByRole('checkbox')).toHaveLength(24);
+    await user.click(screen.getByRole('button', { name: 'Next selected players' }));
+    expect(screen.getByLabelText('Fictional golfer 20 — HI Unknown')).toBeChecked();
+    await user.type(screen.getByRole('searchbox'), '40');
+    await user.click(screen.getByLabelText('Fictional golfer 40 — HI Unknown'));
+    expect(changed).toHaveBeenLastCalledWith([...players.slice(0, 20).map((player) => player.id), fictionalId(40)]);
+    await user.clear(screen.getByRole('searchbox'));
+    expect(screen.getByLabelText('Fictional golfer 40 — HI Unknown')).toBeChecked();
+    await user.click(screen.getByRole('button', { name: 'Previous selected players' }));
+    expect(screen.getByLabelText('Fictional golfer 01 — HI Unknown')).toBeChecked();
   });
 
   it('keeps a locked roster read-only and shows unavailable saved selections explicitly', () => {
@@ -69,6 +87,22 @@ describe('setup roster selection', () => {
     for (const checkbox of screen.getAllByRole('checkbox')) expect(checkbox).toBeDisabled();
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
     expect(changed).not.toHaveBeenCalled();
+  });
+
+  it('lets a locked large roster page through saved selections while keeping every checkbox disabled', async () => {
+    const players = Array.from({ length: 40 }, (_, index) => ({
+      id: fictionalId(index + 1), displayName: `Fictional golfer ${String(index + 1)}`,
+      currentIndex: null, etag: 'player-v1', createdAt: '2026-01-01',
+    }));
+    render(<SetupRoster players={players} selectedIds={players.map((player) => player.id)} savedRoster={[]}
+      locked onChange={vi.fn()} />);
+    const user = userEvent.setup();
+    expect(screen.getByRole('group', { name: 'Saved player roster (40 selected)' })).toBeDisabled();
+    const next = screen.getByRole('button', { name: 'Next selected players' });
+    expect(next).toBeEnabled();
+    await user.click(next);
+    expect(screen.getByLabelText('Fictional golfer 13 — HI Unknown')).toBeChecked();
+    for (const checkbox of screen.getAllByRole('checkbox')) expect(checkbox).toBeDisabled();
   });
 
   it('does not imply a missing catalog is an empty roster and does not submit a form on search Enter', async () => {

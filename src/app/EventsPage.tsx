@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { EventsView } from '../features/events';
 import type { EventsState } from '../features/events';
@@ -17,6 +17,8 @@ import { OwnerScoresView } from '../features/scoring';
 import { eventTabHref, isEventTab, readEventRoute } from './navigation';
 import { SavedEventPage } from './SavedEventPage';
 import { EventLeaderboardPage } from './EventLeaderboardPage';
+import type { PurseClient } from '../client/purse';
+const PursePage = lazy(async () => ({ default: (await import('./PursePage')).PursePage }));
 
 const configuredServices = configureEventServices(import.meta.env);
 
@@ -37,6 +39,7 @@ export interface EventServices {
   readonly setup: SetupClient;
   readonly scores: ScoresClient;
   readonly leaderboard?: EventLeaderboardClient;
+  readonly purse?: PurseClient;
 }
 
 function subscribe(onChange: () => void) {
@@ -50,6 +53,8 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
   readonly configurationError?: string;
 } & AccountPlacement) {
   const route = useSyncExternalStore(subscribe, getRoute);
+  const privateScope = useMemo(() => ({ services, preview }), [services, preview]);
+  const [loadedScope, setLoadedScope] = useState<object>();
   const [state, setState] = useState<EventsState>({ kind: 'loading' });
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
@@ -112,7 +117,10 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
     void services.events.capabilities(controller.signal).then(async (capabilities) => {
       controller.signal.throwIfAborted();
       const page = await services.events.list(controller.signal);
-      if (!controller.signal.aborted) setState({ kind: 'ready', capabilities, page });
+      if (!controller.signal.aborted) {
+        setLoadedScope(privateScope);
+        setState({ kind: 'ready', capabilities, page });
+      }
     }).catch((error: unknown) => {
       if (controller.signal.aborted) return;
       if (error instanceof SessionExpiredError) {
@@ -123,7 +131,7 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
       } else setState({ kind: 'error', message: 'Could not connect to your event services. No saved data was loaded.' });
     });
     return () => { controller.abort(); };
-  }, [services, identity, preview]);
+  }, [services, identity, preview, privateScope]);
 
   function expire(message: string) {
     if (services) setIdentity({ services, signedIn: false });
@@ -207,6 +215,9 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
   if (services && identity?.services !== services && !retryAccount) {
     return <>{accountControl}<p role="status">Loading your events...</p></>;
   }
+  if (services && state.kind === 'ready' && loadedScope !== privateScope) {
+    return <>{accountControl}<p role="status">Loading your events...</p></>;
+  }
   if (services && state.kind === 'ready' && route) {
     const [kind, eventId] = route.split(':');
     return <>{accountControl}<section>
@@ -224,6 +235,11 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
           {state.page.events.length === 0 && <p>No events are available on this page.</p>}
           <a href="#events">Browse your events</a>
         </section>
+        : kind === 'purse' && eventId ? services.purse
+          ? <Suspense fallback={<p role="status">Loading prize view…</p>}>
+            <PursePage key={eventId} eventId={eventId} client={services.purse} onSessionExpired={expire} />
+          </Suspense>
+          : <p role="alert">Prize plans are unavailable in this connection. No prize data was loaded.</p>
         : kind === 'leaderboard' && eventId ? services.leaderboard
           ? <EventLeaderboardPage key={eventId} eventId={eventId} client={services.leaderboard} onSessionExpired={expire} />
           : <p role="alert">Overall results are unavailable in this connection. No scores were loaded.</p>

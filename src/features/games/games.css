@@ -32,3 +32,5 @@
   .round-game, .game-settings fieldset { padding: .75rem; }
   .game-actions > button { flex: 1 1 10rem; }
 }
+.game-results label { display: grid; gap: 8px; min-width: 0; }
+.game-results input[type="search"] { min-width: 0; width: 100%; max-width: 100%; min-height: 44px; padding: 10px; font: inherit; color: var(--cp-text); background: var(--cp-surface); border: 1px solid var(--cp-border); border-radius: .625rem; }

@@ -15,8 +15,11 @@ import type { CatalogAction, CatalogSetupApi } from './catalog/handlers.js';
 import { createScoringHandler } from './scoring/handlers.js';
 import type { ScoringApi } from './scoring/handlers.js';
 import { TableScoreStore } from './scoring/store.js';
+import { TablePurseStore } from './purse/store.js';
+import { createPurseHandler } from './purse/handlers.js';
+import type { PurseApi } from './purse/handlers.js';
 
-type RuntimeApi = EventApi & CatalogSetupApi & ScoringApi;
+type RuntimeApi = EventApi & CatalogSetupApi & ScoringApi & PurseApi;
 let api: RuntimeApi | undefined;
 
 function resolveApi(): RuntimeApi {
@@ -27,13 +30,14 @@ function resolveApi(): RuntimeApi {
   const courses = new TableCourseCatalog(table, manager);
   const players = new TablePlayerCatalog(table, manager);
   const workspace = new TableWorkspaceStore(table, courses, players, manager);
+  const scores = new TableScoreStore(table, workspace);
   api = {
     verify: createIdentityVerifier(settings),
     store: new TableEventStore(table),
     limiter: new TableRequestLimiter(table),
     canCreate: (identity) => canCreateEvents(identity, settings),
     canManageCatalog: manager, courses, players,
-    workspace, scores: new TableScoreStore(table, workspace),
+    workspace, scores, purse: new TablePurseStore(table, workspace, scores),
   };
   return api;
 }
@@ -77,4 +81,8 @@ app.http('roundGames', {
 app.http('eventLeaderboard', {
   route: 'events/{id}/leaderboard', methods: ['GET'], authLevel: 'anonymous',
   handler: createScoringHandler(resolveApi, 'event-leaderboard'),
+});
+app.http('eventPurse', {
+  route: 'events/{id}/purse', methods: ['GET', 'PUT'], authLevel: 'anonymous',
+  handler: createPurseHandler(resolveApi),
 });

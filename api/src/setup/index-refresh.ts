@@ -20,7 +20,7 @@ export interface IndexRefreshAudit {
 }
 
 function isCapturedInputs(value: unknown): value is readonly CapturedIndexInput[] {
-  if (!Array.isArray(value) || value.length < 4 || value.length > 8) return false;
+  if (!Array.isArray(value) || value.length < 4) return false;
   const inputs: unknown[] = value;
   return inputs.every((entry): entry is CapturedIndexInput => isRecord(entry) && isUuid(entry.playerId)
     && (entry.handicapIndex === null || isIndexObservation(entry.handicapIndex)))
@@ -34,6 +34,7 @@ export function isIndexRefreshAudit(value: unknown): value is IndexRefreshAudit 
     || !isUuid(value.recordedBy.tenantId) || !isUuid(value.recordedBy.objectId)
     || !isCapturedInputs(value.previous) || !isCapturedInputs(value.updated)) return false;
   const updated = value.updated;
+  const ids = new Set(updated.map((entry) => entry.playerId));
   return value.previous.length === updated.length
-    && value.previous.every((entry) => updated.some((current) => current.playerId === entry.playerId));
+    && value.previous.every((entry) => ids.has(entry.playerId));
 }

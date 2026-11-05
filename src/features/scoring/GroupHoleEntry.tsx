@@ -17,6 +17,8 @@ export interface GroupHoleEntryRow {
   readonly saved: HoleScore;
   readonly draft?: HoleDraft;
   readonly canReview: boolean;
+  readonly hole?: CourseHole;
+  readonly teeLabel?: string;
 }
 export interface GroupHoleEntryProps {
   readonly groups: readonly RoundGroup[];
@@ -84,7 +86,7 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
     }
     primaryAction.current?.focus();
   }
-  const quickScores = [...new Set([hole.par - 1, hole.par, hole.par + 1, hole.par + 2])].filter((value) => value > 0);
+  const personalContext = rows.some((row) => row.teeLabel !== undefined);
   return <section className="group-hole-entry" aria-label="Group hole entry">
     <div className="score-selection">
       <label>View group<select value={groupNumber} disabled={busy} onChange={(event) => { onGroupChange(Number(event.target.value)); }}>
@@ -97,11 +99,13 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
     {unsavedCount > 0 && <p className="score-hint">{unsavedCount} unsaved {unsavedCount === 1 ? 'score' : 'scores'}</p>}
     <header className="hole-heading">
       <button type="button" aria-label="Previous hole" disabled={busy || !previous} onClick={() => { if (previous) onHoleChange(previous.number); }}>←</button>
-      <div><h2>Hole {hole.number}</h2><p>Par {hole.par} · {hole.length} yards · Stroke index {hole.allocation}</p></div>
+      <div><h2>Hole {hole.number}</h2><p>{personalContext ? 'Golfer tee details shown below' : `Par ${String(hole.par)} · ${String(hole.length)} yards · Stroke index ${String(hole.allocation)}`}</p></div>
       <button type="button" aria-label="Next hole" disabled={busy || !next} onClick={() => { if (next) onHoleChange(next.number); }}>→</button>
     </header>
     <form aria-label={`Group ${String(groupNumber)} hole ${String(hole.number)} entry`} onSubmit={(event) => { event.preventDefault(); onSave(true); }}>
       <div className="group-entry-rows">{rows.slice(0, 4).map((row, rowIndex) => {
+        const playerHole = row.hole ?? hole;
+        const quickScores = [...new Set([playerHole.par - 1, playerHole.par, playerHole.par + 1, playerHole.par + 2])].filter((value) => value > 0);
         const text = row.draft?.text ?? scoreEntryText(row.saved);
         const score = parseScoreEntry(text);
         const pickedUp = score?.kind === 'picked-up';
@@ -113,10 +117,11 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
           : row.saved.kind === 'unplayed' ? 'Unplayed' : 'Saved';
         return <article className="player-entry" key={row.playerId} aria-label={`${row.displayName} scorecard`}>
           <div className="entry-heading"><h3>{row.displayName}</h3><span className={`score-badge score-badge-${row.draft?.status ?? 'saved'}`}>{status}</span></div>
+          {row.teeLabel && <p className="entry-tee">{row.teeLabel} · Par {playerHole.par} · {playerHole.length} yards · Stroke index {playerHole.allocation}</p>}
           <div className="entry-value">
             <button type="button" aria-label={`Decrease score for ${row.displayName}`} disabled={disabled || (!blank && (numeric === undefined || numeric <= 1))} onClick={() => {
               cancelMovement();
-              if (blank) onEdit(row.playerId, String(hole.par));
+              if (blank) onEdit(row.playerId, String(playerHole.par));
               else if (numeric !== undefined && numeric > 1) onEdit(row.playerId, `${pickedUp ? 'X' : ''}${String(numeric - 1)}`);
             }}>−</button>
             <input aria-label={`${row.displayName} score`} inputMode="numeric" enterKeyHint="next" autoComplete="off" spellCheck={false} aria-invalid={score === null}
@@ -154,7 +159,7 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
               }} />
             <button type="button" aria-label={`Increase score for ${row.displayName}`} disabled={disabled || (!blank && (numeric === undefined || numeric >= maximumExactHoleStrokes))} onClick={() => {
               cancelMovement();
-              if (blank) onEdit(row.playerId, String(hole.par));
+              if (blank) onEdit(row.playerId, String(playerHole.par));
               else if (numeric !== undefined && numeric < maximumExactHoleStrokes) onEdit(row.playerId, `${pickedUp ? 'X' : ''}${String(numeric + 1)}`);
             }}>+</button>
             <button className="pickup-button" type="button" aria-label={`Pickup X for ${row.displayName}`} aria-pressed={pickedUp} disabled={disabled} onClick={() => {
@@ -165,7 +170,7 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
           {rows.length === 1 && <div className="quick-scores" aria-label={`Quick scores for ${row.displayName}`}>{quickScores.map((value) => <button type="button" key={value}
             aria-label={`${pickedUp ? 'X' : ''}${String(value)} ${pickedUp ? 'pickup' : 'strokes'} for ${row.displayName}`}
             disabled={disabled} onClick={() => { cancelMovement(); onEdit(row.playerId, `${pickedUp ? 'X' : ''}${String(value)}`); }}>
-            {pickedUp ? 'X' : ''}{value}{value === hole.par && <small>par</small>}
+            {pickedUp ? 'X' : ''}{value}{value === playerHole.par && <small>par</small>}
           </button>)}</div>}
           {!score && <p className="entry-error" role="alert">Enter a valid whole-number score above zero, X or X with a number, or leave this blank.</p>}
           {row.draft?.status === 'conflict' && <div className="entry-conflict">

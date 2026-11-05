@@ -1,9 +1,10 @@
 import type { TableClient, TransactionAction } from '@azure/data-tables';
 import type { AccountIdentity } from '../../../src/domain/events.js';
-import type { EventWorkspace, RoundSnapshot } from '../../../src/domain/setup.js';
+import type { EventWorkspace, RoundPlayerSnapshot, RoundSnapshot } from '../../../src/domain/setup.js';
 import type { GameWriteResult, HoleScore, RoundScores, Scorecard, ScoreChange, ScoreHistoryPage, ScoreWriteResult } from '../../../src/domain/scoring.js';
 import type { GameChange, GameConfiguration, RoundGameDefinition } from '../../../src/domain/games.js';
-import { gameTeamsMatchRoster, maximumGameConfigurationBytes, sameGameDefinitions } from '../../../src/domain/games.js';
+import { gameTeamsMatchRoster, sameGameDefinitions } from '../../../src/domain/games.js';
+import { maximumPrivateWriteBytes } from '../../../src/contracts/private-values.js';
 import { calculateGameResults } from '../../../src/domain/stableford.js';
 import { isGameChange, isRoundGameDefinitions } from '../../../src/contracts/games.js';
 import { isEventRevision, isEventSummary, isRecord, isUuid } from '../../../src/contracts/events.js';
@@ -17,6 +18,8 @@ import type { ScoringLock, StoredScoringLock } from './lock.js';
 import { configuredGameRounds, gameChangeKey, gameConfigurationContent, gameConfigurationKey, readGameConfiguration } from './games.js';
 import type { EventLeaderboardView } from '../../../src/domain/event-leaderboard.js';
 import { calculateEventStandings } from '../../../src/domain/event-leaderboard.js';
+import { privateContent, stagePrivateContent } from '../private-values.js';
+import { receivePrivateWrite } from '../private-transport.js';
 
 function cardKey(roundId: string, playerId: string): string {
   return `score-card:${roundId}:${playerId}`;
@@ -75,11 +78,10 @@ export class TableScoreStore {
     if (current.summary.etag !== etag || current.memberEtag !== memberEtag) throw new ApiError(409, 'EVENT_CHANGED');
   }
 
-  private async card(eventId: string, round: RoundSnapshot, playerId: string, lock: StoredScoringLock | undefined): Promise<Scorecard> {
-    const player = round.players.find((entry) => entry.playerId === playerId);
-    if (!player) throw new ApiError(404, 'ROUND_PLAYER_NOT_FOUND');
+  private async card(eventId: string, round: RoundSnapshot, player: RoundPlayerSnapshot, writtenIds: ReadonlySet<string>): Promise<Scorecard> {
+    const playerId = player.playerId;
     const row = await optionalRow(this.table, eventId, cardKey(round.id, playerId));
-    const written = lock?.writtenPlayerIds.includes(playerId) === true;
+    const written = writtenIds.has(playerId);
     if (!row && written || row && !written) throw new ApiError(503, 'INVALID_STORED_SCORECARD');
     if (!row) return {
       playerId, displayName: player.displayName, etag: null, updatedAt: null,
@@ -104,6 +106,7 @@ export class TableScoreStore {
       eventId: workspace.event.id, eventName: workspace.event.name, eventStatus: workspace.event.status,
       roundId: round.id, roundName: round.name, courseName: round.course.name,
       teeName: round.teeProfile.name, teeCategory: round.teeProfile.category, layout: round.teeProfile.holes,
+      ...(round.playerTees?.length ? { playerTees: round.playerTees } : {}),
       teeRatings: round.teeProfile.ratings.map((rating) => ({
         type: rating.type, course: rating.course, slope: rating.slope, bogey: rating.bogey,
       })),
@@ -113,9 +116,18 @@ export class TableScoreStore {
     };
   }
 
+  private async cards(eventId: string, round: RoundSnapshot, lock: StoredScoringLock | undefined): Promise<readonly Scorecard[]> {
+    const cards: Scorecard[] = [];
+    const written = new Set(lock?.writtenPlayerIds);
+    for (let index = 0; index < round.players.length; index += 16) {
+      cards.push(...await Promise.all(round.players.slice(index, index + 16).map((player) => this.card(eventId, round, player, written))));
+    }
+    return cards;
+  }
+
   async get(identity: AccountIdentity, eventId: string, roundId: string): Promise<RoundScores> {
     const state = await this.snapshot(identity, eventId, roundId);
-    const cards = await Promise.all(state.round.players.map((player) => this.card(eventId, state.round, player.playerId, state.lock)));
+    const cards = await this.cards(eventId, state.round, state.lock);
     await this.unchanged(identity, eventId, state.summary.etag, state.memberEtag);
     return this.projection(state.workspace, state.round, cards, state.games);
   }
@@ -141,7 +153,7 @@ export class TableScoreStore {
   private async gameReceipt(eventId: string, roundId: string, requestId: string): Promise<GameChange | undefined> {
     const row = await optionalRow(this.table, eventId, gameChangeKey(roundId, requestId));
     if (!row) return undefined;
-    const change = decode(row.content, isGameChange);
+    const change = decode(await privateContent(this.table, eventId, gameChangeKey(roundId, requestId), row.content), isGameChange);
     if (row.kind !== 'game-change' || row.roundId !== roundId || change.eventId !== eventId
       || change.roundId !== roundId || change.id !== requestId) throw new ApiError(503, 'INVALID_STORED_GAMES');
     return change;
@@ -177,7 +189,7 @@ export class TableScoreStore {
     expectedEtag: string | null, requestId: string): Promise<GameWriteResult> {
     if (!isUuid(requestId) || !isRoundGameDefinitions(games) || games.length === 0
       || expectedEtag !== null && !isEventRevision(expectedEtag)) throw new ApiError(400, 'INVALID_GAME_SETUP');
-    if (Buffer.byteLength(JSON.stringify({ games }), 'utf8') > maximumGameConfigurationBytes) {
+    if (Buffer.byteLength(JSON.stringify({ games }), 'utf8') > maximumPrivateWriteBytes) {
       throw new ApiError(413, 'REQUEST_TOO_LARGE');
     }
     const state = await this.snapshot(identity, eventId, roundId);
@@ -204,8 +216,9 @@ export class TableScoreStore {
     const configuredRounds = state.gameRoundIds.includes(roundId) ? state.gameRoundIds : [...state.gameRoundIds, roundId];
     const entity = {
       partitionKey: eventId, rowKey: gameConfigurationKey(roundId), kind: 'round-games', schemaVersion: 1,
-      content: canonical(gameConfigurationContent(eventId, roundId, games)),
+      content: await stagePrivateContent(this.table, eventId, gameConfigurationKey(roundId), identity, canonical(gameConfigurationContent(eventId, roundId, games))),
     };
+    const changeContent = await stagePrivateContent(this.table, eventId, gameChangeKey(roundId, requestId), identity, canonical(change));
     try {
       await this.table.submitTransaction([
         ['update', { partitionKey: eventId, rowKey: 'event', gameRoundIds: canonical(configuredRounds) }, 'Merge', { etag: state.summary.etag }],
@@ -213,7 +226,7 @@ export class TableScoreStore {
           partitionKey: eventId, rowKey: `member:${identity.objectId}`, ...actor, role: 'owner',
         }, 'Merge', { etag: state.memberEtag }],
         expectedEtag === null ? ['create', entity] : ['update', entity, 'Replace', { etag: expectedEtag }],
-        ['create', { partitionKey: eventId, rowKey: gameChangeKey(roundId, requestId), kind: 'game-change', roundId, content: canonical(change) }],
+        ['create', { partitionKey: eventId, rowKey: gameChangeKey(roundId, requestId), kind: 'game-change', roundId, content: changeContent }],
       ]);
     } catch (error) {
       const committed = await this.replayGames(identity, eventId, roundId, games, expectedEtag, requestId);
@@ -222,6 +235,22 @@ export class TableScoreStore {
       throw error;
     }
     return this.gameAcknowledgement(identity, change);
+  }
+
+  async receiveGames(identity: AccountIdentity, eventId: string, roundId: string, body: unknown, expected: string | null, requestId: string) {
+    if (!isUuid(roundId) || !isUuid(requestId)) throw new ApiError(400, 'INVALID_REQUEST_ID');
+    const state = await this.access(identity, eventId);
+    if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
+    if (!await optionalRow(this.table, eventId, `round:${roundId}`)) throw new ApiError(404, 'ROUND_NOT_FOUND');
+    // Parts are inactive. Check the head revision without repeatedly decoding a large configuration.
+    // The final save validates the complete captured workspace and games again.
+    const head = await optionalRow(this.table, eventId, gameConfigurationKey(roundId));
+    if ((head ? revision(head) : null) !== expected) {
+      const receipt = await this.gameReceipt(eventId, roundId, requestId);
+      if (!receipt || receipt.expectedEtag !== expected || receipt.recordedBy.tenantId !== identity.tenantId
+        || receipt.recordedBy.objectId !== identity.objectId) throw new ApiError(409, 'GAMES_CHANGED');
+    }
+    return receivePrivateWrite(this.table, identity, eventId, `round-games:${roundId}`, expected, requestId, body);
   }
 
   private async receipt(eventId: string, requestId: string): Promise<ScoreChange | undefined> {
@@ -272,7 +301,7 @@ export class TableScoreStore {
     if (!state.round.players.some((player) => player.playerId === playerId)) throw new ApiError(404, 'ROUND_PLAYER_NOT_FOUND');
     const replay = await this.replay(identity, eventId, roundId, playerId, holeNumber, score, expectedEtag, requestId);
     if (replay) return replay;
-    const cards = await Promise.all(state.round.players.map((player) => this.card(eventId, state.round, player.playerId, state.lock)));
+    const cards = await this.cards(eventId, state.round, state.lock);
     const card = cards.find((entry) => entry.playerId === playerId);
     if (!card) throw new ApiError(503, 'INVALID_STORED_SCORECARD');
     if (card.etag !== expectedEtag) throw new ApiError(409, 'SCORECARD_CHANGED');
@@ -303,7 +332,8 @@ export class TableScoreStore {
       const lock: ScoringLock = {
         kind: 'score-lock', eventId, roundId, requestId, startedAt: recordedAt, startedBy: actor, writtenPlayerIds: [playerId],
       };
-      actions.push(['create', { partitionKey: eventId, rowKey: `score-lock:${roundId}`, content: canonical(lock) }]);
+      actions.push(['create', { partitionKey: eventId, rowKey: `score-lock:${roundId}`,
+        content: await stagePrivateContent(this.table, eventId, `score-lock:${roundId}`, identity, canonical(lock)) }]);
     } else if (!state.lock.writtenPlayerIds.includes(playerId)) {
       const lock: ScoringLock = {
         kind: state.lock.kind, eventId, roundId, requestId: state.lock.requestId,
@@ -311,7 +341,8 @@ export class TableScoreStore {
         writtenPlayerIds: [...state.lock.writtenPlayerIds, playerId],
       };
       actions.push(['update', {
-        partitionKey: eventId, rowKey: `score-lock:${roundId}`, content: canonical(lock),
+        partitionKey: eventId, rowKey: `score-lock:${roundId}`,
+        content: await stagePrivateContent(this.table, eventId, `score-lock:${roundId}`, identity, canonical(lock)),
       }, 'Replace', { etag: state.lock.etag }]);
     }
     try { await this.table.submitTransaction(actions); }

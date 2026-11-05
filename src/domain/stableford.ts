@@ -7,6 +7,7 @@ import type { Scorecard } from './scoring.js';
 import type { RoundPlayerSnapshot, RoundSnapshot } from './setup.js';
 import { gameTeamsMatchRoster, isTeamGameDefinition } from './games.js';
 import { aggregateTeamGameResults } from './team-games.js';
+import { playerTee } from './tees.js';
 
 export function stablefordPoints(preset: StablefordPreset): StablefordPointsTable {
   const points = preset === 'standard' ? [6, 5, 4, 3, 2, 1, 0] : [8, 5, 2, 0, -1, -2];
@@ -105,9 +106,10 @@ function sumPoints(holes: GamePlayerResult['holes']): number | null {
 }
 
 function playerResult(
-  game: RoundGameDefinition, round: RoundSnapshot, player: RoundPlayerSnapshot,
-  layout: readonly CourseHole[], cards: readonly Scorecard[],
+  game: RoundGameDefinition, tee: TeeProfile, player: RoundPlayerSnapshot,
+  cards: readonly Scorecard[],
 ): GamePlayerResult {
+  const layout = [...tee.holes].sort((left, right) => left.number - right.number);
   const card = cards.find((candidate) => candidate.playerId === player.playerId);
   if (!card || layout.some((hole) => !card.holes.some((score) => score.number === hole.number))) {
     return unavailable(player, layout, 'missing-score-data');
@@ -115,7 +117,7 @@ function playerResult(
   let handicap: number | null = null;
   if (game.basis === 'net') {
     if (player.handicapIndex == null) return unavailable(player, layout, 'missing-handicap-index');
-    const result = calculatePlayingHandicap(player.handicapIndex.value, round.teeProfile, game.handicapAllowancePercent);
+    const result = calculatePlayingHandicap(player.handicapIndex.value, tee, game.handicapAllowancePercent);
     if (typeof result === 'string') return unavailable(player, layout, result);
     handicap = result;
   }
@@ -144,7 +146,7 @@ export function calculateGameResults(
 ): readonly RoundGameResult[] {
   const layout = [...round.teeProfile.holes].sort((left, right) => left.number - right.number);
   return games.map((game) => {
-    const players = round.players.map((player) => playerResult(game, round, player, layout, cards));
+    const players = round.players.map((player) => playerResult(game, playerTee(round, player.playerId), player, cards));
     return {
       gameId: game.id, players,
       ...(isTeamGameDefinition(game)

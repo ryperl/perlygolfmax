@@ -21,6 +21,26 @@ const player: GamePlayerResult = {
 const holeNumbers = player.holes.map((hole) => hole.number);
 
 describe('GameResults', () => {
+  it('pages and searches forty saved results without truncation or altering server points', async () => {
+    const players = Array.from({ length: 40 }, (_, index) => ({
+      ...player, playerId: fictionalId(index + 1), displayName: `Fictional golfer ${String(index + 1).padStart(2, '0')}`,
+      totalPoints: index + 100,
+    }));
+    const { rerender } = render(<GameResults game={game} holeNumbers={holeNumbers} result={{ gameId: game.id, players }} />);
+    const user = userEvent.setup();
+    expect(screen.getAllByRole('row')).toHaveLength(13);
+    await user.click(screen.getByRole('button', { name: 'Next results' }));
+    expect(screen.getByText('Fictional golfer 13')).toBeVisible();
+    await user.type(screen.getByRole('searchbox'), '40');
+    expect(screen.getByRole('row', { name: /Fictional golfer 40/ })).toHaveTextContent('139 (partial)');
+    rerender(<GameResults game={game} holeNumbers={holeNumbers} result={{ gameId: game.id, players: [...players] }} />);
+    expect(screen.getByRole('searchbox')).toHaveValue('40');
+    await user.clear(screen.getByRole('searchbox'));
+    expect(screen.getByText('Fictional golfer 01')).toBeVisible();
+    await user.type(screen.getByRole('searchbox'), 'not a golfer');
+    expect(screen.getByText('No results match your search.')).toBeVisible();
+    expect(screen.getAllByRole('row')).toHaveLength(1);
+  });
   it('shows server totals, zero/negative points, plus handicap, partial progress and pending holes in provided order', () => {
     const second = { ...player, playerId: fictionalId(512), displayName: 'Fictional Golfer B', totalPoints: 8 };
     const { container } = render(<GameResults game={game} holeNumbers={holeNumbers} result={{ gameId: game.id, players: [player, second] }} />);

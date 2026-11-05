@@ -61,6 +61,41 @@ function scores(cards: readonly Scorecard[], values: readonly HoleScore[]): read
   }));
 }
 
+describe('individual captured tees in shared round games', () => {
+  it('uses each golfer own par for gross points, without changing others or raw strokes', () => {
+    const f = fixture();
+    const selected = f.round.players[0];
+    if (!selected) throw new Error('Missing fictional golfer.');
+    const alternate = { ...f.round.teeProfile, id: 701, name: 'Fictional alternate', totalPar: f.round.teeProfile.totalPar + 1,
+      holes: f.round.teeProfile.holes.map((hole) => ({ ...hole, par: hole.number === 1 ? 5 : hole.par })) };
+    const round = { ...f.round, playerTees: [{ playerId: selected.playerId, profile: alternate }] };
+    const cards = scores(f.cards, [{ kind: 'strokes', strokes: 4 }]);
+    const before = structuredClone(cards);
+    const results = calculateGameResults([game()], round, cards)[0]?.players;
+    expect(results?.[0]?.totalPoints).toBe(3);
+    expect(results?.[1]?.totalPoints).toBe(2);
+    expect(cards).toEqual(before);
+  });
+  it('uses personal ratings and stroke indexes for net points rather than the common tee', () => {
+    const f = fixture(18, '2');
+    const selected = f.round.players[0];
+    if (!selected) throw new Error('Missing fictional golfer.');
+    const alternate = { ...f.round.teeProfile, id: 701,
+      holes: f.round.teeProfile.holes.map((hole) => ({ ...hole, allocation: 19 - hole.number })) };
+    const round = { ...f.round, playerTees: [{ playerId: selected.playerId, profile: alternate }] };
+    const cards = scores(f.cards, [{ kind: 'strokes', strokes: 4 }]);
+    const result = calculateGameResults([game('standard', { basis: 'net', handicapAllowancePercent: 100 })], round, cards)[0];
+    expect(result?.players[0]?.holes[0]).toMatchObject({ points: 2, strokesReceived: 0 });
+    expect(result?.players[1]?.holes[0]).toMatchObject({ points: 3, strokesReceived: 1 });
+    const rated = { ...alternate, ratings: alternate.ratings.map((rating) => rating.type === 'Total'
+      ? { ...rating, course: 76 } : rating) };
+    const ratedResult = calculateGameResults([game('standard', { basis: 'net', handicapAllowancePercent: 100 })],
+      { ...f.round, playerTees: [{ playerId: selected.playerId, profile: rated }] }, cards)[0];
+    expect(ratedResult?.players[0]?.playingHandicap).toBe(6);
+    expect(ratedResult?.players[1]?.playingHandicap).toBe(2);
+  });
+});
+
 describe('configurable gross Stableford', () => {
   it('treats a par-three hole-in-one as an eagle, not an albatross or a separate automatic bonus', () => {
     const f = fixture();

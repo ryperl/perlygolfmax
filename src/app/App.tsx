@@ -32,7 +32,8 @@ export function App() {
   const [accountHost, setAccountHost] = useState<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const label = activePage === 'preview' ? 'Preview' : activePage === 'leaderboard' ? 'Overall leaderboard' : navigation.find((item) => item.id === activePage)?.label ?? 'Events';
+    const label = activePage === 'preview' ? 'Preview' : activePage === 'leaderboard' ? 'Overall leaderboard'
+      : activePage === 'purse' ? 'Purse and winnings' : navigation.find((item) => item.id === activePage)?.label ?? 'Events';
     document.title = `${label} | Perly Golf Max`;
     if (previousPage.current !== hash) {
       mainRef.current?.focus();

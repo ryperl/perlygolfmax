@@ -27,11 +27,13 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
   const front = layout.filter((hole) => hole.number <= 9);
   const back = layout.filter((hole) => hole.number > 9);
   const rating = round.teeRatings?.find((item) => item.type === 'Total');
+  const mixed = (round.playerTees?.length ?? 0) > 0;
   return <section className="round-scorecards" aria-label="Round scorecards">
     <header className="round-card-heading">
       <div><p className="scorecard-eyebrow">{round.roundName}</p><h2>Round scorecard</h2>
         <p>{round.courseName}</p>
-        <p className="scorecard-course">{round.teeName} / {round.teeCategory}{rating ? ` · Rating ${String(rating.course)} / Slope ${String(rating.slope)}` : ''}</p>
+        <p className="scorecard-course">{mixed ? 'Default tee: ' : ''}{round.teeName} / {round.teeCategory}{rating ? ` · Rating ${String(rating.course)} / Slope ${String(rating.slope)}` : ''}
+          {mixed && ' · Personal tees shown per golfer'}</p>
       </div>
       <button type="button" disabled={busy} onClick={onEnterScores}>{round.eventStatus === 'archived' ? 'View hole entry' : 'Enter scores'} · Group {group.number}</button>
     </header>
@@ -69,8 +71,10 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
         <button type="button" aria-pressed={nine === 'full'} onClick={() => { setNine('full'); }}>Full card</button>
       </div>}
       <div className="recap-sections">
-        {(nine !== 'back' || back.length === 0) && <ScorecardNine label="Front nine" subtotal="Out" layout={front} fullLayout={layout} cards={cards} game={game} onPlayerSelect={setPlayerId} />}
-        {nine !== 'front' && back.length > 0 && <ScorecardNine label="Back nine" subtotal="In" layout={back} fullLayout={layout} cards={cards} game={game} onPlayerSelect={setPlayerId} />}
+        {(nine !== 'back' || back.length === 0) && <ScorecardNine label="Front nine" subtotal="Out" layout={front} fullLayout={layout} cards={cards} game={game}
+          playerTees={round.playerTees} defaultTeeLabel={`${round.teeName} / ${round.teeCategory}`} onPlayerSelect={setPlayerId} />}
+        {nine !== 'front' && back.length > 0 && <ScorecardNine label="Back nine" subtotal="In" layout={back} fullLayout={layout} cards={cards} game={game}
+          playerTees={round.playerTees} defaultTeeLabel={`${round.teeName} / ${round.teeCategory}`} onPlayerSelect={setPlayerId} />}
       </div>
       {(cards.some((card) => !summarizeCard(card, layout).complete) ||
         game?.result?.players.some((player) => group.playerIds.includes(player.playerId) && player.status === 'in-progress' && player.totalPoints !== null)) &&

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { GameSettings } from './GameSettings';
-import { newGameDraft } from './game-draft';
+import { newGameDraft, setFormat } from './game-draft';
 import { draftFromGame } from './game-draft';
 import { teamLeaderboardGame, teamLeaderboardRound } from '../../client/leaderboard.test-support';
 import { fictionalId } from '../../client/catalog.test-support';
@@ -16,6 +16,32 @@ function SettingsHarness({ team = false }: { readonly team?: boolean }) {
 }
 
 describe('GameSettings', () => {
+  it('pages and searches forty-golfer manual team assignments without losing selections or selected choices', async () => {
+    const roster = Array.from({ length: 40 }, (_, index) => ({
+      playerId: fictionalId(index + 1), displayName: `Fictional golfer ${String(index + 1).padStart(2, '0')}`,
+    }));
+    function Fixture() {
+      const [draft, setDraft] = useState(() => setFormat(newGameDraft(), 'two-net-better-ball', roster.length));
+      return <GameSettings draft={draft} roster={roster} disabled={false} saveDisabled={false} cancelDisabled={false}
+        retry={false} onChange={setDraft} onSave={vi.fn()} onCancel={vi.fn()} />;
+    }
+    render(<Fixture />);
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText('Team 1 member 1'), fictionalId(1));
+    await user.click(screen.getByRole('button', { name: 'Next teams' }));
+    await user.selectOptions(screen.getByLabelText('Team 7 member 1'), fictionalId(14));
+    await user.type(screen.getByLabelText('Find golfers for member choices'), '40');
+    expect(screen.getByLabelText('Team 7 member 1')).toHaveValue(fictionalId(14));
+    await user.selectOptions(screen.getByLabelText('Team 7 member 2'), fictionalId(40));
+    await user.type(screen.getByLabelText('Find teams or assigned golfers'), 'Team 1');
+    expect(screen.getByLabelText('Team 1 member 1')).toHaveValue(fictionalId(1));
+    await user.clear(screen.getByLabelText('Find teams or assigned golfers'));
+    await user.type(screen.getByLabelText('Find teams or assigned golfers'), 'golfer 14');
+    expect(screen.getByLabelText('Team 7 member 1')).toHaveValue(fictionalId(14));
+    expect(screen.getByLabelText('Team 7 member 2')).toHaveValue(fictionalId(40));
+    expect(screen.getByRole('button', { name: 'Save game' })).toBeDisabled();
+    expect(screen.getByText('20 teams · 3/40 golfers assigned')).toBeVisible();
+  });
   it('edits name, gross/net, preset, points, and explicit tails using native controls', () => {
     render(<SettingsHarness />);
     expect(screen.getByRole('option', { name: 'Modified Stableford' })).toHaveValue('modified');

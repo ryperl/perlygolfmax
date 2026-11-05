@@ -1,10 +1,11 @@
 import type { TableClient } from '@azure/data-tables';
 import type { GameConfiguration, RoundGameDefinition } from '../../../src/domain/games.js';
-import { maximumGameConfigurationBytes } from '../../../src/domain/games.js';
+import { maximumPrivateWriteBytes } from '../../../src/contracts/private-values.js';
 import { isGameConfiguration } from '../../../src/contracts/games.js';
 import { isRecord, isUuid } from '../../../src/contracts/events.js';
 import { decode, optionalRow, revision } from '../catalog/entities.js';
 import { ApiError } from '../errors.js';
+import { privateContent } from '../private-values.js';
 
 type StoredGames = Omit<GameConfiguration, 'etag'>;
 
@@ -48,9 +49,9 @@ export async function readGameConfiguration(table: TableClient, eventId: string,
   if (!configuredRounds.includes(roundId) || row.kind !== 'round-games' || row.schemaVersion !== 1) {
     throw new ApiError(503, 'INVALID_STORED_GAMES');
   }
-  const stored = decode(row.content, isStoredGames);
+  const stored = decode(await privateContent(table, eventId, gameConfigurationKey(roundId), row.content), isStoredGames);
   if (stored.eventId !== eventId || stored.roundId !== roundId
-    || Buffer.byteLength(JSON.stringify({ games: stored.games }), 'utf8') > maximumGameConfigurationBytes) {
+    || Buffer.byteLength(JSON.stringify({ games: stored.games }), 'utf8') > maximumPrivateWriteBytes) {
     throw new ApiError(503, 'INVALID_STORED_GAMES');
   }
   return { eventId, roundId, games: stored.games, etag: revision(row) };

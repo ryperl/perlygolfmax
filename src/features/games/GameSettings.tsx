@@ -1,5 +1,5 @@
 import type { FormEvent } from 'react';
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import { maximumPointsRows, teamSize } from '../../domain/games';
 import type { GameDraft } from './game-draft';
 import { addBand, buildGame, resetTeamAssignments, setFormat, setPreset, teamDraftFeedback } from './game-draft';
@@ -30,9 +30,17 @@ export function GameSettings({
   draft, disabled, saveDisabled, cancelDisabled, retry, onChange, onSave, onCancel, roster = [],
 }: GameSettingsProps) {
   const allowanceHint = useId();
+  const [teamQuery, setTeamQuery] = useState('');
+  const [golferQuery, setGolferQuery] = useState('');
+  const [teamPage, setTeamPage] = useState(0);
   const rosterIds = roster.map((player) => player.playerId);
   const teamFeedback = teamDraftFeedback(draft, rosterIds);
   const assigned = (draft.teams ?? []).flatMap((team) => team.playerIds).filter(Boolean);
+  const teams = (draft.teams ?? []).map((team, index) => ({ team, index })).filter(({ team }) =>
+    `${team.name} ${team.playerIds.map((id) => roster.find((player) => player.playerId === id)?.displayName ?? '').join(' ')}`
+      .toLowerCase().includes(teamQuery.trim().toLowerCase()));
+  const pageSize = 6;
+  const page = Math.min(teamPage, Math.max(0, Math.ceil(teams.length / pageSize) - 1));
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     onSave();
@@ -88,7 +96,15 @@ export function GameSettings({
             : draft.format === 'four-two-net' ? 'Highest two net points scores per hole; counting golfers may change each hole.' : 'Both net points scores count each hole.'}
             {' '}Team-hole points remain pending until every teammate has saved individual points.</p>
           {draft.assignmentsCleared && <p role="status">Team size changed. Previous assignments were cleared; choose all members again.</p>}
-          {(draft.teams ?? []).map((team, teamIndex) => <fieldset key={team.id}>
+          <p>{draft.teams?.length ?? 0} teams · {new Set(assigned.filter((id) => rosterIds.includes(id))).size}/{roster.length} golfers assigned</p>
+          <label>Find teams or assigned golfers<input type="search" value={teamQuery} onChange={(event) => {
+            setTeamQuery(event.target.value); setTeamPage(0);
+          }} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }} /></label>
+          <label>Find golfers for member choices<input type="search" value={golferQuery} onChange={(event) => {
+            setGolferQuery(event.target.value);
+          }} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }} /></label>
+          <p>Searching and changing pages keeps all team selections, including choices outside the search.</p>
+          {teams.slice(page * pageSize, (page + 1) * pageSize).map(({ team, index: teamIndex }) => <fieldset key={team.id}>
             <legend>Team {teamIndex + 1}</legend>
             <label>Team {teamIndex + 1} name
               <input value={team.name} maxLength={100} onChange={(event) => { onChange({
@@ -104,19 +120,26 @@ export function GameSettings({
               }); }}>
                 <option value="">Choose golfer</option>
                 {playerId && !rosterIds.includes(playerId) && <option value={playerId}>Selected golfer · no longer in round</option>}
-                {roster.map((player) => <option key={player.playerId} value={player.playerId}
+                {roster.filter((player) => player.playerId === playerId
+                  || player.displayName.toLowerCase().includes(golferQuery.trim().toLowerCase())).map((player) => <option key={player.playerId} value={player.playerId}
                   disabled={player.playerId !== playerId && assigned.includes(player.playerId)}>
                   {player.displayName}{player.playerId !== playerId && assigned.includes(player.playerId) ? ' · already assigned' : ''}
                 </option>)}
               </select>
             </label>)}
           </fieldset>)}
+          {teams.length === 0 && <p>No teams match your search. All selections are retained.</p>}
+          {teams.length > pageSize && <nav className="game-actions" aria-label="Team assignment pages">
+            <button type="button" disabled={page === 0} onClick={() => { setTeamPage(page - 1); }}>Previous teams</button>
+            <span>Page {page + 1} of {Math.ceil(teams.length / pageSize)}</span>
+            <button type="button" disabled={(page + 1) * pageSize >= teams.length} onClick={() => { setTeamPage(page + 1); }}>Next teams</button>
+          </nav>}
           <p role="status">{teamFeedback ?? `All ${String(roster.length)} golfers assigned in full ${String(teamSize(draft.format))}-person teams.`}</p>
           {roster.some((player) => !assigned.includes(player.playerId)) && <p>Unassigned golfers: {roster.filter((player) =>
-            !assigned.includes(player.playerId)).map((player) => player.displayName).join(', ')}</p>}
+            !assigned.includes(player.playerId)).length}. Use the member choices to assign them manually.</p>}
           {(draft.teams ?? []).flatMap((team) => team.playerIds).length !== roster.length && <div>
             <p>If the roster size changed, reset the team slots to fit the current round. This clears all member selections; assign the teams again before saving.</p>
-            <button type="button" disabled={roster.length < 4 || roster.length > 8 || roster.length % teamSize(draft.format) !== 0}
+            <button type="button" disabled={roster.length < teamSize(draft.format) || roster.length % teamSize(draft.format) !== 0}
               onClick={() => { onChange(resetTeamAssignments(draft, roster.length)); }}>Reset team assignments</button>
           </div>}
         </section>}

@@ -2,6 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { eventTabHref, readEventRoute, readPage, readPreviewTab, readSelectedEvent } from './navigation';
 
 describe('readPage', () => {
+  it('keeps purse routes event-scoped and rejects missing, repeated and malformed context', () => {
+    const event = '00000000-0000-4000-8000-000000000050';
+    const hash = `#purse?event=${event}`;
+    expect(readPage(hash)).toBe('purse');
+    expect(readSelectedEvent(hash)).toBe(event);
+    expect(readEventRoute(hash)).toBe(`purse:${event}`);
+    for (const invalid of ['#purse', '#purse?event=bad', `${hash}&event=${event}`]) {
+      expect(readEventRoute(invalid)).toBe('invalid-event');
+    }
+    expect(readEventRoute(`${hash}&round=${event}`)).toBe('invalid-score');
+    expect(readEventRoute(`#preview?event=${event}&view=purse`)).toBe('');
+  });
   it('keeps overall standings event-scoped with refresh-safe links, never an anonymous or Preview board', () => {
     const event = '00000000-0000-4000-8000-000000000050';
     const hash = `#leaderboard?event=${event}`;

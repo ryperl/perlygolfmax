@@ -166,7 +166,7 @@ describe('self-contained round game result contracts', () => {
   describe('team definition and exact projection contracts', () => {
     it.each(['two-net-better-ball', 'two-net-aggregate', 'four-two-net'] as const)('accepts explicit complete teams for %s on 9/18 holes', (format) => {
       for (const count of [9, 18]) {
-        for (const size of [4, 8]) {
+        for (const size of [4, 8, 12, 40, 120]) {
           const value = teamView(format, count, size);
           const before = structuredClone(value);
           expect(isRoundGameDefinition(teamDefinition(value))).toBe(true);
@@ -185,18 +185,16 @@ describe('self-contained round game result contracts', () => {
       const invalid = [
         { ...definition, format: 'four-two-net-modified' }, { ...definition, basis: 'gross' },
         { ...definition, format: undefined }, { ...definition, teams: undefined }, { ...definition, teams: [] },
-        { ...definition, extra: true }, { ...definition, teams: [first] }, { ...definition, teams: [first, first] },
+        { ...definition, extra: true }, { ...definition, teams: [first, first] },
         ...[
           { ...first, id: 'team' }, { ...first, name: '' }, { ...first, name: ' Fictional team' },
           { ...first, name: 'x'.repeat(101) }, { ...first, extra: true },
           { ...first, playerIds: first.playerIds.slice(1) }, { ...first, playerIds: [id(101), id(101)] },
           { ...first, playerIds: ['player', id(102)] }, { ...first, playerIds: [id(103), id(104)] },
         ].map((team) => ({ ...definition, teams: [team, ...definition.teams.slice(1)] })),
-        { ...definition, teams: Array.from({ length: 5 }, (_, index) => ({
-          id: id(600 + index), name: 'Fictional team', playerIds: [id(700 + index * 2), id(701 + index * 2)],
-        })) },
       ];
       for (const value of invalid) expect(isRoundGameDefinition(value)).toBe(false);
+      expect(isRoundGameDefinition({ ...definition, teams: [first] })).toBe(true);
       expect(isRoundGameDefinition({ ...game(), teams: definition.teams })).toBe(false);
     });
 
@@ -384,7 +382,7 @@ describe('self-contained round game result contracts', () => {
     expect(isRoundGamesView(mapPlayers(net, (p) => ({ ...mapper(p), playingHandicap: handicap + 1 })))).toBe(false);
   });
 
-  it('pairs results exactly by configured game ID and enforces 4..8 unique golfers', () => {
+  it('pairs results exactly by configured game ID and requires at least four unique golfers without a count ceiling', () => {
     const value = view();
     const result = value.results[0];
     if (!result) throw new Error('Missing fictional result');
@@ -393,10 +391,12 @@ describe('self-contained round game result contracts', () => {
       { ...value, results: [result, result] }, { ...value, results: [{ ...result, gameId: id(2) }] },
       { ...value, results: [{ ...result, players: result.players.slice(1) }] },
       { ...value, results: [{ ...result, players: [...result.players, ...result.players] }] },
-      { ...value, results: [{ ...result, players: Array.from({ length: 9 }, (_, index) => player(index)) }] },
       { ...value, extra: true }, { ...value, results: [{ ...result, extra: true }] },
     ]) expect(isRoundGamesView(invalid)).toBe(false);
     expect(isRoundGamesView({ ...value, results: [{ ...result, players: Array.from({ length: 8 }, (_, index) => player(index)) }] })).toBe(true);
+    for (const count of [12, 40, 120]) {
+      expect(isRoundGamesView({ ...value, results: [{ ...result, players: Array.from({ length: count }, (_, index) => player(index)) }] })).toBe(true);
+    }
     expect(isRoundGamesView({ configuration: { ...value.configuration, games: [], etag: null }, results: [] })).toBe(true);
   });
 

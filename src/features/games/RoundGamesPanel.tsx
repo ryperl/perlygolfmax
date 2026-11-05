@@ -151,7 +151,8 @@ export function RoundGamesPanel({ round, busy, onDirtyChange, onSave, onRefresh 
       <header className="game-round-heading">
         <p className="game-hint">{round.eventName}</p>
         <h2>Games · {round.roundName}</h2>
-        <p className="game-hint">{round.courseName} · {round.teeName} / {round.teeCategory}</p>
+        <p className="game-hint">{round.courseName} · {(round.playerTees?.length ?? 0) > 0 ? 'Default tee: ' : ''}{round.teeName} / {round.teeCategory}
+          {(round.playerTees?.length ?? 0) > 0 && ' · Personal tees assigned; points use each golfer’s captured tee.'}</p>
       </header>
       {archived && <p>This trip is archived. Game settings are read-only.</p>}
       {games.length === 0 && <p>No games configured for this round.</p>}

@@ -3,6 +3,7 @@ import { gameTeamsMatchRoster, isTeamGameDefinition } from './games.js';
 import type { RoundScores } from './scoring.js';
 import type { EventWorkspace, OverallCompetition, RoundSnapshot } from './setup.js';
 import { calculatePlayingHandicap, handicapStrokesForHole } from './stableford.js';
+import { playerTee } from './tees.js';
 
 export type EventStandingStatus = 'complete' | 'in-progress' | 'awaiting-scores' | 'not-configured' | 'unavailable';
 export type EventStandingReason = GameUnavailableReason | 'not-configured' | 'missing-game' | 'missing-round'
@@ -109,9 +110,10 @@ function strokeCell(
   competition: Extract<OverallCompetition, { readonly kind: 'stroke-play' }>,
   round: RoundSnapshot, source: RoundScores, playerId: string,
 ): EventStandingCell {
+  const tee = playerTee(round, playerId);
   const card = source.cards.find((entry) => entry.playerId === playerId);
-  if (!card || card.holes.length !== round.teeProfile.holes.length
-    || round.teeProfile.holes.some((hole) => !card.holes.some((entry) => entry.number === hole.number))) {
+  if (!card || card.holes.length !== tee.holes.length
+    || tee.holes.some((hole) => !card.holes.some((entry) => entry.number === hole.number))) {
     return emptyCell(round, 'missing-score-data');
   }
   const numeric = card.holes.filter((hole) => hole.score.kind === 'strokes').length;
@@ -119,17 +121,17 @@ function strokeCell(
   if (competition.basis === 'net') {
     const player = round.players.find((entry) => entry.playerId === playerId);
     const result = player?.handicapIndex == null ? 'missing-handicap-index'
-      : calculatePlayingHandicap(player.handicapIndex.value, round.teeProfile, competition.handicapAllowancePercent);
+      : calculatePlayingHandicap(player.handicapIndex.value, tee, competition.handicapAllowancePercent);
     if (typeof result === 'string') return { ...emptyCell(round, result), holesScored: numeric };
     handicap = result;
   }
   let strokes = 0n;
   let relative = 0n;
-  for (const hole of round.teeProfile.holes) {
+  for (const hole of tee.holes) {
     const score = card.holes.find((entry) => entry.number === hole.number)?.score;
     if (score?.kind !== 'strokes') continue;
     const received = competition.basis === 'gross' ? 0
-      : handicapStrokesForHole(handicap, hole.allocation, round.teeProfile.holes.length);
+      : handicapStrokesForHole(handicap, hole.allocation, tee.holes.length);
     const net = BigInt(score.strokes) - BigInt(received);
     strokes += net;
     relative += net - BigInt(hole.par);
@@ -142,7 +144,7 @@ function strokeCell(
   return {
     roundId: round.id,
     status: reason !== undefined ? 'unavailable' : numeric === 0 ? 'awaiting-scores'
-      : numeric === round.teeProfile.holes.length ? 'complete' : 'in-progress',
+      : numeric === tee.holes.length ? 'complete' : 'in-progress',
     ...(reason === undefined ? {} : { reason }),
     holesScored: numeric, totalHoles: round.teeProfile.holes.length, subtotal, relativeToPar,
   };
@@ -193,10 +195,19 @@ export function calculateEventStandings(workspace: EventWorkspace, roundScores: 
       return (a < b ? -1 : 1) * (competition.kind === 'stableford' ? -1 : 1);
     });
   const ranks = new Map<string, { readonly rank: number; readonly rankLabel: string }>();
+  const counts = new Map<number, number>();
+  for (const player of ranked) {
+    const value = score(player);
+    if (value !== null) counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+  let previous: number | null = null;
+  let rank = 0;
   for (const [index, player] of ranked.entries()) {
-    const first = ranked.findIndex((entry) => score(entry) === score(player));
-    const rank = first + 1;
-    const tied = ranked.some((entry, otherIndex) => otherIndex !== index && score(entry) === score(player));
+    const value = score(player);
+    if (value === null) continue;
+    if (value !== previous) rank = index + 1;
+    previous = value;
+    const tied = (counts.get(value) ?? 0) > 1;
     ranks.set(player.playerId, { rank, rankLabel: `${tied ? 'T' : ''}${String(rank)}` });
   }
   const ordered = [...ranked, ...players.filter((player) => !ranks.has(player.playerId))];

@@ -157,7 +157,7 @@ describe('authoritative team games persistence', () => {
     expect(complete.round.cards.every((card) => card.etag === null)).toBe(true);
   });
 
-  it('bounds direct configuration saves and rejects oversized stored settings before projecting results', async () => {
+  it('saves configurations above the ordinary request budget and reloads them exactly', async () => {
     const f = await scoringFixture();
     const base = teamGame(capturedZeroIndices(f));
     const large: readonly RoundGameDefinition[] = Array.from({ length: 16 }, (_, index) => ({
@@ -166,15 +166,13 @@ describe('authoritative team games persistence', () => {
       },
     }));
     expect(Buffer.byteLength(JSON.stringify({ games: large }), 'utf8')).toBeGreaterThan(maximumGameConfigurationBytes);
-    await expect(f.scores.saveGames(creator, event.id, f.roundId, large, null, identifier(1000)))
-      .rejects.toMatchObject({ status: 413, code: 'REQUEST_TOO_LARGE' });
-    expect(f.submit).not.toHaveBeenCalled();
-    await f.scores.saveGames(creator, event.id, f.roundId, [base], null, identifier(1001));
+    const saved = await f.scores.saveGames(creator, event.id, f.roundId, large, null, identifier(1000));
+    expect(saved.change.after).toEqual(large);
     const key = `${event.id}|${gameConfigurationKey(f.roundId)}`;
     const stored = f.rows.get(key);
     if (!stored) throw new Error('Missing fictional configuration.');
     f.seed({ ...stored, content: canonical({ eventId: event.id, roundId: f.roundId, games: large }) });
-    await expect(f.scores.get(creator, event.id, f.roundId)).rejects.toMatchObject({ status: 503, code: 'INVALID_STORED_GAMES' });
+    expect((await f.scores.get(creator, event.id, f.roundId)).games?.configuration.games).toEqual(large);
     expect(f.submit).toHaveBeenCalledOnce();
   });
 });

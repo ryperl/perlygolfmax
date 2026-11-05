@@ -3,6 +3,21 @@ import { fictionalId, fictionalSetup, fictionalWorkspace } from '../../client/ca
 import { inputFrom, sameRoundInput, sameSetupInput, setupProblems } from './setup-draft';
 
 describe('setup draft presentation', () => {
+  it('preserves explicit permission and sparse personal tees through captured round drafts and detects changed assignments', () => {
+    const round = fictionalWorkspace.rounds[0];
+    if (!round) throw new Error('Missing fictional round.');
+    const workspace = { ...fictionalWorkspace, allowPerGolferTees: true, rounds: [{
+      ...round, playerTees: [{ playerId: fictionalId(1), profile: { ...round.teeProfile, id: 990 } }],
+    }] };
+    const draft = inputFrom(workspace);
+    expect(draft.allowPerGolferTees).toBe(true);
+    expect(draft.rounds[0]?.playerTeeSelections).toEqual([{ playerId: fictionalId(1), teeProfileId: 990 }]);
+    expect(sameSetupInput(draft, { ...draft, allowPerGolferTees: false })).toBe(false);
+    const first = draft.rounds[0];
+    if (!first) throw new Error('Missing fictional round input.');
+    expect(sameRoundInput(first, { ...first, playerTeeSelections: [] })).toBe(false);
+    expect(inputFrom(fictionalWorkspace).allowPerGolferTees).toBe(false);
+  });
   it('uses explicit null for disabled saves, preserves saved competition and compares bindings without order sensitivity', () => {
     const disabled = inputFrom(fictionalWorkspace);
     expect(disabled.overallCompetition).toBeNull();
@@ -48,7 +63,7 @@ describe('setup draft presentation', () => {
 
   it('gives specific next steps without treating optional location or unknown indices as required', () => {
     expect(setupProblems({ name: '', location: '', playerIds: [], rounds: [] })).toEqual([
-      'Enter an event name.', 'Choose 4–8 players.', 'Add at least one round.',
+      'Enter an event name.', 'Choose at least four players.', 'Add at least one round.',
     ]);
     expect(setupProblems({ ...fictionalSetup, location: '' })).toEqual([]);
     expect(setupProblems({

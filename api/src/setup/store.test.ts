@@ -361,7 +361,7 @@ describe('saved owner workspace', () => {
     const first = f.input.rounds[0];
     if (!first) throw new Error('Missing fictional round');
     for (const groups of [
-      [{ number: 5, playerIds: f.input.playerIds }],
+      [{ number: 0, playerIds: f.input.playerIds }],
       [{ number: 1, playerIds: [f.input.playerIds[0] ?? '', ...f.input.playerIds] }],
       [{ number: 1, playerIds: f.input.playerIds.slice(1) }],
       [{ number: 1, playerIds: f.input.playerIds }, { number: 1, playerIds: [] }],

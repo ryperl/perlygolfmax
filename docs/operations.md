@@ -19,7 +19,8 @@ Individual gross/net Stableford, explicit net team games and configurable point
 tables are implemented. Optional overall standings are configured in event
 setup: actual daily Stableford points with explicit member credit, or individual
 gross/net stroke play. No invitations, owner appointment UI, golfer/assigned-scorer
-access, purse distribution, audit exports or backup job are shipped.
+access, payment transfers, audit exports or backup job are shipped. Organizer
+purse configuration and calculated individual winnings are implemented.
 An unconfigured Events page says so explicitly, without fictional saved events.
 
 Main navigation starts at Events. Opening a saved event binds Overview, Rounds
@@ -96,7 +97,8 @@ maximum/penalty, handicap posting rule or invented Stableford treatment.
 Self-entry, invitation/account mapping and a round/foursome-assigned
 scorekeeper remain a later increment. Scorekeeper assignment is not event
 administration. Individual/team Stableford rules are configured per game;
-purse and financial rules remain undefined. Missing inputs never become zero.
+configured prize plans derive individual winnings without payment operations.
+Missing inputs never become zero.
 
 ### Overall competition configuration and reads
 
@@ -119,7 +121,69 @@ It does not write cards, refresh handicap captures or manufacture missing scores
 Stableford uses saved daily points unchanged; stroke play derives gross/net
 relative-to-par from numeric holes using captured inputs. Pickup/DNF invalidates
 a valid stroke total; unplayed holes stay pending. Neither mode provides
-finalization, a final tie-break, WHS posting or purse/payment operations.
+finalization, a final leaderboard tie-break or WHS posting.
+Purse allocation is separate and never performs a payment.
+
+### Scalable private values and transfers
+
+There is no application golfer/team-count ceiling. Playing groups stay at most
+four and competition teams exactly two/four; minimum event roster is four.
+Requests, storage properties, transactions and finite runtime resources still
+have safeguards. Large setup/game/purse writes use immutable owner-bound parts
+followed by conditional publication. Ordinary bodies remain 4 KiB; the part
+parser is 12 KiB, logical staged writes 4 MiB and private values 32 MiB.
+Oversized work fails explicitly, never as a partial active event.
+
+Large JSON content uses digest-verified immutable fragments below the Table
+UTF-16 property limit. Only the original logical row's pointer is published in
+the event/owner-conditional transaction. Fragment staging is separate from the
+bounded publication transaction, so golfer count does not become an oversized
+batch. Existing inline JSON remains readable; no bulk migration is performed.
+Staged/inactive fragments are retained, not public or active application data.
+Automatic cleanup/retention is separate policy work, not an implicit deletion.
+
+Large private reads use bounded digest-bound pages. Each page reauthorizes and
+rejects changed source data; clients reassemble and verify the whole value
+before exposing a complete typed result. Cursor/digest values are not authority.
+Quota waits retain the current part/page, honor Retry-After and can be aborted.
+Catalogue setup loading also continues the exact throttled page without
+publishing a partial directory as complete. No new cloud resources or grants.
+
+### Personal tee captures
+
+The organizer's event option permits sparse golfer/round overrides from the
+selected immutable course version. Matching hole count/numbers are required;
+each captured tee's own par, distance, rating, slope and allocation are used.
+The common tee remains the default. Captures are event-local metadata; global
+catalogue changes do not replace them, and ordinary member projections still
+exclude Handicap Index observations.
+
+First score locks personal choices along with existing inputs. Disabling the
+option cannot reinterpret a scored mixed-tee round. Legacy request omission
+preserves assignments; an unreviewed course-version change with old overrides
+is rejected. New explicit incompatible/foreign assignments fail validation.
+No self-selection permission, admission or score-history rewrite is introduced.
+
+### Private purse plans and calculated winnings
+
+`GET/PUT /api/events/<event-id>/purse` is bearer-authenticated and owner-only;
+catalog management alone is insufficient and is not required of an event owner.
+Archives are readable but never writable. Writes use exact configuration
+preconditions and request identity, atomically checking event/owner revisions,
+publishing settings plus immutable before/after/actor/time receipts and an
+event registry marker. Missing settings with surviving evidence fail closed.
+Retries confirm the original request independently of a later current plan.
+
+Reads verify consistent saved workspace/round sources with bounded concurrency
+and existing quotas. Prize calculations use exact minor units, actual selected
+game/event rankings, explicit team/member units, pooled occupied-place ties or
+organizer resolutions. Leaderboard positions are not rewritten. Stored stale
+decisions remain readable as unavailable for repair, not fabricated valid awards.
+Projection, reserves, rounding remainders and overcommitment are explicit.
+
+All totals are individual winnings calculations, not collected/paid balances.
+There is no payment provider, transfer, banking data, finalization or hidden
+closest-to-pin measurement engine. Real financial/trip data stays out of source.
 
 ### Owner scoring authority and persistence
 
@@ -197,7 +261,8 @@ administrative master edits and player reports remain future scope.
 
 `PUT /api/events/<event-id>/rounds/<round-id>/games` saves the complete game
 configuration for a round. It requires the active event's authoritative owner,
-JSON within the existing 4 KiB cap, an exact game-configuration `If-Match` or
+bounded JSON parts within the 12 KiB game request cap, an exact configuration
+`If-Match` or
 first-create `If-None-Match: *`, and a UUID `Idempotency-Key`. It shares the
 existing durable `scores-write` quota. Catalog management is not required.
 
@@ -307,8 +372,10 @@ Round setup stores explicit course-version/tee and player input snapshots.
 Later catalog/index changes do not silently update configured rounds. New
 rounds/players capture selected/current inputs; changing a saved round's
 handicap treatment is outside this increment. Existing configured rounds cannot
-be silently removed by a whole-workspace save. Setup remains 4–8 players with
-manual group numbers 1–4, at most four per group and one assignment per round.
+be silently removed by a whole-workspace save. Setup requires at least four
+players, with no golfer/team/group-count ceiling. Playing groups contain at
+most four golfers, with positive safe-integer group numbers and one assignment
+per golfer per round. Separate eight-round/16-game/32-point-row budgets remain.
 
 The organizer's workspace shows latest catalog values separately from captured
 round inputs. `POST /api/events/<event-id>/workspace/rounds/<round-id>/indices/refresh`
@@ -332,7 +399,8 @@ offline synchronization and production changes require later approval.
 
 The local adapter uses separate durable quotas: catalog reads/writes are
 60 per user/minute, workspace reads 60 and workspace writes 30. The original
-event/identity quotas and 4 KiB request cap are unchanged. Course profiles are
+event/identity quotas remain. Ordinary course/player/score bodies retain 4 KiB;
+setup/game/purse parts use 12 KiB. Course profiles are
 staged individually rather than raising the global body limit. Staged imports,
 immutable course versions and index history have no automatic purge/expiry
 in this increment; retention and cleanup are separate policy work.
@@ -397,7 +465,7 @@ are separate trust boundaries.
 | Secret/private-data leakage | Managed identity; safe diagnostic fields |
 | Stale/logout UI | Abort reads; session expiry; provider logout; no-store |
 
-JSON writes are limited to 4 KiB, event names to 100 characters and authorization
+Ordinary JSON writes are limited to 4 KiB, event names to 100 characters and authorization
 headers to 8 KiB. Discovery scans at most 50 metadata rows/page and rechecks
 membership before returning each event. Quotas are 20 identity reads, 60 event
 reads, 10 creates and 10 archive/restore requests per user/minute. Reusing an

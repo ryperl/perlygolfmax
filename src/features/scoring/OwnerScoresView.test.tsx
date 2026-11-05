@@ -9,6 +9,7 @@ import type { RoundScores, ScoreWriteResult } from '../../domain/scoring';
 import { maximumExactHoleStrokes } from '../../domain/scoring';
 import { OwnerScoresView } from './OwnerScoresView';
 import { deferred, memoryScores } from './scoring.test-support';
+import { mixedTeeRound } from './tees.test-support';
 
 function row(number = 1) {
   return within(screen.getByRole('article', { name: `Fictional Player ${String(number)} scorecard` }));
@@ -38,6 +39,23 @@ async function loaded(user = userEvent.setup()) {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); document.documentElement.scrollTop = 0; });
 
 describe('hole-first owner scoring', () => {
+  it('wires personal hole details into group entry and seeds blank nudges from each captured tee', async () => {
+    const { client } = mount(memoryScores(mixedTeeRound()));
+    const user = userEvent.setup();
+    await loaded(user);
+    expect(row().getByText(/Fictional Gold \/ Fictional personal category · personal tee · Par 5/)).toBeVisible();
+    expect(row(2).getByText(/default tee · Par 4/)).toBeVisible();
+    await enter(user, '');
+    await enter(user, '', 2);
+    await user.click(row().getByRole('button', { name: 'Increase score for Fictional Player 1' }));
+    await user.click(row(2).getByRole('button', { name: 'Decrease score for Fictional Player 2' }));
+    expect(input()).toHaveValue('5');
+    expect(input(2)).toHaveValue('4');
+    expect(client.save).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await screen.findByText(/player changes acknowledged/);
+    expect(vi.mocked(client.save).mock.calls[0]?.[4]).toEqual({ kind: 'strokes', strokes: 5 });
+  });
   it('does not pulse status or disable entry during unchanged polls, preserving DOM, focus, caret and scroll while exposing real changes', async () => {
     vi.useFakeTimers();
     const store = memoryScores(scoreResult().round);

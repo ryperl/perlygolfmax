@@ -4,6 +4,7 @@ import type { RoundScores, Scorecard } from '../../domain/scoring';
 import { fictionalRoundScores } from '../../client/scoring.test-support';
 import { PlayerScorecardRecap } from './PlayerScorecardRecap';
 import { scorecardGamesFixture } from './scorecard-games.test-support';
+import { mixedTeeRound } from './tees.test-support';
 
 function fixture() {
   const first = fictionalRoundScores.cards[0];
@@ -27,6 +28,26 @@ function fixture() {
 }
 
 describe('individual traditional scorecard recap', () => {
+  it('uses the captured personal tee for name, category, rating, par, yards, stroke index and raw score marks', () => {
+    const round = mixedTeeRound();
+    const card = round.cards[0];
+    if (!card) throw new Error('Missing fictional card.');
+    render(<PlayerScorecardRecap round={round} card={card} />);
+    expect(screen.getByText(/Fictional Gold \/ Fictional personal category · Course rating 41 · Slope 130/)).toBeVisible();
+    expect(screen.getByLabelText('Hole 1: 4, birdie')).toHaveClass('score-birdie');
+    expect(within(screen.getByRole('row', { name: /^Par / })).getAllByRole('cell')[0]).toHaveTextContent('5');
+    expect(within(screen.getByRole('row', { name: /^Yards / })).getAllByRole('cell')[0]).toHaveTextContent('210');
+    expect(within(screen.getByRole('row', { name: /^Stroke index / })).getAllByRole('cell')[0]).toHaveTextContent('9');
+  });
+
+  it('falls back to the common captured tee and layout for a golfer without an override', () => {
+    const round = mixedTeeRound();
+    const card = round.cards[1];
+    if (!card) throw new Error('Missing fictional card.');
+    render(<PlayerScorecardRecap round={round} card={card} />);
+    expect(screen.getByText(/default tee/)).toHaveTextContent(`${round.teeName} / ${round.teeCategory}`);
+    expect(screen.getByLabelText('Hole 1: 4, par')).not.toHaveClass('score-birdie');
+  });
   it('shows the saved game alongside strokes by default and respects an explicit game or strokes-only selection', () => {
     const { round, games } = scorecardGamesFixture();
     const card = round.cards[0];

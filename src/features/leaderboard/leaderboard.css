@@ -27,3 +27,6 @@
 @media (max-width: 380px) {
   .leaderboard-row { grid-template-columns: 1.75rem minmax(0, 1fr) 3rem; padding: 10px; gap: 8px; }
 }
+.leaderboard-controls, .leaderboard-controls label { display: grid; gap: 8px; min-width: 0; }
+.leaderboard-controls nav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.leaderboard-controls input { min-width: 0; max-width: 100%; width: 100%; min-height: 44px; padding: 10px; font: inherit; color: var(--cp-text); background: var(--cp-surface); border: 1px solid var(--cp-border); border-radius: .625rem; }
