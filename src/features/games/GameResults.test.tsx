@@ -5,6 +5,7 @@ import { fictionalId } from '../../client/catalog.test-support';
 import type { GamePlayerResult, RoundGameDefinition } from '../../domain/games';
 import { stablefordPoints } from '../../domain/stableford';
 import { GameResults } from './GameResults';
+import { teamLeaderboardGame, teamLeaderboardRound } from '../../client/leaderboard.test-support';
 
 const game: RoundGameDefinition = {
   id: fictionalId(510), name: 'Fictional modified net', basis: 'net', preset: 'modified',
@@ -31,8 +32,7 @@ describe('GameResults', () => {
     expect(rows[1]).toHaveTextContent('+2');
     expect(rows[1]).toHaveTextContent('-1 (partial)');
     expect(rows[1]).toHaveTextContent('2/18 holes · In progress');
-    expect(screen.getByText('Net · 95% allowance')).toBeVisible();
-    expect(screen.getByText('Modified Stableford')).toBeVisible();
+    expect(screen.getByText('Modified Stableford · Net · 95% allowance')).toBeVisible();
     expect(screen.queryByText('GolfLink Modified')).not.toBeInTheDocument();
     if (!rows[1]) throw new Error('Missing fictional player row.');
     expect(within(rows[1]).getAllByRole('cell')[0]).toHaveTextContent('0');
@@ -106,7 +106,7 @@ describe('GameResults', () => {
       ...player, status: 'complete', totalPoints: 0, frontPoints: 0, backPoints: 0, holesScored: 18,
       holes: player.holes.map((hole) => ({ ...hole, points: 0 })),
     }] }} />);
-    expect(screen.getByText('Gross')).toBeVisible();
+    expect(screen.getByText('Modified Stableford · Gross')).toBeVisible();
     expect(screen.getByText('Complete')).toBeVisible();
     expect(within(screen.getByRole('region', { name: `${game.name} points scorecard` }))
       .getAllByRole('cell', { name: '0' })).toHaveLength(12);
@@ -125,5 +125,35 @@ describe('GameResults', () => {
     expect(screen.queryByRole('button', { name: /Front 9|Back 9/ })).not.toBeInTheDocument();
     for (const number of numbers) expect(screen.getByRole('columnheader', { name: String(number) })).toBeVisible();
     expect(screen.getByText('Complete')).toBeVisible();
+  });
+
+  it('renders actual teams and member context without inventing team handicaps or exposing individual totals as team credits', () => {
+    const result = teamLeaderboardRound.games?.results[0];
+    if (!result) throw new Error('Missing fictional teams.');
+    render(<GameResults game={teamLeaderboardGame} result={result} holeNumbers={teamLeaderboardRound.layout.map((hole) => hole.number)} />);
+    expect(screen.getByRole('columnheader', { name: 'Team' })).toBeVisible();
+    const rows = screen.getAllByRole('row');
+    expect(rows).toHaveLength(4);
+    expect(rows[1]).toHaveTextContent('Fictional team 1');
+    expect(rows[1]).toHaveTextContent('Fictional golfer 1 · Fictional golfer 2');
+    expect(rows[1]).toHaveTextContent('1/9 holes');
+    expect(screen.queryByText(/Playing handicap/)).not.toBeInTheDocument();
+    expect(screen.getAllByLabelText('Pending').every((cell) => cell.textContent === '')).toBe(true);
+    expect(screen.getByText(/Fictional team 3: No captured Handicap Index/)).toBeVisible();
+    const first = rows[1];
+    if (!first) throw new Error('Missing fictional team row.');
+    expect(within(first).getAllByRole('cell')[0]).toHaveTextContent('2');
+  });
+
+  it('never falls back to individual rows for stale or missing team results', () => {
+    const result = teamLeaderboardRound.games?.results[0];
+    if (!result) throw new Error('Missing fictional teams.');
+    const view = render(<GameResults game={teamLeaderboardGame} result={{ ...result, teams: [], teamSetupRequired: true }}
+      holeNumbers={holeNumbers} />);
+    expect(screen.getByText(/Update team assignments/)).toBeVisible();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    view.rerender(<GameResults game={teamLeaderboardGame} result={{ gameId: result.gameId, players: result.players }} holeNumbers={holeNumbers} />);
+    expect(screen.getByText('Results are unavailable.')).toBeVisible();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 });

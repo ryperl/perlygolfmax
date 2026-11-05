@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { CourseRating } from './catalog.js';
-import type { GamePlayerResult, RoundGameDefinition, StablefordPreset } from './games.js';
-import { defaultHandicapAllowancePercent, maximumExactGamePoints } from './games.js';
+import type { GamePlayerResult, IndividualGameDefinition, RoundGameDefinition, StablefordPreset, TeamGameDefinition, TeamGameFormat } from './games.js';
+import { defaultHandicapAllowancePercent, maximumExactGamePoints, maximumExactPointsForGame, teamSize } from './games.js';
 import type { HoleScore, Scorecard } from './scoring.js';
 import { summarizeGross } from './scoring.js';
 import type { RoundSnapshot } from './setup.js';
 import { calculateGameResults, stablefordPoints } from './stableford.js';
 
 const id = (number: number) => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
-function game(preset: StablefordPreset = 'standard', overrides: Partial<RoundGameDefinition> = {}): RoundGameDefinition {
+function game(preset: StablefordPreset = 'standard', overrides: Partial<IndividualGameDefinition> = {}): IndividualGameDefinition {
   return {
     id: id(1), name: 'Fictional Stableford', preset, basis: 'gross',
     handicapAllowancePercent: defaultHandicapAllowancePercent, points: stablefordPoints(preset), ...overrides,
@@ -173,6 +173,115 @@ describe('captured-handicap net Stableford', () => {
     expect(result.playingHandicap).toBe(handicap);
     expect(result.holes.map((hole) => hole.strokesReceived)).toEqual(strokes);
     expect(result.holes.reduce((sum, hole) => sum + (hole.strokesReceived ?? 0), 0)).toBe(handicap);
+  });
+
+  function teamGame(round: RoundSnapshot, format: TeamGameFormat, preset: StablefordPreset = 'standard'): TeamGameDefinition {
+    const size = teamSize(format);
+    return {
+      ...game(preset), basis: 'net', handicapAllowancePercent: 100, format,
+      teams: Array.from({ length: round.players.length / size }, (_, index) => ({
+        id: id(900 + index), name: `Fictional team ${String(index + 1)}`,
+        playerIds: round.players.slice(index * size, (index + 1) * size).map((player) => player.playerId),
+      })),
+    };
+  }
+
+  describe('saved individual net points feed competition teams', () => {
+    it.each([
+      ['two-net-better-ball', 'standard', 2], ['two-net-aggregate', 'standard', 4],
+      ['four-two-net', 'standard', 4], ['four-two-net', 'modified', 0],
+    ] as const)('supports %s / %s without changing underlying golfer rows or groups', (format, preset, perHole) => {
+      const f = fixture();
+      const definition = teamGame(f.round, format, preset);
+      const before = structuredClone({ ...f, definition });
+      const result = calculateGameResults([definition], f.round, f.cards)[0];
+      expect(result?.players).toEqual(calculateGameResults([game(preset, { basis: 'net', handicapAllowancePercent: 100 })], f.round, f.cards)[0]?.players);
+      expect(result?.players).toHaveLength(4);
+      expect(result?.teams?.[0]).toMatchObject({
+        status: 'complete', holesScored: 18, frontPoints: perHole * 9, backPoints: perHole * 9, totalPoints: perHole * 18,
+      });
+      expect({ ...f, definition }).toEqual(before);
+      expect(calculateGameResults([game()], f.round, f.cards)[0]).not.toHaveProperty('teams');
+    });
+
+    it('selects points, never strokes: nonmonotonic custom values change counting golfers per hole', () => {
+      const f = fixture();
+      const definition: TeamGameDefinition = {
+        ...teamGame(f.round, 'four-two-net'),
+        points: { rows: [{ scoreToPar: -1, points: -5 }, { scoreToPar: 0, points: 0 },
+          { scoreToPar: 1, points: 8 }, { scoreToPar: 2, points: -2 }], betterScorePoints: 1, worseScorePoints: -9 },
+      };
+      const cards = f.cards.map((card, index) => ({
+        ...card, holes: card.holes.map((hole) => ({
+          ...hole, score: { kind: 'strokes' as const, strokes: 3 + (index + hole.number - 1) % 4 },
+        })),
+      }));
+      const result = calculateGameResults([definition], f.round, cards)[0];
+      expect(result?.teams?.[0]?.holes.map((hole) => hole.points)).toEqual(Array<number>(18).fill(8));
+      expect(result?.teams?.[0]?.totalPoints).toBe(144);
+    });
+
+    it.each([9, 18])('applies signed individual handicaps, pickup/DNF minima and manual entries before aggregation on %s holes', (count) => {
+      const f = fixture(count, '+2');
+      const definition = teamGame(f.round, 'two-net-aggregate', 'modified');
+      const cards = scores(f.cards, [{ kind: 'picked-up', reportedStrokes: 7 }, { kind: 'did-not-finish' },
+        { kind: 'strokes', strokes: 4 }]);
+      const result = calculateGameResults([definition], f.round, cards)[0];
+      expect(result?.teams?.[0]).toMatchObject({
+        status: 'in-progress', holesScored: 3, totalPoints: -8, backPoints: null,
+      });
+      expect(result?.teams?.[0]?.holes.slice(0, 4)).toEqual([
+        { number: 1, points: -4 }, { number: 2, points: -4 }, { number: 3, points: 0 }, { number: 4, points: null },
+      ]);
+      expect(result?.players[0]?.playingHandicap).toBe(count === 9 ? -1 : -2);
+      expect(cards[0]?.holes[2]?.score).toEqual({ kind: 'strokes', strokes: 4 });
+      const partial = cards.map((card, index) => index !== 0 ? card : ({
+        ...card, holes: card.holes.map((hole) => hole.number !== 3 ? hole : { ...hole, score: { kind: 'unplayed' as const } }),
+      }));
+      expect(calculateGameResults([definition], f.round, partial)[0]?.teams?.[0]?.holes[2]?.points).toBeNull();
+    });
+
+    it('marks affected teams unavailable for missing index or card data instead of scoring their other teammates', () => {
+      const f = fixture();
+      const definition = teamGame(f.round, 'four-two-net');
+      const round = { ...f.round, players: f.round.players.map((player, index) => index !== 3 ? player : ({ ...player, handicapIndex: null })) };
+      expect(calculateGameResults([definition], round, f.cards)[0]?.teams?.[0]).toMatchObject({
+        status: 'unavailable', unavailableReason: 'missing-handicap-index', totalPoints: null, holesScored: 0,
+      });
+      expect(calculateGameResults([definition], f.round, f.cards.slice(1))[0]?.teams?.[0]).toMatchObject({
+        status: 'unavailable', unavailableReason: 'missing-score-data', totalPoints: null, holesScored: 0,
+      });
+    });
+
+    it('keeps stale saved assignments repairable without inventing partners or emitting old team points', () => {
+        const f = fixture();
+        const definition = teamGame(f.round, 'two-net-better-ball');
+        const round = { ...f.round, players: f.round.players.map((player, index) => index !== 3 ? player : ({
+          ...player, playerId: id(999),
+        })) };
+        const cards = f.cards.map((card, index) => index !== 3 ? card : ({ ...card, playerId: id(999) }));
+        const before = structuredClone({ definition, round, cards });
+        const result = calculateGameResults([definition], round, cards)[0];
+        expect(result).toMatchObject({ gameId: definition.id, teamSetupRequired: true, teams: [] });
+        expect(result?.players.map((player) => player.playerId)).toEqual(round.players.map((player) => player.playerId));
+        expect(result?.players.every((player) => player.status === 'complete')).toBe(true);
+        expect({ definition, round, cards }).toEqual(before);
+        expect(calculateGameResults([definition], f.round, f.cards)[0]).not.toHaveProperty('teamSetupRequired');
+        expect(calculateGameResults([game()], round, cards)[0]).not.toHaveProperty('teamSetupRequired');
+    });
+
+    it.each(['two-net-better-ball', 'two-net-aggregate', 'four-two-net'] as const)('sums signed exact admitted budgets for %s without precision loss', (format) => {
+      const f = fixture();
+      for (const sign of [-1, 1]) {
+        const base = teamGame(f.round, format);
+        const points = maximumExactPointsForGame(base) * sign;
+        const definition = { ...base, points: { rows: [{ scoreToPar: 0, points }], betterScorePoints: points, worseScorePoints: points } };
+        const result = calculateGameResults([definition], f.round, f.cards)[0];
+        const expected = BigInt(points) * 18n * (format === 'two-net-better-ball' ? 1n : 2n);
+        expect(result?.teams?.[0]?.totalPoints).toBe(Number(expected));
+        expect(Number.isSafeInteger(result?.teams?.[0]?.totalPoints)).toBe(true);
+      }
+    });
   });
 
   it.each([

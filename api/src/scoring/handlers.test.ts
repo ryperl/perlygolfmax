@@ -7,6 +7,7 @@ import { ApiError } from '../errors.js';
 import { createScoringHandler } from './handlers.js';
 import type { ScoringAction } from './handlers.js';
 import { stablefordPoints } from '../../../src/domain/stableford.js';
+import { maximumGameConfigurationBytes } from '../../../src/domain/games.js';
 
 async function fixture() {
   const f = await scoringFixture();
@@ -45,9 +46,37 @@ describe('JWT-first owner-only bounded scoring HTTP routes', () => {
       { games: [game], role: 'owner' }, { games: [{ ...game, points: { ...game.points, betterScorePoints: Infinity } }] }]) {
       expect(await f.call('round-games', { 'If-None-Match': '*' }, body)).toMatchObject({ status: 400 });
     }
-    expect(await f.call('round-games', { 'If-None-Match': '*' }, 'x'.repeat(4097))).toMatchObject({ status: 413 });
+    expect(await f.call('round-games', { 'If-None-Match': '*' }, 'x'.repeat(maximumGameConfigurationBytes + 1))).toMatchObject({ status: 413 });
     expect(await f.call('round-games', { 'If-None-Match': '*' }, { games: [game] }, {}, 'GET')).toMatchObject({ status: 405 });
     expect(f.submit).not.toHaveBeenCalled();
+  });
+  it('accepts the exact game byte boundary but rejects declared and streamed excess while keeping score writes at4KiB', async () => {
+    const f = await fixture();
+    const game = { id: identifier(700), name: 'Fictional 界 game', preset: 'standard', basis: 'gross',
+      handicapAllowancePercent: 95, points: stablefordPoints('standard') };
+    const body = JSON.stringify({ games: [game] });
+    const exact = body + ' '.repeat(maximumGameConfigurationBytes - Buffer.byteLength(body, 'utf8'));
+    expect(Buffer.byteLength(exact, 'utf8')).toBe(maximumGameConfigurationBytes);
+    expect(await f.call('round-games', { 'If-None-Match': '*' }, exact)).toMatchObject({ status: 200 });
+    expect(await f.call('round-games', { 'If-None-Match': '*' }, `${exact} `))
+      .toMatchObject({ status: 413, jsonBody: { code: 'REQUEST_TOO_LARGE' } });
+    expect(await f.call('round-games', { 'If-None-Match': '*', 'content-length': String(maximumGameConfigurationBytes + 1) }, body))
+      .toMatchObject({ status: 413 });
+    expect(await f.call('score-hole', { 'If-None-Match': '*' }, ' '.repeat(4096) + '{}')).toMatchObject({ status: 413 });
+    expect(f.submit).toHaveBeenCalledOnce();
+  });
+  it('round-trips a full bounded game set larger than4KiB without dropping games or losing its audit', async () => {
+    const f = await fixture();
+    const games = Array.from({ length: 16 }, (_, index) => ({
+      id: identifier(700 + index), name: 'F'.repeat(100), preset: 'standard', basis: 'gross',
+      handicapAllowancePercent: 95, points: stablefordPoints('standard'),
+    }));
+    const bytes = Buffer.byteLength(JSON.stringify({ games }), 'utf8');
+    expect(bytes).toBeGreaterThan(4096);
+    expect(bytes).toBeLessThanOrEqual(maximumGameConfigurationBytes);
+    expect(await f.call('round-games', { 'If-None-Match': '*' }, { games }))
+      .toMatchObject({ status: 200, jsonBody: { change: { after: games }, round: { games: { configuration: { games } } } } });
+    expect(f.submit).toHaveBeenCalledOnce();
   });
   it('round-trips X7 JSON exactly through reads/history/retries and audits correction to completed seven separately', async () => {
     const f = await fixture();

@@ -2,6 +2,7 @@ import type { HttpRequest, HttpResponseInit, InvocationContext } from '@azure/fu
 import { isEventRevision, isRecord, isUuid } from '../../../src/contracts/events.js';
 import { isHoleScore } from '../../../src/contracts/scoring.js';
 import { isRoundGameDefinitions } from '../../../src/contracts/games.js';
+import { maximumGameConfigurationBytes } from '../../../src/domain/games.js';
 import { failureDiagnostics } from '../diagnostics.js';
 import { ApiError } from '../errors.js';
 import { readCursor, readJson, response } from '../http.js';
@@ -44,7 +45,7 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
       if (action === 'round-games') {
         const requestId = uuid(request.headers.get('Idempotency-Key'));
         const expectedEtag = precondition(request, 'GAME_REVISION_REQUIRED');
-        const body = await readJson(request);
+        const body = await readJson(request, maximumGameConfigurationBytes);
         if (!isRecord(body) || Object.keys(body).length !== 1 || !isRoundGameDefinitions(body.games) || body.games.length === 0) {
           throw new ApiError(400, 'INVALID_GAME_SETUP');
         }

@@ -5,6 +5,8 @@ import type {
 } from './games.js';
 import type { Scorecard } from './scoring.js';
 import type { RoundPlayerSnapshot, RoundSnapshot } from './setup.js';
+import { gameTeamsMatchRoster, isTeamGameDefinition } from './games.js';
+import { aggregateTeamGameResults } from './team-games.js';
 
 export function stablefordPoints(preset: StablefordPreset): StablefordPointsTable {
   const points = preset === 'standard' ? [6, 5, 4, 3, 2, 1, 0] : [8, 5, 2, 0, -1, -2];
@@ -141,8 +143,15 @@ export function calculateGameResults(
   games: readonly RoundGameDefinition[], round: RoundSnapshot, cards: readonly Scorecard[],
 ): readonly RoundGameResult[] {
   const layout = [...round.teeProfile.holes].sort((left, right) => left.number - right.number);
-  return games.map((game) => ({
-    gameId: game.id,
-    players: round.players.map((player) => playerResult(game, round, player, layout, cards)),
-  }));
+  return games.map((game) => {
+    const players = round.players.map((player) => playerResult(game, round, player, layout, cards));
+    return {
+      gameId: game.id, players,
+      ...(isTeamGameDefinition(game)
+        ? gameTeamsMatchRoster(game, round.players.map((player) => player.playerId))
+          ? { teams: aggregateTeamGameResults(game, players, layout.map((hole) => hole.number)) }
+          : { teams: [], teamSetupRequired: true as const }
+        : {}),
+    };
+  });
 }

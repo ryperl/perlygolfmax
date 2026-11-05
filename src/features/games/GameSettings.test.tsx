@@ -4,10 +4,14 @@ import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { GameSettings } from './GameSettings';
 import { newGameDraft } from './game-draft';
+import { draftFromGame } from './game-draft';
+import { teamLeaderboardGame, teamLeaderboardRound } from '../../client/leaderboard.test-support';
+import { fictionalId } from '../../client/catalog.test-support';
 
-function SettingsHarness() {
-  const [draft, setDraft] = useState(newGameDraft);
+function SettingsHarness({ team = false }: { readonly team?: boolean }) {
+  const [draft, setDraft] = useState(() => team ? draftFromGame(teamLeaderboardGame) : newGameDraft());
   return <GameSettings draft={draft} onChange={setDraft} onSave={vi.fn()} onCancel={vi.fn()}
+    roster={teamLeaderboardRound.cards}
     disabled={false} saveDisabled={false} cancelDisabled={false} retry={false} />;
 }
 
@@ -47,6 +51,8 @@ describe('GameSettings', () => {
     await user.tab();
     expect(screen.getByLabelText('Points preset')).toHaveFocus();
     await user.tab();
+    expect(screen.getByLabelText('Game format')).toHaveFocus();
+    await user.tab();
     expect(screen.getByLabelText('Score basis')).toHaveFocus();
     await user.tab();
     expect(screen.getByRole('region', { name: 'Editable points table' })).toHaveFocus();
@@ -56,5 +62,69 @@ describe('GameSettings', () => {
     expect(screen.getByRole('button', { name: 'Retry save' })).toBeDisabled();
     await user.click(screen.getByRole('button', { name: 'Cancel editing' }));
     expect(onCancel).toHaveBeenCalledOnce();
+  });
+
+  it('requires explicit complete teams, disables assigned choices, and retains partners on preset/same-size changes', () => {
+    render(<SettingsHarness />);
+    fireEvent.change(screen.getByLabelText('Game format'), { target: { value: 'two-net-better-ball' } });
+    expect(screen.getByLabelText('Handicap allowance (%)')).toHaveValue('100');
+    expect(screen.getByLabelText('Score basis')).toBeDisabled();
+    expect(screen.getByText(/separate from playing groups/)).toBeVisible();
+    expect(screen.getByText(/until every teammate/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Save game' })).toBeDisabled();
+    const roster = teamLeaderboardRound.cards;
+    for (let index = 0; index < roster.length; index++) {
+      fireEvent.change(screen.getByLabelText(`Team ${String(Math.floor(index / 2) + 1)} member ${String(index % 2 + 1)}`), {
+        target: { value: roster[index]?.playerId },
+      });
+    }
+    expect(screen.getByRole('button', { name: 'Save game' })).toBeEnabled();
+    const selected = screen.getByLabelText('Team 1 member 1');
+    expect(selected).toHaveValue(roster[0]?.playerId);
+    expect(screen.getByLabelText('Team 2 member 1').querySelector(`option[value="${roster[0]?.playerId ?? ''}"]`)).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Handicap allowance (%)'), { target: { value: '88' } });
+    fireEvent.change(screen.getByLabelText('Game format'), { target: { value: 'two-net-aggregate' } });
+    fireEvent.change(screen.getByLabelText('Points preset'), { target: { value: 'modified' } });
+    expect(selected).toHaveValue(roster[0]?.playerId);
+    expect(screen.getByLabelText('Handicap allowance (%)')).toHaveValue('88');
+    fireEvent.change(screen.getByLabelText('Game format'), { target: { value: 'four-two-net' } });
+    expect(screen.getByText(/6 golfers cannot form full 4-person teams/)).toBeVisible();
+    expect(screen.getByText(/Previous assignments were cleared/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Save game' })).toBeDisabled();
+    expect(screen.queryByLabelText('Team 1 member 1')).not.toBeInTheDocument();
+  });
+
+  it('shows stale selections without IDs and permits replacing an unknown member', () => {
+    const old = teamLeaderboardRound.cards[0];
+    if (!old) throw new Error('Missing fictional card.');
+    const roster = teamLeaderboardRound.cards.map((card, index) => index === 0 ? { ...card, playerId: fictionalId(950), displayName: 'Fictional replacement' } : card);
+    function RepairHarness() {
+      const [draft, setDraft] = useState(() => draftFromGame(teamLeaderboardGame));
+      return <GameSettings draft={draft} roster={roster} disabled={false} saveDisabled={false} cancelDisabled={false}
+        retry={false} onChange={setDraft} onSave={vi.fn()} onCancel={vi.fn()} />;
+    }
+    const { container } = render(<RepairHarness />);
+    expect(screen.getByText(/A selected golfer is no longer/)).toBeVisible();
+    expect(container.textContent).not.toContain(old.playerId);
+    expect(screen.getByRole('button', { name: 'Save game' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Team 1 member 1'), { target: { value: fictionalId(950) } });
+    expect(screen.queryByText(/A selected golfer is no longer/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save game' })).toBeEnabled();
+  });
+
+  it('repairs roster-size changes by explicitly resetting empty slots, never auto-pairing golfers', () => {
+    function ResizedHarness() {
+      const [draft, setDraft] = useState(() => draftFromGame(teamLeaderboardGame));
+      return <GameSettings draft={draft} roster={teamLeaderboardRound.cards.slice(0, 4)} disabled={false}
+        saveDisabled={false} cancelDisabled={false} retry={false} onChange={setDraft} onSave={vi.fn()} onCancel={vi.fn()} />;
+    }
+    render(<ResizedHarness />);
+    expect(screen.getByLabelText('Team 3 member 1')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Save game' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Reset team assignments' }));
+    expect(screen.queryByLabelText('Team 3 member 1')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Team 1 member 1')).toHaveValue('');
+    expect(screen.getByLabelText('Team 2 member 2')).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Save game' })).toBeDisabled();
   });
 });

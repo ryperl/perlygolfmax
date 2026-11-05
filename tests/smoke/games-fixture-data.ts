@@ -1,4 +1,4 @@
-import type { RoundGameDefinition } from '../../src/domain/games';
+import type { RoundGameDefinition, TeamGameDefinition, TeamGameFormat } from '../../src/domain/games';
 import type { RoundScores } from '../../src/domain/scoring';
 import type { RoundSnapshot } from '../../src/domain/setup';
 import { calculateGameResults, stablefordPoints } from '../../src/domain/stableford';
@@ -41,4 +41,44 @@ export const fictionalGamesRound: RoundScores = {
   courseName: snapshot.course.name, teeName: snapshot.teeProfile.name, teeCategory: snapshot.teeProfile.category, layout, cards,
   groups: snapshot.groups, setupLocked: true, lastUpdatedAt: '2026-01-01T00:00:00Z',
   games: { configuration: { eventId: id(50), roundId: snapshot.id, etag: 'games-v1', games: definitions }, results: calculateGameResults(definitions, snapshot, cards) },
+};
+
+const teamDefinitions: readonly TeamGameDefinition[] = (
+  [
+    ['two-net-better-ball', 'standard', 'Fictional 2-man Better Ball'],
+    ['two-net-aggregate', 'standard', 'Fictional 2-man Aggregate'],
+    ['four-two-net', 'standard', 'Fictional 4-man Standard'],
+    ['four-two-net', 'modified', 'Fictional 4-man Modified'],
+  ] satisfies readonly (readonly [TeamGameFormat, 'standard' | 'modified', string])[]
+).map(([format, preset, name], index) => {
+  const size = format === 'four-two-net' ? 4 : 2;
+  return {
+    id: id(710 + index), name, format, preset, basis: 'net', handicapAllowancePercent: 100,
+    points: stablefordPoints(preset),
+    teams: Array.from({ length: 4 / size }, (_, teamIndex) => ({
+      id: id(950 + index * 10 + teamIndex), name: `Fictional team ${String(teamIndex + 1)}`,
+      playerIds: snapshot.players.slice(teamIndex * size, teamIndex * size + size).map((player) => player.playerId),
+    })),
+  };
+});
+const teamSnapshot: RoundSnapshot = {
+  ...snapshot,
+  players: snapshot.players.map((player, index) => ({
+    ...player, handicapIndex: {
+      id: id(600 + index), value: '0', effectiveDate: '2026-01-01', source: 'Fictional capture',
+      recordedAt: '2026-01-01T00:00:00Z', recordedBy: { tenantId: id(200), objectId: id(201) }, previousObservationId: null,
+    },
+  })),
+};
+const teamCards: RoundScores['cards'] = cards.map((card, index) => ({
+  ...card, holes: layout.map((hole) => ({
+    number: hole.number, score: hole.number === 18 ? { kind: 'unplayed' } : { kind: 'strokes', strokes: index < 2 ? 3 : 5 },
+  })),
+}));
+export const fictionalTeamGamesRound: RoundScores = {
+  ...fictionalGamesRound, cards: teamCards,
+  games: {
+    configuration: { eventId: fictionalGamesRound.eventId, roundId: snapshot.id, etag: 'team-games-v1', games: teamDefinitions },
+    results: calculateGameResults(teamDefinitions, teamSnapshot, teamCards),
+  },
 };

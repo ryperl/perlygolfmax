@@ -30,6 +30,7 @@ interface Editor {
   readonly attempt: Attempt | null;
   readonly conflict: boolean;
   readonly latest: RoundScores | null;
+  readonly roster: RoundScores['cards'];
 }
 
 export function RoundGamesPanel({ round, busy, onDirtyChange, onSave, onRefresh }: RoundGamesPanelProps) {
@@ -52,7 +53,7 @@ export function RoundGamesPanel({ round, busy, onDirtyChange, onSave, onRefresh 
     setMessage('');
     setEditor({
       draft, base: games, etag: round.games?.configuration.etag ?? null,
-      attempt: null, conflict: false, latest: null,
+      attempt: null, conflict: false, latest: null, roster: round.cards,
     });
   }
 
@@ -64,10 +65,10 @@ export function RoundGamesPanel({ round, busy, onDirtyChange, onSave, onRefresh 
 
   async function save() {
     if (!editor || disabled || editor.conflict || inFlight.current) return;
-    const game = buildGame(editor.draft);
+    const game = buildGame(editor.draft, editor.roster.map((card) => card.playerId));
     const intended = game && replaceGame(editor.base, game);
     if (!intended) {
-      setMessage('Check the game name (1–100 characters), whole-number points, and net allowance (1–100). Values must be safe integers within the supported points range.');
+      setMessage('Check the game name (1–100 characters), whole-number points, net allowance (1–100), and complete team assignments. Values must be safe integers within the supported points range.');
       return;
     }
     const attempt = editor.attempt ?? { games: intended, etag: editor.etag, id: crypto.randomUUID() };
@@ -136,6 +137,7 @@ export function RoundGamesPanel({ round, busy, onDirtyChange, onSave, onRefresh 
     setEditor({
       ...editor, base: editor.latest.games?.configuration.games ?? [],
       etag: editor.latest.games?.configuration.etag ?? null, attempt: null, conflict: false, latest: null,
+      roster: editor.latest.cards,
     });
     setMessage('Draft reviewed against the latest settings. Other games will be preserved. Save when ready.');
   }
@@ -173,6 +175,7 @@ export function RoundGamesPanel({ round, busy, onDirtyChange, onSave, onRefresh 
           </div>
         </div>}
         <GameSettings draft={editor.draft} disabled={disabled || editor.latest?.eventStatus === 'archived'}
+          roster={editor.roster}
           saveDisabled={editor.conflict} cancelDisabled={working} retry={editor.attempt !== null}
           onChange={change} onSave={() => { void save(); }} onCancel={() => {
             setEditor(null);

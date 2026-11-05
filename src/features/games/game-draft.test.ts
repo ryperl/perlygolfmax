@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { fictionalId } from '../../client/catalog.test-support';
-import { maximumExactGamePoints } from '../../domain/games';
-import { addBand, buildGame, draftFromGame, newGameDraft, replaceGame, setPreset } from './game-draft';
+import { maximumExactGamePoints, teamSize } from '../../domain/games';
+import { teamLeaderboardGame, teamLeaderboardRound } from '../../client/leaderboard.test-support';
+import { addBand, buildGame, draftFromGame, newGameDraft, replaceGame, resetTeamAssignments, setFormat, setPreset, teamDraftFeedback } from './game-draft';
 
 describe('game drafts', () => {
   it('creates a fresh standard seed with 95% allowance and independent points rows', () => {
@@ -30,7 +31,7 @@ describe('game drafts', () => {
       betterScorePoints: 12, worseScorePoints: -7,
       rows: [{ scoreToPar: -4, points: 12 }, ...buildGame(modified)?.points.rows ?? [], { scoreToPar: 3, points: -7 }],
     });
-    expect(draftFromGame(buildGame(extended) ?? failGame())).toEqual(extended);
+    expect(draftFromGame(buildGame(extended) ?? failGame())).toEqual({ ...extended, allowanceConfigured: true });
   });
 
   it.each(['', ' ', '1.2', '1e2', 'Infinity', 'NaN', '9007199254740992', String(maximumExactGamePoints + 1)])(
@@ -77,6 +78,61 @@ describe('game drafts', () => {
     const full = Array.from({ length: 16 }, (_, index) => ({ ...first, id: fictionalId(600 + index) }));
     expect(replaceGame(full, first)).toBeNull();
     expect(replaceGame([first, first], updated)).toBeNull();
+  });
+
+  it('creates empty team slots without partner inference and preserves explicitly configured allowance', () => {
+    const team = setFormat(newGameDraft(), 'two-net-better-ball', 6);
+    expect(team.allowance).toBe('100');
+    expect(team.basis).toBe('net');
+    expect(team.teams).toHaveLength(3);
+    expect(team.teams?.flatMap((entry) => entry.playerIds)).toEqual(['', '', '', '', '', '']);
+    expect(buildGame(team, teamLeaderboardRound.cards.map((card) => card.playerId))).toBeNull();
+    const saved = draftFromGame({ ...teamLeaderboardGame, handicapAllowancePercent: 95 });
+    expect(setFormat(saved, 'two-net-aggregate', 6)).toMatchObject({ teams: saved.teams, allowance: '95' });
+    expect(setPreset(setFormat(saved, 'two-net-aggregate', 6), 'standard').allowance).toBe('95');
+    expect(setFormat({ ...team, allowance: '87', allowanceConfigured: true }, 'four-two-net', 8)).toMatchObject({
+      allowance: '87', assignmentsCleared: true, teams: [
+        { playerIds: ['', '', '', ''] }, { playerIds: ['', '', '', ''] },
+      ],
+    });
+  });
+
+  it('round-trips valid assignments and rejects missing, duplicate, stale and incompatible rosters', () => {
+    const ids = teamLeaderboardRound.cards.map((card) => card.playerId);
+    const draft = draftFromGame(teamLeaderboardGame);
+    expect(buildGame(draft, ids)).toEqual(teamLeaderboardGame);
+    expect(teamDraftFeedback(draft, ids)).toBeNull();
+    expect(buildGame(draft, ids.slice(0, 4))).toBeNull();
+    expect(buildGame({ ...draft, teams: draft.teams?.map((team) => ({ ...team, playerIds: [ids[0] ?? '', ''] })) }, ids)).toBeNull();
+    expect(buildGame({ ...draft, format: 'four-two-net' }, ids)).toBeNull();
+    expect(teamDraftFeedback({ ...draft, format: 'four-two-net' }, ids)).toContain('6 golfers cannot form full 4-person teams');
+    expect(buildGame({ ...draft, teams: draft.teams?.map((team) => ({ ...team, name: '' })) }, ids)).toBeNull();
+    expect(buildGame(draft)).toBeNull();
+  });
+
+  it.each([
+    ['two-net-better-ball', 'standard'], ['two-net-aggregate', 'standard'],
+    ['four-two-net', 'standard'], ['four-two-net', 'modified'],
+  ] as const)('builds the requested %s / %s choice with editable independent points and allowance', (format, preset) => {
+    const roster = Array.from({ length: 8 }, (_, index) => fictionalId(1000 + index));
+    const seed = setPreset(setFormat(newGameDraft(), format, roster.length), preset);
+    const draft = { ...seed, allowance: '91', teams: seed.teams?.map((team, index) => ({
+      ...team, playerIds: roster.slice(index * teamSize(format), (index + 1) * teamSize(format)),
+    })) };
+    expect(buildGame(draft, roster)).toMatchObject({ format, preset, basis: 'net', handicapAllowancePercent: 91 });
+    expect(setPreset(draft, preset === 'standard' ? 'modified' : 'standard')).toMatchObject({
+      format, teams: draft.teams, allowance: '91',
+    });
+  });
+
+  it('resets team slot count explicitly after roster growth or shrink and retains saved individual allowances', () => {
+    const draft = draftFromGame(teamLeaderboardGame);
+    expect(resetTeamAssignments(draft, 4).teams).toHaveLength(2);
+    expect(resetTeamAssignments(draft, 8).teams).toHaveLength(4);
+    expect(resetTeamAssignments(draft, 4).teams?.flatMap((team) => team.playerIds)).toEqual(['', '', '', '']);
+    const gross = { id: fictionalId(1100), name: 'Fictional saved gross', preset: 'standard' as const,
+      basis: 'gross' as const, handicapAllowancePercent: 100, points: teamLeaderboardGame.points };
+    expect(buildGame(draftFromGame(gross))).toEqual(gross);
   });
 });
 

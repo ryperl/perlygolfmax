@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type { RoundScores, Scorecard, ScoreChange } from '../domain/scoring';
 import { maximumExactHoleStrokes } from '../domain/scoring';
 import { isHoleScore, isRoundScores, isScorecard, isScoreChange, isScoreHistoryPage, isScoreWriteResult, parseScoreEntry, scoreEntryText } from './scoring';
+import type { GamePlayerResult, TeamGameDefinition, TeamGameFormat } from '../domain/games.js';
+import { teamSize } from '../domain/games.js';
+import { aggregateTeamGameResults } from '../domain/team-games.js';
+import { stablefordPoints } from '../domain/stableford.js';
+import { isRoundGamesView } from './games.js';
 
 const id = (number: number) => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
 function round(): RoundScores {
@@ -27,6 +32,113 @@ const change: ScoreChange = {
 describe('owner gross scoring network contracts', () => {
   it.each([{ kind: 'unplayed' }, { kind: 'picked-up' }, { kind: 'did-not-finish' }, { kind: 'strokes', strokes: 1 }])('accepts explicit disposition %j', (score) => {
     expect(isHoleScore(score)).toBe(true);
+  });
+
+  function teamRound(format: TeamGameFormat = 'four-two-net'): RoundScores {
+    const base = round();
+    const cards = base.cards.map((card): Scorecard => ({
+      ...card, etag: 'fictional-card-v1', updatedAt: '2026-01-01T00:00:00Z',
+      holes: card.holes.map((hole) => ({ ...hole, score: { kind: 'strokes', strokes: 4 } })),
+    }));
+    const players: readonly GamePlayerResult[] = cards.map((card) => ({
+      playerId: card.playerId, displayName: card.displayName, playingHandicap: 0, status: 'complete',
+      holes: card.holes.map((hole) => ({ number: hole.number, points: 2, strokesReceived: 0 })),
+      totalHoles: 9, holesScored: 9, frontPoints: 18, backPoints: null, totalPoints: 18,
+    }));
+    const size = teamSize(format);
+    const definition: TeamGameDefinition = {
+      id: id(800), name: 'Fictional team competition', basis: 'net', format, preset: 'standard',
+      handicapAllowancePercent: 100, points: stablefordPoints('standard'),
+      teams: Array.from({ length: cards.length / size }, (_, index) => ({
+        id: id(900 + index), name: `Fictional team ${String(index + 1)}`,
+        playerIds: cards.slice(index * size, (index + 1) * size).map((card) => card.playerId),
+      })),
+    };
+    return {
+      ...base, cards, setupLocked: true, lastUpdatedAt: '2026-01-01T00:00:00Z',
+      games: {
+        configuration: { eventId: base.eventId, roundId: base.roundId, etag: 'fictional-game-v1', games: [definition] },
+        results: [{ gameId: definition.id, players,
+          teams: aggregateTeamGameResults(definition, players, base.layout.map((hole) => hole.number)) }],
+      },
+    };
+  }
+
+  describe('team projections retain raw-score consistency checks', () => {
+    it('accepts explicit non-scoring repair state for saved assignments mismatching current raw-card roster', () => {
+      const value = teamRound();
+      const view = value.games;
+      if (!view) throw new Error('Missing fictional games');
+      const configuration = { ...view.configuration, games: view.configuration.games.map((game) => ({
+        ...game, teams: game.teams?.map((team) => ({
+          ...team, playerIds: team.playerIds.map((playerId, index) => index !== 0 ? playerId : id(999)),
+        })),
+      })) };
+      const results = view.results.map((result) => ({ ...result, teams: [], teamSetupRequired: true }));
+      expect(isRoundScores({ ...value, games: { configuration, results } })).toBe(true);
+      expect(isRoundScores({ ...value, games: { configuration, results: view.results } })).toBe(false);
+      const cards = value.cards.map((card, index) => index !== 0 ? card : ({ ...card, displayName: 'Fictional changed name' }));
+      expect(isRoundScores({ ...value, cards, games: { configuration, results } })).toBe(false);
+    });
+
+    it.each(['two-net-better-ball', 'two-net-aggregate', 'four-two-net'] as const)('accepts a saved %s without rewriting entered strokes or playing groups', (format) => {
+      const value = teamRound(format);
+      const before = structuredClone(value);
+      expect(isRoundScores(value)).toBe(true);
+      expect(value).toEqual(before);
+      const cards = value.cards.map((card, index) => index !== 0 ? card : ({
+        ...card, holes: card.holes.map((hole) => hole.number !== 1 ? hole : ({
+          ...hole, score: { kind: 'strokes' as const, strokes: 5 },
+        })),
+      }));
+      expect(isRoundScores({ ...value, cards })).toBe(false);
+    });
+
+    it('rejects tampered net components even when their team aggregate is recomputed consistently', () => {
+      const value = teamRound();
+      const view = value.games;
+      const definition = view?.configuration.games[0];
+      const result = view?.results[0];
+      if (!view || !definition || definition.format === undefined || !result) throw new Error('Missing fictional game');
+      const players = result.players.map((player, index) => index !== 0 ? player : ({
+        ...player, frontPoints: 19, totalPoints: 19,
+        holes: player.holes.map((hole) => hole.number !== 1 ? hole : ({ ...hole, points: 3 })),
+      }));
+      const games = {
+        ...view, results: [{ ...result, players, teams: aggregateTeamGameResults(definition, players, value.layout.map((hole) => hole.number)) }],
+      };
+      expect(isRoundGamesView(games)).toBe(true);
+      expect(isRoundScores({ ...value, games })).toBe(false);
+    });
+
+    it('requires every saved teammate hole; accepts pickup/DNF minimums and keeps blank holes pending', () => {
+      const value = teamRound();
+      const view = value.games;
+      const definition = view?.configuration.games[0];
+      const result = view?.results[0];
+      if (!view || !definition || definition.format === undefined || !result) throw new Error('Missing fictional game');
+      const cards = value.cards.map((card, index): Scorecard => ({
+        ...card, holes: card.holes.map((hole) => hole.number !== 1 ? hole : ({
+          ...hole, score: index === 0 ? { kind: 'picked-up', reportedStrokes: 7 }
+            : index === 1 ? { kind: 'did-not-finish' } : index === 3 ? { kind: 'unplayed' } : hole.score,
+        })),
+      }));
+      const players = result.players.map((player, index): GamePlayerResult => ({
+        ...player, status: index === 3 ? 'in-progress' : 'complete', holesScored: index === 3 ? 8 : 9,
+        frontPoints: index === 2 ? 18 : 16, totalPoints: index === 2 ? 18 : 16,
+        holes: player.holes.map((hole) => hole.number !== 1 ? hole : ({
+          ...hole, points: index === 3 ? null : index === 2 ? 2 : 0,
+        })),
+      }));
+      const teams = aggregateTeamGameResults(definition, players, value.layout.map((hole) => hole.number));
+      const games = { ...view, results: [{ ...result, players, teams }] };
+      expect(teams[0]).toMatchObject({ status: 'in-progress', holesScored: 8, totalPoints: 32 });
+      expect(isRoundScores({ ...value, cards, games })).toBe(true);
+      expect(isRoundScores({ ...value, cards, games: { ...games, results: [{
+        ...result, players, teams: teams.map((team) => ({ ...team, status: 'complete', holesScored: 9, frontPoints: 34,
+          totalPoints: 34, holes: team.holes.map((hole) => hole.number !== 1 ? hole : ({ ...hole, points: 2 })) })),
+      }] } })).toBe(false);
+    });
   });
   it.each([
     null, {}, { kind: 'complete' }, { kind: 'strokes', strokes: 0 }, { kind: 'strokes', strokes: -1 },

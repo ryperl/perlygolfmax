@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { RoundLeaderboard } from './RoundLeaderboard';
-import { fictionalStanding, leaderboardGames, leaderboardRound } from '../../client/leaderboard.test-support';
+import { fictionalStanding, leaderboardGames, leaderboardRound, teamLeaderboardGame, teamLeaderboardRound } from '../../client/leaderboard.test-support';
 import { fictionalRoundScores } from '../../client/scoring.test-support';
 
 describe('round leaderboard', () => {
@@ -70,5 +70,35 @@ describe('round leaderboard', () => {
     } }} busy={false} onManageGames={vi.fn()} />);
     expect(screen.getByText('No ranked scores yet.')).toBeVisible();
     expect(screen.queryByLabelText('0 points')).not.toBeInTheDocument();
+  });
+
+  it('ranks saved team totals with member context, not underlying individual components', () => {
+    const { container } = render(<RoundLeaderboard round={teamLeaderboardRound} busy={false} onManageGames={vi.fn()} />);
+    expect(screen.getByRole('heading', { name: 'Team standings' })).toBeVisible();
+    const rows = within(screen.getByRole('list', { name: 'Standings' })).getAllByRole('listitem');
+    expect(rows.map((row) => within(row).getByRole('heading').textContent)).toEqual(['Fictional team 2', 'Fictional team 1']);
+    expect(rows[1]).toHaveTextContent('Fictional golfer 1 · Fictional golfer 2');
+    expect(rows[1]).toHaveTextContent('1/9 holes · In progress');
+    expect(screen.getByRole('region', { name: 'Unavailable results' })).toHaveTextContent('Fictional team 3');
+    expect(screen.getByText(/Teams may have played different/)).toBeVisible();
+    expect(container.textContent).not.toContain(teamLeaderboardGame.teams[0]?.id);
+  });
+
+  it('keeps stale and missing team results unranked and offers assignment repair without individual fallback', async () => {
+    const games = teamLeaderboardRound.games;
+    const result = games?.results[0];
+    if (!games || !result) throw new Error('Missing fictional teams.');
+    const onManageGames = vi.fn();
+    const view = render(<RoundLeaderboard round={{ ...teamLeaderboardRound, games: {
+      ...games, results: [{ ...result, teams: [], teamSetupRequired: true }],
+    } }} busy={false} onManageGames={onManageGames} />);
+    expect(screen.queryByRole('list', { name: 'Standings' })).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Update team assignments' }));
+    expect(onManageGames).toHaveBeenCalledOnce();
+    view.rerender(<RoundLeaderboard round={{ ...teamLeaderboardRound, games: {
+      ...games, results: [{ gameId: result.gameId, players: result.players }],
+    } }} busy={false} onManageGames={onManageGames} />);
+    expect(screen.getByText(/Leaderboard results are unavailable/)).toBeVisible();
+    expect(screen.queryByRole('list', { name: 'Standings' })).not.toBeInTheDocument();
   });
 });

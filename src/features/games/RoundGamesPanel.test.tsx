@@ -8,6 +8,7 @@ import type { GameWriteResult, RoundScores } from '../../domain/scoring';
 import { stablefordPoints } from '../../domain/stableford';
 import { RoundGamesPanel } from './index';
 import type { RoundGamesPanelProps } from './index';
+import { teamLeaderboardGame, teamLeaderboardRound } from '../../client/leaderboard.test-support';
 
 const original: RoundGameDefinition = {
   id: fictionalId(701), name: 'Fictional original game', preset: 'standard', basis: 'gross',
@@ -40,6 +41,53 @@ async function saved() {
 }
 
 describe('RoundGamesPanel', () => {
+  it('repairs stale assignments using current round cards, preserves peer games, and clears stale state after confirmation', async () => {
+    const savedGames = teamLeaderboardRound.games;
+    const result = savedGames?.results[0];
+    if (!savedGames || !result) throw new Error('Missing fictional games.');
+    const replacementId = fictionalId(970);
+    const round: RoundScores = {
+      ...teamLeaderboardRound,
+      cards: teamLeaderboardRound.cards.map((card, index) => index === 0
+        ? { ...card, playerId: replacementId, displayName: 'Fictional new golfer' } : card),
+      games: {
+        ...savedGames, configuration: { ...savedGames.configuration, games: [teamLeaderboardGame, peer] },
+        results: [{ ...result, teams: [], teamSetupRequired: true }],
+      },
+    };
+    const { onSave, props, rerender } = setup(round);
+    click(`Edit ${teamLeaderboardGame.name}`);
+    expect(screen.getByText(/A selected golfer is no longer/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Save game' })).toBeDisabled();
+    field('Team 1 member 1', replacementId);
+    field('Team 1 name', 'Fictional repaired team');
+    click('Save game');
+    await saved();
+    const call = onSave.mock.calls[0];
+    if (!call) throw new Error('Missing fictional save.');
+    expect(call[0]).toHaveLength(2);
+    expect(call[0][1]).toEqual(peer);
+    expect(call[0][0]).toMatchObject({
+      format: 'two-net-better-ball', handicapAllowancePercent: 100,
+      teams: [{ name: 'Fictional repaired team', playerIds: [replacementId, teamLeaderboardRound.cards[1]?.playerId] }, {}, {}],
+    });
+    rerender(<RoundGamesPanel {...props} round={gameResult(...call, round).round} />);
+    expect(screen.queryByText(/Update team assignments/)).not.toBeInTheDocument();
+  });
+
+  it('retains explicit assignments and retry identity when a team save is unconfirmed', async () => {
+    const { onSave } = setup(teamLeaderboardRound);
+    onSave.mockResolvedValueOnce(null);
+    click(`Edit ${teamLeaderboardGame.name}`);
+    field('Points preset', 'standard');
+    click('Save game');
+    await waitFor(() => { expect(screen.getByText(/Save is not confirmed/)).toBeVisible(); });
+    expect(screen.getByLabelText('Team 1 member 1')).toHaveValue(teamLeaderboardRound.cards[0]?.playerId);
+    click('Retry save');
+    await saved();
+    expect(onSave.mock.calls[1]).toEqual(onSave.mock.calls[0]);
+  });
+
   it('does not invent defaults for a legacy round and cancels an unsaved draft', () => {
     const { onSave, onDirtyChange } = setup();
     expect(screen.getByRole('heading', { name: `Games · ${fictionalRoundScores.roundName}` })).toBeVisible();

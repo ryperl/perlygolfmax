@@ -1,5 +1,6 @@
 import type { TableClient } from '@azure/data-tables';
 import type { GameConfiguration, RoundGameDefinition } from '../../../src/domain/games.js';
+import { maximumGameConfigurationBytes } from '../../../src/domain/games.js';
 import { isGameConfiguration } from '../../../src/contracts/games.js';
 import { isRecord, isUuid } from '../../../src/contracts/events.js';
 import { decode, optionalRow, revision } from '../catalog/entities.js';
@@ -48,7 +49,10 @@ export async function readGameConfiguration(table: TableClient, eventId: string,
     throw new ApiError(503, 'INVALID_STORED_GAMES');
   }
   const stored = decode(row.content, isStoredGames);
-  if (stored.eventId !== eventId || stored.roundId !== roundId) throw new ApiError(503, 'INVALID_STORED_GAMES');
+  if (stored.eventId !== eventId || stored.roundId !== roundId
+    || Buffer.byteLength(JSON.stringify({ games: stored.games }), 'utf8') > maximumGameConfigurationBytes) {
+    throw new ApiError(503, 'INVALID_STORED_GAMES');
+  }
   return { eventId, roundId, games: stored.games, etag: revision(row) };
 }
 

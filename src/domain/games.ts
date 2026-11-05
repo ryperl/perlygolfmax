@@ -14,13 +14,58 @@ export interface StablefordPointsTable {
   readonly worseScorePoints: number;
 }
 
-export interface RoundGameDefinition {
+interface CommonGameDefinition {
   readonly id: string;
   readonly name: string;
   readonly preset: StablefordPreset;
-  readonly basis: GameScoreBasis;
   readonly handicapAllowancePercent: number;
   readonly points: StablefordPointsTable;
+}
+
+export interface IndividualGameDefinition extends CommonGameDefinition {
+  readonly basis: GameScoreBasis;
+  readonly format?: never;
+  readonly teams?: never;
+}
+
+export type TeamGameFormat = 'two-net-better-ball' | 'two-net-aggregate' | 'four-two-net';
+
+export interface GameTeam {
+  readonly id: string;
+  readonly name: string;
+  readonly playerIds: readonly string[];
+}
+
+export interface TeamGameDefinition extends CommonGameDefinition {
+  readonly basis: 'net';
+  readonly format: TeamGameFormat;
+  readonly teams: readonly GameTeam[];
+}
+
+export type RoundGameDefinition = IndividualGameDefinition | TeamGameDefinition;
+
+export function isTeamGameDefinition(game: RoundGameDefinition): game is TeamGameDefinition {
+  return game.format !== undefined;
+}
+
+export function teamSize(format: TeamGameFormat): 2 | 4 {
+  return format === 'four-two-net' ? 4 : 2;
+}
+
+export function teamCountingSize(format: TeamGameFormat): 1 | 2 {
+  return format === 'two-net-better-ball' ? 1 : 2;
+}
+
+export function gameTeamsMatchRoster(game: RoundGameDefinition, playerIds: readonly string[]): boolean {
+  if (!isTeamGameDefinition(game)) return true;
+  const size = teamSize(game.format);
+  const assigned = game.teams.flatMap((team) => team.playerIds);
+  return playerIds.length >= 4 && playerIds.length <= 8 && playerIds.length % size === 0
+    && new Set(playerIds).size === playerIds.length
+    && game.teams.every((team) => team.playerIds.length === size)
+    && new Set(game.teams.map((team) => team.id)).size === game.teams.length
+    && assigned.length === playerIds.length && new Set(assigned).size === assigned.length
+    && assigned.every((id) => playerIds.includes(id));
 }
 
 export interface GameConfiguration {
@@ -60,6 +105,27 @@ export interface GamePlayerResult {
 export interface RoundGameResult {
   readonly gameId: string;
   readonly players: readonly GamePlayerResult[];
+  readonly teams?: readonly GameTeamResult[];
+  readonly teamSetupRequired?: true;
+}
+
+export interface GameTeamHoleResult {
+  readonly number: number;
+  readonly points: number | null;
+}
+
+export interface GameTeamResult {
+  readonly teamId: string;
+  readonly displayName: string;
+  readonly playerIds: readonly string[];
+  readonly status: 'complete' | 'in-progress' | 'unavailable';
+  readonly unavailableReason?: GameUnavailableReason;
+  readonly holes: readonly GameTeamHoleResult[];
+  readonly holesScored: number;
+  readonly totalHoles: number;
+  readonly frontPoints: number | null;
+  readonly backPoints: number | null;
+  readonly totalPoints: number | null;
 }
 
 export interface RoundGamesView {
@@ -79,9 +145,15 @@ export interface GameChange {
 }
 
 export const defaultHandicapAllowancePercent = 95;
+export const defaultTeamHandicapAllowancePercent = 100;
 export const maximumExactGamePoints = Math.floor(Number.MAX_SAFE_INTEGER / 18);
+export const maximumGameConfigurationBytes = 12 * 1024;
 export const maximumGamesPerRound = 16;
 export const maximumPointsRows = 32;
+
+export function maximumExactPointsForGame(game: RoundGameDefinition): number {
+  return Math.floor(Number.MAX_SAFE_INTEGER / (18 * (isTeamGameDefinition(game) ? teamCountingSize(game.format) : 1)));
+}
 
 export function sameGameDefinitions(left: readonly RoundGameDefinition[], right: readonly RoundGameDefinition[]): boolean {
   return left.length === right.length && left.every((game, index) => {
@@ -89,6 +161,14 @@ export function sameGameDefinitions(left: readonly RoundGameDefinition[], right:
     return other !== undefined && game.id === other.id && game.name === other.name
       && game.preset === other.preset && game.basis === other.basis
       && game.handicapAllowancePercent === other.handicapAllowancePercent
+      && game.format === other.format
+      && (!isTeamGameDefinition(game) || isTeamGameDefinition(other)
+        && game.teams.length === other.teams.length && game.teams.every((team, teamIndex) => {
+          const counterpart = other.teams[teamIndex];
+          return counterpart !== undefined && team.id === counterpart.id && team.name === counterpart.name
+            && team.playerIds.length === counterpart.playerIds.length
+            && team.playerIds.every((id, memberIndex) => id === counterpart.playerIds[memberIndex]);
+        }))
       && game.points.betterScorePoints === other.points.betterScorePoints
       && game.points.worseScorePoints === other.points.worseScorePoints
       && game.points.rows.length === other.points.rows.length

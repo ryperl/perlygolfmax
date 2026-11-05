@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import type { RoundScores } from '../../domain/scoring';
+import { isTeamGameDefinition } from '../../domain/games';
+import { gameScoringLabel } from '../games';
 import { PlayerScorecardRecap } from './PlayerScorecardRecap';
 import { ScorecardNine } from './ScorecardNine';
 import { cardFor } from './entry-state';
@@ -36,7 +38,7 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
     {games.length > 0 && <section className="scorecard-game-summary" aria-label="Round games">
       <h3>Round games</h3>
       <ul role="list">{games.map((entry) => <li key={entry.id}>
-        {entry.name} · {entry.basis === 'gross' ? 'Gross' : `Net ${String(entry.handicapAllowancePercent)}%`}
+        {entry.name} · {gameScoringLabel(entry)}
       </li>)}</ul>
     </section>}
     <div className="scorecard-controls">
@@ -53,6 +55,9 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
         {games.map((entry) => <option value={entry.id} key={entry.id}>{entry.name} · {entry.basis === 'net' ? `Net ${String(entry.handicapAllowancePercent)}%` : 'Gross'}</option>)}
       </select></label>}
     </div>
+    {game && isTeamGameDefinition(game.definition) && <p className="scorecard-game-unavailable">
+      Team game · These golfer scorecards show individual component points, not full team credits. See Games or Leaderboard for team totals.
+    </p>}
     {player ? <>
       <button type="button" className="scorecard-back" onClick={() => { setPlayerId(null); }}>Back to group scorecard</button>
       <PlayerScorecardRecap round={round} card={player} gameId={game?.definition.id ?? null} />

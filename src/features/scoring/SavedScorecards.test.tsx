@@ -5,6 +5,8 @@ import { fictionalChange, fictionalRoundScores, scoreResult } from '../../client
 import { SavedScorecards } from './SavedScorecards';
 import { scorecardGamesFixture } from './scorecard-games.test-support';
 import { withGameResults } from '../../client/scoring.test-support';
+import { teamLeaderboardRound } from '../../client/leaderboard.test-support';
+import { gameScoringLabel } from '../games';
 
 function props() {
   return { round: fictionalRoundScores, groupNumber: 1, busy: false, onGroupChange: vi.fn(), onEnterScores: vi.fn() };
@@ -18,7 +20,7 @@ describe('golfer-facing round scorecards', () => {
     rerender(<SavedScorecards {...props()} round={round} />);
     const roundGames = screen.getByRole('region', { name: 'Round games' });
     expect(within(roundGames).getAllByRole('listitem')).toHaveLength(games.length);
-    for (const game of games) expect(roundGames).toHaveTextContent(`${game.name} · ${game.basis === 'gross' ? 'Gross' : `Net ${String(game.handicapAllowancePercent)}%`}`);
+    for (const game of games) expect(roundGames).toHaveTextContent(`${game.name} · ${gameScoringLabel(game)}`);
     expect(screen.getByLabelText('Game')).toHaveValue(games[0]?.id);
     expect(screen.getByRole('row', { name: 'Fictional Player 1 · Fictional standard points' })).toBeVisible();
     const user = userEvent.setup();
@@ -31,6 +33,17 @@ describe('golfer-facing round scorecards', () => {
     await user.selectOptions(screen.getByLabelText('Game'), '');
     expect(screen.queryByRole('row', { name: /points$/ })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open scorecard for Fictional Player 1' })).toBeVisible();
+  });
+
+  it('labels team-game golfer points as individual components in group and expanded scorecards', async () => {
+    render(<SavedScorecards {...props()} round={teamLeaderboardRound} />);
+    expect(screen.getByText(/individual component points, not full team credits/)).toBeVisible();
+    expect(screen.getByText(/See Games or Leaderboard for team totals/)).toBeVisible();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Open scorecard for Fictional golfer 1' }));
+    expect(screen.getByRole('region', { name: 'Fictional golfer 1 full scorecard' })).toBeVisible();
+    expect(screen.getByText(/individual component points, not full team credits/)).toBeVisible();
+    await userEvent.setup().selectOptions(screen.getByLabelText('Game'), '');
+    expect(screen.queryByText(/individual component points/)).not.toBeInTheDocument();
   });
 
   it('updates game points from new server projections and shows missing net inputs only once for both nines', async () => {

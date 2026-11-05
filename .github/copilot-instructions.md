@@ -61,13 +61,24 @@
   that hole a completed numeric score. Blank shorthand stays unplayed.
 - Stableford results are server-derived from raw strokes and captured round
   inputs. Games have versioned/audited editable points and net allowance
-  (default 95%); never rewrite strokes or silently use current global indices.
+  (individual default 95%, new team default 100%); never rewrite strokes or
+  silently use current global indices.
   Pickup/DNF award minimum configured points; unplayed remains pending.
   Missing net inputs are unavailable, never a zero handicap.
 - Leaderboards order saved server game points, not local drafts or projected
   totals. Mixed progress is provisional with holes shown. Equal points share
   positions without a tie-break; unplayed/unavailable golfers are not ranked
-  as zero-point scores. Do not imply round finalization or team/trip aggregation.
+  as zero-point scores. Team games rank teams, never individual fallback.
+  Do not imply round finalization or event/trip aggregation.
+- Competition teams are explicit per round/game, separate from playing groups.
+  Require every round golfer exactly once in full teams; count best one of two,
+  both of two, or best two of four net point contributions per hole. Wait for
+  every teammate's saved entry. Never infer partners or copy conceded scores.
+  Stale assignments after an unscored roster change remain visible but produce
+  no team results until repaired; unchanged stale peer games may be retained
+  while another game is repaired. Keep legacy individual definitions valid.
+  Game-configuration writes alone allow 12 KiB UTF-8; ordinary writes retain
+  4 KiB. Preserve audit before/after string-size headroom and explicit failures.
 - Present golfer scores as hole-ordered scorecards, not audit records. Keep
   operation IDs, actor GUIDs, revisions and raw timestamps out of player
   entry/view screens; preserve backend audit and conditional-save safeguards.

@@ -87,7 +87,7 @@ from npm installation and must also comply with your machine's policies.
 - Configurable individual Stableford games derived server-side from the same
   stroke cards: gross/net, Standard/Modified Stableford presets, editable scoring
   bands and per-game handicap allowance. Multiple games can share one round.
-  This is not golfer admission, team scoring, offline recording or a finished
+  This is not golfer admission, offline recording or a finished
   tournament scoreboard.
 
 The Events screen is deliberately unavailable until an approved identity tenant
@@ -116,9 +116,9 @@ Production PWA capabilities require HTTPS and platform-specific verification.
 
 ### Future work, not implemented
 
-Golfer/self/assigned-foursome admission and scoring, team formats and aggregate
-trip results, owner appointment UI, offline synchronization and
-leaderboards remain later increments. The selected design is Entra External ID
+Golfer/self/assigned-foursome admission and scoring, aggregate event/trip results,
+owner appointment UI, offline synchronization and purse configuration remain
+later increments. The selected design is Entra External ID
 email codes, a standalone Functions API and Table Storage, with SWA staying Free.
 Provisioning/deployment is separately approval-gated. Detailed scoring, betting,
 payouts, reporting, overall-trip rules, admission and retention remain unsettled.
@@ -251,13 +251,46 @@ before/after audit records. Active-event games can be added or adjusted on
 existing stroke cards; archived events remain read-only. Conflicts preserve
 the draft and require explicit refresh/review. Saved-game removal and a
 general administrative/history interface are not included. Technical budgets
-are 16 games and 32 points rows, also subject to the existing 4 KiB request
-limit; an oversized request is refused explicitly, not partially saved.
+are 16 games and 32 points rows, also subject to a 12 KiB UTF-8 game-configuration
+request limit; an oversized request is refused explicitly, not partially saved.
+Other ordinary writes retain their 4 KiB limit. The bounded game budget also
+leaves space for both configurations in each immutable audit record.
+
+### Team Stableford games
+
+The Games editor also supports explicit competition teams, separate from playing
+groups. Every round golfer must belong to exactly one complete team in each game.
+Two-person formats require an even roster; four-person formats require a roster
+divisible by four. Partners are never inferred or assigned automatically.
+
+| Format | Counting net points on each hole |
+|--------|---------------------------------|
+| 2-man net better ball | Highest one of two |
+| 2-man net Aggregate | Sum both |
+| 4-man 2-net Stableford | Highest two; initially Standard |
+| 4-man 2-net Modified Stableford | Highest two; initially Modified |
+
+Counting golfers may change every hole. Presets and points remain configurable;
+the calculation selects points, not lowest strokes. New team games default to
+100% allowance, separately configurable from the unchanged 95% individual default.
+Saved allowances are never silently reset.
+
+A team hole waits for every teammate's saved entry, even when enough potential
+counting scores are already available. Explicit pickup/DNF entries retain the
+configured individual minimum; blanks remain pending. Missing handicap inputs
+remain unavailable. Games and Leaderboard show team rows and member names;
+golfer scorecard points remain individual components, not credited team totals.
+No team playing handicap, concession automation or score copying is invented.
+
+Before scoring locks setup, a roster change may invalidate saved assignments.
+These games remain editable but show no team result until assignments are
+repaired. Games can be repaired individually without discarding other stale
+games. This adds no finalization, payout or event-wide credit policy.
 
 ### Round leaderboard
 
 Open **Leaderboard** beside Scorecards, Enter scores and Games. Select a saved
-individual Stableford game to rank all golfers in that round by server-derived
+Stableford game to rank golfers or its configured teams by server-derived
 points earned so far, highest first. Holes scored and complete/in-progress
 states stay visible; mixed-progress standings are explicitly provisional.
 No projected totals, raw-gross ranking or client-side handicap recalculation
@@ -272,7 +305,7 @@ settings are not used in standings, and viewing never saves anything.
 
 The leaderboard uses the existing owner-only online score projection and its
 refresh/backoff/access checks. Archived rounds remain read-only. Participant
-sharing, team leaderboards, multi-round/day aggregation and event-wide results
+sharing, multi-round/day aggregation and event-wide results
 remain separate milestones.
 
 ### Local catalog and round setup

@@ -20,6 +20,25 @@ describe('private catalog/setup transport', () => {
     await expect(request('catalog/players', new AbortController().signal, { method: 'POST', body: { displayName: 'Fictional' } })).resolves.toEqual({ ok: true });
     expect(send.mock.calls[0]?.[1]).toMatchObject({ cache: 'no-store', credentials: 'omit' });
   });
+  it('keeps an explicitly larger transport budget isolated and measures UTF-8 rather than characters', async () => {
+    const send = vi.fn<typeof fetch>().mockResolvedValue(new Response('{"ok":true}'));
+    const token = vi.fn().mockResolvedValue('fictional');
+    const request = createPrivateRequest('https://fictional.example.test/api', token, send, 12 * 1024);
+    const bounded = { name: '界'.repeat(4000) };
+    expect(new TextEncoder().encode(JSON.stringify(bounded)).byteLength).toBeGreaterThan(4096);
+    await expect(request('fixture', new AbortController().signal, { method: 'PUT', body: bounded })).resolves.toEqual({ ok: true });
+    token.mockClear();
+    send.mockClear();
+    await expect(request('fixture', new AbortController().signal, {
+      method: 'PUT', body: { name: '界'.repeat(4100) },
+    })).rejects.toThrow('12288-byte UTF-8');
+    expect(token).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+    const ordinary = createPrivateRequest('https://fictional.example.test/api', token, send);
+    await expect(ordinary('fixture', new AbortController().signal, { method: 'PUT', body: bounded })).rejects.toThrow('4096-byte UTF-8');
+    expect(token).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
   it('keeps the existing two-argument error constructor and bounds optional retry metadata', () => {
     expect(new PrivateRequestError(403, 'Denied.').retryAfterSeconds).toBeUndefined();
     expect(new PrivateRequestError(429, 'Limited.').retryAfterSeconds).toBe(60);

@@ -4,7 +4,8 @@ import { fictionalChange, fictionalRoundScores, gameResult, scoreResult, withGam
 import { fictionalId } from './catalog.test-support';
 import { EventChangedError, SessionExpiredError } from './events';
 import { maximumExactHoleStrokes } from '../domain/scoring';
-import type { RoundGameDefinition } from '../domain/games';
+import type { RoundGameDefinition, TeamGameDefinition } from '../domain/games';
+import { maximumGameConfigurationBytes } from '../domain/games';
 import { stablefordPoints } from '../domain/stableford';
 
 const { eventId, roundId } = fictionalRoundScores;
@@ -39,6 +40,25 @@ describe('owner scoring transport', () => {
     const { client, signal } = fixture(response);
     expect(await client.saveGames(eventId, roundId, [game], null, id, signal)).toEqual(response);
   });
+  it('round-trips explicit teams and rejects an acknowledgement for different partners', async () => {
+    const ids = fictionalRoundScores.cards.map((card) => card.playerId);
+    const team: TeamGameDefinition = {
+      ...game, format: 'two-net-better-ball', basis: 'net', handicapAllowancePercent: 100,
+      teams: [0, 1].map((index) => ({
+        id: fictionalId(800 + index), name: `Fictional Team ${String(index + 1)}`,
+        playerIds: ids.slice(index * 2, index * 2 + 2),
+      })),
+    };
+    const result = gameResult([team], null, id);
+    const valid = fixture(result);
+    expect(await valid.client.saveGames(eventId, roundId, [team], null, id, valid.signal)).toEqual(result);
+    expect(valid.send.mock.calls[0]?.[1]?.body).toBe(JSON.stringify({ games: [team] }));
+    const changed = { ...team, teams: [...team.teams].reverse().map((entry, index) => ({
+      ...entry, id: team.teams[index]?.id ?? '', name: team.teams[index]?.name ?? '',
+    })) };
+    const mismatch = fixture({ ...result, change: { ...result.change, after: [changed] } });
+    await expect(mismatch.client.saveGames(eventId, roundId, [team], null, id, mismatch.signal)).rejects.toThrow('acknowledgement');
+  });
   it('rejects mismatched game acknowledgements and incorrect derived points even when totals are self-consistent', async () => {
     const first = gameResult([game], null, id, scoreResult().round);
     for (const change of [{ id: fictionalId(999) }, { expectedEtag: 'other' }, { after: [{ ...game, name: 'Wrong game' }] }]) {
@@ -61,10 +81,25 @@ describe('owner scoring transport', () => {
     for (const games of [[], [game, game], [{ ...game, handicapAllowancePercent: 0 }]]) {
       await expect(client.saveGames(eventId, roundId, games, null, id, signal)).rejects.toThrow('settings');
     }
-    const oversized = Array.from({ length: 16 }, (_, index) => ({ ...game, id: fictionalId(700 + index), name: 'F'.repeat(100) }));
-    await expect(client.saveGames(eventId, roundId, oversized, null, id, signal)).rejects.toThrow('4096');
+    const oversized = Array.from({ length: 16 }, (_, index) => ({
+      ...game, id: fictionalId(700 + index), name: 'F'.repeat(100),
+      points: { ...game.points, rows: Array.from({ length: 32 }, (_, row) => ({ scoreToPar: row, points: 1_000_000_000_000 })) },
+    }));
+    expect(new TextEncoder().encode(JSON.stringify({ games: oversized })).byteLength).toBeGreaterThan(maximumGameConfigurationBytes);
+    await expect(client.saveGames(eventId, roundId, oversized, null, id, signal)).rejects.toThrow(`${String(maximumGameConfigurationBytes)}-byte UTF-8`);
     expect(token).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
+  });
+  it('sends a complete bounded game set above the ordinary write cap and validates its acknowledgement', async () => {
+    const definitions = Array.from({ length: 16 }, (_, index) => ({ ...game, id: fictionalId(700 + index), name: 'F'.repeat(100) }));
+    const bytes = new TextEncoder().encode(JSON.stringify({ games: definitions })).byteLength;
+    expect(bytes).toBeGreaterThan(4096);
+    expect(bytes).toBeLessThanOrEqual(maximumGameConfigurationBytes);
+    const result = gameResult(definitions, null, id);
+    const { client, send, token, signal } = fixture(result);
+    expect(await client.saveGames(eventId, roundId, definitions, null, id, signal)).toEqual(result);
+    expect(send.mock.calls[0]?.[1]?.body).toBe(JSON.stringify({ games: definitions }));
+    expect(token).toHaveBeenCalledOnce();
   });
   it('loads authenticated, uncached owner scorecards without cookies', async () => {
     const { client, send, token, signal } = fixture();

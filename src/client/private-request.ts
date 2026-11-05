@@ -29,12 +29,12 @@ interface Write {
   readonly createOnly?: boolean;
 }
 
-export function createPrivateRequest(apiUrl: string, getToken: () => Promise<string>, send: typeof fetch) {
+export function createPrivateRequest(apiUrl: string, getToken: () => Promise<string>, send: typeof fetch, maximumBytes = 4096) {
   return async (path: string, signal: AbortSignal, write?: Write): Promise<unknown> => {
     signal.throwIfAborted();
     const body = write ? JSON.stringify(write.body) : undefined;
-    if (body !== undefined && new TextEncoder().encode(body).byteLength > 4096) {
-      throw new Error('Request exceeds the 4096-byte UTF-8 service limit. Nothing was sent or confirmed saved.');
+    if (body !== undefined && new TextEncoder().encode(body).byteLength > maximumBytes) {
+      throw new Error(`Request exceeds the ${String(maximumBytes)}-byte UTF-8 service limit. Nothing was sent or confirmed saved.`);
     }
     const token = await getToken();
     signal.throwIfAborted();

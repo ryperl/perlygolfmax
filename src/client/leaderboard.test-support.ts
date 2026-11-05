@@ -1,6 +1,6 @@
 import { fictionalId, fictionalWorkspace } from './catalog.test-support';
 import { fictionalRoundScores } from './scoring.test-support';
-import type { GamePlayerResult, RoundGameDefinition } from '../domain/games';
+import type { GamePlayerResult, RoundGameDefinition, TeamGameDefinition } from '../domain/games';
 import type { HoleScore, RoundScores } from '../domain/scoring';
 import { calculateGameResults, stablefordPoints } from '../domain/stableford';
 
@@ -49,5 +49,21 @@ export const leaderboardRound: RoundScores = {
   games: {
     configuration: { eventId: fictionalRoundScores.eventId, roundId: fictionalRoundScores.roundId, etag: 'games-v1', games: leaderboardGames },
     results,
+  },
+};
+
+export const teamLeaderboardGame: TeamGameDefinition = {
+  id: fictionalId(703), name: 'Fictional team Better Ball', format: 'two-net-better-ball',
+  preset: 'modified', basis: 'net', handicapAllowancePercent: 100, points: stablefordPoints('modified'),
+  teams: [0, 1, 2].map((index) => ({
+    id: fictionalId(900 + index), name: `Fictional team ${String(index + 1)}`,
+    playerIds: players.slice(index * 2, index * 2 + 2).map((player) => player.playerId),
+  })),
+};
+export const teamLeaderboardRound: RoundScores = {
+  ...leaderboardRound,
+  games: {
+    configuration: { eventId: leaderboardRound.eventId, roundId: leaderboardRound.roundId, etag: 'team-games-v1', games: [teamLeaderboardGame] },
+    results: calculateGameResults([teamLeaderboardGame], { ...captured, players, groups }, cards),
   },
 };

@@ -10,8 +10,7 @@ export function response(status: number, jsonBody: unknown): HttpResponseInit {
   } };
 }
 
-export async function readJson(request: HttpRequest): Promise<unknown> {
-  const maximum = 4096;
+export async function readJson(request: HttpRequest, maximum = 4096): Promise<unknown> {
   const declared = request.headers.get('content-length');
   if (declared !== null && (!/^\d+$/.test(declared) || Number(declared) > maximum)) throw new ApiError(413, 'REQUEST_TOO_LARGE');
   if (!request.headers.get('content-type')?.startsWith('application/json')) throw new ApiError(415, 'JSON_REQUIRED');

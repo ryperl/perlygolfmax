@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type {
-  GameChange, GamePlayerResult, RoundGameDefinition, RoundGamesView,
+  GameChange, GamePlayerResult, IndividualGameDefinition, RoundGamesView, TeamGameDefinition, TeamGameFormat,
 } from '../domain/games.js';
-import { maximumExactGamePoints, maximumGamesPerRound, maximumPointsRows } from '../domain/games.js';
+import { maximumExactGamePoints, maximumExactPointsForGame, maximumGamesPerRound, maximumPointsRows, teamSize } from '../domain/games.js';
+import { aggregateTeamGameResults } from '../domain/team-games.js';
 import { stablefordPoints } from '../domain/stableford.js';
 import {
   isGameChange, isGameConfiguration, isRoundGameDefinition, isRoundGameDefinitions, isRoundGamesView,
 } from './games.js';
 
 const id = (number: number) => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
-function game(number = 1, overrides: Partial<RoundGameDefinition> = {}): RoundGameDefinition {
+function game(number = 1, overrides: Partial<IndividualGameDefinition> = {}): IndividualGameDefinition {
   return { id: id(number), name: 'Fictional Stableford', preset: 'standard', basis: 'gross',
     handicapAllowancePercent: 95, points: stablefordPoints('standard'), ...overrides };
 }
@@ -138,6 +139,164 @@ describe('self-contained round game result contracts', () => {
     const zero = mapPlayers(value, (p) => ({ ...p, frontPoints: 0, backPoints: count === 9 ? null : 0, totalPoints: 0,
       holes: p.holes.map((hole) => ({ ...hole, points: 0 })) }));
     expect(isRoundGamesView(zero)).toBe(true);
+  });
+
+  function teamView(format: TeamGameFormat = 'four-two-net', count = 18, rosterSize = 4): RoundGamesView {
+    const players = Array.from({ length: rosterSize }, (_, index) => player(index + 1, count, { playingHandicap: 0 }));
+    const size = teamSize(format);
+    const definition: TeamGameDefinition = {
+      ...game(), basis: 'net', format, handicapAllowancePercent: 100,
+      teams: Array.from({ length: Math.floor(rosterSize / size) }, (_, index) => ({
+        id: id(900 + index), name: `Fictional team ${String(index + 1)}`,
+        playerIds: players.slice(index * size, (index + 1) * size).map((player) => player.playerId),
+      })),
+    };
+    return {
+      configuration: { ...view(count).configuration, games: [definition] },
+      results: [{ gameId: definition.id, players,
+        teams: aggregateTeamGameResults(definition, players, Array.from({ length: count }, (_, index) => index + 1)) }],
+    };
+  }
+  function teamDefinition(value: RoundGamesView): TeamGameDefinition {
+    const definition = value.configuration.games[0];
+    if (!definition || definition.format === undefined) throw new Error('Missing fictional team definition');
+    return definition;
+  }
+
+  describe('team definition and exact projection contracts', () => {
+    it.each(['two-net-better-ball', 'two-net-aggregate', 'four-two-net'] as const)('accepts explicit complete teams for %s on 9/18 holes', (format) => {
+      for (const count of [9, 18]) {
+        for (const size of [4, 8]) {
+          const value = teamView(format, count, size);
+          const before = structuredClone(value);
+          expect(isRoundGameDefinition(teamDefinition(value))).toBe(true);
+          expect(isRoundGamesView(value)).toBe(true);
+          expect(isGameChange({ ...change, after: value.configuration.games })).toBe(true);
+          expect(value).toEqual(before);
+        }
+      }
+      expect(isRoundGamesView(teamView(format, 18, 6))).toBe(format !== 'four-two-net');
+    });
+
+    it('rejects unknown format, gross teams, extra keys, partial/duplicate/malformed team identities and assignments', () => {
+      const definition = teamDefinition(teamView('two-net-better-ball'));
+      const first = definition.teams[0];
+      if (!first) throw new Error('Missing fictional team');
+      const invalid = [
+        { ...definition, format: 'four-two-net-modified' }, { ...definition, basis: 'gross' },
+        { ...definition, format: undefined }, { ...definition, teams: undefined }, { ...definition, teams: [] },
+        { ...definition, extra: true }, { ...definition, teams: [first] }, { ...definition, teams: [first, first] },
+        ...[
+          { ...first, id: 'team' }, { ...first, name: '' }, { ...first, name: ' Fictional team' },
+          { ...first, name: 'x'.repeat(101) }, { ...first, extra: true },
+          { ...first, playerIds: first.playerIds.slice(1) }, { ...first, playerIds: [id(101), id(101)] },
+          { ...first, playerIds: ['player', id(102)] }, { ...first, playerIds: [id(103), id(104)] },
+        ].map((team) => ({ ...definition, teams: [team, ...definition.teams.slice(1)] })),
+        { ...definition, teams: Array.from({ length: 5 }, (_, index) => ({
+          id: id(600 + index), name: 'Fictional team', playerIds: [id(700 + index * 2), id(701 + index * 2)],
+        })) },
+      ];
+      for (const value of invalid) expect(isRoundGameDefinition(value)).toBe(false);
+      expect(isRoundGameDefinition({ ...game(), teams: definition.teams })).toBe(false);
+    });
+
+    it.each(['two-net-better-ball', 'two-net-aggregate', 'four-two-net'] as const)('uses counting-size-specific exact signed table budgets for %s', (format) => {
+      const definition = teamDefinition(teamView(format));
+      const maximum = maximumExactPointsForGame(definition);
+      for (const sign of [-1, 1]) {
+        const point = maximum * sign;
+        const points = { rows: [{ scoreToPar: 0, points: point }], betterScorePoints: point, worseScorePoints: point };
+        expect(isRoundGameDefinition({ ...definition, points })).toBe(true);
+        expect(isRoundGameDefinition({ ...definition, points: { ...points, betterScorePoints: (maximum + 1) * sign } })).toBe(false);
+        expect(isRoundGameDefinition({ ...definition, points: { ...points, worseScorePoints: (maximum + 1) * sign } })).toBe(false);
+        expect(isRoundGameDefinition({ ...definition, points: { ...points, rows: [{ scoreToPar: 0, points: (maximum + 1) * sign }] } })).toBe(false);
+        const base = teamView(format);
+        const players = base.results[0]?.players.map((source) => ({
+          ...source, frontPoints: point * 9, backPoints: point * 9, totalPoints: point * 18,
+          holes: source.holes.map((hole) => ({ ...hole, points: point })),
+        })) ?? [];
+        const game = { ...definition, points };
+        expect(isRoundGamesView({
+          configuration: { ...base.configuration, games: [game] },
+          results: [{ gameId: game.id, players, teams: aggregateTeamGameResults(game, players, players[0]?.holes.map((hole) => hole.number) ?? []) }],
+        })).toBe(true);
+      }
+    });
+
+    it('rejects missing/extra/tampered teams and individual projections carrying teams', () => {
+      const value = teamView();
+      const result = value.results[0];
+      const team = result?.teams?.[0];
+      if (!result || !team) throw new Error('Missing fictional team result');
+      const { teams: omitted, ...withoutTeams } = result;
+      expect(omitted).toHaveLength(1);
+      for (const replacement of [
+        withoutTeams, { ...result, teams: [] }, { ...result, teams: [team, team] },
+        ...[
+          { ...team, teamId: id(999) }, { ...team, displayName: 'Fictional other team' },
+          { ...team, playerIds: [...team.playerIds].reverse() }, { ...team, playerIds: team.playerIds.slice(1) },
+          { ...team, totalPoints: 71 }, { ...team, frontPoints: 35 }, { ...team, backPoints: null },
+          { ...team, totalHoles: 9 }, { ...team, holesScored: 17 }, { ...team, status: 'in-progress' },
+          { ...team, unavailableReason: undefined }, { ...team, playingHandicap: 0 },
+          { ...team, holes: team.holes.map((hole) => ({ ...hole, points: 3 })) },
+          { ...team, holes: [...team.holes].reverse() },
+          { ...team, holes: team.holes.map((hole) => ({ ...hole, strokesReceived: 0 })) },
+        ].map((team) => ({ ...result, teams: [team] })),
+      ]) expect(isRoundGamesView({ ...value, results: [replacement] })).toBe(false);
+      const individual = view();
+      expect(isRoundGamesView({ ...individual, results: individual.results.map((result) => ({ ...result, teams: [] })) })).toBe(false);
+    });
+
+    it('rejects validly shaped but unknown golfer assignments or incomplete result rosters', () => {
+      const value = teamView();
+      const definition = teamDefinition(value);
+      const changed = { ...definition, teams: definition.teams.map((team) => ({
+        ...team, playerIds: team.playerIds.map((id, index) => index === 0 ? '00000000-0000-4000-8000-000000000999' : id),
+      })) };
+      expect(isRoundGameDefinition(changed)).toBe(true);
+      expect(isRoundGamesView({ ...value, configuration: { ...value.configuration, games: [changed] } })).toBe(false);
+      const configuration = { ...value.configuration, games: [changed] };
+      const results = value.results.map((result) => ({ ...result, teams: [], teamSetupRequired: true }));
+      expect(isRoundGamesView({ configuration, results })).toBe(true);
+      for (const fields of [
+        { teamSetupRequired: undefined }, { teamSetupRequired: false }, { teamSetupRequired: 'true' },
+        { teams: value.results[0]?.teams }, { teams: undefined },
+      ]) expect(isRoundGamesView({ configuration, results: results.map((result) => ({ ...result, ...fields })) })).toBe(false);
+      for (const fields of [{ teamSetupRequired: true }, { teamSetupRequired: undefined }, { teamSetupRequired: true, teams: [] }]) {
+        expect(isRoundGamesView({ ...value, results: value.results.map((result) => ({ ...result, ...fields })) })).toBe(false);
+      }
+      const individual = view();
+      expect(isRoundGamesView({ ...individual, results: individual.results.map((result) => ({
+        ...result, teamSetupRequired: true,
+      })) })).toBe(false);
+      expect(isRoundGamesView({ ...value, results: value.results.map((result) => ({ ...result, players: result.players.slice(1) })) })).toBe(false);
+    });
+
+    it('checks pending all-members completion and unavailable reason against the exact individual sources', () => {
+      const base = teamView();
+      const definition = teamDefinition(base);
+      const result = base.results[0];
+      if (!result) throw new Error('Missing fictional result');
+      const sources = [
+        result.players.map((source, index): GamePlayerResult => index !== 3 ? source : ({
+          ...source, status: 'in-progress', holesScored: 0, frontPoints: null, backPoints: null, totalPoints: null,
+          holes: source.holes.map((hole) => ({ ...hole, points: null })),
+        })),
+        result.players.map((source, index) => index !== 3 ? source : unavailable(source)),
+      ];
+      for (const players of sources) {
+        const teams = aggregateTeamGameResults(definition, players, result.players[0]?.holes.map((hole) => hole.number) ?? []);
+        const value = { ...base, results: [{ ...result, players, teams }] };
+        expect(isRoundGamesView(value)).toBe(true);
+        const team = teams[0];
+        if (!team) throw new Error('Missing fictional team');
+        for (const changed of [
+          { ...team, totalPoints: 0 }, { ...team, holesScored: 18 }, { ...team, status: 'complete' },
+          { ...team, holes: team.holes.map((hole) => ({ ...hole, points: 4 })), frontPoints: 36, backPoints: 36, totalPoints: 72, holesScored: 18, status: 'complete' },
+          { ...team, unavailableReason: team.status === 'unavailable' ? 'missing-handicap-index' : 'missing-score-data' },
+        ]) expect(isRoundGamesView({ ...value, results: [{ ...result, players, teams: [changed] }] })).toBe(false);
+      }
+    });
   });
 
   it('accepts negative modified totals and exact maximum totals', () => {

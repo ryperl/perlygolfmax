@@ -16,9 +16,12 @@ describe('shared game availability copy', () => {
       id: '00000000-0000-4000-8000-000000000001', name: 'Fictional game', preset: 'standard', basis: 'gross',
       handicapAllowancePercent: 95, points: stablefordPoints('standard'),
     };
-    expect(gameScoringLabel(game)).toBe('Standard Stableford');
-    expect(gameScoringLabel({ ...game, preset: 'modified', points: stablefordPoints('modified') })).toBe('Modified Stableford');
-    expect(gameScoringLabel({ ...game, points: { ...game.points, betterScorePoints: 99 } })).toBe('Custom points');
-    expect(gameScoringLabel({ ...game, basis: 'net', handicapAllowancePercent: 100 })).toBe('Standard Stableford');
+    expect(gameScoringLabel(game)).toBe('Standard Stableford · Gross');
+    expect(gameScoringLabel({ ...game, preset: 'modified', points: stablefordPoints('modified') })).toBe('Modified Stableford · Gross');
+    expect(gameScoringLabel({ ...game, points: { ...game.points, betterScorePoints: 99 } })).toBe('Standard Stableford · Custom points · Gross');
+    expect(gameScoringLabel({ ...game, basis: 'net', handicapAllowancePercent: 100 })).toBe('Standard Stableford · Net · 100% allowance');
+    for (const [format, label] of [['two-net-better-ball', '2-man net Better Ball'], ['two-net-aggregate', '2-man net Aggregate'], ['four-two-net', '4-man 2-net Stableford']] as const) {
+      expect(gameScoringLabel({ ...game, basis: 'net', format, teams: [] })).toBe(`${label} · Standard Stableford · Net · 95% allowance`);
+    }
   });
 });

@@ -1,5 +1,5 @@
 import type { GameUnavailableReason, RoundGameDefinition } from '../../domain/games';
-import { sameGameDefinitions } from '../../domain/games';
+import { isTeamGameDefinition, sameGameDefinitions } from '../../domain/games';
 import { stablefordPoints } from '../../domain/stableford';
 
 const reasons: Record<GameUnavailableReason, string> = {
@@ -15,6 +15,9 @@ export function gameUnavailableMessage(reason: GameUnavailableReason | undefined
 }
 
 export function gameScoringLabel(game: RoundGameDefinition): string {
-  return !sameGameDefinitions([game], [{ ...game, points: stablefordPoints(game.preset) }]) ? 'Custom points'
-    : game.preset === 'standard' ? 'Standard Stableford' : 'Modified Stableford';
+  const preset = game.preset === 'standard' ? 'Standard Stableford' : 'Modified Stableford';
+  const custom = !sameGameDefinitions([game], [{ ...game, points: stablefordPoints(game.preset) }]);
+  const format = !isTeamGameDefinition(game) ? '' : game.format === 'two-net-better-ball'
+    ? '2-man net Better Ball · ' : game.format === 'two-net-aggregate' ? '2-man net Aggregate · ' : '4-man 2-net Stableford · ';
+  return `${format}${preset}${custom ? ' · Custom points' : ''} · ${game.basis === 'gross' ? 'Gross' : `Net · ${String(game.handicapAllowancePercent)}% allowance`}`;
 }

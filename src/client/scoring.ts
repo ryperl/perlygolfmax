@@ -2,7 +2,7 @@ import { isEventRevision, isUuid } from '../contracts/events';
 import { isGameWriteResult, isHoleScore, isRoundScores, isScoreHistoryPage, isScoreWriteResult } from '../contracts/scoring';
 import { isRoundGameDefinitions } from '../contracts/games';
 import type { RoundGameDefinition } from '../domain/games';
-import { sameGameDefinitions } from '../domain/games';
+import { maximumGameConfigurationBytes, sameGameDefinitions } from '../domain/games';
 import type { GameWriteResult, HoleScore, RoundScores, ScoreHistoryPage, ScoreWriteResult } from '../domain/scoring';
 import { sameHoleScore } from '../domain/scoring';
 import { createPrivateRequest } from './private-request';
@@ -18,6 +18,7 @@ export interface ScoresClient {
 
 export function createScoresClient(apiUrl: string, getToken: () => Promise<string>, send: typeof fetch = fetch): ScoresClient {
   const request = createPrivateRequest(apiUrl, getToken, send);
+  const gameRequest = createPrivateRequest(apiUrl, getToken, send, maximumGameConfigurationBytes);
   function path(eventId: string, roundId: string) {
     if (!isUuid(eventId) || !isUuid(roundId)) throw new Error('Invalid event or round identifier.');
     return `events/${encodeURIComponent(eventId)}/rounds/${encodeURIComponent(roundId)}`;
@@ -59,7 +60,7 @@ export function createScoresClient(apiUrl: string, getToken: () => Promise<strin
       const base = path(eventId, roundId);
       if (!isRoundGameDefinitions(games) || games.length === 0 || !isUuid(requestId)
         || etag !== null && !isEventRevision(etag)) throw new Error('Check the game settings. Nothing was sent.');
-      const value = await request(`${base}/games`, signal, {
+      const value = await gameRequest(`${base}/games`, signal, {
         method: 'PUT', body: { games }, requestId, ...(etag === null ? { createOnly: true } : { etag }),
       });
       if (!isGameWriteResult(value) || value.round.eventId !== eventId || value.round.roundId !== roundId

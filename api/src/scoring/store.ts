@@ -3,6 +3,7 @@ import type { AccountIdentity } from '../../../src/domain/events.js';
 import type { EventWorkspace, RoundSnapshot } from '../../../src/domain/setup.js';
 import type { GameWriteResult, HoleScore, RoundScores, Scorecard, ScoreChange, ScoreHistoryPage, ScoreWriteResult } from '../../../src/domain/scoring.js';
 import type { GameChange, GameConfiguration, RoundGameDefinition } from '../../../src/domain/games.js';
+import { gameTeamsMatchRoster, maximumGameConfigurationBytes, sameGameDefinitions } from '../../../src/domain/games.js';
 import { calculateGameResults } from '../../../src/domain/stableford.js';
 import { isGameChange, isRoundGameDefinitions } from '../../../src/contracts/games.js';
 import { isEventRevision, isEventSummary, isRecord, isUuid } from '../../../src/contracts/events.js';
@@ -156,10 +157,21 @@ export class TableScoreStore {
     expectedEtag: string | null, requestId: string): Promise<GameWriteResult> {
     if (!isUuid(requestId) || !isRoundGameDefinitions(games) || games.length === 0
       || expectedEtag !== null && !isEventRevision(expectedEtag)) throw new ApiError(400, 'INVALID_GAME_SETUP');
+    if (Buffer.byteLength(JSON.stringify({ games }), 'utf8') > maximumGameConfigurationBytes) {
+      throw new ApiError(413, 'REQUEST_TOO_LARGE');
+    }
     const state = await this.snapshot(identity, eventId, roundId);
     if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     const replay = await this.replayGames(identity, eventId, roundId, games, expectedEtag, requestId);
     if (replay) return replay;
+    // Unchanged stale peers must survive while their assignments are repaired one game at a time.
+    if (games.some((game) => {
+      const previous = state.games?.games.find((saved) => saved.id === game.id);
+      return !gameTeamsMatchRoster(game, state.round.players.map((player) => player.playerId))
+        && (!previous || !sameGameDefinitions([game], [previous]));
+    })) {
+      throw new ApiError(400, 'INVALID_GAME_TEAMS');
+    }
     const before = state.games;
     if ((before?.etag ?? null) !== expectedEtag) throw new ApiError(409, 'GAMES_CHANGED');
     if (before?.games.some((saved) => !games.some((game) => game.id === saved.id))) throw new ApiError(409, 'GAME_REMOVAL_NOT_SUPPORTED');

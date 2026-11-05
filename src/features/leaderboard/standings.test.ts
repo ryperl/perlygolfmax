@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { fictionalStanding, leaderboardPlayers, leaderboardRound } from '../../client/leaderboard.test-support';
 import { gameStandings } from './standings';
 import { isRoundScores } from '../../contracts/scoring';
+import type { GameTeamResult } from '../../domain/games';
 
 describe('saved game standings', () => {
   it('ranks points earned so far, not projected points, progress or gross strokes', () => {
@@ -44,5 +45,19 @@ describe('saved game standings', () => {
       .toEqual([[1, true], [1, true], [1, true]]);
     expect(gameStandings([fictionalStanding(1, -Number.MAX_SAFE_INTEGER), fictionalStanding(2, Number.MAX_SAFE_INTEGER)])
       .ranked.map((entry) => entry.player.totalPoints)).toEqual([Number.MAX_SAFE_INTEGER, -Number.MAX_SAFE_INTEGER]);
+  });
+  it('uses the same stable competition ranking for teams, including zero, pending and unavailable teams', () => {
+    const teams: readonly GameTeamResult[] = [0, 0, -2, null, null].map((points, index) => {
+      const { playerId, playingHandicap, ...entry } = fictionalStanding(index + 1, points);
+      void playingHandicap;
+      return { ...entry, teamId: playerId, playerIds: [], ...(index === 4 ? { status: 'unavailable' } : {}) };
+    });
+    const standings = gameStandings(teams);
+    expect(standings.ranked.map((entry) => [entry.player.totalPoints, entry.position, entry.tied])).toEqual([
+      [0, 1, true], [0, 1, true], [-2, 3, false],
+    ]);
+    expect(standings.awaiting).toHaveLength(1);
+    expect(standings.unavailable).toHaveLength(1);
+    expect(standings.provisional).toBe(true);
   });
 });

@@ -5,7 +5,7 @@ import type { HoleScore } from '../../../src/domain/scoring.js';
 import { isRecord } from '../../../src/contracts/events.js';
 import { isGameWriteResult, isScoreChange, isScoreWriteResult } from '../../../src/contracts/scoring.js';
 import { stablefordPoints } from '../../../src/domain/stableford.js';
-import type { RoundGameDefinition } from '../../../src/domain/games.js';
+import type { RoundGameDefinition, TeamGameDefinition } from '../../../src/domain/games.js';
 import { scoringFixture } from '../../test/scoring-fixtures.js';
 import { identifier } from '../../test/catalog-fixtures.js';
 import { creator, event } from '../../test/fixtures.js';
@@ -186,23 +186,34 @@ describe('scoring real installed Table SDK loopback transport', () => {
         id: identifier(700), name: 'Fictional modified game', preset: 'modified', basis: 'gross',
         handicapAllowancePercent: 95, points: stablefordPoints('modified'),
       };
-      const games = await scores.saveGames(creator, event.id, f.roundId, [game], null, identifier(800));
+      const team: TeamGameDefinition = {
+        ...game, id: identifier(701), name: 'Fictional team game', format: 'two-net-better-ball',
+        basis: 'net', handicapAllowancePercent: 100,
+        teams: [0, 1].map((index) => ({
+          id: identifier(900 + index), name: `Fictional Team ${String(index + 1)}`,
+          playerIds: f.input.playerIds.slice(index * 2, index * 2 + 2),
+        })),
+      };
+      const games = await scores.saveGames(creator, event.id, f.roundId, [game, team], null, identifier(800));
       expect(isGameWriteResult(games)).toBe(true);
       expect(games.round.games?.configuration.etag).toBe('W/"batch-8"');
       expect(games.round.games?.results[0]?.players[0]?.totalPoints).toBe(-4);
       expect(batches[7]?.match(/POST http/g)).toHaveLength(2);
       expect(batches[7]?.match(/if-match:/gi)).toHaveLength(2);
       expect(batches[7]).toContain(`"RowKey":"round-games:${f.roundId}"`);
+      expect(batches[7]).toContain('two-net-better-ball');
+      expect(games.round.games?.configuration.games[1]).toEqual(team);
+      expect(games.round.games?.results[1]?.teams?.every((entry) => entry.status === 'unavailable' && entry.totalPoints === null)).toBe(true);
       expect(batches[7]).not.toContain(`"RowKey":"score-card:`);
-      expect(await scores.saveGames(creator, event.id, f.roundId, [game], null, identifier(800))).toEqual(games);
+      expect(await scores.saveGames(creator, event.id, f.roundId, [game, team], null, identifier(800))).toEqual(games);
       const editedGame = { ...game, points: { ...game.points, worseScorePoints: -6 } };
-      const editedGames = await scores.saveGames(creator, event.id, f.roundId, [editedGame], games.round.games?.configuration.etag ?? null, identifier(801));
+      const editedGames = await scores.saveGames(creator, event.id, f.roundId, [editedGame, team], games.round.games?.configuration.etag ?? null, identifier(801));
       expect(editedGames.round.games?.results[0]?.players[0]?.totalPoints).toBe(-12);
       expect(batches[8]).toMatch(/PUT http[^\r\n]+round-games/);
       expect(batches[8]).toMatch(/if-match: W\/"batch-8"/i);
-      const gameReplay = await scores.saveGames(creator, event.id, f.roundId, [game], null, identifier(800));
+      const gameReplay = await scores.saveGames(creator, event.id, f.roundId, [game, team], null, identifier(800));
       expect(gameReplay.change).toEqual(games.change);
-      expect(gameReplay.round.games?.configuration.games).toEqual([editedGame]);
+      expect(gameReplay.round.games?.configuration.games).toEqual([editedGame, team]);
       const current = await workspace.get(creator, event.id);
       const lockKey = `${event.id}|score-lock:${f.roundId}`;
       const storedLock = rows.get(lockKey);

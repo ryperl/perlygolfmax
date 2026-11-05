@@ -5,7 +5,8 @@ import { RoundLeaderboard } from '../../src/features/leaderboard';
 import { GroupHoleEntry } from '../../src/features/scoring/GroupHoleEntry';
 import type { GroupHoleEntryRow } from '../../src/features/scoring/GroupHoleEntry';
 import type { HoleDraft } from '../../src/features/scoring/entry-state';
-import { fictionalGamesRound } from './games-fixture-data';
+import { fictionalGamesRound, fictionalTeamGamesRound } from './games-fixture-data';
+import { SavedScorecards } from '../../src/features/scoring/SavedScorecards';
 import '../../src/app/styles.css';
 import '../../src/features/scoring/scoring.css';
 
@@ -31,7 +32,11 @@ export function EntryPreview() {
     <p aria-label="Fictional save count">{saves}</p>
   </section>;
 }
+const teamPreview = new URLSearchParams(window.location.search).has('teams');
+const round = teamPreview ? fictionalTeamGamesRound : fictionalGamesRound;
 createRoot(root).render(<div className="app"><main><section className="owner-scores"><div>
-  <RoundGamesPanel round={fictionalGamesRound} busy={false} onDirtyChange={() => undefined}
-    onSave={() => Promise.resolve(null)} onRefresh={() => Promise.resolve(fictionalGamesRound)} />
-</div><EntryPreview /><RoundLeaderboard round={fictionalGamesRound} busy={false} onManageGames={() => undefined} /></section></main></div>);
+  <RoundGamesPanel round={round} busy={false} onDirtyChange={() => undefined}
+    onSave={() => Promise.resolve(null)} onRefresh={() => Promise.resolve(round)} />
+</div>{teamPreview ? <SavedScorecards round={round} groupNumber={1} busy={false} onGroupChange={() => undefined}
+  onEnterScores={() => undefined} /> : <EntryPreview />}
+  <RoundLeaderboard round={round} busy={false} onManageGames={() => undefined} /></section></main></div>);

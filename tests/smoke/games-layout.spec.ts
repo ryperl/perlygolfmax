@@ -86,7 +86,7 @@ test('compact game cards keep golfers visible with shared scrolling and working 
     const address = server.httpServer?.address();
     if (!address || typeof address === 'string') throw new Error('Fictional Games server did not start.');
     const origin = `http://127.0.0.1:${String(address.port)}`;
-    await page.route(`${origin}/__games-fixture`, (route) => route.fulfill({
+    await page.route(`${origin}/__games-fixture*`, (route) => route.fulfill({
       contentType: 'text/html',
       body: `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
         <script>(() => {
@@ -175,6 +175,51 @@ test('compact game cards keep golfers visible with shared scrolling and working 
       await page.evaluate(() => { document.documentElement.style.fontSize = '100%'; });
       await board.getByRole('combobox', { name: 'Leaderboard game' }).selectOption(id(700));
       await board.screenshot({ path: '.azure/round-leaderboard-mobile.png' });
+    }
+    await page.goto(`${origin}/__games-fixture?teams=1`);
+    const teamGame = page.getByRole('region', { name: 'Fictional 2-man Better Ball results', exact: true });
+    const teamCard = teamGame.getByRole('region', { name: 'Fictional 2-man Better Ball points scorecard', exact: true });
+    await expect(teamCard.locator('tbody tr')).toHaveCount(2);
+    await expect(teamCard.getByRole('columnheader', { name: 'Team', exact: true })).toBeVisible();
+    await expect(teamGame.getByText('Fictional golfer 1 · Fictional golfer 2', { exact: true })).toBeVisible();
+    await expect(teamGame.getByText(/Playing handicap/)).toHaveCount(0);
+    await page.getByRole('button', { name: 'Edit Fictional 2-man Better Ball', exact: true }).click();
+    const teamEditor = page.getByRole('form', { name: 'Game settings' });
+    await expect(teamEditor.getByLabel('Handicap allowance (%)')).toHaveValue('100');
+    await teamEditor.getByLabel('Game format').selectOption('four-two-net');
+    await expect(teamEditor.getByText(/Previous assignments were cleared/)).toBeVisible();
+    await expect(teamEditor.getByRole('button', { name: 'Save game', exact: true })).toBeDisabled();
+    for (let index = 0; index < 4; index++) {
+      await teamEditor.getByRole('combobox', { name: `Team 1 member ${String(index + 1)}`, exact: true }).selectOption(id(index + 1));
+    }
+    await expect(teamEditor.getByRole('button', { name: 'Save game', exact: true })).toBeEnabled();
+    const teamBoard = page.getByRole('region', { name: 'Round leaderboard', exact: true });
+    await teamBoard.getByRole('combobox', { name: 'Leaderboard game' }).selectOption(id(713));
+    await expect(teamBoard.getByRole('heading', { name: 'Team standings', exact: true })).toBeVisible();
+    await expect(teamBoard.getByRole('list', { name: 'Standings' }).getByRole('listitem')).toHaveCount(1);
+    const golferCards = page.getByRole('region', { name: 'Round scorecards', exact: true });
+    await golferCards.getByRole('table', { name: 'Front nine scorecard', exact: true })
+      .getByRole('button', { name: 'Open scorecard for Fictional golfer 1', exact: true }).click();
+    await expect(golferCards.getByRole('region', { name: 'Fictional golfer 1 full scorecard', exact: true })).toBeVisible();
+    await expect(golferCards.getByText(/individual component points, not full team credits/)).toBeVisible();
+    for (const [width, fontSize] of [[390, '100%'], [320, '125%']] as const) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.evaluate((size) => { document.documentElement.style.fontSize = size; }, fontSize);
+      expect(await page.evaluate(() => window.innerWidth)).toBe(width);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await teamEditor.getByRole('combobox', { name: 'Team 1 member 4', exact: true }).focus();
+      await expect(teamEditor.getByRole('combobox', { name: 'Team 1 member 4', exact: true })).toBeFocused();
+      expect(await teamCard.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+      await teamCard.evaluate((element) => { element.scrollLeft = 160; });
+      const bounds = await teamCard.boundingBox();
+      const name = await teamCard.locator('tbody th').first().boundingBox();
+      if (!bounds || !name) throw new Error('Missing fictional team scorecard bounds.');
+      expect(Math.abs(name.x - bounds.x)).toBeLessThanOrEqual(1);
+      await teamGame.getByRole('button', { name: 'Back 9', exact: true }).click();
+      await expect(teamCard.getByRole('columnheader', { name: '18', exact: true })).toBeVisible();
+      await expect(teamCard.getByLabel('Pending', { exact: true })).toHaveCount(2);
+      expect(await teamCard.evaluate((element) => element.scrollLeft)).toBe(0);
+      await teamGame.getByRole('button', { name: 'Front 9', exact: true }).click();
     }
   } finally {
     await server.close();
