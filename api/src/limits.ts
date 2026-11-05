@@ -1,5 +1,6 @@
 import type { TableClient } from '@azure/data-tables';
-import type { AccountIdentity } from '../../src/domain/events.js';
+import type { ScoreActor } from '../../src/domain/test-access.js';
+import { isScoreActor } from '../../src/contracts/scoring.js';
 import { isRecord } from '../../src/contracts/events.js';
 import { ApiError } from './errors.js';
 import { isMissingTableEntity } from './table-errors.js';
@@ -13,14 +14,16 @@ const limits: Readonly<Record<RequestClass, number>> = {
 };
 
 export interface RequestLimiter {
-  check(identity: AccountIdentity, action: RequestClass): Promise<void>;
+  check(identity: ScoreActor, action: RequestClass): Promise<void>;
 }
 
 export class TableRequestLimiter implements RequestLimiter {
   constructor(private readonly table: TableClient, private readonly now: () => number = Date.now) {}
 
-  async check(identity: AccountIdentity, action: RequestClass): Promise<void> {
-    const partitionKey = `quota:${identity.tenantId}:${identity.objectId}`;
+  async check(identity: ScoreActor, action: RequestClass): Promise<void> {
+    if (!isScoreActor(identity)) throw new ApiError(503, 'INVALID_REQUEST_PRINCIPAL');
+    const partitionKey = 'kind' in identity ? `quota:tester-link:${identity.eventId}:${identity.linkId}`
+      : `quota:${identity.tenantId}:${identity.objectId}`;
     const rowKey = action;
     const window = Math.floor(this.now() / 60_000);
     for (let attempt = 0; attempt < 5; attempt++) {

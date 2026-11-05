@@ -14,6 +14,18 @@ const input = {
 };
 
 describe('private setup and index contracts', () => {
+  it('validates tester workspace as active viewer-only with score access but no bound golfer', () => {
+    const workspace = {
+      event: { id: ids[0], name: 'Fictional Event', createdAt: '2026-01-01', role: 'viewer', status: 'active', etag: 'current' },
+      location: '', roster: [], rounds: [], etag: 'current', testerAccess: true, canViewScores: true,
+    };
+    expect(isEventWorkspace(workspace)).toBe(true);
+    expect(isEventWorkspace({ ...workspace, testerAccess: false })).toBe(false);
+    expect(isEventWorkspace({ ...workspace, canViewScores: false })).toBe(false);
+    expect(isEventWorkspace({ ...workspace, viewerPlayerId: ids[0] })).toBe(false);
+    expect(isEventWorkspace({ ...workspace, event: { ...workspace.event, role: 'owner' } })).toBe(false);
+    expect(isEventWorkspace({ ...workspace, event: { ...workspace.event, status: 'archived' } })).toBe(false);
+  });
   it.each([1, 2, 3])('accepts %i golfers with complete playing-group assignments, never an empty roster', (count) => {
     const playerIds = ids.slice(0, count);
     const rounds = input.rounds.map((round) => ({ ...round, groups: [{ number: 1, playerIds }] }));

@@ -1,5 +1,6 @@
 import type { CourseHole, CourseRating } from './catalog.js';
-import type { AccountIdentity, EventStatus } from './events.js';
+import type { EventStatus } from './events.js';
+import type { ScoreActor } from './test-access.js';
 import type { RoundGroup } from './setup.js';
 import type { GameChange, GameUnavailableReason, RoundGamesView } from './games.js';
 import type { PlayerTeeProfile } from './tees.js';
@@ -24,7 +25,7 @@ export interface Scorecard {
 }
 
 export interface ScorePermissions {
-  readonly role: 'owner' | 'player' | 'viewer';
+  readonly role: 'owner' | 'player' | 'viewer' | 'tester';
   readonly viewerPlayerId?: string;
   readonly writePlayerIds: readonly string[];
   readonly canManageGames: boolean;
@@ -74,7 +75,7 @@ export interface ScoreChange {
   readonly after: HoleScore;
   readonly expectedEtag: string | null;
   readonly recordedAt: string;
-  readonly recordedBy: AccountIdentity;
+  readonly recordedBy: ScoreActor;
 }
 
 export interface ScoreWriteResult {
@@ -110,6 +111,20 @@ export function sameHoleScore(left: HoleScore, right: HoleScore): boolean {
   return left.kind === right.kind
     && (left.kind !== 'strokes' || right.kind === 'strokes' && left.strokes === right.strokes)
     && (left.kind !== 'picked-up' || right.kind === 'picked-up' && left.reportedStrokes === right.reportedStrokes);
+}
+
+export function sameScoreActor(left: ScoreActor, right: ScoreActor): boolean {
+  if ('kind' in left || 'kind' in right) {
+    return 'kind' in left && 'kind' in right
+      && left.eventId === right.eventId && left.linkId === right.linkId;
+  }
+  return left.tenantId === right.tenantId && left.objectId === right.objectId;
+}
+
+export function scoreActor(identity: ScoreActor): ScoreActor {
+  return 'kind' in identity
+    ? { kind: 'tester-link', eventId: identity.eventId, linkId: identity.linkId }
+    : { tenantId: identity.tenantId, objectId: identity.objectId };
 }
 
 export function summarizeGross(holes: readonly ScoredHole[]): GrossScoreSummary {

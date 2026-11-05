@@ -84,6 +84,8 @@ export function isEventWorkspace(value: unknown): value is EventWorkspace {
   if (!isRecord(value) || !isEventSummary(value.event) || !isEventRevision(value.etag)
     || value.event.status === 'archived' && value.event.role !== 'owner'
     || value.canViewScores !== undefined && typeof value.canViewScores !== 'boolean'
+    || value.testerAccess !== undefined && (value.testerAccess !== true || value.event.role !== 'viewer'
+      || value.event.status !== 'active' || value.canViewScores !== true || value.viewerPlayerId !== undefined)
     || value.viewerPlayerId !== undefined && !isUuid(value.viewerPlayerId)
     || value.allowPerGolferTees !== undefined && typeof value.allowPerGolferTees !== 'boolean'
     || value.overallCompetition !== undefined && !isOverallCompetition(value.overallCompetition)

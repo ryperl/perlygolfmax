@@ -1,5 +1,7 @@
 import type { TableClient } from '@azure/data-tables';
-import type { AccountIdentity } from '../../../src/domain/events.js';
+import type { ScoreActor } from '../../../src/domain/test-access.js';
+import { scoreActor } from '../../../src/domain/scoring.js';
+import { isScoreActor } from '../../../src/contracts/scoring.js';
 import { isRecord, isUuid } from '../../../src/contracts/events.js';
 import { decode, optionalRow, revision } from '../catalog/entities.js';
 import { ApiError } from '../errors.js';
@@ -11,7 +13,7 @@ export interface ScoringLock {
   readonly roundId: string;
   readonly requestId: string;
   readonly startedAt: string;
-  readonly startedBy: AccountIdentity;
+  readonly startedBy: ScoreActor;
   readonly writtenPlayerIds: readonly string[];
 }
 
@@ -19,7 +21,7 @@ function isScoringLock(value: unknown): value is ScoringLock {
   return isRecord(value) && value.kind === 'score-lock'
     && isUuid(value.eventId) && isUuid(value.roundId) && isUuid(value.requestId)
     && typeof value.startedAt === 'string' && value.startedAt.length <= 40 && Number.isFinite(Date.parse(value.startedAt))
-    && isRecord(value.startedBy) && isUuid(value.startedBy.tenantId) && isUuid(value.startedBy.objectId)
+    && isScoreActor(value.startedBy) && (!('kind' in value.startedBy) || value.startedBy.eventId === value.eventId)
     && Array.isArray(value.writtenPlayerIds) && value.writtenPlayerIds.length >= 1
     && value.writtenPlayerIds.every(isUuid) && new Set(value.writtenPlayerIds).size === value.writtenPlayerIds.length;
 }
@@ -44,7 +46,7 @@ export async function scoringLock(table: TableClient, eventId: string, roundId: 
   if (lock.eventId !== eventId || lock.roundId !== roundId) throw new ApiError(503, 'INVALID_STORED_SCORE_LOCK');
   return {
     kind: lock.kind, eventId: lock.eventId, roundId: lock.roundId, requestId: lock.requestId,
-    startedAt: lock.startedAt, startedBy: { tenantId: lock.startedBy.tenantId, objectId: lock.startedBy.objectId },
+    startedAt: lock.startedAt, startedBy: scoreActor(lock.startedBy),
     writtenPlayerIds: [...lock.writtenPlayerIds], etag: revision(row),
   };
 }

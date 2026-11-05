@@ -2,6 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { eventTabHref, readEventRoute, readPage, readPreviewTab, readSelectedEvent } from './navigation';
 
 describe('readPage', () => {
+  it('keeps bearer tester links out of ordinary selected-event context and rejects duplicate or malformed authority', () => {
+    const event = '00000000-0000-4000-8000-000000000050';
+    const link = '00000000-0000-4000-8000-000000000910';
+    const token = 'A'.repeat(43);
+    const hash = `#tester?event=${event}&link=${link}&token=${token}`;
+    expect(readPage(hash)).toBe('tester');
+    expect(readEventRoute(hash)).toBe(`tester:${event}:${link}:${token}`);
+    expect(readSelectedEvent(hash)).toBeNull();
+    for (const invalid of ['#tester', `${hash}&event=${event}`, `${hash}&scope=owner`,
+      `#tester?event=${event}&link=invalid&token=${token}`, `#tester?event=${event}&link=${link}&token=invalid`]) {
+      expect(readPage(invalid)).toBe('tester');
+      expect(readEventRoute(invalid)).toBe('invalid-tester');
+      expect(readSelectedEvent(invalid)).toBeNull();
+    }
+  });
   it('keeps purse routes event-scoped and rejects missing, repeated and malformed context', () => {
     const event = '00000000-0000-4000-8000-000000000050';
     const hash = `#purse?event=${event}`;

@@ -2,7 +2,8 @@
 
 A mobile-first golf-trip companion for a planned group of 12 golfers and five
 rounds. It includes private event workspaces with organizer-managed setup,
-invited-player group scoring and a separate **read-only fictional preview**.
+invited-player group scoring, temporary no-account tester links and a separate
+**read-only fictional preview**.
 Local identity/API configuration is optional and explicitly unconfigured by
 default; score entry is online-only, not an offline-capable tournament app.
 
@@ -126,6 +127,31 @@ betting, reporting, finalization and retention remain separate scope decisions.
 The fictional Preview remains separate from authenticated scoring and results.
 
 ### Player invitations and visibility
+
+For testing without account creation, use **No-account tester access** instead
+of an account-based player invitation:
+
+1. Sign in as the event owner and open **Player invitations**.
+2. Create a private tester link and share it directly with your tester.
+3. The tester opens that link, chooses a saved round and enters scores for any
+   playing group in **that event only**. No sign-in, account or approval follows.
+
+Anyone holding the link can view that event's round scorecards and enter scores
+for any group. Links expire after 24 hours and the owner can revoke them earlier.
+Keep them private. They do not grant other-event access, global catalogs, raw
+Handicap Index observations, score history, purse access or organizer management.
+Score changes are attributed to the **shared tester link**, not a verified
+individual. Existing conditional saves, score locks and audits still apply.
+This is online-only, not an anonymous public scoreboard or offline recording.
+
+The raw link is available only when created; after reloading, revoke a lost
+link and create a fresh one. No email is sent automatically. Tester credentials
+stay in the private URL fragment and request authorization header, never API
+query/path, normal UI text, logs or application persistent storage. Leaving the
+tester view clears its in-memory workspace and drafts; revocation/expiry ends
+access on subsequent reads/saves. Archived events reject tester access.
+
+### Account-based player invitations
 
 After saving an event roster, an owner opens **Player invitations**, selects a
 golfer and creates a private link. Share it privately with that golfer. The link

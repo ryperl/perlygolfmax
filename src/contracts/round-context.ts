@@ -23,7 +23,7 @@ export function roundMatchesSnapshot(workspace: EventWorkspace, snapshot: RoundS
   const permissionsMatch = workspace.event.role === 'owner'
     ? round.permissions === undefined || round.permissions.role === 'owner'
     : workspace.canViewScores === true && round.permissions !== undefined
-      && round.permissions.role === (workspace.viewerPlayerId ? 'player' : 'viewer')
+      && round.permissions.role === (workspace.testerAccess ? 'tester' : workspace.viewerPlayerId ? 'player' : 'viewer')
       && round.permissions.viewerPlayerId === workspace.viewerPlayerId;
   const publishedMatches = round.overallHandicaps === undefined
     || competition?.kind === 'stroke-play' && competition.basis === 'net'

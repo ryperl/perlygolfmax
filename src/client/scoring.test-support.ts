@@ -17,11 +17,12 @@ export const fictionalRoundScores: RoundScores = {
   })),
   setupLocked: false, lastUpdatedAt: null,
 };
+const fictionalAccountActor = { tenantId: fictionalId(201), objectId: fictionalId(202) };
 export const fictionalChange: ScoreChange = {
   id: fictionalId(401), eventId: fictionalRoundScores.eventId, roundId: fictionalRoundScores.roundId,
   playerId: fictionalId(1), holeNumber: 1, before: { kind: 'unplayed' }, after: { kind: 'strokes', strokes: 4 },
   expectedEtag: null, recordedAt: '2026-01-02T00:00:00Z',
-  recordedBy: { tenantId: fictionalId(201), objectId: fictionalId(202) },
+  recordedBy: fictionalAccountActor,
 };
 export function scoreResult(change: ScoreChange = fictionalChange, round: RoundScores = fictionalRoundScores): ScoreWriteResult {
   const updated: RoundScores = {
@@ -55,7 +56,7 @@ export function gameResult(games: readonly RoundGameDefinition[], expectedEtag: 
     round: withGameResults(round, games, etag),
     change: { id: requestId, eventId: round.eventId, roundId: round.roundId, expectedEtag,
       before: round.games?.configuration.games ?? [], after: games,
-      recordedAt: fictionalChange.recordedAt, recordedBy: fictionalChange.recordedBy },
+      recordedAt: fictionalChange.recordedAt, recordedBy: fictionalAccountActor },
   };
 }
 export function fakeScores(): ScoresClient {

@@ -1,5 +1,6 @@
 import type { TableClient, TransactionAction } from '@azure/data-tables';
 import type { AccountIdentity } from '../../../src/domain/events.js';
+import type { ScoreActor } from '../../../src/domain/test-access.js';
 import type { EventWorkspace, RoundPlayerSnapshot, RoundSnapshot } from '../../../src/domain/setup.js';
 import type { GameWriteResult, HoleScore, RoundScores, Scorecard, ScoreChange, ScoreHistoryPage, ScoreWriteResult } from '../../../src/domain/scoring.js';
 import type { GameChange, GameConfiguration, RoundGameDefinition } from '../../../src/domain/games.js';
@@ -9,7 +10,7 @@ import { calculateGameResults } from '../../../src/domain/stableford.js';
 import { isGameChange, isRoundGameDefinitions } from '../../../src/contracts/games.js';
 import { isEventRevision, isRecord, isUuid } from '../../../src/contracts/events.js';
 import { isHoleScore, isScorecard, isScoreChange } from '../../../src/contracts/scoring.js';
-import { sameHoleScore } from '../../../src/domain/scoring.js';
+import { sameHoleScore, sameScoreActor, scoreActor } from '../../../src/domain/scoring.js';
 import { canonical, decode, isConflict, optionalRow, page, revision } from '../catalog/entities.js';
 import { ApiError } from '../errors.js';
 import type { TableWorkspaceStore } from '../setup/store.js';
@@ -23,6 +24,7 @@ import { receivePrivateWrite } from '../private-transport.js';
 import { assertEventAccessUnchanged, readEventAccess } from '../event-access.js';
 import type { EventAccess } from '../event-access.js';
 import { publishedPlayingHandicaps } from '../../../src/domain/playing-handicaps.js';
+import { activeTesterLink, testerLinkKey } from '../test-access/authority.js';
 
 function cardKey(roundId: string, playerId: string): string {
   return `score-card:${roundId}:${playerId}`;
@@ -39,21 +41,21 @@ function projectChange(change: ScoreChange): ScoreChange {
     id: change.id, eventId: change.eventId, roundId: change.roundId, playerId: change.playerId,
     holeNumber: change.holeNumber, before: change.before, after: change.after, expectedEtag: change.expectedEtag,
     recordedAt: change.recordedAt,
-    recordedBy: { tenantId: change.recordedBy.tenantId, objectId: change.recordedBy.objectId },
+    recordedBy: scoreActor(change.recordedBy),
   };
 }
 
 export class TableScoreStore {
   constructor(private readonly table: TableClient, private readonly workspace: TableWorkspaceStore) {}
 
-  private async access(identity: AccountIdentity, eventId: string, ownerOnly = false) {
+  private async access(identity: ScoreActor, eventId: string, ownerOnly = false) {
     if (!isUuid(eventId)) throw new ApiError(400, 'INVALID_REQUEST_ID');
     const access = await readEventAccess(this.table, identity, eventId);
-    if (access.summary.role !== 'owner' && (ownerOnly || !access.admittedPlayer)) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
+    if (access.summary.role !== 'owner' && (ownerOnly || !access.admittedPlayer && !access.testerLink)) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
     return { ...access, gameRoundIds: configuredGameRounds(access.event.gameRoundIds) };
   }
 
-  private async snapshot(identity: AccountIdentity, eventId: string, roundId: string, ownerOnly = false) {
+  private async snapshot(identity: ScoreActor, eventId: string, roundId: string, ownerOnly = false) {
     if (!isUuid(roundId)) throw new ApiError(400, 'INVALID_REQUEST_ID');
     const access = await this.access(identity, eventId, ownerOnly);
     const workspace = await this.workspace.getForScoring(identity, eventId);
@@ -67,11 +69,15 @@ export class TableScoreStore {
     return { ...access, workspace, round, lock, games };
   }
 
-  private async unchanged(identity: AccountIdentity, eventId: string, before: EventAccess): Promise<void> {
+  private async unchanged(identity: ScoreActor, eventId: string, before: EventAccess): Promise<void> {
     await assertEventAccessUnchanged(this.table, identity, eventId, before);
   }
 
   private writer(state: EventAccess & { readonly round: RoundSnapshot }, playerId?: string) {
+    if (state.testerLink) {
+      if (!playerId) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
+      return { etag: revision(state.testerLink), role: 'tester' as const };
+    }
     if (state.summary.role !== 'owner') {
       const group = state.round.groups.find((entry) => state.viewerPlayerId && entry.playerIds.includes(state.viewerPlayerId));
       if (!playerId || !state.viewerPlayerId || state.summary.role !== 'member' || !group?.playerIds.includes(playerId)) {
@@ -122,9 +128,9 @@ export class TableScoreStore {
         type: rating.type, course: rating.course, slope: rating.slope, bogey: rating.bogey,
       })),
       groups: round.groups, cards, setupLocked: round.scoringStarted === true,
-      permissions: { role: owner ? 'owner' : viewerPlayerId ? 'player' : 'viewer',
+      permissions: { role: access.testerLink ? 'tester' : owner ? 'owner' : viewerPlayerId ? 'player' : 'viewer',
         ...(viewerPlayerId ? { viewerPlayerId } : {}),
-        writePlayerIds: !active ? [] : owner ? round.players.map((player) => player.playerId) : ownGroup?.playerIds ?? [],
+        writePlayerIds: !active ? [] : owner || access.testerLink ? round.players.map((player) => player.playerId) : ownGroup?.playerIds ?? [],
         canManageGames: owner && active },
       ...(competition?.kind === 'stroke-play' && competition.basis === 'net'
         ? { overallHandicaps: publishedPlayingHandicaps(round, competition.handicapAllowancePercent) } : {}),
@@ -142,7 +148,7 @@ export class TableScoreStore {
     return cards;
   }
 
-  async get(identity: AccountIdentity, eventId: string, roundId: string): Promise<RoundScores> {
+  async get(identity: ScoreActor, eventId: string, roundId: string): Promise<RoundScores> {
     const state = await this.snapshot(identity, eventId, roundId);
     const cards = await this.cards(eventId, state.round, state.lock);
     await this.unchanged(identity, eventId, state);
@@ -280,7 +286,7 @@ export class TableScoreStore {
     return projectChange(change);
   }
 
-  private async acknowledgement(identity: AccountIdentity, change: ScoreChange): Promise<ScoreWriteResult> {
+  private async acknowledgement(identity: ScoreActor, change: ScoreChange): Promise<ScoreWriteResult> {
     // A later valid edit must not turn an acknowledged write into a stale-create failure.
     for (let attempt = 0; ; attempt++) {
       try {
@@ -295,13 +301,12 @@ export class TableScoreStore {
     }
   }
 
-  private async replay(identity: AccountIdentity, eventId: string, roundId: string, playerId: string,
+  private async replay(identity: ScoreActor, eventId: string, roundId: string, playerId: string,
     holeNumber: number, score: HoleScore, expectedEtag: string | null, requestId: string): Promise<ScoreWriteResult | undefined> {
     const change = await this.receipt(eventId, requestId);
     if (!change) return undefined;
     if (change.roundId !== roundId || change.playerId !== playerId || change.holeNumber !== holeNumber
-      || change.expectedEtag !== expectedEtag || change.recordedBy.tenantId !== identity.tenantId
-      || change.recordedBy.objectId !== identity.objectId || !sameHoleScore(change.after, score)) {
+      || change.expectedEtag !== expectedEtag || !sameScoreActor(change.recordedBy, identity) || !sameHoleScore(change.after, score)) {
       throw new ApiError(409, 'SCORE_REQUEST_CONFLICT');
     }
     const result = await this.acknowledgement(identity, change);
@@ -309,7 +314,7 @@ export class TableScoreStore {
     return result;
   }
 
-  async write(identity: AccountIdentity, eventId: string, roundId: string, playerId: string, holeNumber: number,
+  async write(identity: ScoreActor, eventId: string, roundId: string, playerId: string, holeNumber: number,
     score: HoleScore, expectedEtag: string | null, requestId: string): Promise<ScoreWriteResult> {
     if (!isUuid(requestId) || !isUuid(playerId) || !isHoleScore(score) || !Number.isSafeInteger(holeNumber)
       || expectedEtag !== null && !isEventRevision(expectedEtag)) throw new ApiError(400, 'INVALID_SCORE_WRITE');
@@ -327,7 +332,7 @@ export class TableScoreStore {
     const before = card.holes.find((hole) => hole.number === holeNumber);
     if (!before) throw new ApiError(503, 'INVALID_STORED_SCORECARD');
     const recordedAt = new Date().toISOString();
-    const actor = { tenantId: identity.tenantId, objectId: identity.objectId };
+    const actor = scoreActor(identity);
     const change: ScoreChange = {
       id: requestId, eventId, roundId, playerId, holeNumber, before: before.score, after: score,
       expectedEtag, recordedAt, recordedBy: actor,
@@ -339,9 +344,10 @@ export class TableScoreStore {
     const entity = { partitionKey: eventId, rowKey: cardKey(roundId, playerId), content: canonical(updated) };
     const actions: TransactionAction[] = [
       ['update', { partitionKey: eventId, rowKey: 'event', scoresUpdatedAt: recordedAt }, 'Merge', { etag: state.summary.etag }],
-      ['update', {
-        partitionKey: eventId, rowKey: `member:${identity.objectId}`, ...actor, role: grant.role,
-      }, 'Merge', { etag: grant.etag }],
+      ['update', 'kind' in identity
+        ? { partitionKey: eventId, rowKey: testerLinkKey(identity.linkId), scoreRevision: requestId }
+        : { partitionKey: eventId, rowKey: `member:${identity.objectId}`, ...actor, role: grant.role },
+      'Merge', { etag: grant.etag }],
       expectedEtag === null ? ['create', entity] : ['update', entity, 'Replace', { etag: expectedEtag }],
       ['create', {
         partitionKey: eventId, rowKey: `score-change:${requestId}`, kind: 'score-change', roundId, playerId, content: canonical(change),
@@ -364,6 +370,10 @@ export class TableScoreStore {
         content: await stagePrivateContent(this.table, eventId, `score-lock:${roundId}`, identity, canonical(lock)),
       }, 'Replace', { etag: state.lock.etag }]);
     }
+    // Staging a large lock may take time. Expiry is rechecked at the publication boundary.
+    if ('kind' in identity && (!state.testerLink || !activeTesterLink(state.testerLink, identity))) {
+      throw new ApiError(403, 'TESTER_ACCESS_ENDED');
+    }
     try { await this.table.submitTransaction(actions); }
     catch (error) {
       // Transport failures may occur after commit; the immutable receipt is the authoritative acknowledgement.
@@ -375,7 +385,7 @@ export class TableScoreStore {
     return this.acknowledgement(identity, change);
   }
 
-  async history(identity: AccountIdentity, eventId: string, roundId: string, playerId: string, cursor?: string): Promise<ScoreHistoryPage> {
+  async history(identity: ScoreActor, eventId: string, roundId: string, playerId: string, cursor?: string): Promise<ScoreHistoryPage> {
     if (!isUuid(playerId)) throw new ApiError(400, 'INVALID_REQUEST_ID');
     const state = await this.snapshot(identity, eventId, roundId, true);
     if (!state.round.players.some((player) => player.playerId === playerId)) throw new ApiError(404, 'ROUND_PLAYER_NOT_FOUND');

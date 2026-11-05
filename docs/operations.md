@@ -67,7 +67,46 @@ for every private object operation, not a stale listing index or hidden button.
 No public roster/score access is authorized. Owner appointment remains separate;
 do not infer application authority from sign-in.
 
-### Player admission and active-event viewing
+### Temporary no-account tester access
+
+An event owner can create a private 24-hour tester link without appointing an
+account or granting membership. Anyone holding it can read saved round setup/
+scorecards and enter scores for any playing group in that one active event.
+No account creation, sign-in or organizer approval is required for its holder.
+The owner still signs in for creation/revocation and all management.
+
+Owner endpoints `GET .../test-access`, `POST .../test-access/create` and
+`POST .../test-access/revoke` retain JWT, event-owner checks, exact event/link
+revisions and UUID idempotency receipts. Creation stores only a SHA-256 digest
+of the browser-generated 32-byte secret, with a server-established 24-hour
+expiry. The raw secret cannot be recovered; explicitly revoke lost links and
+create new ones. Revocation does not delete scores.
+
+Dedicated guest routes live under `/api/tester/events/<event-id>`: workspace,
+round scores and per-player hole writes only. They require
+`Authorization: Tester <link-id>.<secret>`, never a secret query/path parameter.
+The ordinary API remains JWT-only. Every guest request validates the event,
+digest, expiry and current link grant; archived/revoked/expired links fail
+closed. Conditional score publication checks the actual link grant, event/card
+revisions and existing first-score lock/audit invariants. Durable request limits,
+private paged reads, no-store responses and explicit failure semantics remain.
+No new cloud identity, role, storage account or resource is required.
+
+Guest projections never grant global event discovery, admission, catalogs, raw
+index observations, history, purse or game/setup/access administration. Explicit
+tester permissions permit all score targets in this event without making the
+holder an owner. Audit actors distinguish a shared tester link from a verified
+account; individual attribution is not implied. Existing owner/account-player
+access is unchanged.
+
+The guest entry route bypasses identity initialization and global discovery.
+It retains its secret in the fragment/in-memory adapter only; secrets must not
+be logged, rendered as ordinary score-entry text or put into app storage.
+Round/credential changes abort old requests and reset private state. Access
+loss clears private views instead of sending the tester to account sign-in.
+This remains online-only; unsaved drafts can be lost when leaving/reloading.
+
+### Account-based player admission
 
 The event owner creates a private single-golfer link after saving the roster.
 The browser generates a 32-byte random secret; the server stores its SHA-256

@@ -22,7 +22,7 @@ export function createSetupClient(apiUrl: string, getToken: () => Promise<string
       return value;
     },
     async save(eventId, etag, input, signal) {
-      if (!isUuid(eventId) || !isEventRevision(etag) || !isEventSetupInput(input)) throw new Error('Check setup: select at least 4 saved players, 1–8 rounds, an explicit course version and tee, and assign every player once to numbered groups (maximum 4 per group).');
+      if (!isUuid(eventId) || !isEventRevision(etag) || !isEventSetupInput(input)) throw new Error('Check setup: select at least 1 saved player, 1–8 rounds, an explicit course version and tee, and assign every player once to numbered groups (maximum 4 per group).');
       const value = await writePrivateValue(setupRequest, `events/${encodeURIComponent(eventId)}/workspace`, signal, { method: 'PUT', body: input, etag }, maximumEventSetupBytes);
       if (!isEventWorkspace(value) || value.event.id !== eventId
         || input.overallCompetition !== undefined && !sameOverallCompetition(input.overallCompetition, value.overallCompetition)

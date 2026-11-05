@@ -1,5 +1,6 @@
 import type { TableClient, TransactionAction } from '@azure/data-tables';
 import type { AccountIdentity, EventSummary } from '../../../src/domain/events.js';
+import type { ScoreActor } from '../../../src/domain/test-access.js';
 import type { PlayerProfile } from '../../../src/domain/catalog.js';
 import type { EventRosterPlayer, EventSetupInput, EventWorkspace, OverallCompetition, RoundSnapshot } from '../../../src/domain/setup.js';
 import { isPrivateUpload, maximumPrivateWriteBytes } from '../../../src/contracts/private-values.js';
@@ -57,7 +58,7 @@ export class TableWorkspaceStore {
     return profiles;
   }
 
-  private async access(identity: AccountIdentity, id: string) {
+  private async access(identity: ScoreActor, id: string) {
     return readEventAccess(this.table, identity, id);
   }
 
@@ -99,14 +100,15 @@ export class TableWorkspaceStore {
     return { ...workspace, event: summary };
   }
 
-  async get(identity: AccountIdentity, id: string): Promise<EventWorkspace> {
+  async get(identity: ScoreActor, id: string): Promise<EventWorkspace> {
     const before = await this.access(identity, id);
     const workspace = await this.load(before.summary);
     await assertEventAccessUnchanged(this.table, identity, id, before);
     // Explicit allowlists prevent catalog/index/audit fields from leaking to event members.
     return {
       event: before.summary, location: workspace.location, etag: before.summary.etag,
-      canViewScores: before.summary.role === 'owner' || before.admittedPlayer,
+      canViewScores: before.summary.role === 'owner' || before.admittedPlayer || before.testerLink !== undefined,
+      ...(before.testerLink ? { testerAccess: true as const } : {}),
       ...(before.viewerPlayerId && workspace.roster.some((player) => player.playerId === before.viewerPlayerId)
         ? { viewerPlayerId: before.viewerPlayerId } : {}),
       ...(workspace.allowPerGolferTees === undefined ? {} : { allowPerGolferTees: workspace.allowPerGolferTees }),
@@ -131,9 +133,9 @@ export class TableWorkspaceStore {
   }
 
   /** Server-only captured inputs; public readers receive get()'s explicit privacy projection. */
-  async getForScoring(identity: AccountIdentity, id: string): Promise<EventWorkspace> {
+  async getForScoring(identity: ScoreActor, id: string): Promise<EventWorkspace> {
     const access = await this.access(identity, id);
-    if (access.summary.role !== 'owner' && !access.admittedPlayer) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
+    if (access.summary.role !== 'owner' && !access.admittedPlayer && !access.testerLink) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
     const workspace = await this.load(access.summary);
     await assertEventAccessUnchanged(this.table, identity, id, access);
     return workspace;

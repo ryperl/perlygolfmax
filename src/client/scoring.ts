@@ -16,9 +16,10 @@ export interface ScoresClient {
     requestId: string, signal: AbortSignal) => Promise<GameWriteResult>;
 }
 
-export function createScoresClient(apiUrl: string, getToken: () => Promise<string>, send: typeof fetch = fetch): ScoresClient {
-  const request = createPrivateRequest(apiUrl, getToken, send);
-  const gameRequest = createPrivateRequest(apiUrl, getToken, send, maximumGameConfigurationBytes);
+export function createScoresClient(apiUrl: string, getToken: () => Promise<string>, send: typeof fetch = fetch,
+  authorization: 'Bearer' | 'Tester' = 'Bearer'): ScoresClient {
+  const request = createPrivateRequest(apiUrl, getToken, send, 4096, authorization);
+  const gameRequest = createPrivateRequest(apiUrl, getToken, send, maximumGameConfigurationBytes, authorization);
   function path(eventId: string, roundId: string) {
     if (!isUuid(eventId) || !isUuid(roundId)) throw new Error('Invalid event or round identifier.');
     return `events/${encodeURIComponent(eventId)}/rounds/${encodeURIComponent(roundId)}`;

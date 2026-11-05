@@ -1,5 +1,6 @@
 import { isUuid } from '../contracts/events';
 import { validInvitationRoute } from '../client/invitation-return';
+import { readTesterFragment } from '../client/test-access';
 
 export const navigation = [
   { id: 'events', label: 'Events' },
@@ -9,7 +10,7 @@ export const navigation = [
 ] as const;
 
 export type EventTab = 'overview' | 'rounds' | 'group';
-export type Page = (typeof navigation)[number]['id'] | 'preview' | 'leaderboard' | 'purse' | 'access' | 'join';
+export type Page = (typeof navigation)[number]['id'] | 'preview' | 'leaderboard' | 'purse' | 'access' | 'join' | 'tester';
 
 export function isEventTab(value: string | undefined): value is EventTab {
   return value === 'overview' || value === 'rounds' || value === 'group';
@@ -18,7 +19,7 @@ export function isEventTab(value: string | undefined): value is EventTab {
 export function readPage(hash: string, search = ''): Page {
   if (new URLSearchParams(search).get('event-auth') === '1' && (!hash || /^#(?:code|error)=/.test(hash))) return 'events';
   const id = hash.replace(/^#/, '').split('?')[0];
-  return id === 'preview' || id === 'leaderboard' || id === 'purse' || id === 'access' || id === 'join'
+  return id === 'preview' || id === 'leaderboard' || id === 'purse' || id === 'access' || id === 'join' || id === 'tester'
     ? id : navigation.find((page) => page.id === id)?.id ?? 'events';
 }
 
@@ -40,6 +41,10 @@ export function eventTabHref(tab: EventTab, eventId: string | null): string {
 
 export function readEventRoute(hash: string): string {
   const page = hash.slice(1).split('?')[0];
+  if (page === 'tester') {
+    const credential = readTesterFragment(hash);
+    return credential ? `tester:${credential.eventId}:${credential.linkId}:${credential.token}` : 'invalid-tester';
+  }
   if (page === 'join') {
     if (!validInvitationRoute(hash)) return 'invalid-invitation';
     const query = new URLSearchParams(hash.split('?')[1] ?? '');

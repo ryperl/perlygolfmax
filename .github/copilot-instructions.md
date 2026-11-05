@@ -62,6 +62,15 @@
   Index observations, audit identities and management endpoints protected.
   Publish derived playing handicaps where readonly net results need them.
   Clear raw invitation secrets after claim/logout/expiry; never log them.
+- No-account tester links are separate 24-hour event-scoped capabilities.
+  Holders may view round scorecards and score any group in that event only;
+  never global events/catalogs, purse, history, raw indices or management.
+  Owner creation/revocation stays JWT-protected. Validate digest/expiry/revocation
+  and conditional grant revisions; never fabricate a tenant/object identity.
+  Record a distinct shared tester-link score actor and explicit tester
+  permissions, not owner role or individual attribution. Keep secrets in the
+  URL fragment/authorization header only; no logs or application persistence.
+  Clear private views/drafts on access end/change. Archives deny tester access.
 - Scoring is online-only. First saved
   scores lock setup inputs; preserve atomic score/audit/grant checks, explicit
   unplayed/pickup/DNF and incomplete totals. Do not infer admission, offline

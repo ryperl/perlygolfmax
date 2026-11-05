@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RoundScores, Scorecard, ScoreChange } from '../domain/scoring';
-import { maximumExactHoleStrokes } from '../domain/scoring';
-import { isHoleScore, isRoundScores, isScorecard, isScoreChange, isScoreHistoryPage, isScoreWriteResult, parseScoreEntry, scoreEntryText } from './scoring';
+import { maximumExactHoleStrokes, sameScoreActor, scoreActor } from '../domain/scoring';
+import { isHoleScore, isRoundScores, isScorecard, isScoreChange, isScoreHistoryPage, isScoreWriteResult, isScoreActor, parseScoreEntry, scoreEntryText } from './scoring';
 import type { GamePlayerResult, TeamGameDefinition, TeamGameFormat } from '../domain/games.js';
 import { teamSize } from '../domain/games.js';
 import { aggregateTeamGameResults } from '../domain/team-games.js';
@@ -30,6 +30,33 @@ const change: ScoreChange = {
 };
 
 describe('owner gross scoring network contracts', () => {
+  it('validates distinct exact tester actors and preserves legacy account audit attribution', () => {
+    const actor = { kind: 'tester-link' as const, eventId: change.eventId, linkId: id(999) };
+    expect(isScoreActor(actor)).toBe(true);
+    expect(isScoreChange({ ...change, recordedBy: actor })).toBe(true);
+    expect(isScoreChange(change)).toBe(true);
+    expect(isScoreChange({ ...change, recordedBy: { ...actor, eventId: id(998) } })).toBe(false);
+    expect(isScoreActor({ ...actor, tenantId: id(500), objectId: id(501) })).toBe(false);
+    expect(isScoreActor({ tenantId: id(500), objectId: id(501), kind: 'owner' })).toBe(false);
+    expect(sameScoreActor(actor, { ...actor })).toBe(true);
+    expect(sameScoreActor(actor, { ...actor, linkId: id(998) })).toBe(false);
+    expect(sameScoreActor(actor, change.recordedBy)).toBe(false);
+    expect(scoreActor(actor)).toEqual(actor);
+    expect(scoreActor(change.recordedBy)).toEqual(change.recordedBy);
+  });
+
+  it('requires tester scope to be active, non-admin and exactly every saved scorecard', () => {
+    const base = round();
+    const permissions = { role: 'tester', writePlayerIds: base.cards.map((card) => card.playerId), canManageGames: false };
+    expect(isRoundScores({ ...base, permissions })).toBe(true);
+    for (const invalid of [
+      { ...permissions, canManageGames: true },
+      { ...permissions, viewerPlayerId: id(1) },
+      { ...permissions, writePlayerIds: [id(1)] },
+      { ...permissions, writePlayerIds: [...permissions.writePlayerIds, id(999)] },
+    ]) expect(isRoundScores({ ...base, permissions: invalid })).toBe(false);
+    expect(isRoundScores({ ...base, eventStatus: 'archived', permissions })).toBe(false);
+  });
   it.each([1, 2, 3])('accepts %i scorecards without placeholder players and rejects an empty or mismatched group', (count) => {
     const base = round();
     const cards = base.cards.slice(0, count);

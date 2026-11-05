@@ -1,0 +1,24 @@
+.tester-access {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.tester-access label {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.tester-access input,
+.tester-access select {
+  width: 100%;
+  min-width: 0;
+}
+
+.tester-access ul {
+  padding-inline-start: 1.25rem;
+}
+
+.tester-access li {
+  margin-block: 0.75rem;
+}

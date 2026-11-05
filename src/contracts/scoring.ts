@@ -8,6 +8,13 @@ import { isGameChange, isRoundGamesView } from './games.js';
 import { handicapStrokesForHole, stablefordScorePoints } from '../domain/stableford.js';
 import type { CourseHole } from '../domain/catalog.js';
 import { isPlayerTeeProfiles } from './tees.js';
+import type { ScoreActor } from '../domain/test-access.js';
+import { isEventTesterIdentity } from './test-access.js';
+
+export function isScoreActor(value: unknown): value is ScoreActor {
+  return isEventTesterIdentity(value) || isRecord(value) && !Object.hasOwn(value, 'kind')
+    && isUuid(value.tenantId) && isUuid(value.objectId);
+}
 
 function instant(value: unknown): value is string {
   return typeof value === 'string' && value.length <= 40 && Number.isFinite(Date.parse(value));
@@ -95,7 +102,7 @@ export function isRoundScores(value: unknown): value is RoundScores {
   if (new Set(ids).size !== ids.length || cards.some((card) => card.holes.length !== count)) return false;
   if (value.permissions !== undefined) {
     const permission = value.permissions;
-    if (!isRecord(permission) || !['owner', 'player', 'viewer'].includes(String(permission.role))
+    if (!isRecord(permission) || !['owner', 'player', 'viewer', 'tester'].includes(String(permission.role))
       || !Object.keys(permission).every((key) => ['role', 'viewerPlayerId', 'writePlayerIds', 'canManageGames'].includes(key))
       || !Array.isArray(permission.writePlayerIds) || !permission.writePlayerIds.every((id: unknown) => isUuid(id) && roster.has(id))
       || new Set(permission.writePlayerIds).size !== permission.writePlayerIds.length
@@ -103,6 +110,9 @@ export function isRoundScores(value: unknown): value is RoundScores {
     if (permission.role === 'owner') {
       if (permission.viewerPlayerId !== undefined || permission.canManageGames !== (value.eventStatus === 'active')
         || permission.writePlayerIds.length !== (value.eventStatus === 'active' ? cards.length : 0)) return false;
+    } else if (permission.role === 'tester') {
+      if (value.eventStatus !== 'active' || permission.viewerPlayerId !== undefined || permission.canManageGames
+        || permission.writePlayerIds.length !== cards.length) return false;
     } else if (permission.role === 'viewer') {
       if (permission.viewerPlayerId !== undefined || permission.writePlayerIds.length || permission.canManageGames) return false;
     } else {
@@ -179,8 +189,8 @@ export function isScoreChange(value: unknown): value is ScoreChange {
     && isUuid(value.playerId) && positiveInteger(value.holeNumber, 18)
     && isHoleScore(value.before) && isHoleScore(value.after)
     && (value.expectedEtag === null || isEventRevision(value.expectedEtag))
-    && instant(value.recordedAt) && isRecord(value.recordedBy)
-    && isUuid(value.recordedBy.tenantId) && isUuid(value.recordedBy.objectId);
+    && instant(value.recordedAt) && isScoreActor(value.recordedBy)
+    && (!('kind' in value.recordedBy) || value.recordedBy.eventId === value.eventId);
 }
 
 export function isScoreWriteResult(value: unknown): value is ScoreWriteResult {

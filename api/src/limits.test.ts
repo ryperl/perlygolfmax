@@ -1,9 +1,25 @@
 import { TableClient } from '@azure/data-tables';
 import { describe, expect, it, vi } from 'vitest';
-import { creator } from '../test/fixtures.js';
+import { creator, event } from '../test/fixtures.js';
+import { identifier } from '../test/catalog-fixtures.js';
 import { TableRequestLimiter } from './limits.js';
 
 describe('shared identity request limits', () => {
+  it('uses separate durable tester-link event principals and fails closed on their quota-store outage', async () => {
+    const table = new TableClient('https://fictional.table.core.windows.net', 'Events');
+    const get = vi.spyOn(table, 'getEntity').mockImplementation(() => Promise.resolve({ etag: 'current', window: 0, count: 59 }));
+    const update = vi.spyOn(table, 'updateEntity').mockResolvedValue({ etag: 'next' });
+    const actor = { kind: 'tester-link' as const, eventId: event.id, linkId: identifier(3000) };
+    const limiter = new TableRequestLimiter(table, () => 1);
+    await limiter.check(actor, 'scores-write');
+    await limiter.check({ ...actor, linkId: identifier(3001) }, 'scores-write');
+    expect(update.mock.calls[0]?.[0]).toMatchObject({ partitionKey: `quota:tester-link:${event.id}:${actor.linkId}`, count: 60 });
+    expect(update.mock.calls[1]?.[0]).toMatchObject({ partitionKey: `quota:tester-link:${event.id}:${identifier(3001)}` });
+    get.mockImplementation(() => Promise.resolve({ etag: 'full', window: 0, count: 60 }));
+    await expect(limiter.check(actor, 'scores-write')).rejects.toMatchObject({ status: 429 });
+    get.mockRejectedValue(new Error('Fictional quota outage'));
+    await expect(limiter.check(actor, 'scores-write')).rejects.toThrow('Fictional quota outage');
+  });
   it.each([
     ['catalog-read', 60], ['catalog-write', 60], ['setup-read', 60], ['setup-write', 30],
     ['scores-read', 60], ['scores-write', 60],

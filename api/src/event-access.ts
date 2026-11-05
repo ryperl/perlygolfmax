@@ -6,6 +6,9 @@ import { isPlayerInvitation, isVerificationCode } from '../../src/contracts/admi
 import { optionalRow, page, revision } from './catalog/entities.js';
 import type { StoredRow } from './catalog/entities.js';
 import { ApiError } from './errors.js';
+import type { ScoreActor } from '../../src/domain/test-access.js';
+import { isEventTesterIdentity } from '../../src/contracts/test-access.js';
+import { readTesterAccess } from './test-access/authority.js';
 
 export interface EventAccess {
   readonly event: StoredRow;
@@ -14,6 +17,7 @@ export interface EventAccess {
   readonly memberEtag?: string;
   readonly viewerPlayerId?: string;
   readonly admittedPlayer: boolean;
+  readonly testerLink?: StoredRow;
   readonly authorityProofs: readonly StoredRow[];
 }
 
@@ -79,7 +83,11 @@ async function globalProof(table: TableClient, identity: AccountIdentity): Promi
   return undefined;
 }
 
-export async function readEventAccess(table: TableClient, identity: AccountIdentity, eventId: string): Promise<EventAccess> {
+export async function readEventAccess(table: TableClient, identity: ScoreActor, eventId: string): Promise<EventAccess> {
+  if ('kind' in identity) {
+    if (!isEventTesterIdentity(identity)) throw new ApiError(403, 'TESTER_ACCESS_ENDED');
+    return readTesterAccess(table, identity, eventId);
+  }
   const event = await optionalRow(table, eventId, 'event');
   if (!event) throw new ApiError(404, 'EVENT_NOT_FOUND');
   const candidate = await optionalRow(table, eventId, `member:${identity.objectId}`);
@@ -101,7 +109,7 @@ export async function readEventAccess(table: TableClient, identity: AccountIdent
     admittedPlayer: proof !== undefined, authorityProofs: [event, ...(usableMember ? [usableMember] : []), ...(proof ?? [])] };
 }
 
-export async function assertEventAccessUnchanged(table: TableClient, identity: AccountIdentity, eventId: string, before: EventAccess): Promise<void> {
+export async function assertEventAccessUnchanged(table: TableClient, identity: ScoreActor, eventId: string, before: EventAccess): Promise<void> {
   const current = await readEventAccess(table, identity, eventId);
   if (current.summary.role !== before.summary.role || current.viewerPlayerId !== before.viewerPlayerId
     || current.admittedPlayer !== before.admittedPlayer) throw new ApiError(409, 'EVENT_CHANGED');

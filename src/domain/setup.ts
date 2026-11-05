@@ -83,4 +83,5 @@ export interface EventWorkspace {
   readonly allowPerGolferTees?: boolean;
   readonly viewerPlayerId?: string;
   readonly canViewScores?: boolean;
+  readonly testerAccess?: true;
 }

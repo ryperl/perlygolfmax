@@ -10,6 +10,8 @@ import { SessionExpiredError } from '../client/events';
 import type { EventPage } from '../domain/events';
 import { fictionalEventPurse } from '../client/purse.test-support';
 import { admissionId, admissionsClient, deferred, status } from '../features/admission/test-support';
+import { fakeTesterAccessClient, fictionalTesterCredential } from '../client/test-access.test-support';
+import { testerUrl } from '../client/test-access';
 
 let testServices: EventServices | undefined;
 vi.mock('./EventsPage', async (importOriginal) => {
@@ -48,6 +50,57 @@ beforeEach(() => {
 });
 
 describe('App', () => {
+  it('opens the no-account tester controls as the primary owner access flow without entering a guest view', async () => {
+    const base = service();
+    const testerAccess = fakeTesterAccessClient();
+    testServices = { ...base, admissions: admissionsClient(), testerAccess };
+    navigate(`#access?event=${fictionalEvent.id}`);
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'No-account tester access' })).toBeVisible();
+    expect(testerAccess.list).toHaveBeenCalledWith(fictionalEvent.id, expect.any(AbortSignal));
+    expect(headerAccount('Sign out')).toBeEnabled();
+    expect(testerAccess.workspace).not.toHaveBeenCalled();
+    expect(screen.getByText('Account-based player invitations')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Request access' })).not.toBeInTheDocument();
+  });
+  it('opens tester score entry without initializing identity or loading global events, and never renders the secret', async () => {
+    const base = service();
+    const testerAccess = fakeTesterAccessClient();
+    testServices = { ...base, testerAccess };
+    navigate(new URL(testerUrl(window.location.origin, fictionalTesterCredential)).hash);
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Round scorecard' })).toBeVisible();
+    expect(base.session.initialize).not.toHaveBeenCalled();
+    expect(base.session.token).not.toHaveBeenCalled();
+    expect(base.events.list).not.toHaveBeenCalled();
+    expect(base.events.capabilities).not.toHaveBeenCalled();
+    expect(base.setup.load).not.toHaveBeenCalled();
+    expect(base.scores.load).not.toHaveBeenCalled();
+    expect(base.catalog.players).not.toHaveBeenCalled();
+    expect(testerAccess.workspace).toHaveBeenCalledWith(fictionalTesterCredential, expect.any(AbortSignal));
+    expect(screen.queryByRole('button', { name: /^Sign (in|out)$/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Main navigation' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Configure event' })).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(fictionalTesterCredential.token);
+    expect(document.title).toBe('Tester score entry | Perly Golf Max');
+    navigate('#events');
+    await screen.findByRole('heading', { name: 'Events' });
+    expect(base.session.initialize).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('heading', { name: 'Round scorecard' })).not.toBeInTheDocument();
+    expect(mainNavigation().getByRole('link', { name: 'Rounds' })).toHaveAttribute('href', '#rounds');
+  });
+  it('does not initialize identity or request private data for invalid tester fragments', async () => {
+    const base = service();
+    const testerAccess = fakeTesterAccessClient();
+    testServices = { ...base, testerAccess };
+    navigate('#tester?event=invalid');
+    render(<App />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('This tester link is invalid.');
+    expect(base.session.initialize).not.toHaveBeenCalled();
+    expect(testerAccess.workspace).not.toHaveBeenCalled();
+    expect(base.events.list).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Sign in' })).not.toBeInTheDocument();
+  });
   it('keeps signed-out invitation landing private and uses the existing header sign-in action', async () => {
     const base = service();
     const account = deferred<boolean>();

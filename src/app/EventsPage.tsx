@@ -20,9 +20,11 @@ import { EventLeaderboardPage } from './EventLeaderboardPage';
 import type { PurseClient } from '../client/purse';
 import type { AdmissionsClient } from '../client/admission';
 import { clearInvitationReturn } from '../client/invitation-return';
+import type { TesterAccessClient } from '../client/test-access';
 const PursePage = lazy(async () => ({ default: (await import('./PursePage')).PursePage }));
 const JoinEventPage = lazy(async () => ({ default: (await import('./JoinEventPage')).JoinEventPage }));
 const PlayerAccessPage = lazy(async () => ({ default: (await import('./PlayerAccessPage')).PlayerAccessPage }));
+const TesterEntry = lazy(async () => ({ default: (await import('../features/test-access')).TesterEntry }));
 
 const configuredServices = configureEventServices(import.meta.env);
 
@@ -45,6 +47,7 @@ export interface EventServices {
   readonly leaderboard?: EventLeaderboardClient;
   readonly purse?: PurseClient;
   readonly admissions?: AdmissionsClient;
+  readonly testerAccess?: TesterAccessClient;
 }
 
 function subscribe(onChange: () => void) {
@@ -58,7 +61,12 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
   readonly configurationError?: string;
 } & AccountPlacement) {
   const route = useSyncExternalStore(subscribe, getRoute);
-  const privateScope = useMemo(() => ({ services, preview }), [services, preview]);
+  const testerMode = route.startsWith('tester:') || route === 'invalid-tester';
+  const testerCredential = useMemo(() => {
+    const [kind, eventId, linkId, token] = route.split(':');
+    return kind === 'tester' && eventId && linkId && token ? { eventId, linkId, token } : undefined;
+  }, [route]);
+  const privateScope = useMemo(() => ({ services, preview, testerMode }), [services, preview, testerMode]);
   const [loadedScope, setLoadedScope] = useState<object>();
   const [admissionRevision, setAdmissionRevision] = useState(0);
   const [state, setState] = useState<EventsState>({ kind: 'loading' });
@@ -83,7 +91,11 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
     request.current = controller;
     running.current = false;
     pendingCreate.current = null;
-    if (services) {
+    if (testerMode) {
+      setIdentity(undefined);
+      setBusy(false);
+      setState({ kind: 'loading' });
+    } else if (services) {
       void services.session.initialize().then((signedIn) => {
         if (!controller.signal.aborted) {
           setIdentity({ services, signedIn });
@@ -112,10 +124,10 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
         });
     }
     return () => { mounted.current = false; controller.abort(); request.current?.abort(); };
-  }, [services]);
+  }, [services, testerMode]);
 
   useEffect(() => {
-    if (!services || identity?.services !== services || !identity.signedIn || preview) return;
+    if (!services || identity?.services !== services || !identity.signedIn || preview || testerMode) return;
     setView('active');
     setState({ kind: 'loading' });
     const controller = new AbortController();
@@ -137,7 +149,7 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
       } else setState({ kind: 'error', message: 'Could not connect to your event services. No saved data was loaded.' });
     });
     return () => { controller.abort(); };
-  }, [services, identity, preview, privateScope, admissionRevision]);
+  }, [services, identity, preview, privateScope, admissionRevision, testerMode]);
 
   function expire(message: string) {
     if (services) setIdentity({ services, signedIn: false });
@@ -216,6 +228,17 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
   </div>;
   const accountControl = accountHost ? createPortal(account, accountHost) : account;
 
+  if (testerMode) {
+    if (!testerCredential) return <p role="alert">This tester link is invalid. Ask the organizer for a new private link.</p>;
+    if (!services?.testerAccess) return <p role="alert">Tester score entry is not configured in this connection.</p>;
+    return <Suspense fallback={<p role="status">Loading tester score entry…</p>}>
+      <TesterEntry key={`${testerCredential.eventId}:${testerCredential.linkId}:${testerCredential.token}`}
+        client={services.testerAccess} credential={testerCredential} onExit={() => {
+          window.history.replaceState(null, '', `${window.location.pathname}#events`);
+          window.dispatchEvent(new HashChangeEvent('hashchange'));
+        }} />
+    </Suspense>;
+  }
   if (preview) return accountControl;
 
   if (services && (route.startsWith('join:') || route === 'invalid-invitation')) {
@@ -261,7 +284,8 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
         </section>
         : kind === 'access' && eventId ? services.admissions
           ? <Suspense fallback={<p role="status">Loading player access…</p>}>
-            <PlayerAccessPage key={eventId} eventId={eventId} client={services.admissions} onSessionExpired={expire} />
+            <PlayerAccessPage key={eventId} eventId={eventId} client={services.admissions}
+              testerAccess={services.testerAccess} onSessionExpired={expire} />
           </Suspense> : <p role="alert">Player invitations are unavailable in this connection.</p>
         : kind === 'purse' && eventId ? services.purse
           ? <Suspense fallback={<p role="status">Loading prize view…</p>}>

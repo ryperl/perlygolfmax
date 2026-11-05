@@ -16,11 +16,12 @@ import type { HoleDraft } from './entry-state';
 import { planGroup, saveGroupEntries } from './save-group';
 import './scoring.css';
 
-interface OwnerScoresViewProps {
+export interface OwnerScoresViewProps {
   readonly client: ScoresClient;
   readonly eventId: string;
   readonly roundId: string;
   readonly onSessionExpired: (message: string) => void;
+  readonly overviewHref?: string | null;
 }
 
 export function OwnerScoresView(props: OwnerScoresViewProps) {
@@ -29,7 +30,7 @@ export function OwnerScoresView(props: OwnerScoresViewProps) {
   return <OwnerScoresController key={`${props.eventId}:${props.roundId}:${String(identity.generation)}`} {...props} />;
 }
 
-function OwnerScoresController({ client, eventId, roundId, onSessionExpired }: OwnerScoresViewProps) {
+function OwnerScoresController({ client, eventId, roundId, onSessionExpired, overviewHref }: OwnerScoresViewProps) {
   const [drafts, setDrafts] = useState<ReadonlyMap<string, HoleDraft>>(new Map());
   const currentDrafts = useRef(drafts);
   const draftAccess = useRef<string | null>(null);
@@ -178,10 +179,11 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired }: O
   }
   if (round?.eventStatus === 'archived' && permissions?.role !== 'owner') return <p role="alert">Archived scorecards are available to the event owner only.</p>;
   return <section className="owner-scores">
-    <a href={`#overview?event=${encodeURIComponent(eventId)}`}>Back to event overview</a>
+    {overviewHref !== null && <a href={overviewHref ?? `#overview?event=${encodeURIComponent(eventId)}`}>Back to event overview</a>}
     <h1>Round scores</h1>
     <p className="score-warning"><strong>Online only.</strong> Unsaved drafts live only in this page. Keep a paper backup.</p>
     {permissions?.role === 'player' && assignedGroup && <p>Your assigned playing group: Group {assignedGroup.number}. You can view every group; enter scores only for your assigned group.</p>}
+    {permissions?.role === 'tester' && <p>Tester link: enter scores for any saved playing group in this event. Game settings are read-only.</p>}
     {round && writeIds.length === 0 && <p>Read-only scorecards and results. Score entry is not available for this round.</p>}
     {accessChanged && <p role="alert">Score permissions or playing groups changed. Your drafts are retained for review only. Discard them before starting new entries.</p>}
     {accessChanged && <button disabled={busy} onClick={() => { setScreen('entry'); }}>Review unsaved scores</button>}

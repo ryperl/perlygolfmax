@@ -22,8 +22,14 @@ import { TableAdmissionStore } from './admission/store.js';
 import type { AdmissionStore } from './admission/store.js';
 import { createAdmissionHandler } from './admission/handlers.js';
 import type { AdmissionAction, AdmissionApi } from './admission/handlers.js';
+import { TableTesterAccessStore } from './test-access/store.js';
+import { createTesterHandler } from './test-access/handlers.js';
+import type { TesterAction } from './test-access/handlers.js';
 
-type RuntimeApi = EventApi & CatalogSetupApi & ScoringApi & PurseApi & { readonly admissions: AdmissionStore };
+type RuntimeApi = EventApi & CatalogSetupApi & ScoringApi & PurseApi & {
+  readonly admissions: AdmissionStore;
+  readonly testers: TableTesterAccessStore;
+};
 let api: RuntimeApi | undefined;
 
 function resolveApi(): RuntimeApi {
@@ -43,6 +49,7 @@ function resolveApi(): RuntimeApi {
     canManageCatalog: manager, courses, players,
     workspace, scores, purse: new TablePurseStore(table, workspace, scores),
     admissions: new TableAdmissionStore(table),
+    testers: new TableTesterAccessStore(table),
   };
   return api;
 }
@@ -107,4 +114,16 @@ const admissionRoutes: readonly { readonly action: AdmissionAction; readonly suf
 for (const item of admissionRoutes) app.http(`playerAdmission-${item.action}`, {
   route: `events/{id}/admissions${item.suffix}`, methods: [item.method], authLevel: 'anonymous',
   handler: createAdmissionHandler(resolveAdmissionApi, item.action),
+});
+
+const testerRoutes: readonly { readonly action: TesterAction; readonly route: string; readonly method: 'GET' | 'POST' | 'PUT' }[] = [
+  { action: 'list', route: 'events/{id}/test-access', method: 'GET' },
+  { action: 'create', route: 'events/{id}/test-access/create', method: 'POST' },
+  { action: 'revoke', route: 'events/{id}/test-access/revoke', method: 'POST' },
+  { action: 'workspace', route: 'tester/events/{id}/workspace', method: 'GET' },
+  { action: 'scores', route: 'tester/events/{id}/rounds/{roundId}/scores', method: 'GET' },
+  { action: 'score-hole', route: 'tester/events/{id}/rounds/{roundId}/players/{playerId}/holes/{holeNumber}', method: 'PUT' },
+];
+for (const item of testerRoutes) app.http(`testerAccess-${item.action}`, {
+  route: item.route, methods: [item.method], authLevel: 'anonymous', handler: createTesterHandler(resolveApi, item.action),
 });

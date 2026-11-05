@@ -34,7 +34,8 @@ export function App() {
   useEffect(() => {
     const label = activePage === 'preview' ? 'Preview' : activePage === 'leaderboard' ? 'Overall leaderboard'
       : activePage === 'purse' ? 'Purse and winnings' : activePage === 'access' ? 'Player access'
-        : activePage === 'join' ? 'Join event' : navigation.find((item) => item.id === activePage)?.label ?? 'Events';
+        : activePage === 'join' ? 'Join event' : activePage === 'tester' ? 'Tester score entry'
+          : navigation.find((item) => item.id === activePage)?.label ?? 'Events';
     document.title = `${label} | Perly Golf Max`;
     if (previousPage.current !== hash) {
       mainRef.current?.focus();
@@ -62,11 +63,11 @@ export function App() {
         </div>
       </header>
       {page === 'preview' && <div className="demo-banner"><span className="demo-dot" aria-hidden="true" /><strong>Demo clubhouse</strong><span>Fictional data. Nothing here is saved or synced.</span></div>}
-      <nav className="navigation" aria-label="Main navigation">
+      {page !== 'tester' && <nav className="navigation" aria-label="Main navigation">
         {navigation.map((item) => (
           <a href={item.id === 'events' ? '#events' : eventTabHref(item.id, activeEvent)} key={item.id} aria-current={activePage === item.id ? 'page' : undefined}>{item.label}</a>
         ))}
-      </nav>
+      </nav>}
       <main id="main-content" ref={mainRef} tabIndex={-1}>
         {/* Keep account state mounted on Preview without loading private event data. */}
         <Suspense fallback={page === 'preview' ? null : <p role="status">Loading event screen...</p>}>
