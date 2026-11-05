@@ -3,6 +3,14 @@ import { fictionalId, fictionalSetup, fictionalWorkspace } from '../../client/ca
 import { inputFrom, sameRoundInput, sameSetupInput, setupProblems } from './setup-draft';
 
 describe('setup draft presentation', () => {
+  it.each([1, 2, 3])('allows a complete %i-player event draft without placeholder golfers', (count) => {
+    const playerIds = fictionalSetup.playerIds.slice(0, count);
+    const draft = { ...fictionalSetup, playerIds, rounds: fictionalSetup.rounds.map((round) => ({
+      ...round, groups: [{ number: 1, playerIds }],
+    })) };
+    expect(setupProblems(draft)).toEqual([]);
+    expect(setupProblems({ ...draft, playerIds: [] })).toContain('Choose at least one player.');
+  });
   it('preserves explicit permission and sparse personal tees through captured round drafts and detects changed assignments', () => {
     const round = fictionalWorkspace.rounds[0];
     if (!round) throw new Error('Missing fictional round.');
@@ -63,7 +71,7 @@ describe('setup draft presentation', () => {
 
   it('gives specific next steps without treating optional location or unknown indices as required', () => {
     expect(setupProblems({ name: '', location: '', playerIds: [], rounds: [] })).toEqual([
-      'Enter an event name.', 'Choose at least four players.', 'Add at least one round.',
+      'Enter an event name.', 'Choose at least one player.', 'Add at least one round.',
     ]);
     expect(setupProblems({ ...fictionalSetup, location: '' })).toEqual([]);
     expect(setupProblems({

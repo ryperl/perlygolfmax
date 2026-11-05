@@ -87,7 +87,7 @@
   no team results until repaired; unchanged stale peer games may be retained
   while another game is repaired. Keep legacy individual definitions valid.
   Remove artificial golfer/team/group-count ceilings, not safeguards. Keep
-  team sizes 2/4, playing groups max4, min4 event golfers and separate round/game
+  team sizes 2/4, playing groups max4, min1 event golfer and separate round/game
   budgets. Bounded staged writes publish immutable fragments atomically;
   legacy inline data stays readable. Digest-bound read pages must never be
   mixed or exposed partially. Retain progress across quota waits; abort safely.

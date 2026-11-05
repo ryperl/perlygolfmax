@@ -13,8 +13,8 @@ import { stablefordPoints } from '../domain/stableford';
 import type { RoundGameDefinition } from '../domain/games';
 
 describe('owner scoring client/handler/storage workflow', () => {
-  it('persists audited dispositions, confirms replay after later edits and prevents nonowner access', async () => {
-    const stored = await scoringFixture();
+  it.each([1, 2, 3, 4] as const)('persists audited dispositions and game results for %i golfers without granting nonowner access', async (count) => {
+    const stored = await scoringFixture(count);
     const api = {
       scores: stored.scores,
       verify: vi.fn((authorization: string | null) => Promise.resolve(authorization === 'Bearer fictional-member' ? member : creator)),

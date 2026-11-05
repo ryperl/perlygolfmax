@@ -14,6 +14,13 @@ const input = {
 };
 
 describe('private setup and index contracts', () => {
+  it.each([1, 2, 3])('accepts %i golfers with complete playing-group assignments, never an empty roster', (count) => {
+    const playerIds = ids.slice(0, count);
+    const rounds = input.rounds.map((round) => ({ ...round, groups: [{ number: 1, playerIds }] }));
+    expect(isEventSetupInput({ ...input, playerIds, rounds })).toBe(true);
+    expect(isEventSetupInput({ ...input, playerIds: [], rounds })).toBe(false);
+    expect(isEventSetupInput({ ...input, playerIds, rounds: rounds.map((round) => ({ ...round, groups: [] })) })).toBe(false);
+  });
   it('preserves legacy omission, accepts explicit disable only on writes and shares the setup byte cap', () => {
     expect(maximumEventSetupBytes).toBe(12288);
     expect(isEventSetupInput(input)).toBe(true);

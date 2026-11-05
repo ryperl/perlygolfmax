@@ -51,7 +51,7 @@ export function isEventSetupInput(value: unknown): value is EventSetupInput {
   if (!isRecord(value) || !boundedText(value.name) || !location(value.location)
     || value.allowPerGolferTees !== undefined && typeof value.allowPerGolferTees !== 'boolean'
     || value.overallCompetition !== undefined && value.overallCompetition !== null && !isOverallCompetition(value.overallCompetition)
-    || !Array.isArray(value.playerIds) || value.playerIds.length < 4
+    || !Array.isArray(value.playerIds) || value.playerIds.length < 1
     || !value.playerIds.every(isUuid) || new Set(value.playerIds).size !== value.playerIds.length
     || !Array.isArray(value.rounds) || value.rounds.length < 1 || value.rounds.length > 8) return false;
   const players: readonly string[] = value.playerIds;
@@ -93,7 +93,7 @@ export function isEventWorkspace(value: unknown): value is EventWorkspace {
   const ids = value.roster.map((player: { readonly playerId: string }) => player.playerId);
   return value.etag === value.event.etag && new Set(ids).size === ids.length
     && (value.viewerPlayerId === undefined || ids.includes(value.viewerPlayerId))
-    && (value.rounds.length === 0 || ids.length >= 4)
+    && (value.rounds.length === 0 || ids.length >= 1)
     && value.rounds.every((round: unknown) => isRoundSnapshot(round, ids))
     && (value.allowPerGolferTees === true || value.rounds.every((round: RoundSnapshot) => !round.playerTees?.length))
     && new Set(value.rounds.map((round: RoundSnapshot) => round.id)).size === value.rounds.length

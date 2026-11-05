@@ -420,6 +420,8 @@ or more rounds, with positive numbered manual groups and at most four players pe
 group. Every selected player must be assigned once per round. Group choices
 show their current counts and are disabled for additional players when full;
 moving or unassigning a player frees a place without moving anyone else.
+The **Create Group** option offers a new group without creating it until a
+golfer is assigned; the round summary counts only existing groups.
 Stale edits require refresh rather than silently overwrite another update.
 Setup does not bind a player to an account, invite anyone, save scores or provide
 offline sync.
@@ -432,9 +434,10 @@ only the visible round; incomplete hidden rounds still prevent saving and are
 identified in the checklist. Saved inputs and captured/current index comparison
 are in a separate expandable review, never a preview of unsaved choices.
 Saved, unsaved and scoring-locked round labels do not imply offline persistence.
-Events require at least four golfers, with no application-imposed upper
+Events support one or more golfers, with no application-imposed upper
 golfer/team/group-count ceiling. Teams remain two or four, not larger Ryder Cup
-sides. Editors and results use search/paging without dropping off-screen
+sides; each team game still requires a complete roster of full teams.
+Editors and results use search/paging without dropping off-screen
 selections. Separate budgets of eight rounds, 16 games per round and 32 points
 rows remain. Finite service safeguards still apply: staged logical writes are
 limited to 4 MiB and private values to 32 MiB; oversized work fails explicitly.

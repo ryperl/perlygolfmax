@@ -30,13 +30,21 @@ const change: ScoreChange = {
 };
 
 describe('owner gross scoring network contracts', () => {
+  it.each([1, 2, 3])('accepts %i scorecards without placeholder players and rejects an empty or mismatched group', (count) => {
+    const base = round();
+    const cards = base.cards.slice(0, count);
+    const value = { ...base, cards, groups: [{ number: 1, playerIds: cards.map((card) => card.playerId) }] };
+    expect(isRoundScores(value)).toBe(true);
+    expect(isRoundScores({ ...value, cards: [] })).toBe(false);
+    expect(isRoundScores({ ...value, groups: base.groups })).toBe(false);
+  });
   it.each([{ kind: 'unplayed' }, { kind: 'picked-up' }, { kind: 'did-not-finish' }, { kind: 'strokes', strokes: 1 }])('accepts explicit disposition %j', (score) => {
     expect(isHoleScore(score)).toBe(true);
   });
 
-  function teamRound(format: TeamGameFormat = 'four-two-net'): RoundScores {
+  function teamRound(format: TeamGameFormat = 'four-two-net', count = 4): RoundScores {
     const base = round();
-    const cards = base.cards.map((card): Scorecard => ({
+    const cards = base.cards.slice(0, count).map((card): Scorecard => ({
       ...card, etag: 'fictional-card-v1', updatedAt: '2026-01-01T00:00:00Z',
       holes: card.holes.map((hole) => ({ ...hole, score: { kind: 'strokes', strokes: 4 } })),
     }));
@@ -55,7 +63,8 @@ describe('owner gross scoring network contracts', () => {
       })),
     };
     return {
-      ...base, cards, setupLocked: true, lastUpdatedAt: '2026-01-01T00:00:00Z',
+      ...base, cards, groups: [{ number: 1, playerIds: cards.map((card) => card.playerId) }],
+      setupLocked: true, lastUpdatedAt: '2026-01-01T00:00:00Z',
       games: {
         configuration: { eventId: base.eventId, roundId: base.roundId, etag: 'fictional-game-v1', games: [definition] },
         results: [{ gameId: definition.id, players,
@@ -65,6 +74,11 @@ describe('owner gross scoring network contracts', () => {
   }
 
   describe('team projections retain raw-score consistency checks', () => {
+    it.each(['two-net-better-ball', 'two-net-aggregate'] as const)('accepts one complete two-player %s team', (format) => {
+      const value = teamRound(format, 2);
+      expect(isRoundScores(value)).toBe(true);
+      expect(value.games?.results[0]?.teams).toHaveLength(1);
+    });
     it('accepts explicit non-scoring repair state for saved assignments mismatching current raw-card roster', () => {
       const value = teamRound();
       const view = value.games;

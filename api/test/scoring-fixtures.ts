@@ -3,11 +3,11 @@ import { catalogFixture, identifier, tee } from './catalog-fixtures.js';
 import { creator, event } from './fixtures.js';
 import { TableScoreStore } from '../src/scoring/store.js';
 
-export async function scoringFixture() {
+export async function scoringFixture(playerCount: 1 | 2 | 3 | 4 = 4) {
   const f = catalogFixture();
   f.seedEvent();
   const version = await f.publish();
-  const players = await Promise.all([200, 201, 202, 203].map((id) =>
+  const players = await Promise.all([200, 201, 202, 203].slice(0, playerCount).map((id) =>
     f.players.create(creator, identifier(id), `Fictional Golfer ${String(id)}`)));
   const playerIds = players.map((player) => player.id);
   const roundId = identifier(500);

@@ -121,7 +121,7 @@ export function RoundEditor({ round, number, saved, courses, players, rosterIds,
       <button type="button" onClick={() => { setAttempt((previous) => previous + 1); }}>Retry round {number} version</button>
     </div>}
     {teeNotice && <p role="status">{teeNotice}</p>}
-    <p>{rosterIds.length} golfers · {round.groups.length} playing groups · {rosterIds.length - unassigned.length} assigned. Search and paging retain all selections.</p>
+    <p>{rosterIds.length} {rosterIds.length === 1 ? 'golfer' : 'golfers'} · {round.groups.length} playing {round.groups.length === 1 ? 'group' : 'groups'} · {rosterIds.length - unassigned.length} assigned. Search and paging retain all selections.</p>
     {visiblePlayers.length === 0 && rosterIds.length > 0 && <p>No golfers match your search. Existing assignments are retained.</p>}
     {allowPerGolferTees && <fieldset><legend>Personal tees · round {number}</legend>
       <p>The organizer assigns tees separately for each round. The common tee is the default. Only tees with matching hole numbers and hole count are available.</p>
@@ -171,7 +171,7 @@ export function RoundEditor({ round, number, saved, courses, players, rosterIds,
           const members = round.groups.find((group) => group.number === number)?.playerIds ?? [];
           const full = members.length >= groupCapacity;
           return <option key={number} value={number} disabled={full && !members.includes(id)}>
-            Group {number} ({members.length}/{groupCapacity}{full ? ', full' : ''})
+            {groupNumbers.has(number) ? `Group ${String(number)} (${String(members.length)}/${String(groupCapacity)}${full ? ', full' : ''})` : `Create Group ${String(number)}`}
           </option>;
         })}</select>
       </label>)}

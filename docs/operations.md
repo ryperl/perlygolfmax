@@ -168,7 +168,9 @@ Purse allocation is separate and never performs a payment.
 ### Scalable private values and transfers
 
 There is no application golfer/team-count ceiling. Playing groups stay at most
-four and competition teams exactly two/four; minimum event roster is four.
+four and competition teams exactly two/four; minimum saved event roster is one.
+Individual rounds support one, two or three golfers without placeholder players.
+Team game setup still requires complete teams covering every round golfer.
 Requests, storage properties, transactions and finite runtime resources still
 have safeguards. Large setup/game/purse writes use immutable owner-bound parts
 followed by conditional publication. Ordinary bodies remain 4 KiB; the part

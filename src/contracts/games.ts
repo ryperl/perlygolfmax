@@ -166,7 +166,7 @@ export function isRoundGamesView(value: unknown): value is RoundGamesView {
     const game = value.configuration.games.find((candidate) => candidate.id === result.gameId);
     if (!game || !keys(result, isTeamGameDefinition(game) ? ['gameId', 'players', 'teams'] : ['gameId', 'players'],
       isTeamGameDefinition(game) ? ['teamSetupRequired'] : [])
-      || !Array.isArray(result.players) || result.players.length < 4) return false;
+      || !Array.isArray(result.players) || result.players.length < 1) return false;
     const ids = new Set<string>();
     const components: GamePlayerResult[] = [];
     for (const player of result.players) {

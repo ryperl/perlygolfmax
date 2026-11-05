@@ -382,19 +382,19 @@ describe('self-contained round game result contracts', () => {
     expect(isRoundGamesView(mapPlayers(net, (p) => ({ ...mapper(p), playingHandicap: handicap + 1 })))).toBe(false);
   });
 
-  it('pairs results exactly by configured game ID and requires at least four unique golfers without a count ceiling', () => {
+  it('pairs results exactly by configured game ID and requires at least one unique golfer without a count ceiling', () => {
     const value = view();
     const result = value.results[0];
     if (!result) throw new Error('Missing fictional result');
     for (const invalid of [
       null, {}, { ...value, results: null }, { ...value, results: [] },
       { ...value, results: [result, result] }, { ...value, results: [{ ...result, gameId: id(2) }] },
-      { ...value, results: [{ ...result, players: result.players.slice(1) }] },
+      { ...value, results: [{ ...result, players: [] }] },
       { ...value, results: [{ ...result, players: [...result.players, ...result.players] }] },
       { ...value, extra: true }, { ...value, results: [{ ...result, extra: true }] },
     ]) expect(isRoundGamesView(invalid)).toBe(false);
     expect(isRoundGamesView({ ...value, results: [{ ...result, players: Array.from({ length: 8 }, (_, index) => player(index)) }] })).toBe(true);
-    for (const count of [12, 40, 120]) {
+    for (const count of [1, 2, 3, 12, 40, 120]) {
       expect(isRoundGamesView({ ...value, results: [{ ...result, players: Array.from({ length: count }, (_, index) => player(index)) }] })).toBe(true);
     }
     expect(isRoundGamesView({ configuration: { ...value.configuration, games: [], etag: null }, results: [] })).toBe(true);

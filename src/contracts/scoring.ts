@@ -67,7 +67,7 @@ export function isRoundScores(value: unknown): value is RoundScores {
     || typeof value.setupLocked !== 'boolean'
     || value.lastUpdatedAt !== null && !instant(value.lastUpdatedAt)
     || !Array.isArray(value.layout) || ![9, 18].includes(value.layout.length)
-    || !Array.isArray(value.cards) || value.cards.length < 4 || !value.cards.every(isScorecard)
+    || !Array.isArray(value.cards) || value.cards.length < 1 || !value.cards.every(isScorecard)
     || !Array.isArray(value.groups) || value.groups.length < 1) return false;
   if (value.teeRatings !== undefined) {
     if (!Array.isArray(value.teeRatings) || value.teeRatings.length !== 3

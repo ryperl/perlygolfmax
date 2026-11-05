@@ -33,7 +33,7 @@ export function SetupRoster({ players, selectedIds, savedRoster, locked, onChang
   return <><fieldset disabled={locked}>
     <legend>Saved player roster ({selectedIds.length} selected)</legend>
     {locked && <p>Roster locked because scoring has started in a saved round.</p>}
-    <p>Choose at least four saved players. Selecting players does not invite them or assign playing groups.</p>
+    <p>Choose one or more saved players. Selecting players does not invite them or assign playing groups.</p>
     {selectedIds.filter((id) => !players.some((player) => player.id === id)).map((id) => <p key={id}>
         Saved roster player unavailable in catalog: {savedRoster.find((player) => player.playerId === id)?.displayName ?? 'Unavailable player'}
     </p>)}

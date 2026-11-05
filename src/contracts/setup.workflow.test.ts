@@ -10,7 +10,7 @@ import { EventChangedError } from '../client/events';
 import { createSetupClient } from '../client/setup';
 
 describe('saved setup client/handler contract', () => {
-  it('imports, reuses, snapshots and projects a real request sequence without live services', async () => {
+  it.each([1, 2, 3, 4])('imports, snapshots, refreshes and reloads a %i-player event through real request contracts', async (count) => {
     const stored = catalogFixture();
     stored.seedEvent();
     const api = {
@@ -55,7 +55,7 @@ describe('saved setup client/handler contract', () => {
     await catalog.uploadProfile(importId, tee, signal);
     const version = await catalog.publish(importId, null, signal);
     expect((await catalog.courses(signal)).courses[0]?.currentVersionId).toBe(version.id);
-    const players = await Promise.all([201, 202, 203, 204].map((id) =>
+    const players = await Promise.all([201, 202, 203, 204].slice(0, count).map((id) =>
       catalog.createPlayer(`Fictional golfer ${String(id)}`, identifier(id), signal,
         id === 201 ? { value: '+2.4', effectiveDate: '2026-01-01', source: 'Fictional starting observation' } : undefined)));
     const first = players[0];
@@ -90,7 +90,7 @@ describe('saved setup client/handler contract', () => {
     const participantSetup = createSetupClient('https://fictional.example.test/api', () => Promise.resolve('fictional-member'), send);
     const participantCatalog = createCatalogClient('https://fictional.example.test/api', () => Promise.resolve('fictional-member'), send);
     const projection = await participantSetup.load(event.id, signal);
-    expect(projection.roster).toHaveLength(4);
+    expect(projection.roster).toHaveLength(count);
     expect(JSON.stringify(projection)).not.toContain('handicapIndex');
     expect(JSON.stringify(projection)).not.toContain('recordedBy');
     await expect(participantCatalog.players(signal)).rejects.toThrow('permission');

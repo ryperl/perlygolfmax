@@ -38,6 +38,7 @@ function savedInput(input: EventSetupInput): EventWorkspace {
   return {
     ...fictionalWorkspace, event: { ...fictionalEvent, name: input.name, etag: 'workspace-v2' },
     etag: 'workspace-v2', location: input.location,
+    roster: fictionalWorkspace.roster.filter((player) => input.playerIds.includes(player.playerId)),
     allowPerGolferTees: input.allowPerGolferTees ?? false,
     ...(input.overallCompetition == null ? {} : { overallCompetition: input.overallCompetition }),
     rounds: input.rounds.map((round) => ({
@@ -48,7 +49,8 @@ function savedInput(input: EventSetupInput): EventWorkspace {
         playerId: entry.playerId,
         profile: fictionalVersion.data.teeProfiles.find((profile) => profile.id === entry.teeProfileId) ?? fictionalProfile,
       })),
-      players: fictionalPlayers.map((player) => ({ playerId: player.id, displayName: player.displayName, handicapIndex: null })),
+      players: fictionalPlayers.filter((player) => input.playerIds.includes(player.id))
+        .map((player) => ({ playerId: player.id, displayName: player.displayName, handicapIndex: null })),
     })),
   };
 }
@@ -75,6 +77,32 @@ async function openSetupSections(user = userEvent.setup()) {
 }
 
 describe('saved event workspace', () => {
+  it.each([1, 2, 3])('saves a complete %i-player workspace while still blocking an empty roster', async (count) => {
+    const setup = fakeSetup();
+    vi.mocked(setup.load).mockResolvedValue(fictionalWorkspace);
+    vi.mocked(setup.save).mockImplementation((_event, _etag, input) => Promise.resolve(savedInput(input)));
+    render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={fakeCatalog()} />);
+    const user = userEvent.setup();
+    await openSetupSections(user);
+    for (const player of fictionalPlayers.slice(count)) {
+      const checkbox = screen.getByLabelText(`${player.displayName} — HI Unknown`);
+      await waitFor(() => { expect(checkbox).toBeEnabled(); });
+      await user.click(checkbox);
+    }
+    const save = screen.getByRole('button', { name: 'Save event workspace' });
+    await waitFor(() => { expect(save).toBeEnabled(); });
+    await user.click(save);
+    await screen.findByText(/Event workspace saved/);
+    const submitted = vi.mocked(setup.save).mock.calls[0]?.[2];
+    expect(submitted?.playerIds).toEqual(fictionalPlayers.slice(0, count).map((player) => player.id));
+    expect(submitted?.rounds[0]?.groups[0]?.playerIds).toEqual(submitted?.playerIds);
+    for (const player of fictionalPlayers.slice(0, count)) {
+      await user.click(screen.getByLabelText(`${player.displayName} — HI Unknown`));
+    }
+    expect(screen.getByText('Choose at least one player.')).toBeVisible();
+    expect(save).toBeDisabled();
+    expect(setup.save).toHaveBeenCalledOnce();
+  });
   it('retains accumulated course and player pages across quota waits and retries only the throttled page', async () => {
     vi.useFakeTimers();
     const catalog = fakeCatalog();
@@ -486,7 +514,7 @@ describe('saved event workspace', () => {
     await user.selectOptions(screen.getByLabelText('Fictional Player 1 — round 1 group'), '2');
     const roster = within(screen.getByRole('group', { name: /Saved player roster/ }));
     await user.click(roster.getByRole('checkbox', { name: /Fictional Player 4/ }));
-    expect(screen.getByRole('button', { name: 'Save event workspace' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save event workspace' })).toBeEnabled();
     await user.click(screen.getByRole('button', { name: 'Refresh workspace' }));
     const review = await screen.findByRole('region', { name: 'Superseded locked setup edits' });
     expect(review).toHaveTextContent('Scoring locked saved setup inputs while you were editing');

@@ -54,7 +54,7 @@ export function setupProblems(draft: EventSetupInput): readonly string[] {
   }
   if (!boundedText(draft.name)) problems.push('Enter an event name.');
   if (draft.location !== '' && !boundedText(draft.location, 200)) problems.push('Review the general location.');
-  if (draft.playerIds.length < 4) problems.push('Choose at least four players.');
+  if (draft.playerIds.length < 1) problems.push('Choose at least one player.');
   if (draft.rounds.length === 0) problems.push('Add at least one round.');
   for (const [index, round] of draft.rounds.entries()) {
     const label = `Round ${String(index + 1)}`;

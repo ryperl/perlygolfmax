@@ -18,6 +18,13 @@ function renderRoster(selectedIds: readonly string[] = [], players: readonly Pla
 }
 
 describe('setup roster selection', () => {
+  it('describes the one-player minimum without implying selection grants access', async () => {
+    const changed = renderRoster();
+    expect(screen.getByText('Choose one or more saved players. Selecting players does not invite them or assign playing groups.')).toBeVisible();
+    await userEvent.setup().click(screen.getByLabelText('Fictional Player 1 — HI Unknown'));
+    expect(changed).toHaveBeenLastCalledWith([fictionalId(1)]);
+    expect(screen.getByText('Saved player roster (1 selected)')).toBeVisible();
+  });
   it('filters names case-insensitively while retaining selected players and their checkbox focus', async () => {
     const changed = renderRoster([fictionalId(3)]);
     const user = userEvent.setup();

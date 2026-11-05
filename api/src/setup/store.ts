@@ -35,7 +35,7 @@ function isHeader(value: unknown): value is WorkspaceHeader {
   return isRecord(value) && typeof value.location === 'string'
     && (value.allowPerGolferTees === undefined || typeof value.allowPerGolferTees === 'boolean')
     && (value.overallCompetition === undefined || isOverallCompetition(value.overallCompetition))
-    && Array.isArray(value.roster) && value.roster.length >= 4
+    && Array.isArray(value.roster) && value.roster.length >= 1
     && value.roster.every((player: unknown) => isRecord(player) && isUuid(player.playerId) && typeof player.displayName === 'string')
     && Array.isArray(value.roundIds) && value.roundIds.length >= 1 && value.roundIds.length <= 8
     && value.roundIds.every(isUuid) && new Set(value.roundIds).size === value.roundIds.length;

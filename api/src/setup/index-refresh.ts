@@ -20,7 +20,7 @@ export interface IndexRefreshAudit {
 }
 
 function isCapturedInputs(value: unknown): value is readonly CapturedIndexInput[] {
-  if (!Array.isArray(value) || value.length < 4) return false;
+  if (!Array.isArray(value) || value.length < 1) return false;
   const inputs: unknown[] = value;
   return inputs.every((entry): entry is CapturedIndexInput => isRecord(entry) && isUuid(entry.playerId)
     && (entry.handicapIndex === null || isIndexObservation(entry.handicapIndex)))

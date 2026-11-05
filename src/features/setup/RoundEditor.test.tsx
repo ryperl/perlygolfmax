@@ -53,6 +53,25 @@ function renderGroups(groups: readonly RoundGroup[]) {
 }
 
 describe('round setup editor', () => {
+  it('distinguishes an optional new group from the one existing foursome without creating empty groups', async () => {
+    const f = renderEditor();
+    const user = userEvent.setup();
+    await waitFor(() => { expect(screen.getByLabelText('Round 1 tee profile')).toBeEnabled(); });
+    expect(screen.getByText(/4 golfers · 1 playing group · 4 assigned/)).toBeVisible();
+    const first = screen.getByLabelText('Fictional Player 1 — round 1 group');
+    expect(within(first).getByRole('option', { name: 'Group 1 (4/4, full)', selected: true })).toBeVisible();
+    expect(within(first).getByRole('option', { name: 'Create Group 2' })).toBeEnabled();
+    expect(within(first).queryByRole('option', { name: 'Group 2 (0/4)' })).not.toBeInTheDocument();
+    expect(f.changed).not.toHaveBeenCalled();
+    await user.selectOptions(first, '2');
+    expect(screen.getByText(/4 golfers · 2 playing groups · 4 assigned/)).toBeVisible();
+    expect(within(first).getByRole('option', { name: 'Group 2 (1/4)', selected: true })).toBeVisible();
+    expect(f.changed.mock.lastCall?.[0].groups).toHaveLength(2);
+    await user.selectOptions(first, '1');
+    expect(screen.getByText(/4 golfers · 1 playing group · 4 assigned/)).toBeVisible();
+    expect(f.changed.mock.lastCall?.[0].groups).toHaveLength(1);
+    expect(within(first).getByRole('option', { name: 'Create Group 2' })).toBeEnabled();
+  });
   it('aborts stale version reads without replacing the newly selected immutable version or its personal choices', async () => {
     const round = fictionalSetup.rounds[0];
     if (!round) throw new Error('Missing fictional round.');
@@ -186,7 +205,7 @@ describe('round setup editor', () => {
     const user = userEvent.setup();
     const fifth = screen.getByLabelText('Fictional Player 5 — round 1 group');
     expect(within(fifth).getByRole('option', { name: 'Group 1 (4/4, full)' })).toBeDisabled();
-    expect(within(fifth).getByRole('option', { name: 'Group 2 (0/4)' })).toBeEnabled();
+    expect(within(fifth).getByRole('option', { name: 'Create Group 2' })).toBeEnabled();
     expect(within(screen.getByLabelText('Fictional Player 1 — round 1 group'))
       .getByRole('option', { name: 'Group 1 (4/4, full)', selected: true })).toBeEnabled();
     for (const player of groupPlayers.slice(4)) {
