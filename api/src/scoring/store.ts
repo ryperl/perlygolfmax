@@ -51,7 +51,7 @@ export class TableScoreStore {
   private async access(identity: ScoreActor, eventId: string, ownerOnly = false) {
     if (!isUuid(eventId)) throw new ApiError(400, 'INVALID_REQUEST_ID');
     const access = await readEventAccess(this.table, identity, eventId);
-    if (access.summary.role !== 'owner' && (ownerOnly || !access.admittedPlayer && !access.testerLink)) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
+    if (access.summary.role !== 'owner' && (ownerOnly || !access.admittedPlayer && !access.testerLink && !access.publicAccess)) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
     return { ...access, gameRoundIds: configuredGameRounds(access.event.gameRoundIds) };
   }
 
@@ -74,6 +74,10 @@ export class TableScoreStore {
   }
 
   private writer(state: EventAccess & { readonly round: RoundSnapshot }, playerId?: string) {
+    if (state.publicAccess) {
+      if (!playerId) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
+      return { etag: state.summary.etag, role: 'public' as const };
+    }
     if (state.testerLink) {
       if (!playerId) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
       return { etag: revision(state.testerLink), role: 'tester' as const };
@@ -128,9 +132,9 @@ export class TableScoreStore {
         type: rating.type, course: rating.course, slope: rating.slope, bogey: rating.bogey,
       })),
       groups: round.groups, cards, setupLocked: round.scoringStarted === true,
-      permissions: { role: access.testerLink ? 'tester' : owner ? 'owner' : viewerPlayerId ? 'player' : 'viewer',
+      permissions: { role: access.publicAccess ? 'public' : access.testerLink ? 'tester' : owner ? 'owner' : viewerPlayerId ? 'player' : 'viewer',
         ...(viewerPlayerId ? { viewerPlayerId } : {}),
-        writePlayerIds: !active ? [] : owner || access.testerLink ? round.players.map((player) => player.playerId) : ownGroup?.playerIds ?? [],
+        writePlayerIds: !active ? [] : owner || access.testerLink || access.publicAccess ? round.players.map((player) => player.playerId) : ownGroup?.playerIds ?? [],
         canManageGames: owner && active },
       ...(competition?.kind === 'stroke-play' && competition.basis === 'net'
         ? { overallHandicaps: publishedPlayingHandicaps(round, competition.handicapAllowancePercent) } : {}),
@@ -155,7 +159,7 @@ export class TableScoreStore {
     return this.projection(state.workspace, state.round, cards, state, state.games);
   }
 
-  async leaderboard(identity: AccountIdentity, eventId: string, chargeRead: () => Promise<void>): Promise<EventLeaderboardView> {
+  async leaderboard(identity: ScoreActor, eventId: string, chargeRead: () => Promise<void>): Promise<EventLeaderboardView> {
     const access = await this.access(identity, eventId);
     const workspace = await this.workspace.get(identity, eventId);
     if (workspace.etag !== access.summary.etag) throw new ApiError(409, 'EVENT_CHANGED');
@@ -344,15 +348,19 @@ export class TableScoreStore {
     const entity = { partitionKey: eventId, rowKey: cardKey(roundId, playerId), content: canonical(updated) };
     const actions: TransactionAction[] = [
       ['update', { partitionKey: eventId, rowKey: 'event', scoresUpdatedAt: recordedAt }, 'Merge', { etag: state.summary.etag }],
-      ['update', 'kind' in identity
-        ? { partitionKey: eventId, rowKey: testerLinkKey(identity.linkId), scoreRevision: requestId }
-        : { partitionKey: eventId, rowKey: `member:${identity.objectId}`, ...actor, role: grant.role },
-      'Merge', { etag: grant.etag }],
       expectedEtag === null ? ['create', entity] : ['update', entity, 'Replace', { etag: expectedEtag }],
       ['create', {
         partitionKey: eventId, rowKey: `score-change:${requestId}`, kind: 'score-change', roundId, playerId, content: canonical(change),
       }],
     ];
+    // Public authority is the active event itself, already conditionally updated above.
+    // Account and tester writes still check their actual independent grant in this transaction.
+    if (!('kind' in identity) || identity.kind === 'tester-link') {
+      actions.splice(1, 0, ['update', 'kind' in identity
+        ? { partitionKey: eventId, rowKey: testerLinkKey(identity.linkId), scoreRevision: requestId }
+        : { partitionKey: eventId, rowKey: `member:${identity.objectId}`, ...actor, role: grant.role },
+      'Merge', { etag: grant.etag }]);
+    }
     if (!state.lock) {
       const lock: ScoringLock = {
         kind: 'score-lock', eventId, roundId, requestId, startedAt: recordedAt, startedBy: actor, writtenPlayerIds: [playerId],
@@ -371,7 +379,7 @@ export class TableScoreStore {
       }, 'Replace', { etag: state.lock.etag }]);
     }
     // Staging a large lock may take time. Expiry is rechecked at the publication boundary.
-    if ('kind' in identity && (!state.testerLink || !activeTesterLink(state.testerLink, identity))) {
+    if ('kind' in identity && identity.kind === 'tester-link' && (!state.testerLink || !activeTesterLink(state.testerLink, identity))) {
       throw new ApiError(403, 'TESTER_ACCESS_ENDED');
     }
     try { await this.table.submitTransaction(actions); }

@@ -6,10 +6,12 @@ The approved design is Static Web Apps (SWA) Free, Entra External ID hosted
 email-code sign-in, a standalone Functions API and Table Storage. The production
 planning allowance is roughly USD 15/month, not a quote or spending cap.
 
-The repository contains an initial implementation with a provisioned test
-foundation, not a connected operational scoreboard:
-customer sign-in, token acquisition, API handlers, bounded event discovery and
-idempotent event creation with atomic owner membership. Manual test verification
+The repository implements public round scoring and a separate organizer
+workspace. The public model was explicitly chosen: any internet visitor may
+browse active rosters/events, change any group score, and view standings and
+purse/winnings. This is not a private tournament or verified-player model.
+Organizer sign-in, API handlers, bounded discovery and idempotent event creation
+with atomic owner membership remain. Manual test verification
 has exercised hosted customer sign-in, signed-in event loading and event
 creation followed by a page reload. Runtime resource settings and narrow
 role scopes have been read back after foundation creation. Those checks do not
@@ -26,13 +28,13 @@ An unconfigured Events page says so explicitly, without fictional saved events.
 
 Main navigation starts at Events. Opening a saved event binds Overview, Rounds
 and The Group to the same explicit event ID in the URL. Their typed projections
-use the existing membership-checked workspace projection, not global catalog
-reads or
-synthetic demo models. Sign-in or a legacy membership alone does not grant
-player scoring or global active-event visibility.
+use allowlisted active-event projections, not global catalog reads or synthetic
+demo models. Organizer management still checks authoritative owner/catalog
+grants. Legacy memberships/tester links are not prerequisites for public scoring.
 Snapshot rounds/groups are not assumed finished just because scoring started.
-Selection is retained only in app memory, restored from validated deep links
-and cleared on sign-out/session expiry; requests abort on route/event changes.
+The public scoring cursor persists in an allowlisted navigation-only localStorage
+record; fresh server scores are read on cold launch/foreground return. Tokens,
+scores and unsaved drafts are not persisted. Requests abort on source changes.
 Missing selection, unavailable configuration, rejected access and service errors
 never fall back to fictional data. The separate Preview is explicitly selected.
 
@@ -47,14 +49,15 @@ ignore or lack their request contract.
 
 ## Identity and application authority
 
-React uses MSAL authorization code with PKCE against a dedicated customer
-tenant's hosted email one-time-passcode flow. No Microsoft account is required
-for golfers. Configure OTP from the start; changing a password flow later does
+Organizer tools use MSAL authorization code with PKCE against a dedicated customer
+tenant's hosted email one-time-passcode flow. Golfers require no account or
+sign-in. Configure organizer OTP from the start; changing a password flow later does
 not automatically migrate existing users. Use the default `ciamlogin.com`
 login host initially; no custom mail relay/domain is implied.
 
-The frontend calls a separate HTTPS API with an explicit bearer access token,
-without cookies. It does not rely on SWA custom OIDC, `/.auth/me`, principal
+Organizer calls use explicit bearer access tokens without cookies. Public calls
+send neither Authorization nor cookies. The app does not rely on SWA custom OIDC,
+`/.auth/me`, principal
 headers or Functions keys. Server validation checks signature, allowed
 algorithm, fixed issuer/JWKS, API audience, lifetime, tenant, delegated scope,
 SPA client and user object ID. User identity is `(tid, oid)`, never display name,
@@ -64,10 +67,62 @@ Only the explicitly bootstrapped creator initially creates events. The creator
 can later appoint owners of specific events; those appointments must not grant
 global creation or directory administration. Event membership is authoritative
 for every private object operation, not a stale listing index or hidden button.
-No public roster/score access is authorized. Owner appointment remains separate;
-do not infer application authority from sign-in.
+Public active-event reads and score writes are separately authorized by current
+event state, not membership. Owner appointment remains separate; public actors
+never acquire management authority.
 
-### Temporary no-account tester access
+### Public scoring and short-visit recovery
+
+The default app is public Events/rounds/groups/cards, score entry, leaderboards
+and purse/winnings. Organizer tools live separately at `#organizer`; existing
+protected setup/catalog routes remain private. Public startup does not initialize
+identity or acquire a token. API URL configuration alone is sufficient for it.
+
+The `/api/public` namespace exposes only active event discovery, workspace,
+round scores, per-player hole writes, overall leaderboard and purse reads.
+There are no public catalog, setup/game/purse/access mutation, archive or audit
+history routes. Private management endpoints remain JWT-only. Public projections
+exclude raw Handicap Index observations and audit identities.
+
+Scores use the same validated raw dispositions, conditional card/event revision,
+UUID idempotency, immutable audit and first-score setup lock. Public authority
+is the active event revision, not a fabricated member/grant row. A distinct
+unverified public-event actor records these edits; no individually verified
+identity is claimed. Shared durable quotas are site-scoped for discovery and
+event-scoped for public reads/writes. They are safeguards, not per-person
+authentication, tamper prevention or global ingress protection.
+
+Anyone on the internet can intentionally or accidentally change an active
+score. This exposure was explicitly approved, including public prize amounts.
+Archived events, organizer-only catalogs/configuration and audit records remain
+protected. A legacy link's expiry/revocation cannot prevent use of the separate
+public website.
+
+For eighteen short course visits, only version/event ID/round ID/group/hole/view
+are persisted under `perly-golf-max:last-score-location:v1`. Cold root/home-screen
+launches restore this context, validate against fresh data and resume entry.
+Saved cursor changes are independent of score data; no offline queue/cache is
+introduced. Save & Next advances only after intended writes are acknowledged.
+Failures/conflicts retain the hole and unconfirmed in-memory entries. The user
+must wait for Saved before closing; mobile browsers cannot promise background
+saving or a reliable unload prompt.
+
+Foreground/bfcache return refreshes without resetting selection or overlapping
+an active request. Dirty drafts remain protected. Storage errors are visible;
+stale group/hole or unavailable round data requires explicit selection and never
+falls back to fictional content. Internal hole/view URL updates do not refocus
+the whole page, which would otherwise scroll mobile entry back to the top.
+The manifest's `/` launch is now the public recovery entry. iOS standalone apps
+may have storage separate from Safari, so their initial selection can differ.
+WebKit tests emulate the iPhone 16 Pro viewport and eighteen cold launches;
+physical Add to Home Screen remains manual.
+
+### Legacy no-account tester protocol
+
+The ordinary app no longer requires tester links. Old tester/admission URLs
+discard their secret and open the public event or remembered scoring position.
+The following protocol remains for old API clients and immutable audit continuity;
+its checks do not restrict the newly public namespace.
 
 An event owner can create a private seven-day tester link without appointing an
 account or granting membership. Anyone holding it can read saved round setup/
@@ -110,14 +165,14 @@ holder an owner. Audit actors distinguish a shared tester link from a verified
 account; individual attribution is not implied. Existing owner/account-player
 access is unchanged.
 
-The guest entry route bypasses identity initialization and global discovery.
+The legacy guest entry protocol bypasses identity initialization and global discovery.
 It retains its secret in the fragment/in-memory adapter only; secrets must not
 be logged, rendered as ordinary score-entry text or put into app storage.
 Round/credential changes abort old requests and reset private state. Access
 loss clears private views instead of sending the tester to account sign-in.
 This remains online-only; unsaved drafts can be lost when leaving/reloading.
 
-### Account-based player admission
+### Legacy account-based player admission
 
 The event owner creates a private single-golfer link after saving the roster.
 The browser generates a 32-byte random secret; the server stores its SHA-256
@@ -184,8 +239,9 @@ corrections. Pickup may include an organizer-entered reported stroke value:
 `X7` records a pickup and contributes seven to the recorded total, while the
 round remains incomplete. This is not a completed seven-stroke hole, automatic
 maximum/penalty, handicap posting rule or invented Stableford treatment.
-Owners correct any golfer; admitted players enter for their saved playing
-group, with all other groups read-only. This is not event administration.
+Public visitors can enter/correct any saved playing group in active events.
+The legacy account namespace still restricts admitted players to their assigned
+group. Neither path confers event administration.
 Individual/team Stableford rules are configured per game;
 configured prize plans derive individual winnings without payment operations.
 Missing inputs never become zero.
@@ -200,7 +256,9 @@ current event round and a saved game; incomplete configuration remains explicit.
 The setup PUT alone has a 12 KiB UTF-8 request budget, alongside the separate
 12 KiB game-configuration budget. Other ordinary writes remain bounded at 4 KiB.
 
-`GET /api/events/<event-id>/leaderboard` is bearer-authenticated: owners and
+`GET /api/public/events/<event-id>/leaderboard` permits unsigned active-event
+reads. `GET /api/events/<event-id>/leaderboard` remains bearer-authenticated:
+owners and
 admitted players can read active events; only owners can read archives.
 Disabled events do not fetch scorecards. Enabled reads
 include every configured round with at most three parallel score reads and
@@ -259,6 +317,8 @@ No self-selection permission, admission or score-history rewrite is introduced.
 
 ### Private purse plans and calculated winnings
 
+`GET /api/public/events/<event-id>/purse` exposes active-event planned amounts
+and calculated winnings without login, by explicit product choice.
 `GET /api/events/<event-id>/purse` permits admitted active-event readers as well
 as owners. PUT and staged configuration writes remain owner-only;
 catalog management alone is insufficient and is not required of an event owner.
@@ -281,12 +341,12 @@ closest-to-pin measurement engine. Real financial/trip data stays out of source.
 
 ### Scoring authority and persistence
 
-Scoring reads require owner or approved player viewing authority. Writes require
-an active event plus owner authority or a current approved binding and target
-in the caller's saved playing group. History and game management remain
-owner-only. Catalog-manager/global-creator status alone is not scoring authority.
-Legacy members without approved admission gain no player scoring privilege.
-Owner archive reads remain private and read-only.
+Public scoring reads/writes require an active event, with all groups writable.
+Legacy private scoring requires owner, approved account-player binding or
+tester-link authority under that protocol's scope. History and game management
+remain owner-only. Catalog-manager/global-creator status alone is not owner
+scoring authority. No public actor becomes a member. Owner archive reads remain
+private and read-only.
 
 The round score read uses the saved course/tee/hole layout and roster, not the
 live catalogs or fictional previews. New cards are virtual unplayed cards until
@@ -435,8 +495,9 @@ it creates no storage resources, operator data-plane grants or directory roles.
 Catalog partitions are distinct from event partitions and metadata row names.
 Only the exact configured organizer `(tid, oid)` may use catalog APIs, via an
 explicit `canManageCatalog` capability, not a browser-supplied role or inferred
-event ownership. Event-local reads still check authoritative membership and
-archived-state rules. Owner setup writes additionally require catalog authority
+event ownership. Private event reads still check authoritative membership;
+public projections require active state and withhold catalog/audit/index fields.
+Owner setup writes additionally require catalog authority
 for selecting global data; other owners remain default-denied for that access.
 
 Import accepts validated course metadata and complete per-profile records in
@@ -546,24 +607,27 @@ Never use an emulated/local identity bypass in a production build.
 
 Treat callers, browser state, token contents before verification, body fields,
 pagination cursors and client ownership claims as untrusted. Protect private
-event data, owner/creator grants, future scores/audit, identity sessions and the
+management data, owner/creator grants, immutable audits, identity sessions and the
 cloud bill. A directory administrator, application creator and event owner
 are separate trust boundaries.
 
 | Threat | Current control |
 |--------|-----------------|
 | Forged/wrong API token | Fixed JWT metadata/claims; negative tests |
-| Cross-event read/escalation | Authoritative membership; creator-only POST |
+| Management escalation | Owner grants; no public management writes |
+| Anonymous score changes | Public edits allowed; unverified actor audit |
 | Lost response/replay | UUID idempotency; atomic metadata/owner writes |
 | Oversized writes/reads | Streaming body cap; bounded discovery pages |
-| Authenticated floods | Shared ETag-based quotas; bounded conflict retries |
+| Request floods | Durable quotas; bounded conflict retries |
 | Quota-store outage | Fail closed, no unlimited in-memory fallback |
 | Secret/private-data leakage | Managed identity; safe diagnostic fields |
 | Stale/logout UI | Abort reads; session expiry; provider logout; no-store |
 
 Ordinary JSON writes are limited to 4 KiB, event names to 100 characters and authorization
 headers to 8 KiB. Discovery scans at most 50 metadata rows/page and rechecks
-membership before returning each event. Quotas are 20 identity reads, 60 event
+active state (public) or membership (private) before returning each event.
+Public counters are shared site/event budgets, not per-person limits.
+Private quotas are 20 identity reads, 60 event
 reads, 10 creates and 10 archive/restore requests per user/minute. Reusing an
 idempotency key with changed
 content or identity conflicts rather than overwriting. Real key rotation,

@@ -84,4 +84,5 @@ export interface EventWorkspace {
   readonly viewerPlayerId?: string;
   readonly canViewScores?: boolean;
   readonly testerAccess?: true;
+  readonly publicAccess?: true;
 }

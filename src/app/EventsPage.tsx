@@ -268,7 +268,7 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
   if (services && state.kind === 'ready' && route) {
     const [kind, eventId] = route.split(':');
     return <>{accountControl}<section>
-      {(kind === 'courses' || kind === 'players') && <nav className="event-actions" aria-label="Saved event navigation"><a href="#events">Events</a>
+      {(kind === 'courses' || kind === 'players') && <nav className="event-actions" aria-label="Saved event navigation"><a href="#organizer">Organizer events</a>
         {state.capabilities.canManageCatalog && <><a href="#events?catalog=courses">Course catalog</a><a href="#events?catalog=players">Player catalog</a></>}
       </nav>}
       {route === 'invalid-score' ? <p role="alert">Invalid event or round identifier. No score request was made.</p>
@@ -310,6 +310,7 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
   }
 
   return <>{accountControl}<EventsView
+    eventHref={(event) => `#organizer?event=${event.id}`}
     state={services ? state : { kind: 'unconfigured', message: configurationError ?? 'Identity and API settings have not been supplied.' }}
     busy={busy} notice={notice} view={view}
     onReload={() => { void run(async (service, signal) => {

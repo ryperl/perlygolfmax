@@ -245,10 +245,10 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
     {!initialPending && workspace && <>
       <h2>{workspace.event.name}</h2><p>{workspace.location || 'General location not supplied'}</p>
       <a href={`#overview?event=${eventId}`}>View event overview</a>
-      {workspace.event.role === 'owner' && <a href={`#purse?event=${encodeURIComponent(eventId)}`}>
+      {workspace.event.role === 'owner' && <a href={`#organizer?event=${encodeURIComponent(eventId)}&view=purse`}>
         {workspace.event.status === 'archived' ? 'View purse and winnings' : 'Configure purse and winnings'}
       </a>}
-      {workspace.event.role === 'owner' && <a href={`#access?event=${encodeURIComponent(eventId)}`}>Player invitations</a>}
+      <a href={`#overview?event=${encodeURIComponent(eventId)}`}>Open public scoreboard</a>
       {editing && draft && <OverallCompetitionEditor workspace={workspace} draft={draft} scores={scores}
         disabled={busy || conflict} onDenied={denyAccess}
         onChange={(overallCompetition) => { editDraft({ ...draft, overallCompetition }); }} />}
@@ -273,7 +273,7 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
         {!workspace.rounds.some((round) => round.id === selectedRound?.id) && <p>This new round has no saved inputs yet.</p>}
       <ol className="round-list">{workspace.rounds.map((round) => <li hidden={round.id !== selectedRound?.id} key={round.id}>
         <h3>{round.name} — {round.course.name}</h3>
-        {workspace.event.role === 'owner' && <a href={`#events?event=${eventId}&round=${round.id}`}>Open owner scorecards for {round.name}</a>}
+        {workspace.event.role === 'owner' && <a href={`#organizer?event=${eventId}&round=${round.id}`}>Open owner scorecards for {round.name}</a>}
         {round.scoringStarted && <p>Scoring started: course, tee, players, groups and captured indices are locked. Clearing scores cannot unlock setup. Event name/location and unstarted new rounds remain editable.</p>}
         <p>Immutable saved course version; catalog edits do not replace these inputs.</p>
         <p>Tee: {round.teeProfile.name} / {round.teeProfile.category} / {round.teeProfile.holeCount} holes</p>

@@ -23,7 +23,12 @@ function EntryProgress({ state, allowed }: { readonly state: RoundEntryProgressS
 }
 
 function setupLink(eventId: string) {
-  return `#events?event=${encodeURIComponent(eventId)}`;
+  return `#organizer?event=${encodeURIComponent(eventId)}`;
+}
+
+function scoreLink(workspace: EventWorkspace, roundId: string) {
+  const page = workspace.event.role === 'owner' ? 'organizer' : 'events';
+  return `#${page}?event=${encodeURIComponent(workspace.event.id)}&round=${encodeURIComponent(roundId)}`;
 }
 
 function ManualGroups({ round }: { readonly round: RoundSnapshot }) {
@@ -85,12 +90,12 @@ function SavedRounds({ workspace, showGroups, progress }: {
                 {(workspace.event.role === 'owner' || workspace.canViewScores) && (
                   <a
                     className="event-trip-scorecard"
-                    href={`${setupLink(workspace.event.id)}&round=${encodeURIComponent(round.id)}`}
+                    href={scoreLink(workspace, round.id)}
                     aria-label={`Open scorecard for ${round.name}`}
                   >Open scorecard <span aria-hidden="true">→</span></a>
                 )}
                 {(workspace.canViewScores || workspace.event.role === 'owner') && workspace.event.status === 'active' && workspace.viewerPlayerId && round.groups.some((group) => group.playerIds.includes(workspace.viewerPlayerId ?? '')) &&
-                  <a href={`${setupLink(workspace.event.id)}&round=${encodeURIComponent(round.id)}`}>Your playing group · Group {round.groups.find((group) => group.playerIds.includes(workspace.viewerPlayerId ?? ''))?.number}</a>}
+                  <a href={scoreLink(workspace, round.id)}>Your playing group · Group {round.groups.find((group) => group.playerIds.includes(workspace.viewerPlayerId ?? ''))?.number}</a>}
               </div>
               {showGroups && (
                 <>
@@ -124,7 +129,6 @@ export function EventTripView({ workspace, view, progress }: EventTripViewProps)
         {archived && <p className="event-trip-archive"><strong>Archived event · Read-only</strong></p>}
         <nav className="event-trip-links" aria-label={event.role === 'owner' ? 'Event setup' : 'Event links'}>
             {event.role === 'owner' && <a href={setupLink(event.id)}>{archived ? 'View event setup' : 'Configure event'}</a>}
-            {event.role === 'owner' && view !== 'group' && <a href={`#access?event=${encodeURIComponent(event.id)}`}>Player invitations</a>}
             {(event.role === 'owner' || workspace.canViewScores) && workspace.overallCompetition && view !== 'group' && <a href={`#leaderboard?event=${encodeURIComponent(event.id)}`}>Overall leaderboard</a>}
             {(event.role === 'owner' || workspace.canViewScores) && view !== 'group' && <a href={`#purse?event=${encodeURIComponent(event.id)}`}>{archived || event.role !== 'owner' ? 'View purse and winnings' : 'Purse and winnings'}</a>}
         </nav>

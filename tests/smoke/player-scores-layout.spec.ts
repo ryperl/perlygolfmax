@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 import { createServer } from 'vite';
 
 test('assigned player entry and readonly controls work at 390 and 320 pixels', async ({ page }, testInfo) => {

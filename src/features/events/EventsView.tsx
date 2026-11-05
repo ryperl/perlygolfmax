@@ -17,13 +17,14 @@ interface EventsViewProps {
   readonly onCreate: (name: string) => Promise<boolean>;
   readonly onViewChange: (status: EventStatus) => void;
   readonly onStatusChange: (event: EventSummary, status: EventStatus) => void;
+  readonly eventHref?: (event: EventSummary) => string;
 }
 
-export function EventsView({ state, busy, notice, view, onReload, onNextPage, onCreate, onViewChange, onStatusChange }: EventsViewProps) {
+export function EventsView({ state, busy, notice, view, onReload, onNextPage, onCreate, onViewChange, onStatusChange, eventHref }: EventsViewProps) {
   return <section>
-    <p className="eyebrow">Your private clubhouse</p>
+    <p className="eyebrow">Organizer workspace</p>
     <h1>Events</h1>
-    <p className="page-description">Admitted players can view all active events. Score entry is limited to their assigned playing group; organizer settings stay protected. The fictional preview is separate.</p>
+    <p className="page-description">Sign in here for course, player and event management. Golfers use the public scoreboard without an account. Organizer settings stay protected.</p>
     {state.kind === 'unconfigured' && <div className="panel"><h2>Event services are not configured</h2><p>{state.message}</p><p>No sign-in or saved-event connection is active. Fictional content is available separately under Preview.</p></div>}
     {state.kind === 'signed-out' && <div className="panel"><h2>Sign in with an email code</h2><p>Use Sign in above. No Microsoft account is needed. Signing in does not grant event access.</p>{state.message && <p role="status">{state.message}</p>}</div>}
     {state.kind === 'loading' && <p role="status">Loading your events...</p>}
@@ -40,7 +41,7 @@ export function EventsView({ state, busy, notice, view, onReload, onNextPage, on
         : <ul className="round-list" aria-label="Your events">{state.page.events.map((event) => <li className="panel" key={event.id}>
           <h2>{event.name}</h2><p>{event.role === 'owner' ? 'Event owner' : event.role === 'viewer' ? 'Read-only viewer' : 'Event member'} / Private</p>
           <div className="event-card-actions" role="group" aria-label={`Actions for ${event.name}`}>
-            <a href={`#overview?event=${encodeURIComponent(event.id)}`}>Open {event.name}</a>
+            <a href={eventHref?.(event) ?? `#overview?event=${encodeURIComponent(event.id)}`}>Open {event.name}</a>
             {event.role === 'owner' && <button disabled={busy} onClick={() => {
               onStatusChange(event, event.status === 'active' ? 'archived' : 'active');
             }} aria-label={`${event.status === 'active' ? 'Archive' : 'Restore'} ${event.name}`}>{event.status === 'active' ? 'Archive event' : 'Restore event'}</button>}
@@ -60,7 +61,7 @@ export function EventsView({ state, busy, notice, view, onReload, onNextPage, on
         <input id="event-name" name="name" required maxLength={100} disabled={busy} />
         <button disabled={busy} type="submit">Create event</button>
       </form>}
-      <p className="boundary-note">Open an event to see its Overview, Rounds and The Group. Approved players can score their assigned playing group. Setup and management require ownership; signing in alone does not grant admission or catalog permissions.</p>
+      <p className="boundary-note">Setup and management require ownership; signing in alone does not grant catalog permissions. Public scoring, standings and winnings do not require accounts.</p>
     </>}
     <p role="status">{busy ? 'Working...' : notice}</p>
   </section>;

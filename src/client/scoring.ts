@@ -17,7 +17,7 @@ export interface ScoresClient {
 }
 
 export function createScoresClient(apiUrl: string, getToken: () => Promise<string>, send: typeof fetch = fetch,
-  authorization: 'Bearer' | 'Tester' = 'Bearer'): ScoresClient {
+  authorization: 'Bearer' | 'Tester' | 'None' = 'Bearer'): ScoresClient {
   const request = createPrivateRequest(apiUrl, getToken, send, 4096, authorization);
   const gameRequest = createPrivateRequest(apiUrl, getToken, send, maximumGameConfigurationBytes, authorization);
   function path(eventId: string, roundId: string) {

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 import { createServer } from 'vite';
 import { isEventLeaderboardView } from '../../src/contracts/event-leaderboard';
 import { overallView } from './overall-fixture-data';

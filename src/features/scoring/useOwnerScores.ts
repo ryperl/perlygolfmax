@@ -32,6 +32,8 @@ export function useOwnerScores(client: ScoresClient, eventId: string, roundId: s
   const serverRetryAt = useRef(0);
   const expired = useRef(false);
   const denied = useRef(false);
+  const resumeRequested = useRef(false);
+  const resumeWake = useRef<(() => void) | null>(null);
   const expiryHandler = useRef(onSessionExpired);
   useEffect(() => { expiryHandler.current = onSessionExpired; }, [onSessionExpired]);
 
@@ -44,9 +46,9 @@ export function useOwnerScores(client: ScoresClient, eventId: string, roundId: s
     if (dirty && active.current?.background) active.current.discardProjection = true;
   }, [dirty]);
 
-  const perform = useCallback(async <T,>(work: (signal: AbortSignal) => Promise<T>, background = false, allowDenied = false): Promise<T | null> => {
+  const perform = useCallback(async <T,>(work: (signal: AbortSignal) => Promise<T>, background = false, allowDenied = false, allowDirtyRead = false): Promise<T | null> => {
     const available = () => mounted.current && !expired.current && (!denied.current || allowDenied) && Date.now() >= serverRetryAt.current;
-    if (!available() || foreground.current || background && dirtyNow.current) return null;
+    if (!available() || foreground.current || background && dirtyNow.current && !allowDirtyRead) return null;
     const previous = active.current;
     if (previous && (background || !previous.background)) return null;
     const ticket = {};
@@ -104,6 +106,7 @@ export function useOwnerScores(client: ScoresClient, eventId: string, roundId: s
         foreground.current = null;
         if (mounted.current) setBusy(false);
       }
+      resumeWake.current?.();
     }
   }, []);
   const run = useCallback(<T,>(work: (signal: AbortSignal) => Promise<T>) => perform(work), [perform]);
@@ -120,17 +123,45 @@ export function useOwnerScores(client: ScoresClient, eventId: string, roundId: s
     setStale(false);
     setRefreshedAt(new Date().toISOString());
   }, []);
-  const load = useCallback((background: boolean) => perform(async (signal) => {
+  const load = useCallback((background: boolean, resume = false) => perform(async (signal) => {
     const value = await client.load(eventId, roundId, signal);
     signal.throwIfAborted();
     const unchanged = JSON.stringify(value) === projectionKey.current;
     // Keep an edit-time baseline and the focused field intact if typing started
     // after this poll began. Authorization errors still flow through perform.
-    if (background && scoreAccessKey(value) === accessKey.current && (dirtyNow.current || active.current?.discardProjection) && !unchanged) setStale(true);
+    if (background && scoreAccessKey(value) === accessKey.current && ((!resume && dirtyNow.current) || active.current?.discardProjection) && !unchanged) setStale(true);
     else accept(value);
     return value;
-  }, background, !background), [accept, client, eventId, roundId, perform]);
+  }, background, !background, resume), [accept, client, eventId, roundId, perform]);
   const refresh = useCallback(() => load(false), [load]);
+
+  useEffect(() => {
+    let hidden = document.hidden;
+    function wake() {
+      if (!resumeRequested.current || !mounted.current || document.hidden || active.current || foreground.current
+        || expired.current || denied.current || Date.now() < retryAt.current) return;
+      resumeRequested.current = false;
+      // Re-read on real return, including with drafts. Drafts remain separate from
+      // the server projection; conditional writes still require their captured etags.
+      void load(true, true).catch(() => undefined);
+    }
+    function visibility() {
+      const wasHidden = hidden;
+      hidden = document.hidden;
+      if (wasHidden && !hidden) { resumeRequested.current = true; wake(); }
+    }
+    function pageshow(event: PageTransitionEvent) {
+      if (event.persisted) { resumeRequested.current = true; wake(); }
+    }
+    resumeWake.current = wake;
+    document.addEventListener('visibilitychange', visibility);
+    window.addEventListener('pageshow', pageshow);
+    return () => {
+      resumeWake.current = null;
+      document.removeEventListener('visibilitychange', visibility);
+      window.removeEventListener('pageshow', pageshow);
+    };
+  }, [load]);
 
   useEffect(() => {
     mounted.current = true;
@@ -154,6 +185,7 @@ export function useOwnerScores(client: ScoresClient, eventId: string, roundId: s
     }
     async function tick() {
       if (disposed) return;
+      if (resumeRequested.current) resumeWake.current?.();
       if (!dirtyNow.current && !document.hidden && !active.current && !foreground.current && !expired.current && !denied.current && Date.now() >= retryAt.current) {
         try { await load(true); } catch { /* Errors and stale state remain visible. */ }
       }

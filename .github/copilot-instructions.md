@@ -53,7 +53,21 @@
 - Keep archived events owner-only. Archive/restore must conditionally check
   both event and owner-grant revisions. Deletion or retention rules require
   a separate scope decision.
-- Approved players may view all active events and score only their bound
+- Public app access is an explicit product decision: any visitor may read all
+  active events/rosters/cards/standings/purse amounts and score any saved group,
+  without accounts or links. Never expose raw indices, audits, archives,
+  catalogs or any management writes. Keep organizer sign-in separate. Public
+  audits use a distinct unverified public-event actor, never a fake account or
+  owner row. Preserve event/card concurrency, locks, idempotency and shared
+  durable site/event request budgets.
+- Persist only allowlisted public scoring navigation: version/event/round/group/
+  hole/view. No scores, drafts, credentials or identities in that record.
+  Cold/foreground resume reads fresh server data without resetting place.
+  Advance only after acknowledged Save & Next; failures stay pending on the
+  same hole. Surface storage failures/stale selections. Intra-round URL updates
+  must not focus the main page or scroll entry back to the landing header.
+- Legacy approved account players may view all active events and score only
+  their bound
   golfer's saved playing group per round, never competition teams or other
   events. Admission requires private expiring link, explicit claim and owner
   verification/approval. Revalidate member/binding/published-admission proofs;
@@ -62,7 +76,7 @@
   Index observations, audit identities and management endpoints protected.
   Publish derived playing handicaps where readonly net results need them.
   Clear raw invitation secrets after claim/logout/expiry; never log them.
-- No-account tester links are separate seven-day event-scoped capabilities.
+- Legacy tester links are separate seven-day event-scoped capabilities.
   Holders may view round scorecards and score any group in that event only;
   never global events/catalogs, purse, history, raw indices or management.
   Owner creation/revocation stays JWT-protected. Validate digest/expiry/revocation
@@ -75,6 +89,8 @@
   URL/digest/creation time and expires seven days from server renewedAt; retries
   must not extend twice. Never renew on reads or reactivate revoked/archived
   grants. Keep conditional event/owner/link checks and expiry audit receipts.
+  Retain old API/audit compatibility, but old UI links open the public event and
+  discard secrets. Revoking a legacy link cannot disable separate public access.
 - Scoring is online-only. First saved
   scores lock setup inputs; preserve atomic score/audit/grant checks, explicit
   unplayed/pickup/DNF and incomplete totals. Do not infer admission, offline

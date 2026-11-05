@@ -35,7 +35,7 @@ interface Write {
 }
 
 export function createPrivateRequest(apiUrl: string, getToken: () => Promise<string>, send: typeof fetch, maximumBytes = 4096,
-  authorization: 'Bearer' | 'Tester' = 'Bearer') {
+  authorization: 'Bearer' | 'Tester' | 'None' = 'Bearer') {
   return async (path: string, signal: AbortSignal, write?: Write): Promise<unknown> => {
     signal.throwIfAborted();
     const body = write ? JSON.stringify(write.body) : undefined;
@@ -43,14 +43,14 @@ export function createPrivateRequest(apiUrl: string, getToken: () => Promise<str
       throw new Error(`Request exceeds the ${String(maximumBytes)}-byte UTF-8 service limit. Nothing was sent or confirmed saved.`);
     }
 
-    const token = await getToken();
+    const token = authorization === 'None' ? undefined : await getToken();
     signal.throwIfAborted();
     const response = await send(`${apiUrl}/${path}`, {
       signal, cache: 'no-store', credentials: 'omit',
       ...(write ? { method: write.method } : {}),
       ...(body !== undefined ? { body } : {}),
       headers: {
-        Authorization: `${authorization} ${token}`,
+        ...(authorization === 'None' ? {} : { Authorization: `${authorization} ${token ?? ''}` }),
         ...(write ? { 'Content-Type': 'application/json' } : {}),
         ...(write?.etag ? { 'If-Match': write.etag } : {}),
         ...(write?.createOnly ? { 'If-None-Match': '*' } : {}),
@@ -60,6 +60,9 @@ export function createPrivateRequest(apiUrl: string, getToken: () => Promise<str
     signal.throwIfAborted();
     if (authorization === 'Tester' && [401, 403, 404].includes(response.status)) {
       throw new SessionExpiredError('This tester link is unavailable, expired or revoked. Ask the organizer for a new link.');
+    }
+    if (authorization === 'None' && [401, 403, 404].includes(response.status)) {
+      throw new SessionExpiredError('This event or round is no longer available publicly. Choose an active event.');
     }
     if (response.status === 401) throw new SessionExpiredError('Your session expired. Sign in again.');
     if (response.status === 409) throw new EventChangedError('This data changed. Refresh before approving and retrying. Your draft was preserved.');

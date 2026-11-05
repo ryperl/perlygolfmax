@@ -1,5 +1,6 @@
 import type { TableClient } from '@azure/data-tables';
 import type { AccountIdentity } from '../../../src/domain/events.js';
+import type { PublicScoreIdentity } from '../../../src/domain/public-access.js';
 import type { PursePlan, PurseTieResolution } from '../../../src/domain/purse.js';
 import { calculatePurse, samePursePlan, samePurseTieResolutions } from '../../../src/domain/purse.js';
 import type { EventPurseView, PurseChange, PurseConfiguration, PurseWriteResult } from '../../../src/domain/purse-settings.js';
@@ -25,10 +26,10 @@ export class TablePurseStore {
   constructor(private readonly table: TableClient, private readonly workspace: TableWorkspaceStore,
     private readonly scores: TableScoreStore) {}
 
-  private async access(identity: AccountIdentity, eventId: string, ownerOnly = false) {
+  private async access(identity: AccountIdentity | PublicScoreIdentity, eventId: string, ownerOnly = false) {
     if (!isUuid(eventId)) throw new ApiError(400, 'INVALID_REQUEST_ID');
     const access = await readEventAccess(this.table, identity, eventId);
-    if (access.summary.role !== 'owner' && (ownerOnly || !access.admittedPlayer)) throw new ApiError(403, 'PURSE_OWNER_REQUIRED');
+    if (access.summary.role !== 'owner' && (ownerOnly || !access.admittedPlayer && !access.publicAccess)) throw new ApiError(403, 'PURSE_OWNER_REQUIRED');
     return access;
   }
 
@@ -61,7 +62,7 @@ export class TablePurseStore {
     return value;
   }
 
-  private async source(identity: AccountIdentity, eventId: string, chargeRead: () => Promise<void>) {
+  private async source(identity: AccountIdentity | PublicScoreIdentity, eventId: string, chargeRead: () => Promise<void>) {
     const access = await this.access(identity, eventId);
     const workspace = await this.workspace.get(identity, eventId);
     if (workspace.etag !== access.summary.etag) throw new ApiError(409, 'EVENT_CHANGED');
@@ -77,7 +78,7 @@ export class TablePurseStore {
     return { ...access, workspace, roundScores, configuration };
   }
 
-  async get(identity: AccountIdentity, eventId: string, chargeRead: () => Promise<void>): Promise<EventPurseView> {
+  async get(identity: AccountIdentity | PublicScoreIdentity, eventId: string, chargeRead: () => Promise<void>): Promise<EventPurseView> {
     const state = await this.source(identity, eventId, chargeRead);
     const { plan, resolutions } = state.configuration;
     return { workspace: state.workspace, roundScores: state.roundScores, configuration: state.configuration,

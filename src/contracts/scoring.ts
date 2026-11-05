@@ -10,9 +10,10 @@ import type { CourseHole } from '../domain/catalog.js';
 import { isPlayerTeeProfiles } from './tees.js';
 import type { ScoreActor } from '../domain/test-access.js';
 import { isEventTesterIdentity } from './test-access.js';
+import { isPublicScoreIdentity } from './public-access.js';
 
 export function isScoreActor(value: unknown): value is ScoreActor {
-  return isEventTesterIdentity(value) || isRecord(value) && !Object.hasOwn(value, 'kind')
+  return isPublicScoreIdentity(value) || isEventTesterIdentity(value) || isRecord(value) && !Object.hasOwn(value, 'kind')
     && isUuid(value.tenantId) && isUuid(value.objectId);
 }
 
@@ -102,7 +103,7 @@ export function isRoundScores(value: unknown): value is RoundScores {
   if (new Set(ids).size !== ids.length || cards.some((card) => card.holes.length !== count)) return false;
   if (value.permissions !== undefined) {
     const permission = value.permissions;
-    if (!isRecord(permission) || !['owner', 'player', 'viewer', 'tester'].includes(String(permission.role))
+    if (!isRecord(permission) || !['owner', 'player', 'viewer', 'tester', 'public'].includes(String(permission.role))
       || !Object.keys(permission).every((key) => ['role', 'viewerPlayerId', 'writePlayerIds', 'canManageGames'].includes(key))
       || !Array.isArray(permission.writePlayerIds) || !permission.writePlayerIds.every((id: unknown) => isUuid(id) && roster.has(id))
       || new Set(permission.writePlayerIds).size !== permission.writePlayerIds.length
@@ -110,7 +111,7 @@ export function isRoundScores(value: unknown): value is RoundScores {
     if (permission.role === 'owner') {
       if (permission.viewerPlayerId !== undefined || permission.canManageGames !== (value.eventStatus === 'active')
         || permission.writePlayerIds.length !== (value.eventStatus === 'active' ? cards.length : 0)) return false;
-    } else if (permission.role === 'tester') {
+    } else if (permission.role === 'tester' || permission.role === 'public') {
       if (value.eventStatus !== 'active' || permission.viewerPlayerId !== undefined || permission.canManageGames
         || permission.writePlayerIds.length !== cards.length) return false;
     } else if (permission.role === 'viewer') {

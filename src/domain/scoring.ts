@@ -25,7 +25,7 @@ export interface Scorecard {
 }
 
 export interface ScorePermissions {
-  readonly role: 'owner' | 'player' | 'viewer' | 'tester';
+  readonly role: 'owner' | 'player' | 'viewer' | 'tester' | 'public';
   readonly viewerPlayerId?: string;
   readonly writePlayerIds: readonly string[];
   readonly canManageGames: boolean;
@@ -116,14 +116,16 @@ export function sameHoleScore(left: HoleScore, right: HoleScore): boolean {
 export function sameScoreActor(left: ScoreActor, right: ScoreActor): boolean {
   if ('kind' in left || 'kind' in right) {
     return 'kind' in left && 'kind' in right
-      && left.eventId === right.eventId && left.linkId === right.linkId;
+      && left.kind === right.kind && left.eventId === right.eventId
+      && (left.kind === 'public-score' || right.kind === 'tester-link' && left.linkId === right.linkId);
   }
   return left.tenantId === right.tenantId && left.objectId === right.objectId;
 }
 
 export function scoreActor(identity: ScoreActor): ScoreActor {
   return 'kind' in identity
-    ? { kind: 'tester-link', eventId: identity.eventId, linkId: identity.linkId }
+    ? identity.kind === 'public-score' ? { kind: 'public-score', eventId: identity.eventId }
+      : { kind: 'tester-link', eventId: identity.eventId, linkId: identity.linkId }
     : { tenantId: identity.tenantId, objectId: identity.objectId };
 }
 

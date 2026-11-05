@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 import type { RoundScores, Scorecard } from '../../src/domain/scoring';
 import { renderComponentFixture } from './render-fixture';
 

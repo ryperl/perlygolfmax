@@ -25,6 +25,9 @@ import type { AdmissionAction, AdmissionApi } from './admission/handlers.js';
 import { TableTesterAccessStore } from './test-access/store.js';
 import { createTesterHandler } from './test-access/handlers.js';
 import type { TesterAction } from './test-access/handlers.js';
+import { createPublicHandler } from './public-access/handlers.js';
+import type { PublicAction, PublicApi } from './public-access/handlers.js';
+import { createPublicApi } from './public-access/runtime.js';
 
 type RuntimeApi = EventApi & CatalogSetupApi & ScoringApi & PurseApi & {
   readonly admissions: AdmissionStore;
@@ -127,4 +130,21 @@ const testerRoutes: readonly { readonly action: TesterAction; readonly route: st
 ];
 for (const item of testerRoutes) app.http(`testerAccess-${item.action}`, {
   route: item.route, methods: [item.method], authLevel: 'anonymous', handler: createTesterHandler(resolveApi, item.action),
+});
+
+const publicRoutes: readonly { readonly action: PublicAction; readonly route: string; readonly method: 'GET' | 'PUT' }[] = [
+  { action: 'events', route: 'public/events', method: 'GET' },
+  { action: 'workspace', route: 'public/events/{id}/workspace', method: 'GET' },
+  { action: 'scores', route: 'public/events/{id}/rounds/{roundId}/scores', method: 'GET' },
+  { action: 'score-hole', route: 'public/events/{id}/rounds/{roundId}/players/{playerId}/holes/{holeNumber}', method: 'PUT' },
+  { action: 'event-leaderboard', route: 'public/events/{id}/leaderboard', method: 'GET' },
+  { action: 'purse', route: 'public/events/{id}/purse', method: 'GET' },
+];
+let publicApi: PublicApi | undefined;
+function resolvePublicApi(): PublicApi {
+  publicApi ??= createPublicApi(process.env);
+  return publicApi;
+}
+for (const item of publicRoutes) app.http(`publicAccess-${item.action}`, {
+  route: item.route, methods: [item.method], authLevel: 'anonymous', handler: createPublicHandler(resolvePublicApi, item.action),
 });

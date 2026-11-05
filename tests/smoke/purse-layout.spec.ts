@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 import { createServer } from 'vite';
 
 test('purse controls retain forty-golfer choices at 390/320 and enlarged text with keyboard-accessible shared scroll', async ({ page }, testInfo) => {

@@ -5,6 +5,46 @@ import { identifier } from '../test/catalog-fixtures.js';
 import { TableRequestLimiter } from './limits.js';
 
 describe('shared identity request limits', () => {
+  it('uses one site-wide browse bucket and one event-scoped shared public bucket, never visitor/account identity', async () => {
+    const table = new TableClient('https://fictional.table.core.windows.net', 'Events');
+    const get = vi.spyOn(table, 'getEntity').mockImplementation(() => Promise.resolve({ etag: 'current', window: 0, count: 59 }));
+    const update = vi.spyOn(table, 'updateEntity').mockResolvedValue({ etag: 'next' });
+    const limiter = new TableRequestLimiter(table, () => 1);
+    await limiter.check({ kind: 'public-browse' }, 'events-read');
+    await limiter.check({ kind: 'public-browse' }, 'events-read');
+    await limiter.check({ kind: 'public-score', eventId: event.id }, 'scores-write');
+    await limiter.check({ kind: 'public-score', eventId: identifier(4001) }, 'scores-write');
+    expect(update.mock.calls.map((call) => call[0].partitionKey)).toEqual([
+      'quota:public-browse', 'quota:public-browse', `quota:public-score:${event.id}`, `quota:public-score:${identifier(4001)}`,
+    ]);
+    get.mockImplementation(() => Promise.resolve({ etag: 'full', window: 0, count: 60 }));
+    for (const actor of [{ kind: 'public-browse' as const }, { kind: 'public-score' as const, eventId: event.id }]) {
+      await expect(limiter.check(actor, 'events-read')).rejects.toMatchObject({ status: 429 });
+      get.mockRejectedValueOnce(new Error('Fictional shared public quota outage'));
+      await expect(limiter.check(actor, 'scores-read')).rejects.toThrow('Fictional shared public quota outage');
+    }
+    await expect(limiter.check({ kind: 'public-score', eventId: 'invalid' }, 'scores-write'))
+      .rejects.toMatchObject({ status: 503, code: 'INVALID_REQUEST_PRINCIPAL' });
+  });
+
+  it.each(['public-browse', 'public-score'] as const)('shares the final %s quota slot across independent instances', async (kind) => {
+    const table = new TableClient('https://fictional.table.core.windows.net', 'Events');
+    let count = 59;
+    vi.spyOn(table, 'getEntity').mockImplementation(() => Promise.resolve({ etag: String(count), window: 0, count }));
+    vi.spyOn(table, 'updateEntity').mockImplementation((_entity, _mode, options) => {
+      if (options?.etag !== String(count)) return Promise.reject(Object.assign(new Error('Fictional shared quota conflict'), { statusCode: 412 }));
+      count++;
+      return Promise.resolve({ etag: String(count) });
+    });
+    const principal = kind === 'public-browse' ? { kind } : { kind, eventId: event.id };
+    const outcomes = await Promise.allSettled([
+      new TableRequestLimiter(table, () => 1).check(principal, 'events-read'),
+      new TableRequestLimiter(table, () => 1).check(principal, 'events-read'),
+    ]);
+    expect(outcomes.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(outcomes.filter((result) => result.status === 'rejected')).toHaveLength(1);
+    expect(count).toBe(60);
+  });
   it('uses separate durable tester-link event principals and fails closed on their quota-store outage', async () => {
     const table = new TableClient('https://fictional.table.core.windows.net', 'Events');
     const get = vi.spyOn(table, 'getEntity').mockImplementation(() => Promise.resolve({ etag: 'current', window: 0, count: 59 }));

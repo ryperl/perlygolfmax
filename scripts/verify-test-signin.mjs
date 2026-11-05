@@ -22,7 +22,7 @@ export async function verifyTestSignin(target) {
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage();
-    await page.goto(`${target.frontendOrigin}/#events`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${target.frontendOrigin}/#organizer`, { waitUntil: 'domcontentloaded' });
     const signIn = page.getByRole('button', { name: 'Sign in', exact: true });
     await signIn.waitFor({ state: 'visible', timeout: 30000 });
     await signIn.click();

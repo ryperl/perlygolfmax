@@ -77,10 +77,10 @@ describe('saved event overview', () => {
       .toEqual([firstRound.name, secondRound.name]);
     expect(roundCard(secondRound.name).getByText('Fictional Pines')).toBeVisible();
     expect(roundCard(secondRound.name).getByText('Fictional Gold tees')).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Configure event' })).toHaveAttribute('href', `#events?${eventUrl}`);
+    expect(screen.getByRole('link', { name: 'Configure event' })).toHaveAttribute('href', `#organizer?${eventUrl}`);
     for (const round of workspace.rounds) {
       expect(screen.getByRole('link', { name: `Open scorecard for ${round.name}` }))
-        .toHaveAttribute('href', `#events?${eventUrl}&round=${encodeURIComponent(round.id)}`);
+        .toHaveAttribute('href', `#organizer?${eventUrl}&round=${encodeURIComponent(round.id)}`);
     }
     expect(screen.queryByText(/completed|today|tee time|handicap|demo/i)).not.toBeInTheDocument();
   });
@@ -190,7 +190,7 @@ describe.each(['overview', 'rounds', 'group'] as const)('saved %s navigation and
       await user.tab();
       expect(link).toHaveFocus();
     }
-    expect(within(nav).getByRole('link', { name: 'Configure event' })).toHaveAttribute('href', `#events?${eventUrl}`);
+    expect(within(nav).getByRole('link', { name: 'Configure event' })).toHaveAttribute('href', `#organizer?${eventUrl}`);
     expect(screen.queryByRole('link', { name: 'Overview' })).not.toBeInTheDocument();
     await user.tab();
     expect(screen.getByRole('link', { name: `Open scorecard for ${firstRound.name}` })).toHaveFocus();
@@ -200,7 +200,7 @@ describe.each(['overview', 'rounds', 'group'] as const)('saved %s navigation and
     const archived: EventWorkspace = { ...workspace, event: { ...workspace.event, status: 'archived' } };
     const rendered = render(<EventTripView workspace={archived} view={view} />);
     expect(screen.getByText('Archived event · Read-only')).toBeVisible();
-    expect(screen.getByRole('link', { name: 'View event setup' })).toHaveAttribute('href', `#events?${eventUrl}`);
+    expect(screen.getByRole('link', { name: 'View event setup' })).toHaveAttribute('href', `#organizer?${eventUrl}`);
     expect(screen.queryByRole('link', { name: 'Configure event' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
     rendered.rerender(<EventTripView workspace={{ ...workspace, event: { ...workspace.event, role: 'member' } }} view={view} />);

@@ -20,6 +20,79 @@ async function advance(ms: number) { await act(async () => { await vi.advanceTim
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('foreground owner score polling', () => {
+  it('refreshes only an actual visibility return or persisted pageshow, including dirty drafts, without duplicate initial loads', async () => {
+    vi.useFakeTimers();
+    const client = fakeScores();
+    const { result } = renderHook(() => useOwnerScores(client, fictionalRoundScores.eventId, fictionalRoundScores.roundId, true, vi.fn()));
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: false }));
+      window.dispatchEvent(new Event('focus'));
+      document.dispatchEvent(new Event('visibilitychange'));
+      await Promise.resolve();
+    });
+    expect(client.load).toHaveBeenCalledOnce();
+    vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+    act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+    await advance(20 * 60_000);
+    expect(client.load).toHaveBeenCalledOnce();
+    vi.mocked(client.load).mockResolvedValueOnce(scoreResult().round);
+    vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); await Promise.resolve(); });
+    expect(client.load).toHaveBeenCalledTimes(2);
+    expect(result.current.round).toEqual(scoreResult().round);
+    await act(async () => { window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })); await Promise.resolve(); });
+    expect(client.load).toHaveBeenCalledTimes(3);
+    expect(result.current.busy).toBe(false);
+  });
+  it('defers a persisted restore read until a pending write settles and coalesces repeated resume events', async () => {
+    const client = fakeScores();
+    const { result } = renderHook(() => useOwnerScores(client, fictionalRoundScores.eventId, fictionalRoundScores.roundId, true, vi.fn()));
+    await act(async () => { await Promise.resolve(); });
+    const mutation = deferred<string>();
+    let writing: Promise<string | null> | undefined;
+    act(() => { writing = result.current.run(() => mutation.promise); });
+    await act(async () => {
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+      await Promise.resolve();
+    });
+    expect(client.load).toHaveBeenCalledOnce();
+    expect(result.current.busy).toBe(true);
+    await act(async () => { mutation.resolve('acknowledged'); await writing; });
+    expect(client.load).toHaveBeenCalledTimes(2);
+    expect(result.current.busy).toBe(false);
+  });
+  it('does not replace the edit-time baseline when a new edit begins during the resumed read', async () => {
+    const client = fakeScores();
+    const read = deferred<RoundScores>();
+    vi.mocked(client.load).mockResolvedValueOnce(fictionalRoundScores).mockReturnValueOnce(read.promise);
+    const { result } = renderHook(() => useOwnerScores(client, fictionalRoundScores.eventId, fictionalRoundScores.roundId, false, vi.fn()));
+    await act(async () => { await Promise.resolve(); });
+    act(() => { window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })); });
+    act(() => { result.current.pauseForEdit(); });
+    await act(async () => { read.resolve(scoreResult().round); await read.promise; });
+    expect(client.load).toHaveBeenCalledTimes(2);
+    expect(result.current.round).toBe(fictionalRoundScores);
+    expect(result.current.stale).toBe(true);
+  });
+  it('respects backoff and Retry-After on repeated resume, then completes the deferred read even while dirty', async () => {
+    vi.useFakeTimers();
+    const client = fakeScores();
+    vi.mocked(client.load).mockResolvedValueOnce(fictionalRoundScores).mockRejectedValueOnce(new PrivateRequestError(429, 'Fictional quota', 60))
+      .mockResolvedValueOnce(scoreResult().round);
+    const { result } = renderHook(() => useOwnerScores(client, fictionalRoundScores.eventId, fictionalRoundScores.roundId, true, vi.fn()));
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })); await Promise.resolve(); });
+    expect(result.current.error).toContain('Wait at least 60 seconds');
+    await act(async () => { window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })); await Promise.resolve(); });
+    await advance(59_999);
+    expect(client.load).toHaveBeenCalledTimes(2);
+    await advance(1);
+    expect(client.load).toHaveBeenCalledTimes(3);
+    expect(result.current.round).toEqual(scoreResult().round);
+    expect(result.current.error).toBe('');
+  });
   it('keeps polling out of foreground busy state and retains the exact unchanged projection, but exposes actual changes', async () => {
     vi.useFakeTimers();
     const client = fakeScores();

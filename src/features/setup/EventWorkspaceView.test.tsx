@@ -458,7 +458,7 @@ describe('saved event workspace', () => {
     const catalog = fakeCatalog();
     const view = render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog={false} setup={setup} catalog={catalog} />);
     expect(await screen.findByRole('link', { name: /Open owner scorecards/ })).toHaveAttribute('href',
-      `#events?event=${fictionalEvent.id}&round=${fictionalId(70)}`);
+      `#organizer?event=${fictionalEvent.id}&round=${fictionalId(70)}`);
     expect(catalog.players).not.toHaveBeenCalled();
     view.unmount();
     vi.mocked(setup.load).mockResolvedValue({ ...fictionalWorkspace, event: { ...fictionalEvent, role: 'member' } });

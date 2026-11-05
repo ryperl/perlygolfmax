@@ -107,8 +107,9 @@ export class TableWorkspaceStore {
     // Explicit allowlists prevent catalog/index/audit fields from leaking to event members.
     return {
       event: before.summary, location: workspace.location, etag: before.summary.etag,
-      canViewScores: before.summary.role === 'owner' || before.admittedPlayer || before.testerLink !== undefined,
+      canViewScores: before.summary.role === 'owner' || before.admittedPlayer || before.testerLink !== undefined || before.publicAccess === true,
       ...(before.testerLink ? { testerAccess: true as const } : {}),
+      ...(before.publicAccess ? { publicAccess: true as const } : {}),
       ...(before.viewerPlayerId && workspace.roster.some((player) => player.playerId === before.viewerPlayerId)
         ? { viewerPlayerId: before.viewerPlayerId } : {}),
       ...(workspace.allowPerGolferTees === undefined ? {} : { allowPerGolferTees: workspace.allowPerGolferTees }),
@@ -135,7 +136,7 @@ export class TableWorkspaceStore {
   /** Server-only captured inputs; public readers receive get()'s explicit privacy projection. */
   async getForScoring(identity: ScoreActor, id: string): Promise<EventWorkspace> {
     const access = await this.access(identity, id);
-    if (access.summary.role !== 'owner' && !access.admittedPlayer && !access.testerLink) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
+    if (access.summary.role !== 'owner' && !access.admittedPlayer && !access.testerLink && !access.publicAccess) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
     const workspace = await this.load(access.summary);
     await assertEventAccessUnchanged(this.table, identity, id, access);
     return workspace;

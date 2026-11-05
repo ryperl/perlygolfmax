@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readClientSettings } from './config';
+import { readClientSettings, readPublicApiUrl } from './config';
 
 const env = {
   VITE_ENTRA_SPA_CLIENT_ID: '00000000-0000-4000-8000-000000000001',
@@ -9,6 +9,12 @@ const env = {
   VITE_API_URL: 'https://fictional.example.test/api/',
 };
 describe('client configuration', () => {
+  it('lets public scoring use an API URL without any organizer identity configuration', () => {
+    expect(readPublicApiUrl({})).toBeUndefined();
+    expect(readPublicApiUrl({ VITE_API_URL: env.VITE_API_URL })).toBe('https://fictional.example.test/api');
+    expect(() => readPublicApiUrl({ VITE_API_URL: 'https://user:password@fictional.example.test/api' })).toThrow();
+    expect(() => readPublicApiUrl({ VITE_API_URL: 1 })).toThrow();
+  });
   it('distinguishes unconfigured from invalid configuration and uses the customer authority', () => {
     expect(readClientSettings({})).toBeUndefined();
     expect(readClientSettings(env)).toMatchObject({

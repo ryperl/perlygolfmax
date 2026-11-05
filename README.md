@@ -1,9 +1,9 @@
 # Perly Golf Max
 
 A mobile-first golf-trip companion for a planned group of 12 golfers and five
-rounds. It includes private event workspaces with organizer-managed setup,
-invited-player group scoring, temporary no-account tester links and a separate
-**read-only fictional preview**.
+rounds. Golfers browse active events, enter scores and view standings/winnings
+without accounts. Organizers sign in separately for management. A separate
+**read-only fictional preview** never substitutes for saved data.
 Local identity/API configuration is optional and explicitly unconfigured by
 default; score entry is online-only, not an offline-capable tournament app.
 
@@ -36,7 +36,7 @@ outside version control. Never bypass organizational network restrictions.
 | `npm run test:watch` | Interactive unit/component test runner |
 | `npm run build` | Type check and generate production assets in `dist/` |
 | `npm run preview` | Serve the production build locally |
-| `npm run test:smoke` | Chromium desktop/mobile smoke tests against `dist/` |
+| `npm run test:smoke` | Chromium and focused iPhone-sized WebKit smoke tests |
 | `npm run check:lockfile` | Verify public package URLs and integrity |
 | `npm run check:dependencies` | Audit high/critical production advisories |
 | `npm run check:infra` | Compile/check test IaC from restored Bicep modules |
@@ -46,14 +46,14 @@ outside version control. Never bypass organizational network restrictions.
 Before the first browser smoke run, install its browser and build:
 
 ```bash
-npx playwright install chromium
+npx playwright install chromium webkit
 npm run build
 npm run test:smoke
 ```
 
 The smoke runner manages its own loopback preview server on port 4173; leave
 that port available. On Linux, Playwright may also require system dependencies
-(`npx playwright install --with-deps chromium`). Browser downloads are separate
+(`npx playwright install --with-deps chromium webkit`). Browser downloads are separate
 from npm installation and must also comply with your machine's policies.
 
 ## Implemented scope
@@ -69,8 +69,8 @@ from npm installation and must also comply with your machine's policies.
 - Web app manifest, SVG favicon, Apple touch icon, standard PNG icons, and a
   dedicated maskable icon with inset artwork.
 - Strict checks, component/module tests, production-browser smoke tests, and CI.
-- Separate Events navigation with explicit unconfigured/signed-out/loading/
-  empty/error states, email-code MSAL integration and authorized event creation.
+- Public Events navigation with explicit unconfigured/loading/empty/error states.
+  Separate **Organizer tools** use email-code sign-in for management and creation.
 - Active/Archived event lists with owner-only archive and restore. Archived
   events stay private to their owners, preserve their data, and can be restored.
   Permanent deletion is not implemented.
@@ -82,19 +82,18 @@ from npm installation and must also comply with your machine's policies.
   reusable players with dated manual Handicap Index history, and saved-event
   owner setup with explicit course/tee selection, roster and manual foursomes.
   Real source exports are never bundled or committed.
-- Online gross scorecards from saved round setup, with owner corrections and
-  approved players entering scores for their assigned playing group:
+- Online gross scorecards from saved round setup, with public score entry for
+  any saved playing group:
   explicit hole dispositions, conditional saved scores, correction history
   and complete-versus-incomplete gross summaries.
 - Configurable individual Stableford games derived server-side from the same
   stroke cards: gross/net, Standard/Modified Stableford presets, editable scoring
   bands and per-game handicap allowance. Multiple games can share one round.
-  Private invitations require sign-in, explicit claim and organizer approval.
-  Admitted players can view all active events without management authority.
+  No golfer account, admission or tester link is required in the public app.
   This is not offline recording or a finalized tournament scoreboard.
 
-The Events screen is deliberately unavailable until an approved identity tenant
-and API are configured. Customer sign-in and event creation/reload have been
+The public Events screen needs only an API URL; organizer tools additionally
+need approved identity configuration. Organizer sign-in and event creation have been
 manually verified in isolated test; archive/restore also has automated coverage.
 This does not establish all live authorization, concurrency or recovery cases.
 The fictional Preview remains available without configuration. Main navigation
@@ -103,7 +102,11 @@ for setup requirements, controls, residual risks and separate approval gates.
 
 Bundled names, locations, courses, and tee times are **fictional sample content**.
 The repository contains no real bookings, invitations, scores, handicap indexes,
-or identities. Private saved events live separately in the configured environment.
+or identities. Saved events live separately in the configured environment.
+**Active events are public:** any visitor can view rosters, scores and winnings
+and edit scores. Do not put information in active events that should stay private.
+Only organizer management, raw index observations, audit identities and archives
+remain protected; anonymous score edits cannot be attributed to a verified person.
 Never commit real trip data, contact details, account identifiers, credentials,
 corporate feed configuration, or secrets to this public repository.
 
@@ -117,6 +120,29 @@ offline navigation/reload is not supported or guaranteed. New builds are picked
 up on normal network reload; there is no service-worker update lifecycle.
 Production PWA capabilities require HTTPS and platform-specific verification.
 
+### Returning between holes
+
+Select an event, round and playing group once. Enter scores, tap **Save & Next
+Hole**, and wait for **Saved** before closing the app. A cold launch from the
+site/home-screen entry restores the last round, group, hole and view and fetches
+fresh server scores. Returning to a running/backgrounded page refreshes safely
+without resetting that position or overwriting local drafts. Failed/conflicting
+saves do not advance or claim confirmation.
+
+Only allowlisted navigation fields are kept in localStorage: version, event ID,
+round ID, group number, hole number and view. No scores, drafts, credentials or
+personal identities are stored there. Storage failures are visible and allow
+scoring in memory, but reopening may require selecting the round/group again.
+**Events** always provides an explicit chooser. Archived/removed rounds and
+changed group/hole assignments require a fresh selection, never a demo fallback.
+This is navigation recovery, not offline score storage or synchronization.
+
+The manifest launches `/`, now the public resume entry rather than sign-in.
+Safari home-screen apps may have separate storage from Safari tabs; choose the
+round/group once inside that app if needed. Subsequent visits use its own saved
+position. Browser tests cover full-app eighteen cold visits at an iPhone 16 Pro
+viewport in WebKit; adding an actual iOS home-screen icon remains a device check.
+
 ### Future work, not implemented
 
 Owner appointment UI, automated invitation email and offline synchronization
@@ -124,70 +150,24 @@ remain later increments. The selected design is Entra External ID
 email codes, a standalone Functions API and Table Storage, with SWA staying Free.
 Provisioning/deployment is separately approval-gated. Additional scoring rules,
 betting, reporting, finalization and retention remain separate scope decisions.
-The fictional Preview remains separate from authenticated scoring and results.
+The fictional Preview remains separate from saved scoring and results.
 
-### Player invitations and visibility
+### Public access and legacy links
 
-For testing without account creation, use **No-account tester access** instead
-of an account-based player invitation:
+Golfers use the ordinary site and public event/round URLs. Course/player catalogs,
+event setup, round/group/tee/game configuration, purse changes and audit history
+still require organizer authority. Archives remain owner-only.
 
-1. Sign in as the event owner and open **Player invitations**.
-2. Create a private tester link and share it directly with your tester.
-3. The tester opens that link, chooses a saved round and enters scores for any
-   playing group in **that event only**. No sign-in, account or approval follows.
-
-Anyone holding the link can view that event's round scorecards and enter scores
-for any group. New links expire after seven days and the owner can revoke them
-earlier. Existing 24-hour links keep their recorded expiry until explicitly
-renewed.
-Keep them private. They do not grant other-event access, global catalogs, raw
-Handicap Index observations, score history, purse access or organizer management.
-Score changes are attributed to the **shared tester link**, not a verified
-individual. Existing conditional saves, score locks and audits still apply.
-This is online-only, not an anonymous public scoreboard or offline recording.
-
-The raw link is available only when created; after reloading, revoke a lost
-link and create a fresh one. No email is sent automatically. Tester credentials
-stay in the private URL fragment and request authorization header, never API
-query/path, normal UI text, logs or application persistent storage. Leaving the
-tester view clears its in-memory workspace and drafts; revocation/expiry ends
-access on subsequent reads/saves. Archived events reject tester access.
-
-An organizer can choose **Renew for 7 days** to keep the same URL and reset
-expiry to seven days from the server's renewal time, including for an expired
-but unrevoked link. Anyone holding that URL regains its existing event-scoring
-access. Refreshing the page or link list does not renew access. Revoked links
-cannot be renewed; create a new link instead. Retries of the same renewal
-confirm the original expiry rather than repeatedly extending it.
-
-### Account-based player invitations
-
-After saving an event roster, an owner opens **Player invitations**, selects a
-golfer and creates a private link. Share it privately with that golfer. The link
-expires after 24 hours; signing in alone grants no event access. The golfer
-signs in using the header, selects **Request access**, and reads their verification
-code to the organizer. The owner verifies the person and approves the matching
-request. The golfer selects **Check approval** to continue.
-
-An approved player can browse **all active events**, including other groups,
-scorecards, game/overall standings and saved prize results. Score entry is
-limited to every golfer in their own saved **playing group** for each round,
-not their competition team or other groups/events. Organizers retain setup,
-game, purse and invitation management plus score corrections. Global catalogs,
-raw Handicap Index observations and audit identities remain protected. Archives
-are owner-only.
-
-Owners can revoke an admission or replace an unused/pending link. Revocation
-removes that event's scoring grant; another approved admission can still permit
-general active-event viewing. Approved account/roster bindings are explicit,
-not matched automatically by email. No invitation emails are sent by the app.
-Raw link secrets are not recoverable from the server. Sign-in continuation uses
-temporary tab session storage for at most 30 minutes and is cleared on claim,
-logout or expiry; it is not score persistence or an authentication token cache.
+Previously issued tester/admission links open their public event (or its saved
+scoring position), remove the secret fragment and do not request account creation.
+Their original backend protocols and audit records remain for compatibility;
+no grants are silently migrated or promoted. Revoking a legacy link does **not**
+block the new public website—public access is a separate, explicitly chosen
+policy. Legacy grant expiry/renewal does not control public scoring.
 
 ### Online gross scorecards
 
-An event owner can open scorecards for a saved round and enter each player's
+Any visitor can open scorecards for an active saved round and enter each player's
 per-hole gross strokes. Unplayed, picked-up and did-not-finish are distinct
 states, never automatic zero/penalty strokes. The normal entry flow is one hole
 for one selected group: blank means unplayed, a number means strokes, and `X`
@@ -231,10 +211,11 @@ organizer audit, master-edit and player-report interfaces are not built.
 
 Each saved operation has an idempotency ID, conditional card revision and
 immutable before/after/actor/time history. Conflicting edits require explicit
-refresh/review; failed local drafts are not confirmed saves. Access is checked
-against current server membership, approved roster binding and saved playing
-group, not global course-manager status or hidden UI controls. Other groups are
-read-only for players. Archived owner cards are read-only.
+refresh/review; failed local drafts are not confirmed saves. Public writes
+conditionally check the active event/card revisions and record an explicit
+unverified public actor, never a fabricated account or owner grant. Organizer
+and legacy account/tester write checks remain independent. Archived owner cards
+are read-only.
 
 The first saved score locks that round's course, tee, roster/group and captured
 index inputs, even if all holes are later cleared. Catalog index changes remain
@@ -368,7 +349,7 @@ Game selection survives view changes and refreshes. Unsaved strokes or game
 settings are not used in standings, and viewing never saves anything.
 
 The leaderboard uses the authorized online score projection and its
-refresh/backoff/access checks. Admitted players can view active events; archived
+refresh/backoff/access checks. Everyone can view active events; archived
 rounds remain owner-only and read-only.
 
 ### Optional overall event leaderboard
@@ -400,7 +381,7 @@ Unplayed holes are pending and live standings provisional. Missing configuration
 unavailable net inputs, stale team assignments and arithmetic-range failures
 remain explicit rather than becoming zero or a fabricated valid rank.
 
-The overall view is online and available to owners and admitted active-event
+The overall view is online and available to owners and public active-event
 readers. A bounded server read
 derives standings from saved cards/game results and verifies event consistency;
 each round consumes the existing score-read quota. Unsaved score/settings drafts
@@ -566,24 +547,24 @@ The API imports only shared domain/contracts, never UI/demo/client code.
 Provider SDKs stay in concrete adapters; the browser never imports storage or
 server credentials. No empty future layers or generic service framework exists.
 
-The selected event is explicit in each live-tab URL and retained only in app
-memory while moving between screens. Opening an event links its Overview,
+The selected event is explicit in each live-tab URL; scoring navigation alone
+is also remembered on the device. Opening an event links its Overview,
 Rounds, Group, setup and scorecards without reusing demo models or fetching the
 global catalogs for read-only views. Direct links restore the event context;
 without one, choose an event rather than automatically taking the first result.
-Sign-out/session expiry clears the in-memory selection and private UI.
-Account controls belong in the site header rather than inside individual
-event screens, with the same pending, unavailable and sign-out failure behavior.
+Organizer sign-out/session expiry clears private management UI. Public scoring
+does not depend on that session. Organizer controls belong behind the header's
+Organizer tools entry rather than in ordinary golfer screens.
 Saved round cards distinguish **No scores yet**, **In progress** and
 **Entries complete**, including playing-group coverage. A saved pickup or DNF
 counts as an entry, but does not make an incomplete gross score complete or
-finalize the round. Progress uses saved owner-authorized scorecards, not local
+finalize the round. Progress uses saved active-event scorecards, not local
 drafts or the permanent setup-lock flag, and refreshes with **Refresh event**.
 Loading or unavailable progress must not be presented as zero or complete.
-Workspace reads retain their existing membership checks and allowlisted
-member projections. Setup writes keep their owner-plus-catalog checks;
-scorecards and game management require event ownership, not catalog authority.
-This does not add player admission or grants.
+Public workspace reads check active state and use allowlisted projections;
+private legacy reads retain their membership checks. Setup writes keep their
+owner-plus-catalog checks; game management remains event-owner only. Public
+scoring does not create memberships, admissions or administrator grants.
 
 ## Local feeds versus public CI
 

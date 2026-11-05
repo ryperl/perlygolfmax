@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 import type { Page, TestInfo } from '@playwright/test';
 import { createServer } from 'vite';
 

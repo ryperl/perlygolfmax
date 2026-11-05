@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { eventTabHref, readEventRoute, readPage, readPreviewTab, readSelectedEvent } from './navigation';
+import { eventTabHref, isOrganizerRoute, readEventRoute, readPage, readPreviewTab, readSelectedEvent } from './navigation';
 
 describe('readPage', () => {
+  it('keeps ordinary scoring and old player links public and requires explicit organizer management context', () => {
+    const event = '00000000-0000-4000-8000-000000000050';
+    for (const hash of ['', '#events', `#events?event=${event}`, `#events?event=${event}&round=${event}`,
+      `#overview?event=${event}`, `#purse?event=${event}`, '#tester', '#join', '#preview']) {
+      expect(isOrganizerRoute(hash)).toBe(false);
+    }
+    for (const hash of ['#organizer', `#organizer?event=${event}`, '#events?catalog=courses', `#access?event=${event}`]) {
+      expect(isOrganizerRoute(hash)).toBe(true);
+    }
+    expect(isOrganizerRoute('#code=returned', '?event-auth=1')).toBe(true);
+    expect(readEventRoute(`#organizer?event=${event}&view=purse`)).toBe(`purse:${event}`);
+  });
   it('keeps bearer tester links out of ordinary selected-event context and rejects duplicate or malformed authority', () => {
     const event = '00000000-0000-4000-8000-000000000050';
     const link = '00000000-0000-4000-8000-000000000910';
@@ -64,9 +76,9 @@ describe('readPage', () => {
   });
 
   it('routes identity callbacks to Events before MSAL consumes the authorization response', () => {
-    expect(readPage('#code=fictional&state=fictional', '?event-auth=1')).toBe('events');
-    expect(readPage('#error=access_denied', '?event-auth=1')).toBe('events');
-    expect(readPage('', '?event-auth=1')).toBe('events');
+    expect(readPage('#code=fictional&state=fictional', '?event-auth=1')).toBe('organizer');
+    expect(readPage('#error=access_denied', '?event-auth=1')).toBe('organizer');
+    expect(readPage('', '?event-auth=1')).toBe('organizer');
     expect(readPage('#group', '?event-auth=1')).toBe('group');
     expect(readPage('#code=fictional')).toBe('events');
   });

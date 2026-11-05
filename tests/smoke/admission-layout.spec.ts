@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 import { createServer } from 'vite';
 
 test('fictional invitation controls fit 320/390, enlarged text, keyboard focus and the complete searchable roster', async ({ page }, testInfo) => {

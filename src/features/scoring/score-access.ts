@@ -5,9 +5,10 @@ export function writablePlayerIds(round: RoundScores): readonly string[] {
   const permissions = scorePermissions(round);
   if (round.eventStatus !== 'active') return [];
   if (permissions.role === 'owner') return round.cards.map((card) => card.playerId);
-  if (permissions.role === 'tester') {
+  if (permissions.role === 'tester' || permissions.role === 'public') {
     const ids = round.cards.map((card) => card.playerId);
     return !permissions.canManageGames && permissions.viewerPlayerId === undefined
+      && new Set(ids).size === ids.length
       && new Set(permissions.writePlayerIds).size === ids.length
       && permissions.writePlayerIds.length === ids.length
       && ids.every((id) => permissions.writePlayerIds.includes(id)) ? ids : [];

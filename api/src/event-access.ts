@@ -9,6 +9,8 @@ import { ApiError } from './errors.js';
 import type { ScoreActor } from '../../src/domain/test-access.js';
 import { isEventTesterIdentity } from '../../src/contracts/test-access.js';
 import { readTesterAccess } from './test-access/authority.js';
+import { isPublicScoreIdentity } from '../../src/contracts/public-access.js';
+import { readPublicAccess } from './public-access/authority.js';
 
 export interface EventAccess {
   readonly event: StoredRow;
@@ -18,6 +20,7 @@ export interface EventAccess {
   readonly viewerPlayerId?: string;
   readonly admittedPlayer: boolean;
   readonly testerLink?: StoredRow;
+  readonly publicAccess?: true;
   readonly authorityProofs: readonly StoredRow[];
 }
 
@@ -85,6 +88,10 @@ async function globalProof(table: TableClient, identity: AccountIdentity): Promi
 
 export async function readEventAccess(table: TableClient, identity: ScoreActor, eventId: string): Promise<EventAccess> {
   if ('kind' in identity) {
+    if (identity.kind === 'public-score') {
+      if (!isPublicScoreIdentity(identity)) throw new ApiError(403, 'PUBLIC_EVENT_NOT_AVAILABLE');
+      return readPublicAccess(table, identity, eventId);
+    }
     if (!isEventTesterIdentity(identity)) throw new ApiError(403, 'TESTER_ACCESS_ENDED');
     return readTesterAccess(table, identity, eventId);
   }

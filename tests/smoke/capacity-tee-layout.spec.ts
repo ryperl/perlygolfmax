@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 import { createServer } from 'vite';
 
 test('real large controls and mixed-tee cards retain choices at 390/320 and enlarged text', async ({ page }, testInfo) => {

@@ -14,6 +14,19 @@ const input = {
 };
 
 describe('private setup and index contracts', () => {
+  it('requires a public workspace to be active viewer-only with scores, no account binding or tester flag', () => {
+    const workspace = {
+      event: { id: ids[0], name: 'Fictional Event', createdAt: '2026-01-01', role: 'viewer', status: 'active', etag: 'current' },
+      location: '', roster: [], rounds: [], etag: 'current', publicAccess: true, canViewScores: true,
+    };
+    expect(isEventWorkspace(workspace)).toBe(true);
+    for (const invalid of [
+      { ...workspace, publicAccess: false }, { ...workspace, canViewScores: false },
+      { ...workspace, viewerPlayerId: ids[0] }, { ...workspace, testerAccess: true },
+      { ...workspace, event: { ...workspace.event, role: 'owner' } },
+      { ...workspace, event: { ...workspace.event, status: 'archived' } },
+    ]) expect(isEventWorkspace(invalid)).toBe(false);
+  });
   it('validates tester workspace as active viewer-only with score access but no bound golfer', () => {
     const workspace = {
       event: { id: ids[0], name: 'Fictional Event', createdAt: '2026-01-01', role: 'viewer', status: 'active', etag: 'current' },

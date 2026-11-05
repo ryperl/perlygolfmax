@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 import { createServer } from 'vite';
 
 test('real setup controls preserve drafts and fit narrow, enlarged and dark layouts', async ({ page }, testInfo) => {

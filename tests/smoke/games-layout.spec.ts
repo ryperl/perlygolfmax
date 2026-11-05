@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 import { createServer } from 'vite';
 import { stablefordPoints } from '../../src/domain/stableford';
 import { renderComponentFixture } from './render-fixture';

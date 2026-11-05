@@ -1,4 +1,5 @@
 import type { AccountIdentity, EventStatus } from './events.js';
+import type { PublicScoreIdentity } from './public-access.js';
 
 export interface EventTesterIdentity {
   readonly kind: 'tester-link';
@@ -6,7 +7,7 @@ export interface EventTesterIdentity {
   readonly linkId: string;
 }
 
-export type ScoreActor = AccountIdentity | EventTesterIdentity;
+export type ScoreActor = AccountIdentity | EventTesterIdentity | PublicScoreIdentity;
 
 export interface TesterLink {
   readonly linkId: string;

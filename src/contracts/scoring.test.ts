@@ -30,6 +30,22 @@ const change: ScoreChange = {
 };
 
 describe('owner gross scoring network contracts', () => {
+  it('requires exact event-scoped public score attribution and all-card non-admin permissions', () => {
+    const base = round();
+    const actor = { kind: 'public-score', eventId: base.eventId };
+    expect(isScoreChange({ ...change, recordedBy: actor })).toBe(true);
+    expect(isScoreChange({ ...change, recordedBy: { ...actor, eventId: id(999) } })).toBe(false);
+    expect(isScoreChange({ ...change, recordedBy: { ...actor, objectId: id(999) } })).toBe(false);
+    const permissions = { role: 'public', writePlayerIds: base.cards.map((card) => card.playerId), canManageGames: false };
+    expect(isRoundScores({ ...base, permissions })).toBe(true);
+    expect(isRoundScores({ ...base, permissions: { ...permissions, writePlayerIds: [...permissions.writePlayerIds].reverse() } })).toBe(true);
+    for (const invalid of [
+      { ...permissions, canManageGames: true }, { ...permissions, viewerPlayerId: id(1) },
+      { ...permissions, writePlayerIds: [id(1)] }, { ...permissions, writePlayerIds: [...permissions.writePlayerIds, id(999)] },
+      { ...permissions, writePlayerIds: [id(1), id(1), id(3), id(4)] },
+    ]) expect(isRoundScores({ ...base, permissions: invalid })).toBe(false);
+    expect(isRoundScores({ ...base, eventStatus: 'archived', permissions })).toBe(false);
+  });
   it('validates distinct exact tester actors and preserves legacy account audit attribution', () => {
     const actor = { kind: 'tester-link' as const, eventId: change.eventId, linkId: id(999) };
     expect(isScoreActor(actor)).toBe(true);

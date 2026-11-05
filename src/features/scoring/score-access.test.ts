@@ -10,6 +10,31 @@ describe('tester score permission targets', () => {
     expect(writablePlayerIds({ ...fictionalRoundScores, permissions })).toEqual(ids);
     expect(permissions.role).toBe('tester');
   });
+
+  describe('public score permission targets', () => {
+    const publicPermissions: ScorePermissions = { ...permissions, role: 'public' };
+    it('allows exactly the published active card set without management authority', () => {
+      expect(writablePlayerIds({ ...fictionalRoundScores, permissions: publicPermissions })).toEqual(ids);
+      expect(writablePlayerIds({ ...fictionalRoundScores, permissions: publicPermissions, eventStatus: 'archived' })).toEqual([]);
+    });
+    it('rejects duplicated published cards rather than treating an extra target as an exact set', () => {
+      const first = fictionalRoundScores.cards[0];
+      if (!first) throw new Error('Missing fictional card');
+      expect(writablePlayerIds({
+        ...fictionalRoundScores, cards: [first, first],
+        permissions: { ...publicPermissions, writePlayerIds: [first.playerId, 'fictional-foreign-player'] },
+      })).toEqual([]);
+    });
+    it.each([
+      { ...publicPermissions, writePlayerIds: ids.slice(1) },
+      { ...publicPermissions, writePlayerIds: [...ids, 'fictional-foreign-player'] },
+      { ...publicPermissions, writePlayerIds: [...ids.slice(1), ids[1] ?? 'fictional-missing'] },
+      { ...publicPermissions, canManageGames: true },
+      { ...publicPermissions, viewerPlayerId: ids[0] ?? 'fictional-missing' },
+    ])('rejects mismatched published public target sets (%j)', (invalid) => {
+      expect(writablePlayerIds({ ...fictionalRoundScores, permissions: invalid })).toEqual([]);
+    });
+  });
   it.each([
     { ...permissions, writePlayerIds: ids.slice(1) },
     { ...permissions, writePlayerIds: [...ids, 'fictional-foreign-player'] },

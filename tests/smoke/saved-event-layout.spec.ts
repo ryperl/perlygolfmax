@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 import type { EventWorkspace } from '../../src/domain/setup';
 import type { EventEntryProgress } from '../../src/features/event-trip/entry-progress';
 import { renderComponentFixture } from './render-fixture';
@@ -51,7 +51,7 @@ for (const view of ['overview', 'rounds', 'group'] as const) {
     await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(view === 'overview' ? workspace.event.name : view === 'rounds' ? 'Rounds' : 'The Group');
     const open = page.getByRole('link', { name: 'Open scorecard for Fictional round 1' });
-    await expect(open).toHaveAttribute('href', `#events?event=${id(50)}&round=${id(71)}`);
+    await expect(open).toHaveAttribute('href', `#organizer?event=${id(50)}&round=${id(71)}`);
     await open.focus();
     await expect(open).toBeFocused();
     await expect(page.getByText('In progress', { exact: false }).first()).toBeVisible();
@@ -61,6 +61,6 @@ for (const view of ['overview', 'rounds', 'group'] as const) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.setViewportSize({ width: 1280, height: 900 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    await expect(page.getByRole('link', { name: 'Configure event' })).toHaveAttribute('href', `#events?event=${id(50)}`);
+    await expect(page.getByRole('link', { name: 'Configure event' })).toHaveAttribute('href', `#organizer?event=${id(50)}`);
   });
 }

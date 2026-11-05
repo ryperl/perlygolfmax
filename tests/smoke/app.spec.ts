@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 
 test('production shell supports navigation, history, and keyboard access', async ({ page }) => {
   const errors: string[] = [];
@@ -18,11 +18,10 @@ test('production shell supports navigation, history, and keyboard access', async
   await page.goBack();
   await expect(page.getByRole('link', { name: 'Demo rounds', exact: true })).toHaveAttribute('aria-current', 'page');
   await page.getByRole('link', { name: 'Events', exact: true }).click();
-  if (process.env.EXPECT_EVENT_SERVICES_CONFIGURED === 'true') {
-    await expect(page.getByRole('banner').getByRole('button', { name: 'Sign in', exact: true })).toBeEnabled();
-  } else {
+  await expect(page.getByRole('link', { name: 'Organizer tools', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Sign (in|out)$/ })).toHaveCount(0);
+  if (process.env.EXPECT_PUBLIC_SERVICES_CONFIGURED !== 'true' && process.env.EXPECT_EVENT_SERVICES_CONFIGURED !== 'true') {
     await expect(page.getByRole('heading', { name: 'Event services are not configured' })).toBeVisible();
-    await expect(page.getByRole('banner').getByRole('button', { name: 'Sign in', exact: true })).toBeDisabled();
   }
   await page.goto('/#unknown');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Events');
@@ -35,9 +34,9 @@ test('every page fits a narrow viewport and enlarged text', async ({ page }) => 
     await page.goto(`/#${hash}`);
     await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-    const account = page.getByRole('banner').getByRole('button', { name: 'Sign in', exact: true });
+    const account = page.getByRole('banner').getByRole('link', { name: 'Organizer tools', exact: true });
     await expect(account).toBeVisible();
-    await expect(page.getByRole('button', { name: /^Sign (in|out)$/ })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: /^Sign (in|out)$/ })).toHaveCount(0);
     const brandBounds = await page.getByRole('link', { name: 'Perly Golf Max home' }).boundingBox();
     const accountBounds = await account.boundingBox();
     expect(brandBounds).not.toBeNull();

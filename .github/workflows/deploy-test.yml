@@ -49,6 +49,10 @@ jobs:
           if (configured !== 0 && configured !== identity.length) {
             throw new Error('Partial customer identity configuration; deployment refused.');
           }
+          if (process.env.API_URL) {
+            if (/[\r\n]/.test(process.env.API_URL)) throw new Error('Invalid public API URL.');
+            appendFileSync(process.env.GITHUB_ENV, `VITE_API_URL=${process.env.API_URL}\nEXPECT_PUBLIC_SERVICES_CONFIGURED=true\n`);
+          }
           if (configured) {
             if (!process.env.API_URL) throw new Error('Missing test API URL.');
             const mapping = {
@@ -69,7 +73,7 @@ jobs:
           appendFileSync(process.env.GITHUB_OUTPUT, `configured=${configured ? 'true' : 'false'}\n`);
           JS
       - run: npm run build
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:smoke
       - uses: actions/upload-artifact@v4
         with:
@@ -213,7 +217,15 @@ jobs:
                 const body = await response.json();
                 assert.equal(body.code, expectedCode);
               }
-              console.log('Verified deployed API refuses unauthorized access in its declared readiness state.');
+              const publicEvents = await fetch(`${process.env.API_URL}/public/events`, { signal: AbortSignal.timeout(10000) });
+              assert.equal(publicEvents.status, ready ? 200 : 503);
+              assert.equal(publicEvents.headers.get('cache-control'), 'no-store');
+              const publicBody = await publicEvents.json();
+              if (ready) {
+                assert.ok(Array.isArray(publicBody.events));
+                assert.ok(publicBody.events.every((event) => event.status === 'active' && event.role === 'viewer'));
+              } else assert.equal(publicBody.code, 'SERVICE_NOT_CONFIGURED');
+              console.log('Verified public active-event discovery and protected organizer API readiness.');
               failure = undefined;
               break;
             } catch (error) {

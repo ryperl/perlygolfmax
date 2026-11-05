@@ -29,6 +29,7 @@ export interface GroupHoleEntryProps {
   readonly busy: boolean;
   readonly readOnly: boolean;
   readonly unsavedCount: number;
+  readonly focusHole?: number | null;
   readonly onGroupChange: (number: number) => void;
   readonly onHoleChange: (number: number) => void;
   readonly onEdit: (playerId: string, text: string) => void;
@@ -37,7 +38,7 @@ export interface GroupHoleEntryProps {
   readonly onSave: (advance: boolean) => void;
 }
 
-export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, readOnly, unsavedCount,
+export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, readOnly, unsavedCount, focusHole,
   onGroupChange, onHoleChange, onEdit, onReview, onDiscard, onSave }: GroupHoleEntryProps) {
   const index = layout.findIndex((item) => item.number === hole.number);
   const previous = layout[index - 1];
@@ -45,6 +46,12 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
   const disabled = busy || readOnly;
   const scoreInputs = useRef<Array<HTMLInputElement | null>>([]);
   const primaryAction = useRef<HTMLButtonElement | null>(null);
+  const heading = useRef<HTMLHeadingElement | null>(null);
+  useLayoutEffect(() => {
+    if (focusHole !== hole.number) return;
+    heading.current?.focus({ preventScroll: true });
+    if (typeof heading.current?.scrollIntoView === 'function') heading.current.scrollIntoView({ block: 'center', behavior: 'instant' });
+  }, [focusHole, hole.number]);
   const composing = useRef(false);
   const context = JSON.stringify([groupNumber, hole.number, rows.slice(0, 4).map((row) => row.playerId)]);
   const current = useRef({ rows, disabled, context });
@@ -99,7 +106,7 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
     {unsavedCount > 0 && <p className="score-hint">{unsavedCount} unsaved {unsavedCount === 1 ? 'score' : 'scores'}</p>}
     <header className="hole-heading">
       <button type="button" aria-label="Previous hole" disabled={busy || !previous} onClick={() => { if (previous) onHoleChange(previous.number); }}>←</button>
-      <div><h2>Hole {hole.number}</h2><p>{personalContext ? 'Golfer tee details shown below' : `Par ${String(hole.par)} · ${String(hole.length)} yards · Stroke index ${String(hole.allocation)}`}</p></div>
+      <div><h2 ref={heading} tabIndex={-1}>Hole {hole.number}</h2><p>{personalContext ? 'Golfer tee details shown below' : `Par ${String(hole.par)} · ${String(hole.length)} yards · Stroke index ${String(hole.allocation)}`}</p></div>
       <button type="button" aria-label="Next hole" disabled={busy || !next} onClick={() => { if (next) onHoleChange(next.number); }}>→</button>
     </header>
     <form aria-label={`Group ${String(groupNumber)} hole ${String(hole.number)} entry`} onSubmit={(event) => { event.preventDefault(); onSave(true); }}>

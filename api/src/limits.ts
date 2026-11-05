@@ -1,5 +1,7 @@
 import type { TableClient } from '@azure/data-tables';
 import type { ScoreActor } from '../../src/domain/test-access.js';
+import type { PublicBrowseIdentity } from '../../src/domain/public-access.js';
+import { isPublicBrowseIdentity } from '../../src/contracts/public-access.js';
 import { isScoreActor } from '../../src/contracts/scoring.js';
 import { isRecord } from '../../src/contracts/events.js';
 import { ApiError } from './errors.js';
@@ -14,15 +16,18 @@ const limits: Readonly<Record<RequestClass, number>> = {
 };
 
 export interface RequestLimiter {
-  check(identity: ScoreActor, action: RequestClass): Promise<void>;
+  check(identity: ScoreActor | PublicBrowseIdentity, action: RequestClass): Promise<void>;
 }
 
 export class TableRequestLimiter implements RequestLimiter {
   constructor(private readonly table: TableClient, private readonly now: () => number = Date.now) {}
 
-  async check(identity: ScoreActor, action: RequestClass): Promise<void> {
-    if (!isScoreActor(identity)) throw new ApiError(503, 'INVALID_REQUEST_PRINCIPAL');
-    const partitionKey = 'kind' in identity ? `quota:tester-link:${identity.eventId}:${identity.linkId}`
+  async check(identity: ScoreActor | PublicBrowseIdentity, action: RequestClass): Promise<void> {
+    if (!isScoreActor(identity) && !isPublicBrowseIdentity(identity)) throw new ApiError(503, 'INVALID_REQUEST_PRINCIPAL');
+    const partitionKey = 'kind' in identity
+      ? identity.kind === 'public-browse' ? 'quota:public-browse'
+        : identity.kind === 'public-score' ? `quota:public-score:${identity.eventId}`
+          : `quota:tester-link:${identity.eventId}:${identity.linkId}`
       : `quota:${identity.tenantId}:${identity.objectId}`;
     const rowKey = action;
     const window = Math.floor(this.now() / 60_000);
