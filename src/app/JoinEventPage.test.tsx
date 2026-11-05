@@ -1,5 +1,5 @@
 import { StrictMode } from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { admissionId, admissionsClient, status } from '../features/admission/test-support';
 import { JoinEventPage } from './JoinEventPage';
@@ -21,7 +21,7 @@ it('forwards onApproved once for a resumed approved status, including strict eff
     onSessionExpired: vi.fn(), onApproved };
   const f = render(<StrictMode><JoinEventPage {...props} /></StrictMode>);
   await screen.findByRole('link', { name: 'Open event overview' });
-  expect(onApproved).toHaveBeenCalledOnce();
+  await waitFor(() => { expect(onApproved).toHaveBeenCalledOnce(); });
   const updatedCallback = vi.fn();
   f.rerender(<StrictMode><JoinEventPage {...props} onApproved={updatedCallback} /></StrictMode>);
   expect(updatedCallback).not.toHaveBeenCalled();
