@@ -52,7 +52,8 @@ describe('PurseSettings', () => {
     expect(screen.getByLabelText('Pool 1 prize 2 amount')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Remove prize 2 from pool 1' }));
     expect(screen.queryByLabelText('Pool 1 prize 2 amount')).not.toBeInTheDocument();
-    for (let index = 0; index < 20; index++) fireEvent.click(screen.getByRole('button', { name: 'Add award pool' }));
+    const addPool = screen.getByRole('button', { name: 'Add award pool' });
+    for (let index = 0; index < 20; index++) fireEvent.click(addPool);
     expect(screen.getByLabelText('Pool 21 name')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Remove pool 21' }));
     expect(screen.queryByLabelText('Pool 21 name')).not.toBeInTheDocument();
