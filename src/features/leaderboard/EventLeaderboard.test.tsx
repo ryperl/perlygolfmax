@@ -74,15 +74,18 @@ describe('overall leaderboard presentation', () => {
     expect(screen.getByText(/not event finalization/)).toBeVisible();
     expect(screen.getByText(/Review removed-round/)).toBeVisible();
   });
-  it('handles disabled and non-owner views without exposing result rows', () => {
+  it('shows disabled setup to owners and published result rows to admitted nonowners', () => {
     const value = fixture();
     const view = render(<EventLeaderboard value={{ ...value, workspace: fictionalWorkspace }} />);
     expect(screen.getByRole('heading', { name: /not enabled/ })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Open event setup' })).toHaveAttribute('href', `#events?event=${fictionalWorkspace.event.id}`);
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
     view.rerender(<EventLeaderboard value={{ ...value, workspace: { ...value.workspace, event: { ...value.workspace.event, role: 'member' } } }} />);
-    expect(screen.getByRole('alert')).toHaveTextContent('event owner only');
-    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.getByRole('table')).toBeVisible();
+    expect(screen.queryByRole('link', { name: 'Open event setup' })).not.toBeInTheDocument();
+    view.rerender(<EventLeaderboard value={{ ...value, workspace: { ...fictionalWorkspace, event: { ...fictionalWorkspace.event, role: 'viewer' } } }} />);
+    expect(screen.getByRole('heading', { name: /not enabled/ })).toBeVisible();
+    expect(screen.queryByRole('link', { name: 'Open event setup' })).not.toBeInTheDocument();
   });
   it.each<EventStandingReason>([
     'missing-handicap-index', 'invalid-handicap-index', 'missing-tee-ratings', 'missing-stroke-index',

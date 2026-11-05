@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { GamePlayerResult, GameTeamResult } from '../../domain/games';
 import { isTeamGameDefinition } from '../../domain/games';
 import type { RoundScores } from '../../domain/scoring';
+import { scorePermissions } from '../../domain/scoring';
 import { scorecardTee } from '../../domain/tees';
 import { gameScoringLabel, gameUnavailableMessage } from '../games';
 import { gameStandings } from './standings';
@@ -40,6 +41,7 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
   const [query, setQuery] = useState('');
   const [pageIndex, setPageIndex] = useState(0);
   const games = round.games?.configuration.games ?? [];
+  const canManage = round.eventStatus === 'active' && scorePermissions(round).role === 'owner' && scorePermissions(round).canManageGames;
   const game = games.find((entry) => entry.id === gameId) ?? games[0];
   const result = game && round.games?.results.find((entry) => entry.gameId === game.id);
   const teamGame = game !== undefined && isTeamGameDefinition(game);
@@ -59,6 +61,7 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
   const pageSize = 12;
   const page = Math.min(pageIndex, Math.max(0, Math.ceil(matching.length / pageSize) - 1));
   const visible = new Set(matching.slice(page * pageSize, (page + 1) * pageSize).map(standingId));
+  if (round.eventStatus === 'archived' && scorePermissions(round).role !== 'owner') return <p role="alert">Archived results are available to the event owner only.</p>;
   return <section className="round-leaderboard" aria-label="Round leaderboard">
     <header className="leaderboard-heading">
       <p>{round.eventName}</p><h2>Leaderboard · {round.roundName}</h2>
@@ -67,10 +70,10 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
     </header>
     {!game ? <>
       <p>{round.eventStatus === 'archived' ? 'No games configured for this archived round.'
-        : 'No games configured for this round. Add a Stableford game to see its leaderboard.'}</p>
-      <button type="button" disabled={busy} onClick={onManageGames}>
+        : canManage ? 'No games configured for this round. Add a Stableford game to see its leaderboard.' : 'No games configured for this round.'}</p>
+      {(canManage || round.eventStatus === 'archived' && scorePermissions(round).role === 'owner') && <button type="button" disabled={busy} onClick={onManageGames}>
         {round.eventStatus === 'archived' ? 'View games' : 'Configure a game'}
-      </button>
+      </button>}
     </> : <>
       <label className="leaderboard-game">Leaderboard game<select value={game.id} disabled={busy} onChange={(event) => { setGameId(event.target.value); }}>
         {games.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} · {gameScoringLabel(entry)}</option>)}
@@ -78,7 +81,7 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
       <p className="leaderboard-format">{gameScoringLabel(game)}</p>
       {teamGame && result?.teamSetupRequired ? <>
         <p>Update team assignments. Team standings are unavailable until the teams match this round&apos;s golfers.</p>
-        <button type="button" disabled={busy} onClick={onManageGames}>Update team assignments</button>
+        {canManage && <button type="button" disabled={busy} onClick={onManageGames}>Update team assignments</button>}
       </> : !result || !standings || rows.length === 0 ? <p>Leaderboard results are unavailable. Refresh the saved round to retry.</p> : <>
         <p className="leaderboard-qualifier">{standings.provisional
           ? `Provisional standings · Points earned so far. ${teamGame ? 'Teams' : 'Golfers'} may have played different numbers of holes.`

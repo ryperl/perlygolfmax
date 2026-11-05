@@ -81,4 +81,6 @@ export interface EventWorkspace {
   readonly etag: string;
   readonly overallCompetition?: OverallCompetition;
   readonly allowPerGolferTees?: boolean;
+  readonly viewerPlayerId?: string;
+  readonly canViewScores?: boolean;
 }

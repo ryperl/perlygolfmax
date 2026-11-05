@@ -26,7 +26,7 @@ export function createScoresClient(apiUrl: string, getToken: () => Promise<strin
   return {
     async load(eventId, roundId, signal) {
       const value = await readPrivateValue(request, `${path(eventId, roundId)}/scores`, signal);
-      if (!isRoundScores(value) || value.eventId !== eventId || value.roundId !== roundId
+      if (!isRoundScores(value) || value.permissions === undefined || value.eventId !== eventId || value.roundId !== roundId
         || value.cards.some((card) => card.etag !== null) && (!value.setupLocked || value.lastUpdatedAt === null)) throw new Error('Invalid owner scorecards response. Nothing was loaded.');
       return value;
     },
@@ -37,7 +37,7 @@ export function createScoresClient(apiUrl: string, getToken: () => Promise<strin
       const value = await request(`${base}/players/${encodeURIComponent(playerId)}/holes/${String(holeNumber)}`, signal, {
         method: 'PUT', body: { score }, requestId, ...(etag === null ? { createOnly: true } : { etag }),
       });
-      if (!isScoreWriteResult(value) || value.round.eventId !== eventId || value.round.roundId !== roundId
+      if (!isScoreWriteResult(value) || value.round.permissions === undefined || value.round.eventId !== eventId || value.round.roundId !== roundId
         || value.change.eventId !== eventId || value.change.roundId !== roundId || value.change.playerId !== playerId
         || value.change.holeNumber !== holeNumber || value.change.id !== requestId
         || value.change.expectedEtag !== etag || !sameHoleScore(value.change.after, score)
@@ -63,7 +63,7 @@ export function createScoresClient(apiUrl: string, getToken: () => Promise<strin
       const value = await writePrivateValue(gameRequest, `${base}/games`, signal, {
         method: 'PUT', body: { games }, requestId, ...(etag === null ? { createOnly: true } : { etag }),
       }, maximumGameConfigurationBytes);
-      if (!isGameWriteResult(value) || value.round.eventId !== eventId || value.round.roundId !== roundId
+      if (!isGameWriteResult(value) || value.round.permissions === undefined || value.round.eventId !== eventId || value.round.roundId !== roundId
         || value.change.id !== requestId || value.change.expectedEtag !== etag
         || !sameGameDefinitions(value.change.after, games)) {
         throw new Error('Invalid game save acknowledgement. The outcome is uncertain; keep this draft and refresh to review.');

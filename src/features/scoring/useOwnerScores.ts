@@ -3,6 +3,7 @@ import type { ScoresClient } from '../../client/scoring';
 import { SessionExpiredError } from '../../client/events';
 import { PrivateRequestError } from '../../client/private-request';
 import type { RoundScores } from '../../domain/scoring';
+import { scoreAccessKey } from './score-access';
 
 interface ActiveOperation {
   readonly controller: AbortController;
@@ -20,6 +21,8 @@ export function useOwnerScores(client: ScoresClient, eventId: string, roundId: s
   const [stale, setStale] = useState(true);
   const [refreshedAt, setRefreshedAt] = useState<string | null>(null);
   const projectionKey = useRef<string | null>(null);
+  const accessKey = useRef<string | null>(null);
+  const latestRound = useRef<RoundScores | null>(null);
   const active = useRef<ActiveOperation | null>(null);
   const foreground = useRef<object | null>(null);
   const dirtyNow = useRef(dirty);
@@ -80,11 +83,13 @@ export function useOwnerScores(client: ScoresClient, eventId: string, roundId: s
         if (failure instanceof PrivateRequestError && (failure.status === 403 || failure.status === 404)) {
           denied.current = true;
           projectionKey.current = null;
+          latestRound.current = null;
           setRound(null);
         }
         if (failure instanceof SessionExpiredError) {
           expired.current = true;
           projectionKey.current = null;
+          latestRound.current = null;
           setRound(null);
           expiryHandler.current(message);
         }
@@ -106,8 +111,10 @@ export function useOwnerScores(client: ScoresClient, eventId: string, roundId: s
   const accept = useCallback((value: RoundScores) => {
     if (!mounted.current || expired.current) return;
     const key = JSON.stringify(value);
+    latestRound.current = value;
     if (key !== projectionKey.current) {
       projectionKey.current = key;
+      accessKey.current = scoreAccessKey(value);
       setRound(value);
     }
     setStale(false);
@@ -119,7 +126,7 @@ export function useOwnerScores(client: ScoresClient, eventId: string, roundId: s
     const unchanged = JSON.stringify(value) === projectionKey.current;
     // Keep an edit-time baseline and the focused field intact if typing started
     // after this poll began. Authorization errors still flow through perform.
-    if (background && (dirtyNow.current || active.current?.discardProjection) && !unchanged) setStale(true);
+    if (background && scoreAccessKey(value) === accessKey.current && (dirtyNow.current || active.current?.discardProjection) && !unchanged) setStale(true);
     else accept(value);
     return value;
   }, background, !background), [accept, client, eventId, roundId, perform]);
@@ -156,5 +163,6 @@ export function useOwnerScores(client: ScoresClient, eventId: string, roundId: s
     return () => { disposed = true; clearTimeout(timer); };
   }, [dirty, load]);
 
-  return { round, busy, error, stale, refreshedAt, run, refresh, accept, pauseForEdit };
+  const currentRound = useCallback(() => latestRound.current, []);
+  return { round, busy, error, stale, refreshedAt, run, refresh, accept, pauseForEdit, currentRound };
 }

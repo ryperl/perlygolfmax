@@ -120,8 +120,11 @@ function strokeCell(
   let handicap = 0;
   if (competition.basis === 'net') {
     const player = round.players.find((entry) => entry.playerId === playerId);
-    const result = player?.handicapIndex == null ? 'missing-handicap-index'
-      : calculatePlayingHandicap(player.handicapIndex.value, tee, competition.handicapAllowancePercent);
+    const published = source.overallHandicaps?.allowancePercent === competition.handicapAllowancePercent
+      ? source.overallHandicaps.players.find((entry) => entry.playerId === playerId) : undefined;
+    const result = player?.handicapIndex != null
+      ? calculatePlayingHandicap(player.handicapIndex.value, tee, competition.handicapAllowancePercent)
+      : published?.playingHandicap ?? published?.unavailableReason ?? 'missing-handicap-index';
     if (typeof result === 'string') return { ...emptyCell(round, result), holesScored: numeric };
     handicap = result;
   }

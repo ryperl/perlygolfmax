@@ -41,7 +41,7 @@ export function SavedEventPage({ client, scores, eventId, view, onSessionExpired
   const progress: EventEntryProgress = progressResult?.workspace === workspace && progressResult.client === client
     && progressResult.scores === scores && progressResult.eventId === eventId && progressResult.refresh === refresh
     ? progressResult.progress : Object.fromEntries((workspace?.rounds ?? []).map((round) =>
-      [round.id, { kind: scores && workspace?.event.role === 'owner' ? 'loading' : 'unavailable' }]));
+      [round.id, { kind: scores && (workspace?.event.role === 'owner' || workspace?.canViewScores === true) ? 'loading' : 'unavailable' }]));
   const expiryHandler = useRef(onSessionExpired);
   useEffect(() => { expiryHandler.current = onSessionExpired; }, [onSessionExpired]);
   useEffect(() => {
@@ -57,7 +57,8 @@ export function SavedEventPage({ client, scores, eventId, view, onSessionExpired
     return () => { controller.abort(); };
   }, [client, eventId, refresh]);
   useEffect(() => {
-    if (!workspace || workspace.event.id !== eventId || workspace.event.role !== 'owner' || !scores) return;
+    if (!workspace || workspace.event.id !== eventId
+      || workspace.event.role !== 'owner' && workspace.canViewScores !== true || !scores) return;
     const controller = new AbortController();
     const identity = { workspace, client, scores, eventId, refresh };
     const activeWorkspace = workspace;

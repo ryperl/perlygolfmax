@@ -86,11 +86,11 @@ describe('overall result request lifecycle', () => {
     expect(screen.queryByRole('heading')).not.toBeInTheDocument();
     expect(view.props.onSessionExpired).toHaveBeenCalledTimes(expired ? 1 : 0);
   });
-  it('rejects a wrong-event or member response without exposing private standings', async () => {
+  it('rejects a wrong-event or unadmitted response without exposing private standings', async () => {
     const client = { load: vi.fn().mockResolvedValue({ ...value, workspace: { ...fictionalWorkspace,
       event: { ...fictionalWorkspace.event, role: 'member' } } }) };
     const view = mount(client);
-    expect(await screen.findByRole('alert')).toHaveTextContent('owner only');
+    expect(await screen.findByRole('alert')).toHaveTextContent('unavailable for this event access');
     client.load.mockResolvedValue({ ...value, workspace: { ...fictionalWorkspace,
       event: { ...fictionalWorkspace.event, id: fictionalId(51) } } });
     await userEvent.click(screen.getByRole('button', { name: 'Refresh overall results' }));

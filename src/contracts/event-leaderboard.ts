@@ -18,6 +18,7 @@ export function isEventLeaderboardView(value: unknown): value is EventLeaderboar
     || !Object.keys(value).every((key) => ['workspace', 'roundScores', 'standings'].includes(key))
     || !isEventWorkspace(value.workspace) || !Array.isArray(value.roundScores)) return false;
   const workspace = value.workspace;
+  if (workspace.event.role !== 'owner' && workspace.canViewScores !== true) return false;
   if (workspace.overallCompetition === undefined) {
     return value.roundScores.length === 0 && isEventStandings(value.standings, workspace, []);
   }

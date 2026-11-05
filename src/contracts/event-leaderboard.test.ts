@@ -10,6 +10,7 @@ import { calculateGameResults, stablefordPoints } from '../domain/stableford.js'
 import { isRoundScores } from './scoring.js';
 import { isEventWorkspace } from './setup.js';
 import { isEventLeaderboardView, isEventStandings } from './event-leaderboard.js';
+import { publishedPlayingHandicaps } from '../domain/playing-handicaps.js';
 
 const id = (number: number) => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
 function fixture(
@@ -80,6 +81,45 @@ const game: RoundGameDefinition = {
 const stableford: OverallCompetition = { kind: 'stableford', credit: 'individual', roundGames: [{ roundId: id(200), gameId: game.id }] };
 
 describe('authoritative event leaderboard runtime contract', () => {
+  it('keeps net event results identical for an admitted reader without exposing index observations', () => {
+    const f = fixture(1, { kind: 'stroke-play', basis: 'net', handicapAllowancePercent: 95 });
+    const rounds = f.workspace.rounds.map((round) => ({
+      ...round, players: round.players.map((player, index) => player.handicapIndex && index === 0
+        ? { ...player, handicapIndex: { ...player.handicapIndex, value: '18.0' } } : player),
+    }));
+    const privateWorkspace = { ...f.workspace, rounds };
+    const sources = f.roundScores.map((round) => {
+      const snapshot = rounds.find((entry) => entry.id === round.roundId);
+      if (!snapshot) throw new Error('Missing fictional round.');
+      return { ...round, overallHandicaps: publishedPlayingHandicaps(snapshot, 95),
+        permissions: { role: 'viewer' as const, writePlayerIds: [], canManageGames: false } };
+    });
+    const workspace: EventWorkspace = { ...privateWorkspace, event: { ...privateWorkspace.event, role: 'member' },
+      canViewScores: true, rounds: rounds.map((round) => ({
+        ...round, players: round.players.map(({ handicapIndex: omitted, ...player }) => {
+          void omitted;
+          return player;
+        }),
+      })) };
+    const visible = { workspace, roundScores: sources, standings: calculateEventStandings(workspace, sources) };
+    expect(visible.standings).toEqual(calculateEventStandings(privateWorkspace, sources));
+    expect(visible.standings.players[0]).toMatchObject({ subtotal: 27, relativeToPar: -9, rank: 1 });
+    expect(JSON.stringify(visible)).not.toContain('handicapIndex');
+    expect(isEventLeaderboardView(visible)).toBe(true);
+    expect(isEventLeaderboardView({ ...visible, workspace: { ...workspace, rounds } })).toBe(false);
+    expect(isEventLeaderboardView({ ...visible, workspace: { ...workspace, canViewScores: false } })).toBe(false);
+    expect(isEventLeaderboardView({ ...visible, roundScores: sources.map((round) => ({
+      ...round, permissions: { role: 'owner', writePlayerIds: round.cards.map((card) => card.playerId), canManageGames: true },
+    })) })).toBe(false);
+  });
+  it('does not trust an owner-projection playing-handicap map that contradicts captured inputs', () => {
+    const f = fixture(1, { kind: 'stroke-play', basis: 'net', handicapAllowancePercent: 95 });
+    const source = f.roundScores[0];
+    if (!source) throw new Error('Missing fictional source.');
+    const altered = { ...source, overallHandicaps: { allowancePercent: 95,
+      players: source.cards.map((card) => ({ playerId: card.playerId, playingHandicap: 18 })) } };
+    expect(isEventLeaderboardView({ ...f, roundScores: [altered] })).toBe(false);
+  });
   it('accepts disabled legacy projections only with no score data and empty disabled standings', () => {
     const f = fixture();
     const { overallCompetition: omitted, ...workspace } = f.workspace;

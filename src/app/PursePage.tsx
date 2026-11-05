@@ -40,8 +40,8 @@ export function PursePage({ client, eventId, onSessionExpired }: {
     try {
       const value = await client.load(eventId, controller.signal);
       if (controller.signal.aborted || active.current !== identity) return null;
-      if (value.workspace.event.id !== eventId || value.workspace.event.role !== 'owner') {
-        throw new PrivateRequestError(403, 'Prize plans and winnings are available to the event owner only.');
+      if (value.workspace.event.id !== eventId || value.workspace.event.role !== 'owner' && value.workspace.canViewScores !== true) {
+        throw new PrivateRequestError(403, 'Prize results are unavailable for this event access.');
       }
       setResult({ identity, value });
       return value;

@@ -53,7 +53,16 @@
 - Keep archived events owner-only. Archive/restore must conditionally check
   both event and owner-grant revisions. Deletion or retention rules require
   a separate scope decision.
-- Scoring is currently an owner-only online simulation. First saved
+- Approved players may view all active events and score only their bound
+  golfer's saved playing group per round, never competition teams or other
+  events. Admission requires private expiring link, explicit claim and owner
+  verification/approval. Revalidate member/binding/published-admission proofs;
+  discovery indices alone are not authority. Preserve player roles in score
+  transactions; never promote them to owner. Keep global catalogs, raw Handicap
+  Index observations, audit identities and management endpoints protected.
+  Publish derived playing handicaps where readonly net results need them.
+  Clear raw invitation secrets after claim/logout/expiry; never log them.
+- Scoring is online-only. First saved
   scores lock setup inputs; preserve atomic score/audit/grant checks, explicit
   unplayed/pickup/DNF and incomplete totals. Do not infer admission, offline
   durability, team rules or permission to unlock scored rounds.
@@ -88,14 +97,17 @@
   on numeric holes, gross/net with captured inputs; pickup/DNF invalidates a
   valid stroke total, never invent a penalty. Keep pending/unavailable distinct.
   Undefined competition in a legacy setup request preserves saved settings;
-  explicit null disables. Overall reads remain owner-only, bounded, quota-charged
-  per round and checked for consistent event revisions. No finalization.
+  explicit null disables. Overall reads allow admitted active-event viewers,
+  remain bounded, quota-charged per round and check consistent event/access
+  revisions. Archives remain owner-only. No finalization.
 - Per-golfer tees are organizer-enabled/assigned per round, common tee default.
   Capture only compatible layouts from the selected immutable course version.
   Use each golfer's par/yardage/rating/slope/allocation throughout entry,
   scorecards, handicap/points and stroke standings; never unlock scored captures.
-- Purse plans/winnings remain owner-only, conditional/idempotent/audited and
-  planned, never collected/paid. Use exact minor units. Attribute team pots to
+- Purse management remains owner-only, conditional/idempotent/audited; admitted
+  active-event readers may see plans/winnings, never management/audit identities.
+  Amounts are planned, never collected/paid. Use exact minor units. Attribute
+  team pots to
   individual members; pool occupied-place ties or explicit organizer resolution.
   Keep remainders unallocated, partial results projected, unavailable totals
   distinct from zero, and stale decisions readable for repair. No money transfers.

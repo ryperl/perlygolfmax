@@ -1,10 +1,10 @@
 # Perly Golf Max
 
 A mobile-first golf-trip companion for a planned group of 12 golfers and five
-rounds. It includes a private, selected-event workspace with an owner-operated
-online gross-scoring simulation and a separate **read-only fictional preview**.
+rounds. It includes private event workspaces with organizer-managed setup,
+invited-player group scoring and a separate **read-only fictional preview**.
 Local identity/API configuration is optional and explicitly unconfigured by
-default; this is not yet a golfer-admission or offline-capable tournament app.
+default; score entry is online-only, not an offline-capable tournament app.
 
 ## Local setup
 
@@ -81,14 +81,16 @@ from npm installation and must also comply with your machine's policies.
   reusable players with dated manual Handicap Index history, and saved-event
   owner setup with explicit course/tee selection, roster and manual foursomes.
   Real source exports are never bundled or committed.
-- Owner-only online gross scorecard simulation from saved round setup:
+- Online gross scorecards from saved round setup, with owner corrections and
+  approved players entering scores for their assigned playing group:
   explicit hole dispositions, conditional saved scores, correction history
   and complete-versus-incomplete gross summaries.
 - Configurable individual Stableford games derived server-side from the same
   stroke cards: gross/net, Standard/Modified Stableford presets, editable scoring
   bands and per-game handicap allowance. Multiple games can share one round.
-  This is not golfer admission, offline recording or a finished
-  tournament scoreboard.
+  Private invitations require sign-in, explicit claim and organizer approval.
+  Admitted players can view all active events without management authority.
+  This is not offline recording or a finalized tournament scoreboard.
 
 The Events screen is deliberately unavailable until an approved identity tenant
 and API are configured. Customer sign-in and event creation/reload have been
@@ -116,15 +118,39 @@ Production PWA capabilities require HTTPS and platform-specific verification.
 
 ### Future work, not implemented
 
-Golfer/self/assigned-foursome admission and scoring, owner appointment UI and
-offline synchronization remain
-later increments. The selected design is Entra External ID
+Owner appointment UI, automated invitation email and offline synchronization
+remain later increments. The selected design is Entra External ID
 email codes, a standalone Functions API and Table Storage, with SWA staying Free.
-Provisioning/deployment is separately approval-gated. Detailed scoring, betting,
-payouts, reporting, overall-trip rules, admission and retention remain unsettled.
+Provisioning/deployment is separately approval-gated. Additional scoring rules,
+betting, reporting, finalization and retention remain separate scope decisions.
 The fictional Preview remains separate from authenticated scoring and results.
 
-### Owner gross scorecard simulation
+### Player invitations and visibility
+
+After saving an event roster, an owner opens **Player invitations**, selects a
+golfer and creates a private link. Share it privately with that golfer. The link
+expires after 24 hours; signing in alone grants no event access. The golfer
+signs in using the header, selects **Request access**, and reads their verification
+code to the organizer. The owner verifies the person and approves the matching
+request. The golfer selects **Check approval** to continue.
+
+An approved player can browse **all active events**, including other groups,
+scorecards, game/overall standings and saved prize results. Score entry is
+limited to every golfer in their own saved **playing group** for each round,
+not their competition team or other groups/events. Organizers retain setup,
+game, purse and invitation management plus score corrections. Global catalogs,
+raw Handicap Index observations and audit identities remain protected. Archives
+are owner-only.
+
+Owners can revoke an admission or replace an unused/pending link. Revocation
+removes that event's scoring grant; another approved admission can still permit
+general active-event viewing. Approved account/roster bindings are explicit,
+not matched automatically by email. No invitation emails are sent by the app.
+Raw link secrets are not recoverable from the server. Sign-in continuation uses
+temporary tab session storage for at most 30 minutes and is cleared on claim,
+logout or expiry; it is not score persistence or an authentication token cache.
+
+### Online gross scorecards
 
 An event owner can open scorecards for a saved round and enter each player's
 per-hole gross strokes. Unplayed, picked-up and did-not-finish are distinct
@@ -170,10 +196,10 @@ organizer audit, master-edit and player-report interfaces are not built.
 
 Each saved operation has an idempotency ID, conditional card revision and
 immutable before/after/actor/time history. Conflicting edits require explicit
-refresh/review; failed local drafts are not confirmed saves. Owner access is
-checked by authoritative event membership, not global course-manager status.
-Ordinary members do not yet have scoring access. Archived owner cards are
-read-only.
+refresh/review; failed local drafts are not confirmed saves. Access is checked
+against current server membership, approved roster binding and saved playing
+group, not global course-manager status or hidden UI controls. Other groups are
+read-only for players. Archived owner cards are read-only.
 
 The first saved score locks that round's course, tee, roster/group and captured
 index inputs, even if all holes are later cleared. Catalog index changes remain
@@ -306,9 +332,9 @@ the ranks, and unavailable results show their reason rather than a zero.
 Game selection survives view changes and refreshes. Unsaved strokes or game
 settings are not used in standings, and viewing never saves anything.
 
-The leaderboard uses the existing owner-only online score projection and its
-refresh/backoff/access checks. Archived rounds remain read-only. Participant
-sharing remains a separate milestone.
+The leaderboard uses the authorized online score projection and its
+refresh/backoff/access checks. Admitted players can view active events; archived
+rounds remain owner-only and read-only.
 
 ### Optional overall event leaderboard
 
@@ -339,11 +365,12 @@ Unplayed holes are pending and live standings provisional. Missing configuration
 unavailable net inputs, stale team assignments and arithmetic-range failures
 remain explicit rather than becoming zero or a fabricated valid rank.
 
-The overall view is currently owner-only and online. A bounded server read
+The overall view is online and available to owners and admitted active-event
+readers. A bounded server read
 derives standings from saved cards/game results and verifies event consistency;
 each round consumes the existing score-read quota. Unsaved score/settings drafts
 are excluded. Archived owner views are read-only. This is not finalization,
-handicap posting, invitation access, purse allocation or automatic payout.
+handicap posting or automatic payout. Purse allocation is configured separately.
 
 ### Local catalog and round setup
 

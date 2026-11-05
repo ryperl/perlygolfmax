@@ -14,12 +14,13 @@ has exercised hosted customer sign-in, signed-in event loading and event
 creation followed by a page reload. Runtime resource settings and narrow
 role scopes have been read back after foundation creation. Those checks do not
 prove all authorization, concurrency or recovery boundaries.
-Saved owner round setup and an owner-only gross-score simulation are implemented.
+Saved owner round setup and online group-scoped player scoring are implemented.
 Individual gross/net Stableford, explicit net team games and configurable point
 tables are implemented. Optional overall standings are configured in event
 setup: actual daily Stableford points with explicit member credit, or individual
-gross/net stroke play. No invitations, owner appointment UI, golfer/assigned-scorer
-access, payment transfers, audit exports or backup job are shipped. Organizer
+gross/net stroke play. Private invitations support explicit claim, organizer
+verification/approval and revocation. No owner appointment UI, payment transfers,
+audit exports or backup job are shipped. Organizer
 purse configuration and calculated individual winnings are implemented.
 An unconfigured Events page says so explicitly, without fictional saved events.
 
@@ -27,7 +28,8 @@ Main navigation starts at Events. Opening a saved event binds Overview, Rounds
 and The Group to the same explicit event ID in the URL. Their typed projections
 use the existing membership-checked workspace projection, not global catalog
 reads or
-synthetic demo models. This does not grant ordinary members new access.
+synthetic demo models. Sign-in or a legacy membership alone does not grant
+player scoring or global active-event visibility.
 Snapshot rounds/groups are not assumed finished just because scoring started.
 Selection is retained only in app memory, restored from validated deep links
 and cleared on sign-out/session expiry; requests abort on route/event changes.
@@ -62,8 +64,46 @@ Only the explicitly bootstrapped creator initially creates events. The creator
 can later appoint owners of specific events; those appointments must not grant
 global creation or directory administration. Event membership is authoritative
 for every private object operation, not a stale listing index or hidden button.
-No public roster/score access is authorized. Invitation admission mechanics and
-owner-appointment lifecycle remain pending; do not infer them from sign-in.
+No public roster/score access is authorized. Owner appointment remains separate;
+do not infer application authority from sign-in.
+
+### Player admission and active-event viewing
+
+The event owner creates a private single-golfer link after saving the roster.
+The browser generates a 32-byte random secret; the server stores its SHA-256
+digest, not the secret. Links expire after 24 hours. An authenticated explicit
+claim binds the pending request to verified tenant/object identity. The owner
+verifies the person and matching request code before approving. No email
+matching, email delivery, automatic approval or cloud-role grant occurs.
+
+The owner management endpoints are `GET .../admissions` and
+`POST .../admissions/invite`, `/approve` and `/revoke`. Owner mutations require
+the current event ETag, request UUID and applicable invitation revision.
+`POST .../admissions/claim` receives the secret in its body, never query/path.
+`GET .../admissions/status?inviteId=...` returns only the caller-bound claim.
+All endpoints use existing JWT validation, request limits and private responses.
+
+Approval publishes matching event membership, unique roster/account binding
+and approved invitation records plus an immutable actor-scoped index locator.
+Only completed publication grants admission. Every read validates the current
+counterparts and their revisions; the index alone is not authority. Revocation
+invalidates that grant, including when a stale index remains. Another approved
+admission may still authorize general viewing.
+
+An admitted player can view every active event: rosters, groups, scorecards,
+game/overall standings and saved prize results. A reader without a validated
+binding in the target event is explicitly a viewer. Only the bound golfer's
+saved playing group grants score-write targets; competition teams do not.
+Owners retain organizer controls and corrections. Global catalogs, raw captured
+Handicap Index observations and audit identities are not player projections.
+Derived playing handicaps support identical net results without raw observations.
+Archived target events remain owner-only.
+
+The fragment link is stripped to a caller-bound claim reference after success.
+During identity redirect only, validated invitation continuation lives in tab
+session storage for at most 30 minutes, consumed once and cleared on claim,
+logout or expiry. Do not log/share link secrets publicly. No real invitations,
+claims or approvals are created by release verification.
 
 ### Event archiving
 
@@ -85,18 +125,18 @@ Archiving hides an event from active lists and from ordinary members; restoring
 returns it to its existing members. Metadata, membership and other event data
 are not deleted. Creation retries do not restore an already archived event.
 There is no permanent-delete endpoint, automatic expiry, retention policy or
-new backup guarantee. Future detail, score and invitation endpoints must enforce
+new backup guarantee. Detail, score and invitation endpoints enforce
 these lifecycle rules independently of discovery.
 
-The current scoring slice is an online owner-operated simulation: per-hole
+The current scoring slice is online: per-hole
 gross strokes, unplayed holes and explicit pickup/DNF dispositions with audited
 corrections. Pickup may include an organizer-entered reported stroke value:
 `X7` records a pickup and contributes seven to the recorded total, while the
 round remains incomplete. This is not a completed seven-stroke hole, automatic
 maximum/penalty, handicap posting rule or invented Stableford treatment.
-Self-entry, invitation/account mapping and a round/foursome-assigned
-scorekeeper remain a later increment. Scorekeeper assignment is not event
-administration. Individual/team Stableford rules are configured per game;
+Owners correct any golfer; admitted players enter for their saved playing
+group, with all other groups read-only. This is not event administration.
+Individual/team Stableford rules are configured per game;
 configured prize plans derive individual winnings without payment operations.
 Missing inputs never become zero.
 
@@ -110,11 +150,12 @@ current event round and a saved game; incomplete configuration remains explicit.
 The setup PUT alone has a 12 KiB UTF-8 request budget, alongside the separate
 12 KiB game-configuration budget. Other ordinary writes remain bounded at 4 KiB.
 
-`GET /api/events/<event-id>/leaderboard` is bearer-authenticated and owner-only,
-including archives. Disabled events do not fetch scorecards. Enabled reads
+`GET /api/events/<event-id>/leaderboard` is bearer-authenticated: owners and
+admitted players can read active events; only owners can read archives.
+Disabled events do not fetch scorecards. Enabled reads
 include every configured round with at most three parallel score reads and
 charge the existing score-read quota for each round, in addition to the request.
-The service checks the event and owner-grant revisions before returning the
+The service checks the event and current authority revisions before returning the
 aggregate; concurrent changes fail explicitly instead of returning mixed data.
 It does not write cards, refresh handicap captures or manufacture missing scores.
 
@@ -166,7 +207,8 @@ No self-selection permission, admission or score-history rewrite is introduced.
 
 ### Private purse plans and calculated winnings
 
-`GET/PUT /api/events/<event-id>/purse` is bearer-authenticated and owner-only;
+`GET /api/events/<event-id>/purse` permits admitted active-event readers as well
+as owners. PUT and staged configuration writes remain owner-only;
 catalog management alone is insufficient and is not required of an event owner.
 Archives are readable but never writable. Writes use exact configuration
 preconditions and request identity, atomically checking event/owner revisions,
@@ -185,19 +227,21 @@ All totals are individual winnings calculations, not collected/paid balances.
 There is no payment provider, transfer, banking data, finalization or hidden
 closest-to-pin measurement engine. Real financial/trip data stays out of source.
 
-### Owner scoring authority and persistence
+### Scoring authority and persistence
 
-Scoring reads, writes and history require an authoritative event owner grant.
-Catalog-manager/global-creator status alone is not scoring authority. Ordinary
-members cannot access this simulation's score endpoints. Owner archive reads
-remain private and read-only; active status is required for writes.
+Scoring reads require owner or approved player viewing authority. Writes require
+an active event plus owner authority or a current approved binding and target
+in the caller's saved playing group. History and game management remain
+owner-only. Catalog-manager/global-creator status alone is not scoring authority.
+Legacy members without approved admission gain no player scoring privilege.
+Owner archive reads remain private and read-only.
 
 The round score read uses the saved course/tee/hole layout and roster, not the
 live catalogs or fictional previews. New cards are virtual unplayed cards until
 a saved operation creates their revision. A first-card write requires
 `If-None-Match: *`; an existing-card write requires the exact `If-Match` revision.
 Every write requires a UUID idempotency key and a validated explicit disposition.
-The conditional event/owner/card transaction also records immutable before/after,
+The conditional event/member/card transaction also records immutable before/after,
 actor/time and operation identity. Replays confirm the original audit, not a
 potentially newer current projection.
 
@@ -296,7 +340,7 @@ and explicit review; rebasing replaces only the edited game and preserves
 other owners' additional games. Stroke and game requests share the existing
 single-operation hook, and both kinds of local draft pause background polling.
 No game configuration, points input or audit log is added to normal stroke
-entry. No invitation, golfer-scoring grant or full administrative UI is implied.
+entry. Game controls never confer player admission or organizer authority.
 Group and individual scorecards display the selected game's server-derived
 hole points and Out/In/Total values below the raw strokes. The first configured
 game is the default view; a compact selector switches games or shows strokes

@@ -1,7 +1,7 @@
 import type { CourseHole, CourseRating } from './catalog.js';
 import type { AccountIdentity, EventStatus } from './events.js';
 import type { RoundGroup } from './setup.js';
-import type { GameChange, RoundGamesView } from './games.js';
+import type { GameChange, GameUnavailableReason, RoundGamesView } from './games.js';
 import type { PlayerTeeProfile } from './tees.js';
 
 export type HoleScore =
@@ -23,6 +23,22 @@ export interface Scorecard {
   readonly holes: readonly ScoredHole[];
 }
 
+export interface ScorePermissions {
+  readonly role: 'owner' | 'player' | 'viewer';
+  readonly viewerPlayerId?: string;
+  readonly writePlayerIds: readonly string[];
+  readonly canManageGames: boolean;
+}
+
+export interface OverallHandicaps {
+  readonly allowancePercent: number;
+  readonly players: readonly {
+    readonly playerId: string;
+    readonly playingHandicap: number | null;
+    readonly unavailableReason?: GameUnavailableReason;
+  }[];
+}
+
 export interface RoundScores {
   readonly eventId: string;
   readonly eventName: string;
@@ -40,6 +56,12 @@ export interface RoundScores {
   readonly lastUpdatedAt: string | null;
   readonly games?: RoundGamesView;
   readonly playerTees?: readonly PlayerTeeProfile[];
+  readonly permissions?: ScorePermissions;
+  readonly overallHandicaps?: OverallHandicaps;
+}
+
+export function scorePermissions(round: RoundScores): ScorePermissions {
+  return round.permissions ?? { role: 'viewer', writePlayerIds: [], canManageGames: false };
 }
 
 export interface ScoreChange {

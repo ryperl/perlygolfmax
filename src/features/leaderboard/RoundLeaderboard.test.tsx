@@ -7,6 +7,18 @@ import { fictionalRoundScores } from '../../client/scoring.test-support';
 import { fictionalId, fictionalProfile } from '../../client/catalog.test-support';
 
 describe('round leaderboard', () => {
+  it('renders the same server standings for an admitted viewer and never offers setup repair controls', () => {
+    const round = { ...leaderboardRound, permissions: { role: 'viewer' as const, writePlayerIds: [], canManageGames: false } };
+    const manage = vi.fn();
+    const view = render(<RoundLeaderboard round={round} busy={false} onManageGames={manage} />);
+    expect(screen.getByRole('list', { name: 'Standings' })).toBeVisible();
+    expect(screen.getAllByLabelText('Tied position 1')).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: /Configure|Update team/ })).not.toBeInTheDocument();
+    view.rerender(<RoundLeaderboard round={{ ...round, eventStatus: 'archived' }} busy={false} onManageGames={manage} />);
+    expect(screen.getByRole('alert')).toHaveTextContent('event owner only');
+    expect(screen.queryByRole('list', { name: 'Standings' })).not.toBeInTheDocument();
+    expect(manage).not.toHaveBeenCalled();
+  });
   it('searches and pages a large field while retaining full-field positions and personal tee context', async () => {
     if (!leaderboardRound.games) throw new Error('Missing fictional games.');
     const first = leaderboardRound.games.configuration.games[0];

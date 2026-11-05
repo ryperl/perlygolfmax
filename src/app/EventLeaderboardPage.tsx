@@ -23,8 +23,8 @@ export function EventLeaderboardPage({ client, eventId, onSessionExpired }: {
     const controller = new AbortController();
     void client.load(eventId, controller.signal).then((value) => {
       if (controller.signal.aborted) return;
-      if (value.workspace.event.id !== eventId || value.workspace.event.role !== 'owner') {
-        setResult({ generation, error: 'Overall results are available to the event owner only.' });
+      if (value.workspace.event.id !== eventId || value.workspace.event.role !== 'owner' && value.workspace.canViewScores !== true) {
+        setResult({ generation, error: 'Overall results are unavailable for this event access.' });
       } else setResult({ generation, value });
     }).catch((failure: unknown) => {
       if (controller.signal.aborted) return;

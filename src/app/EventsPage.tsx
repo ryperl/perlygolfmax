@@ -18,7 +18,11 @@ import { eventTabHref, isEventTab, readEventRoute } from './navigation';
 import { SavedEventPage } from './SavedEventPage';
 import { EventLeaderboardPage } from './EventLeaderboardPage';
 import type { PurseClient } from '../client/purse';
+import type { AdmissionsClient } from '../client/admission';
+import { clearInvitationReturn } from '../client/invitation-return';
 const PursePage = lazy(async () => ({ default: (await import('./PursePage')).PursePage }));
+const JoinEventPage = lazy(async () => ({ default: (await import('./JoinEventPage')).JoinEventPage }));
+const PlayerAccessPage = lazy(async () => ({ default: (await import('./PlayerAccessPage')).PlayerAccessPage }));
 
 const configuredServices = configureEventServices(import.meta.env);
 
@@ -40,6 +44,7 @@ export interface EventServices {
   readonly scores: ScoresClient;
   readonly leaderboard?: EventLeaderboardClient;
   readonly purse?: PurseClient;
+  readonly admissions?: AdmissionsClient;
 }
 
 function subscribe(onChange: () => void) {
@@ -55,6 +60,7 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
   const route = useSyncExternalStore(subscribe, getRoute);
   const privateScope = useMemo(() => ({ services, preview }), [services, preview]);
   const [loadedScope, setLoadedScope] = useState<object>();
+  const [admissionRevision, setAdmissionRevision] = useState(0);
   const [state, setState] = useState<EventsState>({ kind: 'loading' });
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
@@ -131,7 +137,7 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
       } else setState({ kind: 'error', message: 'Could not connect to your event services. No saved data was loaded.' });
     });
     return () => { controller.abort(); };
-  }, [services, identity, preview, privateScope]);
+  }, [services, identity, preview, privateScope, admissionRevision]);
 
   function expire(message: string) {
     if (services) setIdentity({ services, signedIn: false });
@@ -212,6 +218,24 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
 
   if (preview) return accountControl;
 
+  if (services && (route.startsWith('join:') || route === 'invalid-invitation')) {
+    const [, eventId, inviteId, token] = route.split(':');
+    return <>{accountControl}
+      {route === 'invalid-invitation' || !eventId || !inviteId
+        ? <p role="alert">This invitation link is invalid. Ask the organizer for a new private link.</p>
+        : services.admissions ? <Suspense fallback={<p role="status">Loading invitation…</p>}>
+          <JoinEventPage key={`${eventId}:${inviteId}`} client={services.admissions} eventId={eventId}
+            inviteId={inviteId} token={token} signedIn={Boolean(signedIn)} onSessionExpired={expire}
+            onClaimed={(claimed) => {
+              if (claimed !== inviteId) throw new Error('The invitation response did not confirm this link.');
+              window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#join?${new URLSearchParams({ event: eventId, claim: inviteId }).toString()}`);
+              clearInvitationReturn();
+              window.dispatchEvent(new HashChangeEvent('hashchange'));
+            }} onApproved={() => { setState({ kind: 'loading' }); setAdmissionRevision((value) => value + 1); }} />
+        </Suspense> : <p role="alert">Player invitations are unavailable in this connection.</p>}
+    </>;
+  }
+
   if (services && identity?.services !== services && !retryAccount) {
     return <>{accountControl}<p role="status">Loading your events...</p></>;
   }
@@ -235,6 +259,10 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
           {state.page.events.length === 0 && <p>No events are available on this page.</p>}
           <a href="#events">Browse your events</a>
         </section>
+        : kind === 'access' && eventId ? services.admissions
+          ? <Suspense fallback={<p role="status">Loading player access…</p>}>
+            <PlayerAccessPage key={eventId} eventId={eventId} client={services.admissions} onSessionExpired={expire} />
+          </Suspense> : <p role="alert">Player invitations are unavailable in this connection.</p>
         : kind === 'purse' && eventId ? services.purse
           ? <Suspense fallback={<p role="status">Loading prize view…</p>}>
             <PursePage key={eventId} eventId={eventId} client={services.purse} onSessionExpired={expire} />

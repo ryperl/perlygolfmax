@@ -3,7 +3,7 @@ import type { AccountIdentity, EventSummary } from '../../../src/domain/events.j
 import type { PlayerProfile } from '../../../src/domain/catalog.js';
 import type { EventRosterPlayer, EventSetupInput, EventWorkspace, OverallCompetition, RoundSnapshot } from '../../../src/domain/setup.js';
 import { isPrivateUpload, maximumPrivateWriteBytes } from '../../../src/contracts/private-values.js';
-import { isEventSummary, isRecord, isUuid } from '../../../src/contracts/events.js';
+import { isRecord, isUuid } from '../../../src/contracts/events.js';
 import { isEventSetupInput, isEventWorkspace, isOverallCompetition } from '../../../src/contracts/setup.js';
 import { ApiError } from '../errors.js';
 import { canonical, decode, isConflict, optionalRow, revision, transaction } from '../catalog/entities.js';
@@ -21,6 +21,7 @@ import { receivePrivateWrite } from '../private-transport.js';
 import type { StagedPublication } from '../private-transport.js';
 import type { PlayerTeeProfile } from '../../../src/domain/tees.js';
 import { compatibleTeeLayouts, sameTeeSelections } from '../../../src/domain/tees.js';
+import { assertEventAccessUnchanged, readEventAccess } from '../event-access.js';
 
 interface WorkspaceHeader {
   readonly location: string;
@@ -57,17 +58,13 @@ export class TableWorkspaceStore {
   }
 
   private async access(identity: AccountIdentity, id: string) {
-    const member = await optionalRow(this.table, id, `member:${identity.objectId}`);
-    if (!member || member.tenantId !== identity.tenantId || member.objectId !== identity.objectId) throw new ApiError(404, 'EVENT_NOT_FOUND');
-    const event = await optionalRow(this.table, id, 'event');
-    if (!event) throw new ApiError(404, 'EVENT_NOT_FOUND');
-    const summary: unknown = {
-      id, name: event.name, createdAt: event.createdAt, status: event.status === undefined ? 'active' : event.status, role: member.role, etag: revision(event),
-    };
-    if (!isEventSummary(summary)) throw new ApiError(503, 'INVALID_STORED_EVENT');
-    revision(member);
-    if (summary.status === 'archived' && summary.role !== 'owner') throw new ApiError(404, 'EVENT_NOT_FOUND');
-    return { event, member, summary };
+    return readEventAccess(this.table, identity, id);
+  }
+
+  private async ownerAccess(identity: AccountIdentity, id: string) {
+    const access = await this.access(identity, id);
+    if (access.summary.role !== 'owner' || !access.member) throw new ApiError(403, 'EVENT_MANAGEMENT_FORBIDDEN');
+    return { ...access, member: access.member };
   }
 
   private async load(summary: EventSummary): Promise<EventWorkspace> {
@@ -105,11 +102,13 @@ export class TableWorkspaceStore {
   async get(identity: AccountIdentity, id: string): Promise<EventWorkspace> {
     const before = await this.access(identity, id);
     const workspace = await this.load(before.summary);
-    const after = await this.access(identity, id);
-    if (after.summary.etag !== before.summary.etag || revision(after.member) !== revision(before.member)) throw new ApiError(409, 'EVENT_CHANGED');
+    await assertEventAccessUnchanged(this.table, identity, id, before);
     // Explicit allowlists prevent catalog/index/audit fields from leaking to event members.
     return {
-      event: after.summary, location: workspace.location, etag: after.summary.etag,
+      event: before.summary, location: workspace.location, etag: before.summary.etag,
+      canViewScores: before.summary.role === 'owner' || before.admittedPlayer,
+      ...(before.viewerPlayerId && workspace.roster.some((player) => player.playerId === before.viewerPlayerId)
+        ? { viewerPlayerId: before.viewerPlayerId } : {}),
       ...(workspace.allowPerGolferTees === undefined ? {} : { allowPerGolferTees: workspace.allowPerGolferTees }),
       ...(workspace.overallCompetition ? { overallCompetition: workspace.overallCompetition } : {}),
       roster: workspace.roster.map((player) => ({ playerId: player.playerId, displayName: player.displayName })),
@@ -121,7 +120,7 @@ export class TableWorkspaceStore {
         })) } : {}),
         ...(round.scoringStarted ? { scoringStarted: true } : {}),
         groups: round.groups.map((group) => ({ number: group.number, playerIds: [...group.playerIds] })),
-        players: round.players.map((player) => after.summary.role === 'owner'
+        players: round.players.map((player) => before.summary.role === 'owner'
           ? {
             playerId: player.playerId, displayName: player.displayName,
             handicapIndex: player.handicapIndex ?? null,
@@ -129,6 +128,15 @@ export class TableWorkspaceStore {
           : { playerId: player.playerId, displayName: player.displayName }),
       })),
     };
+  }
+
+  /** Server-only captured inputs; public readers receive get()'s explicit privacy projection. */
+  async getForScoring(identity: AccountIdentity, id: string): Promise<EventWorkspace> {
+    const access = await this.access(identity, id);
+    if (access.summary.role !== 'owner' && !access.admittedPlayer) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
+    const workspace = await this.load(access.summary);
+    await assertEventAccessUnchanged(this.table, identity, id, access);
+    return workspace;
   }
 
   private async refreshReplay(identity: AccountIdentity, eventId: string, roundId: string, requestId: string, etag: string): Promise<boolean> {
@@ -142,8 +150,7 @@ export class TableWorkspaceStore {
   }
 
   async refreshIndices(identity: AccountIdentity, eventId: string, roundId: string, requestId: string, etag: string): Promise<EventWorkspace> {
-    const access = await this.access(identity, eventId);
-    if (access.summary.role !== 'owner') throw new ApiError(403, 'EVENT_MANAGEMENT_FORBIDDEN');
+    const access = await this.ownerAccess(identity, eventId);
     if (access.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     requireManager(identity, this.allowed);
     if (await scoringLock(this.table, eventId, roundId)) throw new ApiError(409, 'ROUND_SCORING_STARTED');
@@ -194,8 +201,7 @@ export class TableWorkspaceStore {
   }
 
   async receive(identity: AccountIdentity, id: string, body: unknown, etag: string) {
-    const access = await this.access(identity, id);
-    if (access.summary.role !== 'owner') throw new ApiError(403, 'EVENT_MANAGEMENT_FORBIDDEN');
+    const access = await this.ownerAccess(identity, id);
     if (access.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     requireManager(identity, this.allowed);
     // A client may retry all immutable parts after losing the final response.
@@ -215,8 +221,7 @@ export class TableWorkspaceStore {
   }
 
   async save(identity: AccountIdentity, id: string, input: EventSetupInput, etag: string, publication?: StagedPublication): Promise<EventWorkspace> {
-    const access = await this.access(identity, id);
-    if (access.summary.role !== 'owner') throw new ApiError(403, 'EVENT_MANAGEMENT_FORBIDDEN');
+    const access = await this.ownerAccess(identity, id);
     if (access.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     requireManager(identity, this.allowed);
     const receiptKey = publication ? `setup-receipt:${publication.id}` : undefined;

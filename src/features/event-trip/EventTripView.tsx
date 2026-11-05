@@ -8,8 +8,8 @@ interface EventTripViewProps {
   readonly progress?: EventEntryProgress;
 }
 
-function EntryProgress({ state, owner }: { readonly state: RoundEntryProgressState | undefined; readonly owner: boolean }) {
-  if (!owner) return <p>Entry progress is available to the event owner only.</p>;
+function EntryProgress({ state, allowed }: { readonly state: RoundEntryProgressState | undefined; readonly allowed: boolean }) {
+  if (!allowed) return <p>Entry progress requires approved player access.</p>;
   if (state?.kind === 'loading') return <p role="status">Loading entry progress…</p>;
   if (state?.kind !== 'ready') return <p>Progress unavailable. Use Refresh event to retry.</p>;
   const { summary } = state;
@@ -70,7 +70,7 @@ function SavedRounds({ workspace, showGroups, progress }: {
   return (
     <section className="event-trip-section" aria-label="Saved rounds">
       <h2>Saved rounds</h2>
-      {workspace.event.role === 'owner' && workspace.rounds.length > 0 && <p>Saved entries, not finalization. Includes pickups and DNF.</p>}
+      {(workspace.event.role === 'owner' || workspace.canViewScores) && workspace.rounds.length > 0 && <p>Saved entries, not finalization. Includes pickups and DNF.</p>}
       {workspace.rounds.length === 0 ? <p>No rounds saved for this event.</p> : (
         <ol className="event-trip-rounds">
           {workspace.rounds.map((round) => (
@@ -81,14 +81,16 @@ function SavedRounds({ workspace, showGroups, progress }: {
                   <p>{round.course.name}</p>
                   <p><span>{round.teeProfile.name} tees</span> · {round.teeProfile.category}</p>
                 </div>
-                <EntryProgress state={progress?.[round.id]} owner={workspace.event.role === 'owner'} />
-                {workspace.event.role === 'owner' && (
+                <EntryProgress state={progress?.[round.id]} allowed={workspace.event.role === 'owner' || workspace.canViewScores === true} />
+                {(workspace.event.role === 'owner' || workspace.canViewScores) && (
                   <a
                     className="event-trip-scorecard"
                     href={`${setupLink(workspace.event.id)}&round=${encodeURIComponent(round.id)}`}
                     aria-label={`Open scorecard for ${round.name}`}
                   >Open scorecard <span aria-hidden="true">→</span></a>
                 )}
+                {(workspace.canViewScores || workspace.event.role === 'owner') && workspace.event.status === 'active' && workspace.viewerPlayerId && round.groups.some((group) => group.playerIds.includes(workspace.viewerPlayerId ?? '')) &&
+                  <a href={`${setupLink(workspace.event.id)}&round=${encodeURIComponent(round.id)}`}>Your playing group · Group {round.groups.find((group) => group.playerIds.includes(workspace.viewerPlayerId ?? ''))?.number}</a>}
               </div>
               {showGroups && (
                 <>
@@ -111,6 +113,7 @@ function SavedRounds({ workspace, showGroups, progress }: {
 export function EventTripView({ workspace, view, progress }: EventTripViewProps) {
   const { event } = workspace;
   const archived = event.status === 'archived';
+  if (archived && event.role !== 'owner') return <p role="alert">Archived events are available to the event owner only.</p>;
 
   return (
     <div className="event-trip">
@@ -119,11 +122,12 @@ export function EventTripView({ workspace, view, progress }: EventTripViewProps)
         <h1>{view === 'overview' ? event.name : view === 'rounds' ? 'Rounds' : 'The Group'}</h1>
         <p className="event-trip-location">{workspace.location || 'No location saved.'}</p>
         {archived && <p className="event-trip-archive"><strong>Archived event · Read-only</strong></p>}
-        {event.role === 'owner' && <nav className="event-trip-links" aria-label="Event setup">
-            <a href={setupLink(event.id)}>{archived ? 'View event setup' : 'Configure event'}</a>
-            {workspace.overallCompetition && view !== 'group' && <a href={`#leaderboard?event=${encodeURIComponent(event.id)}`}>Overall leaderboard</a>}
-            {view !== 'group' && <a href={`#purse?event=${encodeURIComponent(event.id)}`}>{archived ? 'View purse and winnings' : 'Purse and winnings'}</a>}
-        </nav>}
+        <nav className="event-trip-links" aria-label={event.role === 'owner' ? 'Event setup' : 'Event links'}>
+            {event.role === 'owner' && <a href={setupLink(event.id)}>{archived ? 'View event setup' : 'Configure event'}</a>}
+            {event.role === 'owner' && view !== 'group' && <a href={`#access?event=${encodeURIComponent(event.id)}`}>Player invitations</a>}
+            {(event.role === 'owner' || workspace.canViewScores) && workspace.overallCompetition && view !== 'group' && <a href={`#leaderboard?event=${encodeURIComponent(event.id)}`}>Overall leaderboard</a>}
+            {(event.role === 'owner' || workspace.canViewScores) && view !== 'group' && <a href={`#purse?event=${encodeURIComponent(event.id)}`}>{archived || event.role !== 'owner' ? 'View purse and winnings' : 'Purse and winnings'}</a>}
+        </nav>
       </header>
       {view === 'overview' && (
         <section className="event-trip-section" aria-label="Event at a glance">

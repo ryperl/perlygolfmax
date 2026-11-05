@@ -26,7 +26,8 @@ export function isPurseConfiguration(value: unknown): value is PurseConfiguratio
 
 export function isEventPurseView(value: unknown): value is EventPurseView {
   if (!isRecord(value) || !keys(value, ['workspace', 'roundScores', 'configuration', 'view'])
-    || !isEventWorkspace(value.workspace) || value.workspace.event.role !== 'owner'
+    || !isEventWorkspace(value.workspace)
+    || value.workspace.event.role !== 'owner' && value.workspace.canViewScores !== true
     || !isPurseConfiguration(value.configuration) || value.configuration.eventId !== value.workspace.event.id
     || !Array.isArray(value.roundScores) || !value.roundScores.every(isRoundScores)
     || !roundScoresMatchWorkspace(value.workspace, value.roundScores)) return false;

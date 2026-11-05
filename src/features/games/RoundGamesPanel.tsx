@@ -3,6 +3,7 @@ import { EventChangedError } from '../../client/events';
 import type { RoundGameDefinition } from '../../domain/games';
 import { maximumGamesPerRound, sameGameDefinitions } from '../../domain/games';
 import type { GameWriteResult, RoundScores } from '../../domain/scoring';
+import { scorePermissions } from '../../domain/scoring';
 import type { GameDraft } from './game-draft';
 import { buildGame, draftFromGame, newGameDraft, replaceGame } from './game-draft';
 import { GameResults } from './GameResults';
@@ -34,6 +35,12 @@ interface Editor {
 }
 
 export function RoundGamesPanel({ round, busy, onDirtyChange, onSave, onRefresh }: RoundGamesPanelProps) {
+  if (round.eventStatus === 'archived' && scorePermissions(round).role !== 'owner') return <p role="alert">Archived game results are available to the event owner only.</p>;
+  return <RoundGamesController key={JSON.stringify(scorePermissions(round))} round={round} busy={busy}
+    onDirtyChange={onDirtyChange} onSave={onSave} onRefresh={onRefresh} />;
+}
+
+function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }: RoundGamesPanelProps) {
   const [editor, setEditor] = useState<Editor | null>(null);
   const [message, setMessage] = useState('');
   const [working, setWorking] = useState(false);
@@ -41,7 +48,9 @@ export function RoundGamesPanel({ round, busy, onDirtyChange, onSave, onRefresh 
   const dirtyCallback = useRef(onDirtyChange);
   const games = round.games?.configuration.games ?? [];
   const archived = round.eventStatus === 'archived';
-  const disabled = busy || working || archived;
+  const canManage = scorePermissions(round).role === 'owner' && scorePermissions(round).canManageGames
+    && (!editor?.latest || scorePermissions(editor.latest).role === 'owner' && scorePermissions(editor.latest).canManageGames);
+  const disabled = busy || working || archived || !canManage;
 
   useEffect(() => { dirtyCallback.current = onDirtyChange; }, [onDirtyChange]);
   useEffect(() => () => { dirtyCallback.current(false); }, []);
@@ -133,7 +142,8 @@ export function RoundGamesPanel({ round, busy, onDirtyChange, onSave, onRefresh 
   }
 
   function review() {
-    if (!editor?.latest || disabled || editor.latest.eventStatus === 'archived') return;
+    if (!editor?.latest || disabled || editor.latest.eventStatus === 'archived'
+      || scorePermissions(editor.latest).role !== 'owner' || !scorePermissions(editor.latest).canManageGames) return;
     setEditor({
       ...editor, base: editor.latest.games?.configuration.games ?? [],
       etag: editor.latest.games?.configuration.etag ?? null, attempt: null, conflict: false, latest: null,
@@ -155,17 +165,18 @@ export function RoundGamesPanel({ round, busy, onDirtyChange, onSave, onRefresh 
           {(round.playerTees?.length ?? 0) > 0 && ' · Personal tees assigned; points use each golfer’s captured tee.'}</p>
       </header>
       {archived && <p>This trip is archived. Game settings are read-only.</p>}
+      {!canManage && <p>Saved game results · Settings are read-only.</p>}
       {games.length === 0 && <p>No games configured for this round.</p>}
       {games.map((game) => <div className="round-game" key={game.id}>
         <GameResults game={game} result={round.games?.results.find((result) => result.gameId === game.id)}
           holeNumbers={round.layout.map((hole) => hole.number)} />
-        <button type="button" disabled={disabled || editor !== null} onClick={() => { open(game); }}>Edit {game.name}</button>
+        {canManage && <button type="button" disabled={disabled || editor !== null} onClick={() => { open(game); }}>Edit {game.name}</button>}
       </div>)}
-      {!editor && !archived && <button type="button" disabled={disabled || games.length >= maximumGamesPerRound}
+      {!editor && !archived && canManage && <button type="button" disabled={disabled || games.length >= maximumGamesPerRound}
         onClick={() => { open(); }}>Add game</button>}
       {games.length >= maximumGamesPerRound && <p>This round has reached the 16-game limit.</p>}
       {message && <p role="status" className="game-notice">{message}</p>}
-      {editor && <>
+      {editor && canManage && <>
         {editor.conflict && <div className="game-review">
           {editedGameChanged && <p>This game changed in the latest settings. Reviewing keeps your draft for this game and preserves other games.</p>}
           {editor.latest?.eventStatus === 'archived' && <p>The refreshed trip is archived. Your draft is retained, read-only.</p>}

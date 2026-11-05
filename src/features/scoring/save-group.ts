@@ -4,6 +4,7 @@ import type { HoleScore, RoundScores, ScoreChange } from '../../domain/scoring';
 import { sameHoleScore } from '../../domain/scoring';
 import { cardFor, conflictedDraft, entryKey, entryScore, savedHole } from './entry-state';
 import type { HoleDraft } from './entry-state';
+import { scoreAccessKey, writablePlayerIds } from './score-access';
 
 export interface GroupWrite {
   readonly playerId: string;
@@ -54,6 +55,7 @@ export async function saveGroupEntries({ client, round, holeNumber, plan, signal
   readonly onProjection: (round: RoundScores) => void;
 }): Promise<RoundScores> {
   if (plan.invalid.length > 0 || plan.conflicts.length > 0) throw new Error('Review all entries before saving this group.');
+  const accessKey = scoreAccessKey(round);
   let latest = round;
   const acknowledged = new Map<string, ScoreChange>();
   const queued = plan.writes.map((write) => ({
@@ -77,7 +79,8 @@ export async function saveGroupEntries({ client, round, holeNumber, plan, signal
       signal.throwIfAborted();
       const key = entryKey(write.playerId, holeNumber);
       const card = cardFor(latest, write.playerId);
-      if (latest.eventStatus !== 'active' || !write.attempt.sent && card.etag !== write.attempt.etag) {
+      if (scoreAccessKey(latest) !== accessKey || !writablePlayerIds(latest).includes(write.playerId)
+        || !write.attempt.sent && card.etag !== write.attempt.etag) {
         onDraft(key, conflictedDraft(write.score, card, refreshVersion, { ...write.draft, attempt: write.attempt }));
         throw new EventChangedError('Saved data changed while saving this group. Refresh and review; remaining values were not sent.');
       }

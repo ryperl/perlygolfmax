@@ -41,6 +41,20 @@ async function saved() {
 }
 
 describe('RoundGamesPanel', () => {
+  it('renders saved results directly for players and discards an owner editor on permission loss without permitting save', () => {
+    const view = setup(configured);
+    click(`Edit ${original.name}`);
+    expect(screen.getByRole('button', { name: /Save game/ })).toBeVisible();
+    view.rerender(<RoundGamesPanel {...view.props} round={{ ...configured,
+      permissions: { role: 'player', viewerPlayerId: fictionalId(1), writePlayerIds: [fictionalId(1)], canManageGames: false } }} />);
+    expect(screen.getByRole('region', { name: `${original.name} results` })).toBeVisible();
+    expect(screen.queryByRole('button', { name: /Add game|Edit Fictional|Save game/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Game name')).not.toBeInTheDocument();
+    expect(view.onSave).not.toHaveBeenCalled();
+    view.rerender(<RoundGamesPanel {...view.props} />);
+    expect(screen.queryByRole('button', { name: /Save game/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: `Edit ${original.name}` })).toBeVisible();
+  });
   it('repairs stale assignments using current round cards, preserves peer games, and clears stale state after confirmation', async () => {
     const savedGames = teamLeaderboardRound.games;
     const result = savedGames?.results[0];

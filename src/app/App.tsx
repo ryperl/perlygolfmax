@@ -33,7 +33,8 @@ export function App() {
 
   useEffect(() => {
     const label = activePage === 'preview' ? 'Preview' : activePage === 'leaderboard' ? 'Overall leaderboard'
-      : activePage === 'purse' ? 'Purse and winnings' : navigation.find((item) => item.id === activePage)?.label ?? 'Events';
+      : activePage === 'purse' ? 'Purse and winnings' : activePage === 'access' ? 'Player access'
+        : activePage === 'join' ? 'Join event' : navigation.find((item) => item.id === activePage)?.label ?? 'Events';
     document.title = `${label} | Perly Golf Max`;
     if (previousPage.current !== hash) {
       mainRef.current?.focus();

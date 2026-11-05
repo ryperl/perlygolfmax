@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { RoundScores } from '../../domain/scoring';
+import { writablePlayerIds } from './score-access';
 import { isTeamGameDefinition } from '../../domain/games';
 import { gameScoringLabel } from '../games';
 import { PlayerScorecardRecap } from './PlayerScorecardRecap';
@@ -35,7 +36,8 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
         <p className="scorecard-course">{mixed ? 'Default tee: ' : ''}{round.teeName} / {round.teeCategory}{rating ? ` · Rating ${String(rating.course)} / Slope ${String(rating.slope)}` : ''}
           {mixed && ' · Personal tees shown per golfer'}</p>
       </div>
-      <button type="button" disabled={busy} onClick={onEnterScores}>{round.eventStatus === 'archived' ? 'View hole entry' : 'Enter scores'} · Group {group.number}</button>
+      {group.playerIds.some((id) => writablePlayerIds(round).includes(id)) &&
+        <button type="button" disabled={busy} onClick={onEnterScores}>Enter scores · Group {group.number}</button>}
     </header>
     {games.length > 0 && <section className="scorecard-game-summary" aria-label="Round games">
       <h3>Round games</h3>

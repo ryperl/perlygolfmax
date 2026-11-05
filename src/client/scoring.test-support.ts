@@ -6,6 +6,7 @@ import type { ScoresClient } from './scoring';
 import { fictionalEvent, fictionalId, fictionalPlayers, fictionalProfile, fictionalWorkspace } from './catalog.test-support';
 
 export const fictionalRoundScores: RoundScores = {
+  permissions: { role: 'owner', writePlayerIds: fictionalPlayers.map((player) => player.id), canManageGames: true },
   eventId: fictionalEvent.id, eventName: fictionalEvent.name, eventStatus: 'active',
   roundId: fictionalId(70), roundName: 'Fictional opening round',
   courseName: 'Fictional Meadows', teeName: fictionalProfile.name, teeCategory: fictionalProfile.category,

@@ -4,7 +4,7 @@ import type { PursePlan, PurseTieResolution } from '../../../src/domain/purse.js
 import { calculatePurse, samePursePlan, samePurseTieResolutions } from '../../../src/domain/purse.js';
 import type { EventPurseView, PurseChange, PurseConfiguration, PurseWriteResult } from '../../../src/domain/purse-settings.js';
 import type { RoundScores } from '../../../src/domain/scoring.js';
-import { isEventRevision, isEventSummary, isRecord, isUuid } from '../../../src/contracts/events.js';
+import { isEventRevision, isRecord, isUuid } from '../../../src/contracts/events.js';
 import { isPursePlanForWorkspace, isPurseTieResolutions } from '../../../src/contracts/purse.js';
 import { isPurseChange, isPurseConfiguration } from '../../../src/contracts/purse-settings.js';
 import { isPrivateUpload, maximumPrivateWriteBytes } from '../../../src/contracts/private-values.js';
@@ -15,6 +15,8 @@ import { receivePrivateWrite } from '../private-transport.js';
 import type { StagedPublication } from '../private-transport.js';
 import type { TableWorkspaceStore } from '../setup/store.js';
 import type { TableScoreStore } from '../scoring/store.js';
+import { assertEventAccessUnchanged, readEventAccess } from '../event-access.js';
+import type { EventAccess } from '../event-access.js';
 
 const configurationKey = 'purse';
 const changeKey = (id: string) => `purse-change:${id}`;
@@ -23,20 +25,16 @@ export class TablePurseStore {
   constructor(private readonly table: TableClient, private readonly workspace: TableWorkspaceStore,
     private readonly scores: TableScoreStore) {}
 
-  private async access(identity: AccountIdentity, eventId: string) {
+  private async access(identity: AccountIdentity, eventId: string, ownerOnly = false) {
     if (!isUuid(eventId)) throw new ApiError(400, 'INVALID_REQUEST_ID');
-    const member = await optionalRow(this.table, eventId, `member:${identity.objectId}`);
-    if (!member || member.tenantId !== identity.tenantId || member.objectId !== identity.objectId) {
-      throw new ApiError(404, 'EVENT_NOT_FOUND');
-    }
-    const event = await optionalRow(this.table, eventId, 'event');
-    if (!event) throw new ApiError(404, 'EVENT_NOT_FOUND');
-    const summary: unknown = { id: eventId, name: event.name, createdAt: event.createdAt,
-      status: event.status === undefined ? 'active' : event.status, role: member.role, etag: revision(event) };
-    if (!isEventSummary(summary)) throw new ApiError(503, 'INVALID_STORED_EVENT');
-    if (summary.role !== 'owner') throw new ApiError(summary.status === 'archived' ? 404 : 403,
-      summary.status === 'archived' ? 'EVENT_NOT_FOUND' : 'PURSE_OWNER_REQUIRED');
-    return { event, summary, memberEtag: revision(member) };
+    const access = await readEventAccess(this.table, identity, eventId);
+    if (access.summary.role !== 'owner' && (ownerOnly || !access.admittedPlayer)) throw new ApiError(403, 'PURSE_OWNER_REQUIRED');
+    return access;
+  }
+
+  private ownerGrant(access: EventAccess): string {
+    if (access.summary.role !== 'owner' || !access.member || !access.memberEtag) throw new ApiError(403, 'PURSE_OWNER_REQUIRED');
+    return access.memberEtag;
   }
 
   private async configuration(eventId: string, event: Readonly<Record<string, unknown>>): Promise<PurseConfiguration> {
@@ -75,8 +73,7 @@ export class TablePurseStore {
         return this.scores.get(identity, eventId, round.id);
       })));
     }
-    const after = await this.access(identity, eventId);
-    if (after.summary.etag !== access.summary.etag || after.memberEtag !== access.memberEtag) throw new ApiError(409, 'EVENT_CHANGED');
+    await assertEventAccessUnchanged(this.table, identity, eventId, access);
     return { ...access, workspace, roundScores, configuration };
   }
 
@@ -96,7 +93,7 @@ export class TablePurseStore {
   }
 
   async receive(identity: AccountIdentity, eventId: string, expected: string | null, requestId: string, body: unknown) {
-    const access = await this.access(identity, eventId);
+    const access = await this.access(identity, eventId, true);
     if (access.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     const upload = isRecord(body) ? body.privateUpload ?? body.privateCommit : undefined;
     if (upload !== undefined) {
@@ -124,7 +121,7 @@ export class TablePurseStore {
     publication?: StagedPublication): Promise<PurseWriteResult> {
     if (!isUuid(requestId) || expected !== null && !isEventRevision(expected)) throw new ApiError(400, 'INVALID_PURSE_SETUP');
     if (Buffer.byteLength(JSON.stringify({ plan, resolutions }), 'utf8') > maximumPrivateWriteBytes) throw new ApiError(413, 'REQUEST_TOO_LARGE');
-    const access = await this.access(identity, eventId);
+    const access = await this.access(identity, eventId, true);
     if (access.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     const previousReceipt = await this.receipt(eventId, requestId);
     if (previousReceipt) {
@@ -132,6 +129,7 @@ export class TablePurseStore {
       return { current: await this.get(identity, eventId, chargeRead), change: previousReceipt };
     }
     const state = await this.source(identity, eventId, chargeRead);
+    const ownerEtag = this.ownerGrant(state);
     if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     if (state.configuration.etag !== expected) throw new ApiError(409, 'PURSE_CHANGED');
     if (!isPursePlanForWorkspace(plan, state.workspace, state.roundScores)
@@ -150,7 +148,7 @@ export class TablePurseStore {
       await this.table.submitTransaction([
         ['update', { partitionKey: eventId, rowKey: 'event', purseConfigured: true }, 'Merge', { etag: state.summary.etag }],
         ['update', { partitionKey: eventId, rowKey: `member:${identity.objectId}`, ...change.recordedBy, role: 'owner' },
-          'Merge', { etag: state.memberEtag }],
+          'Merge', { etag: ownerEtag }],
         expected === null ? ['create', entity] : ['update', entity, 'Replace', { etag: expected }],
         ['create', { partitionKey: eventId, rowKey: changeKey(requestId), kind: 'purse-change', content: auditContent,
           ownerTenantId: identity.tenantId, ownerObjectId: identity.objectId, expectedBase: canonical(expected),

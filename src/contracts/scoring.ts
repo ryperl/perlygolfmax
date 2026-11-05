@@ -93,6 +93,44 @@ export function isRoundScores(value: unknown): value is RoundScores {
   const ids = cards.map((card) => card.playerId);
   const roster = new Set(ids);
   if (new Set(ids).size !== ids.length || cards.some((card) => card.holes.length !== count)) return false;
+  if (value.permissions !== undefined) {
+    const permission = value.permissions;
+    if (!isRecord(permission) || !['owner', 'player', 'viewer'].includes(String(permission.role))
+      || !Object.keys(permission).every((key) => ['role', 'viewerPlayerId', 'writePlayerIds', 'canManageGames'].includes(key))
+      || !Array.isArray(permission.writePlayerIds) || !permission.writePlayerIds.every((id: unknown) => isUuid(id) && roster.has(id))
+      || new Set(permission.writePlayerIds).size !== permission.writePlayerIds.length
+      || typeof permission.canManageGames !== 'boolean') return false;
+    if (permission.role === 'owner') {
+      if (permission.viewerPlayerId !== undefined || permission.canManageGames !== (value.eventStatus === 'active')
+        || permission.writePlayerIds.length !== (value.eventStatus === 'active' ? cards.length : 0)) return false;
+    } else if (permission.role === 'viewer') {
+      if (permission.viewerPlayerId !== undefined || permission.writePlayerIds.length || permission.canManageGames) return false;
+    } else {
+      if (!isUuid(permission.viewerPlayerId) || !roster.has(permission.viewerPlayerId) || permission.canManageGames) return false;
+      const group: unknown = value.groups.find((entry: unknown) => isRecord(entry)
+        && Array.isArray(entry.playerIds) && entry.playerIds.includes(permission.viewerPlayerId));
+      if (!isRecord(group) || !Array.isArray(group.playerIds)) return false;
+      const members: readonly unknown[] = group.playerIds;
+      if (permission.writePlayerIds.length !== (value.eventStatus === 'active' ? members.length : 0)
+        || permission.writePlayerIds.some((id: unknown) => !members.includes(id))) return false;
+    }
+  }
+  if (value.overallHandicaps !== undefined) {
+    const published = value.overallHandicaps;
+    if (!isRecord(published) || Object.keys(published).length !== 2
+      || !positiveInteger(published.allowancePercent, 100) || !Array.isArray(published.players)
+      || published.players.length !== cards.length) return false;
+    const seen = new Set<string>();
+    for (const player of published.players) {
+      if (!isRecord(player) || !isUuid(player.playerId) || !roster.has(player.playerId) || seen.has(player.playerId)
+        || !Object.keys(player).every((key) => ['playerId', 'playingHandicap', 'unavailableReason'].includes(key))) return false;
+      if (player.playingHandicap === null) {
+        if (!['missing-handicap-index', 'invalid-handicap-index', 'missing-tee-ratings', 'missing-stroke-index'].includes(String(player.unavailableReason))) return false;
+      } else if (typeof player.playingHandicap !== 'number' || !Number.isSafeInteger(player.playingHandicap)
+        || player.unavailableReason !== undefined) return false;
+      seen.add(player.playerId);
+    }
+  }
   if (value.playerTees !== undefined && !isPlayerTeeProfiles(value.playerTees, { holeCount: count, holes: layout }, ids)) return false;
   const playerLayouts = new Map(value.playerTees?.map((entry) => [entry.playerId, entry.profile.holes]));
   if (value.games !== undefined) {

@@ -20,6 +20,21 @@ function edit() {
 }
 
 describe('PursePanel save workflow', () => {
+  it('shows saved prize results to viewers without edit, save, or tie-resolution controls, including permission loss during editing', () => {
+    const props = callbacks();
+    const rendered = render(<PursePanel {...props} />);
+    edit();
+    rendered.rerender(<PursePanel {...props} value={{ ...props.value, workspace: { ...props.value.workspace,
+      event: { ...props.value.workspace.event, role: 'viewer' } } }} />);
+    expect(screen.getByText(/Settings are read-only/)).toBeVisible();
+    expect(screen.queryByRole('button', { name: /Edit purse|Configure purse|Save purse|Retry purse|Review my draft/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Planned budget amount')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Currency')).not.toBeInTheDocument();
+    expect(props.onSave).not.toHaveBeenCalled();
+    rendered.rerender(<PursePanel {...props} />);
+    expect(screen.getByRole('button', { name: 'Edit purse' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Save purse' })).not.toBeInTheDocument();
+  });
   it('handles empty unconfigured and archived panels honestly without assumed winnings or controls', () => {
     const props = callbacks();
     const value = { ...props.value, configuration: { ...props.value.configuration, plan: null }, view: null };

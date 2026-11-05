@@ -3,6 +3,7 @@ import { InteractionRequiredAuthError, PublicClientApplication } from '@azure/ms
 import type * as Msal from '@azure/msal-browser';
 import { createEventSession } from './identity';
 import { SessionExpiredError } from './events';
+import { consumeInvitationReturn, rememberInvitationReturn } from './invitation-return';
 
 const sdk = vi.hoisted(() => ({
   initialize: vi.fn(), handleRedirectPromise: vi.fn(), getActiveAccount: vi.fn(),
@@ -18,12 +19,28 @@ const config = {
   scope: 'api://00000000-0000-4000-8000-000000000002/Events.Access', apiUrl: 'https://fictional.example.test/api',
 };
 beforeEach(() => {
+  sessionStorage.clear();
+  window.history.replaceState(null, '', '/');
   vi.resetAllMocks();
   sdk.initialize.mockResolvedValue(undefined);
   sdk.handleRedirectPromise.mockResolvedValue(null);
   sdk.getAllAccounts.mockReturnValue([]);
 });
 describe('customer identity session', () => {
+  it('restores a validated private invitation only after the SDK sign-in return, then removes the continuation', async () => {
+    const hash = `#join?event=${config.clientId}&invite=00000000-0000-4000-8000-000000000003&token=${'A'.repeat(43)}`;
+    window.history.replaceState(null, '', hash);
+    const session = createEventSession(config);
+    await session.signIn();
+    window.history.replaceState(null, '', '/?event-auth=1#code=fictional');
+    sdk.handleRedirectPromise.mockResolvedValue({ account: { homeAccountId: 'fictional-account' } });
+    expect(await session.initialize()).toBe(true);
+    expect(window.location.hash).toBe(hash);
+    expect(consumeInvitationReturn()).toBeNull();
+    rememberInvitationReturn(hash);
+    await session.signOut();
+    expect(consumeInvitationReturn()).toBeNull();
+  });
   it('processes the identity callback before declaring a session and requests only API-scoped tokens', async () => {
     const account = { homeAccountId: 'fictional-account' };
     sdk.handleRedirectPromise.mockResolvedValue({ account });

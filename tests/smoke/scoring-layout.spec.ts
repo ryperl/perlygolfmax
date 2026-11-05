@@ -15,6 +15,7 @@ const card: Scorecard = {
   })),
 };
 const round: RoundScores = {
+  permissions: { role: 'owner', writePlayerIds: [1, 2, 3, 4].map(id), canManageGames: true },
   eventId: id(100), eventName: 'Fictional Open', eventStatus: 'active', roundId: id(200), roundName: 'Fictional Round',
   courseName: 'Fictional Course', teeName: 'Fictional Teal', teeCategory: 'Fictional rating', layout,
   groups: [{ number: 1, playerIds: [1, 2, 3, 4].map(id) }],

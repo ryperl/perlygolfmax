@@ -82,6 +82,9 @@ function isRoundSnapshot(value: unknown, playerIds: readonly string[]): value is
 
 export function isEventWorkspace(value: unknown): value is EventWorkspace {
   if (!isRecord(value) || !isEventSummary(value.event) || !isEventRevision(value.etag)
+    || value.event.status === 'archived' && value.event.role !== 'owner'
+    || value.canViewScores !== undefined && typeof value.canViewScores !== 'boolean'
+    || value.viewerPlayerId !== undefined && !isUuid(value.viewerPlayerId)
     || value.allowPerGolferTees !== undefined && typeof value.allowPerGolferTees !== 'boolean'
     || value.overallCompetition !== undefined && !isOverallCompetition(value.overallCompetition)
     || !location(value.location) || !Array.isArray(value.roster)
@@ -89,6 +92,7 @@ export function isEventWorkspace(value: unknown): value is EventWorkspace {
     || !Array.isArray(value.rounds) || value.rounds.length > 8) return false;
   const ids = value.roster.map((player: { readonly playerId: string }) => player.playerId);
   return value.etag === value.event.etag && new Set(ids).size === ids.length
+    && (value.viewerPlayerId === undefined || ids.includes(value.viewerPlayerId))
     && (value.rounds.length === 0 || ids.length >= 4)
     && value.rounds.every((round: unknown) => isRoundSnapshot(round, ids))
     && (value.allowPerGolferTees === true || value.rounds.every((round: RoundSnapshot) => !round.playerTees?.length))

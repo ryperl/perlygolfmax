@@ -9,6 +9,7 @@ import { fakeScores } from '../client/scoring.test-support';
 import { SessionExpiredError } from '../client/events';
 import type { EventPage } from '../domain/events';
 import { fictionalEventPurse } from '../client/purse.test-support';
+import { admissionId, admissionsClient, status } from '../features/admission/test-support';
 
 let testServices: EventServices | undefined;
 vi.mock('./EventsPage', async (importOriginal) => {
@@ -47,6 +48,48 @@ beforeEach(() => {
 });
 
 describe('App', () => {
+  it('keeps signed-out invitation landing private and uses the existing header sign-in action', async () => {
+    const base = service();
+    vi.mocked(base.session.initialize).mockResolvedValue(false);
+    const admissions = admissionsClient();
+    testServices = { ...base, admissions };
+    navigate(`#join?event=${admissionId(100)}&invite=${admissionId(200)}&token=${'A'.repeat(43)}`);
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Player invitation' })).toBeVisible();
+    await userEvent.setup().click(headerAccount('Sign in'));
+    expect(base.session.signIn).toHaveBeenCalledOnce();
+    expect(base.events.list).not.toHaveBeenCalled();
+    expect(base.setup.load).not.toHaveBeenCalled();
+    expect(admissions.status).not.toHaveBeenCalled();
+    expect(admissions.claim).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent('A'.repeat(43));
+  });
+  it('strips a claimed secret and refreshes all-active-event discovery after explicit approval', async () => {
+    const base = service();
+    const admissions = admissionsClient();
+    vi.mocked(admissions.status).mockResolvedValue(status('approved'));
+    vi.mocked(base.events.capabilities).mockResolvedValue({ canCreateEvents: false, canManageCatalog: false });
+    const otherEvent = { ...fictionalEvent, role: 'viewer' as const };
+    vi.mocked(base.events.list).mockResolvedValueOnce({ events: [] }).mockResolvedValue({ events: [otherEvent] });
+    testServices = { ...base, admissions };
+    navigate(`#join?event=${admissionId(100)}&invite=${admissionId(200)}&token=${'A'.repeat(43)}`);
+    render(<App />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Request access' }));
+    expect(await screen.findByText('ABCD-1234')).toBeVisible();
+    expect(window.location.hash).toBe(`#join?event=${admissionId(100)}&claim=${admissionId(200)}`);
+    expect(admissions.claim).toHaveBeenCalledWith(admissionId(100), { inviteId: admissionId(200), token: 'A'.repeat(43) },
+      expect.any(String), expect.any(AbortSignal));
+    await user.click(screen.getByRole('button', { name: 'Check approval' }));
+    await screen.findByRole('link', { name: 'Open event overview' });
+    await waitFor(() => { expect(base.events.list).toHaveBeenCalledTimes(2); });
+    navigate('#events');
+    expect(await screen.findByRole('link', { name: `Open ${fictionalEvent.name}` })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Create event' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Course catalog' })).not.toBeInTheDocument();
+    expect(base.scores.load).not.toHaveBeenCalled();
+    expect(admissions.status).toHaveBeenCalledOnce();
+  });
   it('opens private purse deep links and preserves event navigation without prefetching in Preview', async () => {
     const base = service();
     const value = fictionalEventPurse();

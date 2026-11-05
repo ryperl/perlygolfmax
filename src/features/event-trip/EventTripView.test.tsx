@@ -31,6 +31,27 @@ function roundCard(name: string) {
 }
 
 describe('saved event overview', () => {
+  it.each(['overview', 'rounds', 'group'] as const)('lets other-event viewers browse %s without inventing a playing group or access management', (view) => {
+    const enabled = { ...workspace, canViewScores: true, event: { ...workspace.event, role: 'viewer' as const } };
+    const rendered = render(<EventTripView workspace={enabled} view={view} />);
+    expect(screen.getAllByRole('link', { name: /Open scorecard for/ })).toHaveLength(workspace.rounds.length);
+    expect(screen.queryByRole('link', { name: /Your playing group|Configure event/ })).not.toBeInTheDocument();
+    rendered.rerender(<EventTripView workspace={{ ...enabled, event: { ...enabled.event, status: 'archived' } }} view={view} />);
+    expect(screen.getByRole('alert')).toHaveTextContent('event owner only');
+    expect(screen.queryByRole('link', { name: /Open scorecard for/ })).not.toBeInTheDocument();
+  });
+  it('links all admitted scorecards and the bound playing group without exposing organizer setup', () => {
+    const player = workspace.roster[0];
+    if (!player) throw new Error('Missing fictional player.');
+    render(<EventTripView workspace={{ ...workspace, canViewScores: true, viewerPlayerId: player.playerId,
+      event: { ...workspace.event, role: 'member' },
+      overallCompetition: { kind: 'stroke-play', basis: 'gross' } }} view="rounds" />);
+    expect(screen.getAllByRole('link', { name: /Open scorecard for/ })).toHaveLength(workspace.rounds.length);
+    expect(screen.getAllByRole('link', { name: /Your playing group/ }).length).toBeGreaterThan(0);
+    expect(screen.getByRole('link', { name: 'Overall leaderboard' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'View purse and winnings' })).toBeVisible();
+    expect(screen.queryByRole('link', { name: 'Configure event' })).not.toBeInTheDocument();
+  });
   it('links enabled owner overall results from Overview and Rounds only, including archived read-only events', () => {
     const enabled: EventWorkspace = { ...workspace, overallCompetition: { kind: 'stroke-play', basis: 'gross' } };
     const view = render(<EventTripView workspace={enabled} view="overview" />);
@@ -41,8 +62,9 @@ describe('saved event overview', () => {
     expect(screen.queryByRole('link', { name: 'Overall leaderboard' })).not.toBeInTheDocument();
     view.rerender(<EventTripView workspace={workspace} view="overview" />);
     expect(screen.queryByRole('link', { name: 'Overall leaderboard' })).not.toBeInTheDocument();
-    view.rerender(<EventTripView workspace={{ ...enabled, event: { ...enabled.event, role: 'member' } }} view="overview" />);
-    expect(screen.queryByRole('link', { name: 'Overall leaderboard' })).not.toBeInTheDocument();
+    view.rerender(<EventTripView workspace={{ ...enabled, canViewScores: true, event: { ...enabled.event, role: 'member' } }} view="overview" />);
+    expect(screen.getByRole('link', { name: 'Overall leaderboard' })).toBeVisible();
+    expect(screen.queryByRole('link', { name: 'Configure event' })).not.toBeInTheDocument();
   });
   it('uses the selected workspace, actual counts, and saved-round order and links', () => {
     render(<EventTripView workspace={workspace} view="overview" />);
@@ -155,7 +177,7 @@ describe.each(['overview', 'rounds', 'group'] as const)('saved %s navigation and
     expect(screen.queryByText('No scores yet')).not.toBeInTheDocument();
     rendered.rerender(<EventTripView workspace={{ ...fictionalWorkspace, event: { ...fictionalWorkspace.event, role: 'member' } }} view={view}
       progress={{ [fictionalRoundScores.roundId]: summarizeEntryProgress(fictionalWorkspace.event.id, openingRound, scoreResult().round) }} />);
-    expect(screen.getByText('Entry progress is available to the event owner only.')).toBeVisible();
+    expect(screen.getByText('Entry progress requires approved player access.')).toBeVisible();
     expect(screen.queryByRole('region', { name: 'Saved entry progress' })).not.toBeInTheDocument();
   });
 

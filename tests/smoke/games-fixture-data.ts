@@ -38,6 +38,7 @@ const cards: RoundScores['cards'] = snapshot.players.map((player) => ({
   holes: layout.map((hole) => ({ number: hole.number, score: { kind: 'strokes', strokes: 4 } })),
 }));
 export const fictionalGamesRound: RoundScores = {
+  permissions: { role: 'owner', writePlayerIds: cards.map((card) => card.playerId), canManageGames: true },
   eventId: id(50), eventName: 'Fictional event', eventStatus: 'active', roundId: snapshot.id, roundName: snapshot.name,
   courseName: snapshot.course.name, teeName: snapshot.teeProfile.name, teeCategory: snapshot.teeProfile.category, layout, cards,
   groups: snapshot.groups, setupLocked: true, lastUpdatedAt: '2026-01-01T00:00:00Z',

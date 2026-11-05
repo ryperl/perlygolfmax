@@ -248,6 +248,7 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
       {workspace.event.role === 'owner' && <a href={`#purse?event=${encodeURIComponent(eventId)}`}>
         {workspace.event.status === 'archived' ? 'View purse and winnings' : 'Configure purse and winnings'}
       </a>}
+      {workspace.event.role === 'owner' && <a href={`#access?event=${encodeURIComponent(eventId)}`}>Player invitations</a>}
       {editing && draft && <OverallCompetitionEditor workspace={workspace} draft={draft} scores={scores}
         disabled={busy || conflict} onDenied={denyAccess}
         onChange={(overallCompetition) => { editDraft({ ...draft, overallCompetition }); }} />}

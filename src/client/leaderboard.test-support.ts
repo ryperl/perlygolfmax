@@ -46,6 +46,7 @@ if (!primary) throw new Error('Missing fictional game results.');
 export const leaderboardPlayers: readonly GamePlayerResult[] = primary.players;
 export const leaderboardRound: RoundScores = {
   ...fictionalRoundScores, cards, groups, setupLocked: true, lastUpdatedAt: '2026-01-01T00:00:00Z',
+  permissions: { role: 'owner', writePlayerIds: cards.map((card) => card.playerId), canManageGames: true },
   games: {
     configuration: { eventId: fictionalRoundScores.eventId, roundId: fictionalRoundScores.roundId, etag: 'games-v1', games: leaderboardGames },
     results,

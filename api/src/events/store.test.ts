@@ -2,6 +2,7 @@ import { TableClient } from '@azure/data-tables';
 import { describe, expect, it, vi } from 'vitest';
 import { creator, event, member } from '../../test/fixtures.js';
 import { TableEventStore } from './store.js';
+import { identifier, memoryTable } from '../../test/catalog-fixtures.js';
 
 function table() { return new TableClient('https://fictional.table.core.windows.net', 'Events'); }
 
@@ -41,19 +42,15 @@ describe('Table event persistence', () => {
   });
 
   it('bounds scanned pages and rechecks authoritative membership before returning any event', async () => {
-    const client = table();
-    const source = client.listEntities();
-    const page = Object.assign([
-      { partitionKey: event.id, ...event, etag: 'one' },
-      { partitionKey: '00000000-0000-4000-8000-000000000009', ...event, etag: 'two' },
-    ], { continuationToken: 'next' });
-    const byPage = vi.spyOn(source, 'byPage').mockImplementation(async function* () { yield await Promise.resolve(page); });
-    vi.spyOn(client, 'listEntities').mockReturnValue(source);
-    vi.spyOn(client, 'getEntity')
-      .mockImplementationOnce(() => Promise.resolve({ etag: 'member', ...creator, role: 'owner' }))
-      .mockRejectedValueOnce({ statusCode: 404, details: { odataError: { code: 'ResourceNotFound' } } });
-    await expect(new TableEventStore(client).list(creator)).resolves.toEqual({ events: [{ ...event, role: 'owner', status: 'active', etag: 'one' }], continuationToken: 'next' });
-    expect(byPage).toHaveBeenCalledWith({ maxPageSize: 50 });
+    const f = memoryTable();
+    const saved = f.seed({ partitionKey: event.id, rowKey: 'event', ...event });
+    f.seed({ partitionKey: event.id, rowKey: `member:${creator.objectId}`, ...creator, role: 'owner' });
+    for (let index = 0; index < 50; index++) f.seed({ partitionKey: identifier(100 + index), rowKey: 'event', ...event });
+    const result = await new TableEventStore(f.table).list(creator);
+    expect(result.events).toEqual([{ ...event, role: 'owner', status: 'active', etag: saved.etag }]);
+    expect(result.continuationToken).toBeDefined();
+    expect(f.get).toHaveBeenCalledWith(event.id, `member:${creator.objectId}`);
+    expect(f.list).toHaveBeenCalledWith({ queryOptions: { filter: "RowKey eq 'event'" } });
   });
 
   it('fails explicitly on storage outages instead of returning a successful empty list', async () => {
@@ -80,33 +77,26 @@ describe('Table event persistence', () => {
   });
 
   it('does not disclose an event to a mismatched tenant or revoked member', async () => {
-    const client = table();
-    const source = client.listEntities();
-    vi.spyOn(source, 'byPage').mockImplementation(async function* () {
-      yield await Promise.resolve([{ partitionKey: event.id, ...event, etag: 'event' }]);
-    });
-    vi.spyOn(client, 'listEntities').mockReturnValue(source);
-    const get = vi.spyOn(client, 'getEntity').mockImplementation(() => Promise.resolve({ etag: 'member', ...creator, tenantId: member.objectId, role: 'owner' }));
-    await expect(new TableEventStore(client).list(creator)).resolves.toEqual({ events: [] });
-    get.mockRejectedValue({ statusCode: 404, code: 'ResourceNotFound' });
-    await expect(new TableEventStore(client).list(creator)).resolves.toEqual({ events: [] });
+    const f = memoryTable();
+    f.seed({ partitionKey: event.id, rowKey: 'event', ...event });
+    const key = `member:${creator.objectId}`;
+    f.seed({ partitionKey: event.id, rowKey: key, ...creator, tenantId: member.objectId, role: 'owner' });
+    await expect(new TableEventStore(f.table).list(creator)).resolves.toEqual({ events: [] });
+    f.seed({ partitionKey: event.id, rowKey: key, ...creator, role: 'member', revoked: true });
+    await expect(new TableEventStore(f.table).list(creator)).resolves.toEqual({ events: [] });
+    f.rows.delete(`${event.id}|${key}`);
+    await expect(new TableEventStore(f.table).list(creator)).resolves.toEqual({ events: [] });
   });
 
   it('separates active and archived lists, keeping archived events owner-only', async () => {
-    const client = table();
-    const source = client.listEntities();
-    vi.spyOn(source, 'byPage').mockImplementation(async function* () {
-      yield await Promise.resolve([
-        { partitionKey: event.id, ...event, etag: 'legacy' },
-        { partitionKey: member.objectId, ...event, status: 'archived', etag: 'archived' },
-      ]);
-    });
-    vi.spyOn(client, 'listEntities').mockReturnValue(source);
-    const get = vi.spyOn(client, 'getEntity').mockImplementation(() => Promise.resolve({ ...creator, role: 'owner', etag: 'member' }));
-    const store = new TableEventStore(client);
+    const f = memoryTable();
+    f.seed({ partitionKey: event.id, rowKey: 'event', ...event });
+    f.seed({ partitionKey: member.objectId, rowKey: 'event', ...event, status: 'archived' });
+    for (const id of [event.id, member.objectId]) f.seed({ partitionKey: id, rowKey: `member:${creator.objectId}`, ...creator, role: 'owner' });
+    const store = new TableEventStore(f.table);
     expect((await store.list(creator)).events.map((item) => item.status)).toEqual(['active']);
     expect((await store.list(creator, undefined, 'archived')).events.map((item) => item.status)).toEqual(['archived']);
-    get.mockImplementation(() => Promise.resolve({ ...creator, role: 'member', etag: 'member' }));
+    f.seed({ partitionKey: member.objectId, rowKey: `member:${creator.objectId}`, ...creator, role: 'member' });
     expect((await store.list(creator, undefined, 'archived')).events).toEqual([]);
   });
 

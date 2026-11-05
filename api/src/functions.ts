@@ -18,8 +18,12 @@ import { TableScoreStore } from './scoring/store.js';
 import { TablePurseStore } from './purse/store.js';
 import { createPurseHandler } from './purse/handlers.js';
 import type { PurseApi } from './purse/handlers.js';
+import { TableAdmissionStore } from './admission/store.js';
+import type { AdmissionStore } from './admission/store.js';
+import { createAdmissionHandler } from './admission/handlers.js';
+import type { AdmissionAction, AdmissionApi } from './admission/handlers.js';
 
-type RuntimeApi = EventApi & CatalogSetupApi & ScoringApi & PurseApi;
+type RuntimeApi = EventApi & CatalogSetupApi & ScoringApi & PurseApi & { readonly admissions: AdmissionStore };
 let api: RuntimeApi | undefined;
 
 function resolveApi(): RuntimeApi {
@@ -38,6 +42,7 @@ function resolveApi(): RuntimeApi {
     canCreate: (identity) => canCreateEvents(identity, settings),
     canManageCatalog: manager, courses, players,
     workspace, scores, purse: new TablePurseStore(table, workspace, scores),
+    admissions: new TableAdmissionStore(table),
   };
   return api;
 }
@@ -85,4 +90,21 @@ app.http('eventLeaderboard', {
 app.http('eventPurse', {
   route: 'events/{id}/purse', methods: ['GET', 'PUT'], authLevel: 'anonymous',
   handler: createPurseHandler(resolveApi),
+});
+
+function resolveAdmissionApi(): AdmissionApi {
+  const resolved = resolveApi();
+  return { verify: resolved.verify, limiter: resolved.limiter, store: resolved.admissions };
+}
+const admissionRoutes: readonly { readonly action: AdmissionAction; readonly suffix: string; readonly method: 'GET' | 'POST' }[] = [
+  { action: 'list', suffix: '', method: 'GET' },
+  { action: 'status', suffix: '/status', method: 'GET' },
+  { action: 'invite', suffix: '/invite', method: 'POST' },
+  { action: 'claim', suffix: '/claim', method: 'POST' },
+  { action: 'approve', suffix: '/approve', method: 'POST' },
+  { action: 'revoke', suffix: '/revoke', method: 'POST' },
+];
+for (const item of admissionRoutes) app.http(`playerAdmission-${item.action}`, {
+  route: `events/{id}/admissions${item.suffix}`, methods: [item.method], authLevel: 'anonymous',
+  handler: createAdmissionHandler(resolveAdmissionApi, item.action),
 });

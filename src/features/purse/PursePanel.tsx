@@ -42,7 +42,8 @@ function sameSelection(left: PurseSelection, right: PurseSelection): boolean {
 
 /** Keying isolates an event's private draft when the app changes the selected event. */
 export function PursePanel(props: PursePanelProps) {
-  return <EventPursePanel key={props.value.workspace.event.id} {...props} />;
+  if (props.value.workspace.event.status === 'archived' && props.value.workspace.event.role !== 'owner') return <p role="alert">Archived purse results are available to the event owner only.</p>;
+  return <EventPursePanel key={`${props.value.workspace.event.id}:${props.value.workspace.event.role}`} {...props} />;
 }
 
 function EventPursePanel({ value, busy, onSave, onRefresh, onDirtyChange }: PursePanelProps) {
@@ -54,7 +55,8 @@ function EventPursePanel({ value, busy, onSave, onRefresh, onDirtyChange }: Purs
   const dirtyCallback = useRef(onDirtyChange);
   const current = confirmed && value.configuration.etag === confirmed.previousEtag ? confirmed.value : value;
   const archived = value.workspace.event.status === 'archived' || editor?.latest?.workspace.event.status === 'archived';
-  const disabled = busy || working || archived;
+  const canManage = value.workspace.event.role === 'owner' && (!editor?.latest || editor.latest.workspace.event.role === 'owner');
+  const disabled = busy || working || archived || !canManage;
   const changedExternally = editor !== null && value.configuration.etag !== editor.observed.etag
     && !sameSelection(value.configuration, editor.observed)
     && !sameSelection(value.configuration, editor.base);
@@ -158,14 +160,15 @@ function EventPursePanel({ value, busy, onSave, onRefresh, onDirtyChange }: Purs
       <p>Plan awards and calculate each golfer’s winnings. No money is collected or transferred here. No Ryder Cup sides or closest-to-pin scoring engine.</p>
     </header>
     {archived && <p>This event is archived. Purse settings are read-only.</p>}
+    {!canManage && <p>Saved purse and winnings · Settings are read-only.</p>}
     {!current.configuration.plan && <p>No purse configured. There is no assumed budget or winnings total.</p>}
     {current.view && <PurseResults value={current} plan={current.view.plan} calculation={current.view.calculation} />}
     {current.configuration.plan && !current.view && <p>Purse results are unavailable. Refresh saved sources; no winners or zero totals are assumed.</p>}
-    {!editor && !archived && <button type="button" disabled={disabled} onClick={open}>
+    {!editor && !archived && canManage && <button type="button" disabled={disabled} onClick={open}>
       {current.configuration.plan ? 'Edit purse' : 'Configure purse'}
     </button>}
     {message && <p role="status" className="purse-notice">{message}</p>}
-    {editor && <>
+    {editor && canManage && <>
       {conflict && <div className="purse-notice" role="status">
         <p>Review required. Your complete draft is retained; saving is paused so other pools are not silently overwritten.</p>
         {editor.latest && <div>

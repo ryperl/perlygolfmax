@@ -36,11 +36,11 @@ function Result({ cell, stroke }: { readonly cell: Omit<EventStandingCell, 'roun
 export function EventLeaderboard({ value }: { readonly value: EventLeaderboardView }) {
   const { workspace, standings } = value;
   const competition = workspace.overallCompetition;
-  if (workspace.event.role !== 'owner') return <p role="alert">Overall results are available to the event owner only.</p>;
+  if (workspace.event.status === 'archived' && workspace.event.role !== 'owner') return <p role="alert">Archived results are available to the event owner only.</p>;
   if (!competition || standings.status === 'disabled') return <section>
     <h1>Overall leaderboard not enabled</h1>
-    <p>Round leaderboards are unchanged. Enable an optional competition in event setup.</p>
-    <a href={`#events?event=${encodeURIComponent(workspace.event.id)}`}>Open event setup</a>
+    <p>Round leaderboards are unchanged. An overall competition has not been configured.</p>
+    {workspace.event.role === 'owner' && <a href={`#events?event=${encodeURIComponent(workspace.event.id)}`}>Open event setup</a>}
   </section>;
   const stroke = competition.kind === 'stroke-play';
   return <section className="overall-leaderboard">

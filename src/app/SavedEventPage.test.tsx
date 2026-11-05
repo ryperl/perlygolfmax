@@ -73,21 +73,22 @@ describe('saved event view loading', () => {
       expect(view.client.save).not.toHaveBeenCalled();
     });
 
-    it('does not request scoring for members, including an archived member projection', async () => {
+    it('does not request scoring for legacy unadmitted members and rejects archived member projections', async () => {
       const member = { ...fictionalWorkspace, event: { ...fictionalWorkspace.event, role: 'member' as const } };
       const view = progressMount(member);
-      expect(await screen.findByText('Entry progress is available to the event owner only.')).toBeVisible();
+      expect(await screen.findByText('Entry progress requires approved player access.')).toBeVisible();
       expect(view.scores.load).not.toHaveBeenCalled();
       vi.mocked(view.client.load).mockResolvedValueOnce({ ...member, event: { ...member.event, status: 'archived' } });
       await userEvent.setup().click(screen.getByRole('button', { name: 'Refresh event' }));
-      await screen.findByText('Archived event · Read-only');
+      expect(await screen.findByRole('alert')).toHaveTextContent('Archived events are available to the event owner only.');
       expect(view.scores.load).not.toHaveBeenCalled();
     });
 
     it('reads archived owner entries without writes and handles an absent scores client honestly', async () => {
       const archived = { ...fictionalWorkspace, event: { ...fictionalWorkspace.event, status: 'archived' as const } };
       const view = progressMount(archived);
-      vi.mocked(view.scores.load).mockResolvedValue({ ...fictionalRoundScores, eventStatus: 'archived' });
+      vi.mocked(view.scores.load).mockResolvedValue({ ...fictionalRoundScores, eventStatus: 'archived',
+        permissions: { role: 'owner', writePlayerIds: [], canManageGames: false } });
       expect(await screen.findByText('Saved entry progress: No scores yet')).toBeVisible();
       expect(view.scores.save).not.toHaveBeenCalled();
       view.rerender(<SavedEventPage client={view.client} eventId={view.props.eventId} view="overview" onSessionExpired={view.props.onSessionExpired} />);

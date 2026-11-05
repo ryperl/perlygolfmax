@@ -4,6 +4,7 @@ import type { AccountIdentity, EventPage, EventStatus, EventSummary, GolfEvent }
 import { isEventRevision, isEventSummary, isRecord } from '../../../src/contracts/events.js';
 import { ApiError } from '../errors.js';
 import { isMissingTableEntity } from '../table-errors.js';
+import { assertEventAccessUnchanged, readEventAccess } from '../event-access.js';
 
 export interface EventStore {
   list(identity: AccountIdentity, continuationToken?: string, status?: EventStatus): Promise<EventPage>;
@@ -26,7 +27,8 @@ export class TableEventStore implements EventStore {
   private async membership(identity: AccountIdentity, id: string): Promise<TableEntityResult<Record<string, unknown>> | undefined> {
     try {
       const member = await this.table.getEntity(id, `member:${identity.objectId}`);
-      return member.tenantId === identity.tenantId && member.objectId === identity.objectId ? member : undefined;
+      return member.tenantId === identity.tenantId && member.objectId === identity.objectId
+        && (member.revoked === undefined || member.revoked === false) ? member : undefined;
     } catch (error) {
       if (isMissingTableEntity(error)) return undefined;
       throw error;
@@ -42,10 +44,16 @@ export class TableEventStore implements EventStore {
     const page = next.value;
     for (const event of page) {
       if (typeof event.partitionKey !== 'string') throw new ApiError(503, 'INVALID_STORED_EVENT');
-      const member = await this.membership(identity, event.partitionKey);
-      if (!member) continue;
-      const item = summary(event.partitionKey, event, member);
-      if (item.status === status && (status === 'active' || item.role === 'owner')) results.push(item);
+      try {
+        const access = await readEventAccess(this.table, identity, event.partitionKey);
+        const item = access.summary;
+        if (item.status === status && (status === 'active' || item.role === 'owner')) {
+          await assertEventAccessUnchanged(this.table, identity, event.partitionKey, access);
+          results.push(item);
+        }
+      } catch (error) {
+        if (!(error instanceof ApiError) || error.status !== 404) throw error;
+      }
     }
     return { events: results, ...(page.continuationToken ? { continuationToken: page.continuationToken } : {}) };
   }

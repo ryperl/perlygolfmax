@@ -1,0 +1,13 @@
+.admission-panel { min-width: 0; overflow-wrap: anywhere; }
+.admission-panel form, .admission-controls { display: grid; gap: .75rem; min-width: 0; }
+.admission-panel input, .admission-panel select, .admission-panel button {
+  box-sizing: border-box; max-width: 100%; min-width: 0; font: inherit;
+}
+.admission-panel label { display: grid; gap: .35rem; min-width: 0; }
+.admission-panel input, .admission-panel select { width: 100%; }
+.admission-panel input[type="checkbox"] { width: auto; }
+.admission-panel button { white-space: normal; }
+.admission-panel ul { padding-inline-start: 1.25rem; }
+.admission-panel li { margin-block: 1rem; }
+.admission-panel :focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
+.admission-policy { border-inline-start: 3px solid var(--cp-accent); padding-inline-start: .75rem; }
