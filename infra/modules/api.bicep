@@ -63,7 +63,7 @@ module app 'br/public:avm/res/web/site:0.15.1' = {
       APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'Authorization=AAD'
       EVENTS_TABLE_ENDPOINT: dataEndpoint
       EVENTS_TABLE_NAME: tableName
-      FUNCTIONS_REQUEST_BODY_SIZE_LIMIT: '4096'
+      FUNCTIONS_REQUEST_BODY_SIZE_LIMIT: '12288'
       AzureFunctionsJobHost__functionTimeout: '00:01:00'
       AzureFunctionsJobHost__logging__applicationInsights__samplingSettings__maxTelemetryItemsPerSecond: '2'
     })

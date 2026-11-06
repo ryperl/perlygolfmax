@@ -127,7 +127,7 @@ test('every API environment contract is wired without storage keys or identity o
     assert.ok(`${rootWiring}${appSettings}`.includes(name), `Unwired API setting: ${name}`);
   }
   assert.match(appSettings, /FUNCTIONS_REQUEST_BODY_SIZE_LIMIT/);
-  assert.match(appSettings, /4096/);
+  assert.match(appSettings, /'FUNCTIONS_REQUEST_BODY_SIZE_LIMIT', '12288'/);
   assert.match(appSettings, /managedidentity/);
   assert.doesNotMatch(appSettings, /listKeys|AccountKey|SharedAccessSignature|client_secret/i);
   assert.deepEqual(Object.keys(template.outputs).sort(), [

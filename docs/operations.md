@@ -2,6 +2,22 @@
 
 ## Status and approval boundary
 
+### Request-size configuration for test and future production
+
+Set `FUNCTIONS_REQUEST_BODY_SIZE_LIMIT` to **12288 bytes (12 KiB)** on the
+Functions host. The previous 4096-byte host limit rejected larger event setup
+requests before the application handlers could enforce their own limits,
+surfacing as HTTP 500 errors when adding rounds.
+
+Keep this setting in the infrastructure source and verify its live value during
+future production preparation; application-only deployments do not apply
+infrastructure settings. Workspace, game and purse handlers retain their
+12 KiB transport limits, ordinary endpoints retain 4 KiB limits, and larger
+logical private writes still use bounded staging. Authentication, conditional
+writes and durable request budgets remain required. Raising the host ceiling
+does not authorize a larger endpoint payload or bypass application validation.
+Production provisioning or settings changes still require separate approval.
+
 The approved design is Static Web Apps (SWA) Free, Entra External ID hosted
 email-code sign-in, a standalone Functions API and Table Storage. The production
 planning allowance is roughly USD 15/month, not a quote or spending cap.
