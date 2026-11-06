@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { EventSetupInput } from '../../../src/domain/setup.js';
 import { isEventWorkspace } from '../../../src/contracts/setup.js';
 import { catalogFixture, identifier, manifest, tee } from '../../test/catalog-fixtures.js';
@@ -6,10 +6,10 @@ import { creator, event, member } from '../../test/fixtures.js';
 import { decode } from '../catalog/entities.js';
 import { isIndexRefreshAudit } from './index-refresh.js';
 
-async function fixture() {
+async function fixture(teeProfile = tee) {
   const f = catalogFixture();
   f.seedEvent();
-  const version = await f.publish();
+  const version = await f.publish(identifier(100), manifest, [teeProfile]);
   const players = await Promise.all([200, 201, 202, 203].map((id) => f.players.create(creator, identifier(id), `Fictional Player ${String(id)}`)));
   const first = players[0];
   if (!first) throw new Error('Missing fictional first player');
@@ -19,7 +19,7 @@ async function fixture() {
     name: 'Fictional Saved Event', location: 'Fictional general location', playerIds: ids,
     rounds: [{
       id: identifier(500), name: 'Fictional Round One', courseId: version.courseId, courseVersionId: version.id,
-      teeProfileId: tee.id, groups: [{ number: 1, playerIds: ids }],
+      teeProfileId: teeProfile.id, groups: [{ number: 1, playerIds: ids }],
     }],
   };
   const empty = await f.workspace.get(creator, event.id);
@@ -27,6 +27,55 @@ async function fixture() {
 }
 
 describe('saved owner workspace', () => {
+  it('projects authoritative purse availability without an additional purse or round-score read', async () => {
+    const f = await fixture();
+    expect(f.empty.purseConfigured).toBe(false);
+    const reads = vi.spyOn(f.table, 'getEntity');
+    const stored = f.rows.get(`${event.id}|event`);
+    if (!stored) throw new Error('Missing fictional event.');
+    f.rows.set(`${event.id}|event`, { ...stored, purseConfigured: true });
+    expect((await f.workspace.get(creator, event.id)).purseConfigured).toBe(true);
+    expect(reads.mock.calls.every(([, rowKey]) => rowKey !== 'purse' && !rowKey.startsWith('score-card:'))).toBe(true);
+    f.rows.set(`${event.id}|event`, { ...stored, purseConfigured: 'invalid' });
+    await expect(f.workspace.get(creator, event.id)).rejects.toMatchObject({ status: 503, code: 'INVALID_STORED_PURSE' });
+  });
+  it.each([1, 10, 18])('persists and reloads explicit starting hole %i and validates captured workspace groups', async (startingHole) => {
+    const f = await fixture();
+    const input = { ...f.input, rounds: f.input.rounds.map((round) => ({
+      ...round, groups: round.groups.map((group) => ({ ...group, startingHole })),
+    })) };
+    const saved = await f.workspace.save(creator, event.id, input, f.empty.etag);
+    expect(saved.rounds[0]?.groups).toEqual(input.rounds[0]?.groups);
+    expect((await f.workspace.get(creator, event.id)).rounds).toEqual(saved.rounds);
+    expect(isEventWorkspace(saved)).toBe(true);
+    for (const invalid of [0, 19, 1.5, Number.NaN, Infinity, '10', null]) {
+      expect(isEventWorkspace({ ...saved, rounds: saved.rounds.map((round) => ({
+        ...round, groups: round.groups.map((group) => ({ ...group, startingHole: invalid })),
+      })) })).toBe(false);
+    }
+  });
+
+  it('rejects a start absent from the selected nine-hole tee before persistence and in captured workspace guards', async () => {
+    const f = await fixture({
+      ...tee, holeCount: 9, totalYardage: 3150, totalPar: 36, holes: tee.holes.slice(0, 9),
+    });
+    const input = { ...f.input, rounds: f.input.rounds.map((round) => ({
+      ...round, groups: round.groups.map((group) => ({ ...group, startingHole: 10 })),
+    })) };
+    f.submit.mockClear();
+    const before = new Map(f.rows);
+    await expect(f.workspace.save(creator, event.id, input, f.empty.etag)).rejects.toMatchObject({
+      status: 400, code: 'INVALID_GROUP_STARTING_HOLE',
+    });
+    expect(f.submit).not.toHaveBeenCalled();
+    expect(f.rows).toEqual(before);
+    const saved = await f.workspace.save(creator, event.id, f.input, f.empty.etag);
+    expect(isEventWorkspace(saved)).toBe(true);
+    expect(isEventWorkspace({ ...saved, rounds: saved.rounds.map((round) => ({
+      ...round, groups: input.rounds[0]?.groups,
+    })) })).toBe(false);
+  });
+
   it('returns an empty unsaved workspace, then atomically saves event metadata, immutable selections, roster and groups', async () => {
     const f = await fixture();
     expect(f.empty).toMatchObject({ location: '', roster: [], rounds: [], event: { role: 'owner' } });

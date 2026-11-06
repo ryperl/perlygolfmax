@@ -6,6 +6,7 @@ import { readPublicApiUrl } from '../client/config';
 import type { EventPage } from '../domain/events';
 import type { EventWorkspace } from '../domain/setup';
 import type { ScoreLocation } from '../domain/score-location';
+import { groupStartingHole } from '../domain/round-navigation';
 import { OwnerScoresView } from '../features/scoring';
 import { eventTabHref, isEventTab, readEventRoute } from './navigation';
 import type { EventTab } from './navigation';
@@ -126,17 +127,19 @@ function PublicRoundPage({ services, eventId, roundId, onUnavailable }: {
   }, [eventId, roundId]);
   const selected = workspace?.rounds.find((round) => round.id === roundId);
   const defaultLocation: ScoreLocation | undefined = selected?.groups[0] && selected.teeProfile.holes[0]
-    ? { groupNumber: selected.groups[0].number, holeNumber: selected.teeProfile.holes[0].number, view: 'entry' } : undefined;
+    ? { groupNumber: selected.groups[0].number, holeNumber: groupStartingHole(selected.groups[0], selected.teeProfile.holes) ?? selected.teeProfile.holes[0].number, view: 'entry' } : undefined;
   return <section>
-    <p className="score-hint">Save &amp; Next Hole and wait for Saved before closing the app. Reopening restores your place and loads fresh scores. An internet connection is required.</p>
     {(storageNotice || initial.error) && <p role="status">{storageNotice || initial.error}</p>}
     {error && <p role="alert">{error}</p>}
     {!workspace && !error && <p role="status">Loading saved round…</p>}
     {workspace && <>
-      <label>Saved round<select value={roundId} onChange={(event) => {
-        window.location.hash = `#events?event=${eventId}&round=${event.target.value}`;
-      }}>{workspace.rounds.map((round) => <option key={round.id} value={round.id}>{round.name}</option>)}</select></label>
       <OwnerScoresView client={services.scores} eventId={eventId} roundId={roundId}
+        roundTools={<>
+          <p className="score-hint">Save &amp; Next Hole and wait for Saved before closing the app. Reopening restores your place and loads fresh scores. An internet connection is required.</p>
+          <label>Saved round<select value={roundId} onChange={(event) => {
+            window.location.hash = `#events?event=${eventId}&round=${event.target.value}`;
+          }}>{workspace.rounds.map((round) => <option key={round.id} value={round.id}>{round.name}</option>)}</select></label>
+        </>}
         initialLocation={initial.location ?? defaultLocation} onLocationChange={remember} onSessionExpired={onUnavailable} />
     </>}
   </section>;

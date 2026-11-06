@@ -4,6 +4,7 @@ import type { HoleScore } from '../../domain/scoring';
 import type { RoundGroup } from '../../domain/setup';
 import { parseScoreEntry, scoreEntryText } from '../../contracts/scoring';
 import { maximumExactHoleStrokes } from '../../domain/scoring';
+import { adjacentHole, groupStartingHole } from '../../domain/round-navigation';
 import type { HoleDraft } from './entry-state';
 import { scoreLabel } from './entry-state';
 import './scoring.css';
@@ -30,19 +31,21 @@ export interface GroupHoleEntryProps {
   readonly readOnly: boolean;
   readonly unsavedCount: number;
   readonly focusHole?: number | null;
+  readonly saveStatus?: string;
   readonly onGroupChange: (number: number) => void;
   readonly onHoleChange: (number: number) => void;
   readonly onEdit: (playerId: string, text: string) => void;
   readonly onReview: (playerId: string) => void;
   readonly onDiscard: (playerId: string) => void;
+  readonly onDiscardAll: () => void;
   readonly onSave: (advance: boolean) => void;
 }
 
-export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, readOnly, unsavedCount, focusHole,
-  onGroupChange, onHoleChange, onEdit, onReview, onDiscard, onSave }: GroupHoleEntryProps) {
-  const index = layout.findIndex((item) => item.number === hole.number);
-  const previous = layout[index - 1];
-  const next = layout[index + 1];
+export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, readOnly, unsavedCount, focusHole, saveStatus,
+  onGroupChange, onHoleChange, onEdit, onReview, onDiscard, onDiscardAll, onSave }: GroupHoleEntryProps) {
+  const previous = adjacentHole(layout, hole.number, -1);
+  const next = adjacentHole(layout, hole.number, 1);
+  const last = next?.number === groupStartingHole(groups.find((group) => group.number === groupNumber), layout);
   const disabled = busy || readOnly;
   const scoreInputs = useRef<Array<HTMLInputElement | null>>([]);
   const primaryAction = useRef<HTMLButtonElement | null>(null);
@@ -103,11 +106,10 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
         {layout.map((item) => <option value={item.number} key={item.number}>Hole {item.number}</option>)}
       </select></label>
     </div>
-    {unsavedCount > 0 && <p className="score-hint">{unsavedCount} unsaved {unsavedCount === 1 ? 'score' : 'scores'}</p>}
     <header className="hole-heading">
-      <button type="button" aria-label="Previous hole" disabled={busy || !previous} onClick={() => { if (previous) onHoleChange(previous.number); }}>←</button>
+      <button type="button" aria-label="Previous hole" disabled={busy || !previous || layout.length < 2} onClick={() => { if (previous) onHoleChange(previous.number); }}>←</button>
       <div><h2 ref={heading} tabIndex={-1}>Hole {hole.number}</h2><p>{personalContext ? 'Golfer tee details shown below' : `Par ${String(hole.par)} · ${String(hole.length)} yards · Stroke index ${String(hole.allocation)}`}</p></div>
-      <button type="button" aria-label="Next hole" disabled={busy || !next} onClick={() => { if (next) onHoleChange(next.number); }}>→</button>
+      <button type="button" aria-label="Next hole" disabled={busy || !next || layout.length < 2} onClick={() => { if (next) onHoleChange(next.number); }}>→</button>
     </header>
     <form aria-label={`Group ${String(groupNumber)} hole ${String(hole.number)} entry`} onSubmit={(event) => { event.preventDefault(); onSave(true); }}>
       <div className="group-entry-rows">{rows.slice(0, 4).map((row, rowIndex) => {
@@ -189,8 +191,15 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
         </article>;
       })}</div>
       <div className="group-save-actions">
-        <button ref={primaryAction} className="primary-score-action" disabled={disabled}>{next ? 'Save & Next Hole' : 'Save Hole'}</button>
+        <button ref={primaryAction} className="primary-score-action" disabled={disabled}>{last ? 'Save Hole' : 'Save & Next Hole'}</button>
         <button type="button" disabled={disabled} onClick={() => { onSave(false); }}>Save changes</button>
+        <div className="score-secondary-actions">
+          <div className="score-secondary-summary">
+            <p className="score-hint">{unsavedCount} unsaved {unsavedCount === 1 ? 'score' : 'scores'}</p>
+            <p className="score-save-status" aria-live="polite">{saveStatus ?? (busy ? 'Working…' : unsavedCount > 0 ? 'Unsaved changes' : 'Ready for scores')}</p>
+          </div>
+          <button className="discard-score-action" type="button" aria-label="Discard unsaved scores" disabled={busy || unsavedCount === 0} onClick={onDiscardAll}>Discard changes</button>
+        </div>
       </div>
     </form>
   </section>;

@@ -3,6 +3,18 @@ import { fictionalId, fictionalSetup, fictionalWorkspace } from '../../client/ca
 import { inputFrom, sameRoundInput, sameSetupInput, setupProblems } from './setup-draft';
 
 describe('setup draft presentation', () => {
+  it('retains group starts and detects starting-hole edits while accepting legacy hole one', () => {
+    const initial = fictionalSetup.rounds[0];
+    const saved = fictionalWorkspace.rounds[0];
+    if (!initial || !saved) throw new Error('Missing fictional round.');
+    expect(sameRoundInput(initial, { ...initial, groups: initial.groups.map((group) => ({ ...group, startingHole: 1 })) })).toBe(true);
+    const changed = { ...initial, groups: initial.groups.map((group) => ({ ...group, startingHole: 7 })) };
+    expect(sameRoundInput(initial, changed)).toBe(false);
+    expect(inputFrom({ ...fictionalWorkspace, rounds: [{ ...saved, groups: changed.groups }] }).rounds[0]?.groups)
+      .toEqual(changed.groups);
+    expect(setupProblems({ ...fictionalSetup, rounds: [{ ...changed, groups: changed.groups.map((group) => ({ ...group, startingHole: 19 })) }] }))
+      .toContain('Round 1, group 1: choose a starting hole from 1 to 18.');
+  });
   it.each([1, 2, 3])('allows a complete %i-player event draft without placeholder golfers', (count) => {
     const playerIds = fictionalSetup.playerIds.slice(0, count);
     const draft = { ...fictionalSetup, playerIds, rounds: fictionalSetup.rounds.map((round) => ({

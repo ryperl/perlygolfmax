@@ -31,6 +31,20 @@ function roundCard(name: string) {
 }
 
 describe('saved event overview', () => {
+  it('shows purse navigation only for a configured purse and displays actual group starting holes', () => {
+    const current = { ...workspace, canViewScores: true, event: { ...workspace.event, role: 'viewer' as const } };
+    const view = render(<EventTripView workspace={current} view="overview" />);
+    expect(screen.queryByRole('link', { name: 'View purse and winnings' })).not.toBeInTheDocument();
+    view.rerender(<EventTripView workspace={{ ...current, purseConfigured: false }} view="overview" />);
+    expect(screen.queryByRole('link', { name: 'View purse and winnings' })).not.toBeInTheDocument();
+    view.rerender(<EventTripView workspace={{ ...current, purseConfigured: true }} view="overview" />);
+    expect(screen.getByRole('link', { name: 'View purse and winnings' })).toBeVisible();
+    const round = current.rounds[0];
+    if (!round) throw new Error('Missing fictional round.');
+    view.rerender(<EventTripView workspace={{ ...current, rounds: [{ ...round,
+      groups: round.groups.map((group) => ({ ...group, startingHole: 7 })) }] }} view="rounds" />);
+    expect(screen.getAllByText('Starting hole: 7')).toHaveLength(round.groups.length);
+  });
   it.each(['overview', 'rounds', 'group'] as const)('lets other-event viewers browse %s without inventing a playing group or access management', (view) => {
     const enabled = { ...workspace, canViewScores: true, event: { ...workspace.event, role: 'viewer' as const } };
     const rendered = render(<EventTripView workspace={enabled} view={view} />);
@@ -43,7 +57,7 @@ describe('saved event overview', () => {
   it('links all admitted scorecards and the bound playing group without exposing organizer setup', () => {
     const player = workspace.roster[0];
     if (!player) throw new Error('Missing fictional player.');
-    render(<EventTripView workspace={{ ...workspace, canViewScores: true, viewerPlayerId: player.playerId,
+    render(<EventTripView workspace={{ ...workspace, purseConfigured: true, canViewScores: true, viewerPlayerId: player.playerId,
       event: { ...workspace.event, role: 'member' },
       overallCompetition: { kind: 'stroke-play', basis: 'gross' } }} view="rounds" />);
     expect(screen.getAllByRole('link', { name: /Open scorecard for/ })).toHaveLength(workspace.rounds.length);

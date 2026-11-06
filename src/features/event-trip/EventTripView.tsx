@@ -1,4 +1,5 @@
 import type { EventWorkspace, RoundSnapshot } from '../../domain/setup';
+import { groupStartingHole } from '../../domain/round-navigation';
 import type { EventEntryProgress, RoundEntryProgressState } from './entry-progress';
 import './event-trip.css';
 
@@ -43,6 +44,7 @@ function ManualGroups({ round }: { readonly round: RoundSnapshot }) {
           {round.groups.map((group) => (
             <li key={group.number}>
               <h5>Group {group.number}</h5>
+              <p>Starting hole: {groupStartingHole(group, round.teeProfile.holes)}</p>
               {group.playerIds.length === 0 ? <p>No players assigned.</p> : (
                 <ul>
                   {group.playerIds.map((playerId) => (
@@ -130,7 +132,7 @@ export function EventTripView({ workspace, view, progress }: EventTripViewProps)
         <nav className="event-trip-links" aria-label={event.role === 'owner' ? 'Event setup' : 'Event links'}>
             {event.role === 'owner' && <a href={setupLink(event.id)}>{archived ? 'View event setup' : 'Configure event'}</a>}
             {(event.role === 'owner' || workspace.canViewScores) && workspace.overallCompetition && view !== 'group' && <a href={`#leaderboard?event=${encodeURIComponent(event.id)}`}>Overall leaderboard</a>}
-            {(event.role === 'owner' || workspace.canViewScores) && view !== 'group' && <a href={`#purse?event=${encodeURIComponent(event.id)}`}>{archived || event.role !== 'owner' ? 'View purse and winnings' : 'Purse and winnings'}</a>}
+            {workspace.purseConfigured === true && (event.role === 'owner' || workspace.canViewScores) && view !== 'group' && <a href={`#purse?event=${encodeURIComponent(event.id)}`}>{archived || event.role !== 'owner' ? 'View purse and winnings' : 'Purse and winnings'}</a>}
         </nav>
       </header>
       {view === 'overview' && (

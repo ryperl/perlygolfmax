@@ -176,6 +176,8 @@ export function isRoundScores(value: unknown): value is RoundScores {
   const groupNumbers = new Set<number>();
   for (const group of value.groups) {
     if (!isRecord(group) || !positiveInteger(group.number, Number.MAX_SAFE_INTEGER) || !Array.isArray(group.playerIds)
+      || group.startingHole !== undefined && (!positiveInteger(group.startingHole, 18)
+        || !layout.some((hole) => hole.number === group.startingHole))
       || group.playerIds.length < 1 || group.playerIds.length > 4) return false;
     const players: unknown[] = group.playerIds;
     if (!players.every((id): id is string => isUuid(id) && roster.has(id))) return false;

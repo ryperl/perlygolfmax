@@ -33,6 +33,7 @@ test('assigned player entry and readonly controls work at 390 and 320 pixels', a
       await page.getByLabel('View group').selectOption('1');
       for (const field of await page.getByRole('textbox').all()) await expect(field).toBeDisabled();
       await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+      await page.getByText('Round details & tools', { exact: true }).click();
       await page.getByRole('button', { name: 'Games', exact: true }).click();
       await expect(page.getByText(/Settings are read-only/)).toBeVisible();
       await expect(page.getByRole('button', { name: /Add game|Edit Fictional|Save game/ })).toHaveCount(0);

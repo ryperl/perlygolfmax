@@ -6,6 +6,21 @@ import type { EventSetupInput } from '../domain/setup';
 import { maximumEventSetupBytes } from '../domain/setup';
 
 describe('event workspace client', () => {
+  it('requires explicit group starts to be acknowledged rather than accepting a server that drops them', async () => {
+    const round = fictionalSetup.rounds[0];
+    if (!round) throw new Error('Missing fictional round.');
+    const input = { ...fictionalSetup, rounds: [{ ...round, groups: round.groups.map((group) => ({ ...group, startingHole: 7 })) }] };
+    const saved = { ...fictionalWorkspace, rounds: fictionalWorkspace.rounds.map((snapshot) => ({
+      ...snapshot, groups: input.rounds[0]?.groups ?? [],
+    })) };
+    const send = vi.fn<typeof fetch>().mockImplementation(() => Promise.resolve(new Response(JSON.stringify(saved))));
+    const client = createSetupClient('https://fictional.example.test/api', () => Promise.resolve('fictional'), send);
+    await expect(client.save(fictionalEvent.id, 'v1', input, new AbortController().signal)).resolves.toEqual(saved);
+    send.mockImplementation(() => Promise.resolve(new Response(JSON.stringify(fictionalWorkspace))));
+    await expect(client.save(fictionalEvent.id, 'v1', input, new AbortController().signal)).rejects.toThrow('Invalid saved workspace response');
+    await expect(client.save(fictionalEvent.id, 'v1', { ...input, rounds: [{ ...round,
+      groups: round.groups.map((group) => ({ ...group, startingHole: 1 })) }] }, new AbortController().signal)).resolves.toEqual(fictionalWorkspace);
+  });
   it('explicitly refreshes a saved round with a stable request ID, exact workspace revision and empty body', async () => {
     const send = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(fictionalWorkspace)));
     const client = createSetupClient('https://fictional.example.test/api', () => Promise.resolve('fictional'), send);

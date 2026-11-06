@@ -14,6 +14,27 @@ const input = {
 };
 
 describe('private setup and index contracts', () => {
+  it('accepts legacy purse availability omission and explicit booleans, not truthy malformed values', () => {
+    const workspace = { event: { id: ids[0], name: 'Fictional Event', createdAt: '2026-01-01', role: 'owner', status: 'active', etag: 'current' },
+      location: '', roster: [], rounds: [], etag: 'current' };
+    for (const purseConfigured of [true, false]) expect(isEventWorkspace({ ...workspace, purseConfigured })).toBe(true);
+    for (const purseConfigured of [null, 1, 'true', {}]) expect(isEventWorkspace({ ...workspace, purseConfigured })).toBe(false);
+    expect(isEventWorkspace(workspace)).toBe(true);
+  });
+  it('accepts legacy groups and explicit integer starting holes from 1 through 18', () => {
+    expect(isEventSetupInput(input)).toBe(true);
+    for (const startingHole of [1, 10, 18]) {
+      expect(isEventSetupInput({ ...input, rounds: input.rounds.map((round) => ({
+        ...round, groups: round.groups.map((group) => ({ ...group, startingHole })),
+      })) })).toBe(true);
+    }
+    for (const startingHole of [0, -1, 19, 1.5, Number.NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, '10', null]) {
+      expect(isEventSetupInput({ ...input, rounds: input.rounds.map((round) => ({
+        ...round, groups: round.groups.map((group) => ({ ...group, startingHole })),
+      })) })).toBe(false);
+    }
+  });
+
   it('requires a public workspace to be active viewer-only with scores, no account binding or tester flag', () => {
     const workspace = {
       event: { id: ids[0], name: 'Fictional Event', createdAt: '2026-01-01', role: 'viewer', status: 'active', etag: 'current' },

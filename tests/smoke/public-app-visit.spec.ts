@@ -16,6 +16,7 @@ test('the full public app resumes the next hole across eighteen home-screen-styl
     logLevel: 'error',
   });
   let stored = structuredClone(fictionalResumeRound);
+  stored = { ...stored, groups: stored.groups.map((group) => ({ ...group, startingHole: group.number === 2 ? 10 : 1 })) };
   let writes = 0;
   let reads = 0;
   const errors: string[] = [];
@@ -85,20 +86,32 @@ test('the full public app resumes the next hole across eighteen home-screen-styl
       await route.fulfill({ json: result });
     });
     await page.setViewportSize({ width: 402, height: 874 });
-    for (let hole = 1; hole <= 18; hole++) {
-      await page.goto(hole === 1 ? `${origin}/#events?event=${stored.eventId}&round=${stored.roundId}` : `${origin}/`);
-      const form = page.getByRole('form', { name: `Group ${String(hole === 1 ? 1 : 2)} hole ${String(hole)} entry`, exact: true });
+    for (let visit = 1; visit <= 18; visit++) {
+      const hole = (visit + 8) % 18 + 1;
+      const nextHole = hole === 18 ? 1 : hole + 1;
+      await page.goto(visit === 1 ? `${origin}/#events?event=${stored.eventId}&round=${stored.roundId}` : `${origin}/`);
+      const form = page.getByRole('form', { name: `Group ${String(visit === 1 ? 1 : 2)} hole ${String(visit === 1 ? 1 : hole)} entry`, exact: true });
       await expect(form).toBeVisible();
-      if (hole === 1) await page.getByLabel('View group').selectOption('2');
+      await expect(page.getByRole('region', { name: 'Round scores', exact: true })).toBeFocused();
+      if (visit === 1) await page.getByLabel('View group').selectOption('2');
       expect(await page.evaluate(() => window.innerWidth)).toBe(402);
       await expect(page.getByRole('button', { name: /^Sign (in|out)$/ })).toHaveCount(0);
-      await expect(page.getByRole('combobox', { name: /Saved round/ })).toHaveValue(stored.roundId);
-      await page.getByLabel('Fictional golfer 3 score', { exact: true }).fill('4');
-      await page.getByRole('button', { name: hole === 18 ? 'Save Hole' : 'Save & Next Hole', exact: true }).click();
+      await expect(page.getByRole('combobox', { name: /Saved round/, includeHidden: true })).toHaveValue(stored.roundId);
+      await expect(page.locator('.score-round-tools')).not.toHaveAttribute('open');
+      const field = page.getByLabel('Fictional golfer 3 score', { exact: true });
+      await expect(field).toBeInViewport({ ratio: 1 });
+      const before = await field.evaluate((element) => element.getBoundingClientRect().top + scrollY);
+      const discard = page.getByRole('button', { name: 'Discard unsaved scores', exact: true });
+      await expect(discard).toBeDisabled();
+      await field.fill('4');
+      await expect(discard).toBeEnabled();
+      expect(await field.evaluate((element) => element.getBoundingClientRect().top + scrollY)).toBeCloseTo(before, 0);
+      if (visit === 1) await page.screenshot({ path: testInfo.outputPath('focused-group-entry.png') });
+      await page.getByRole('button', { name: visit === 18 ? 'Save Hole' : 'Save & Next Hole', exact: true }).click();
       await expect(page.getByText(/^Saved —/)).toBeVisible();
       expect(stored.cards[2]?.holes[hole - 1]?.score).toEqual({ kind: 'strokes', strokes: 4 });
-      if (hole < 18) {
-        const heading = page.getByRole('heading', { name: `Hole ${String(hole + 1)}`, exact: true });
+      if (visit < 18) {
+        const heading = page.getByRole('heading', { name: `Hole ${String(nextHole)}`, exact: true });
         await expect(heading).toBeFocused();
         await expect(heading).toBeInViewport();
         await expect(page.getByRole('heading', { name: 'Round scorecard', exact: true })).toHaveCount(0);
@@ -107,7 +120,7 @@ test('the full public app resumes the next hole across eighteen home-screen-styl
       }
       const location = await page.evaluate(() => JSON.parse(localStorage.getItem('perly-golf-max:last-score-location:v1') ?? 'null') as unknown);
       expect(location).toEqual({ version: 1, eventId: stored.eventId, roundId: stored.roundId,
-        groupNumber: 2, holeNumber: hole === 18 ? 18 : hole + 1, view: hole === 18 ? 'cards' : 'entry' });
+        groupNumber: 2, holeNumber: visit === 18 ? hole : nextHole, view: visit === 18 ? 'cards' : 'entry' });
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     }
     expect(writes).toBe(18);

@@ -15,6 +15,41 @@ import { stagePrivateContent, privateContent } from '../private-values.js';
 import { publicFixture } from './test-support.js';
 
 describe('active event public scoring authority', () => {
+  it('publishes the purse-presence flag for public events without publishing configuration or money in the workspace', async () => {
+    const f = await publicFixture();
+    expect((await f.workspace.get(f.actor, event.id)).purseConfigured).toBe(false);
+    const stored = f.rows.get(`${event.id}|event`);
+    if (!stored) throw new Error('Missing fictional event.');
+    f.rows.set(`${event.id}|event`, { ...stored, purseConfigured: true });
+    const workspace = await f.workspace.get(f.actor, event.id);
+    expect(workspace.purseConfigured).toBe(true);
+    expect(workspace).not.toHaveProperty('plan');
+    expect(workspace).not.toHaveProperty('configuration');
+    expect(isEventWorkspace(workspace)).toBe(true);
+  });
+  it('publishes each group starting hole through public workspace, scores and acknowledged score writes', async () => {
+    const f = await publicFixture();
+    const before = await f.workspace.get(creator, event.id);
+    const input = { ...f.input, rounds: f.input.rounds.map((round) => ({
+      ...round, groups: round.groups.map((group, index) => ({ ...group, startingHole: index === 0 ? 10 : 18 })),
+    })) };
+    await f.workspace.save(creator, event.id, input, before.etag);
+    const workspace = await f.workspace.get(f.actor, event.id);
+    const scores = await f.scores.get(f.actor, event.id, f.roundId);
+    expect(workspace.rounds[0]?.groups).toEqual(input.rounds[0]?.groups);
+    expect(scores.groups).toEqual(input.rounds[0]?.groups);
+    expect(isEventWorkspace(workspace)).toBe(true);
+    expect(isRoundScores(scores)).toBe(true);
+    const snapshot = workspace.rounds[0];
+    if (!snapshot) throw new Error('Missing fictional public starting-hole round');
+    expect(roundMatchesSnapshot(workspace, snapshot, scores)).toBe(true);
+    const saved = await f.scores.write(f.actor, event.id, f.roundId, f.peerId, 18,
+      { kind: 'strokes', strokes: 4 }, null, identifier(4099));
+    expect(saved.round.groups).toEqual(scores.groups);
+    expect(isScoreWriteResult(saved)).toBe(true);
+    expect((await f.workspace.get(f.actor, event.id)).rounds[0]?.groups).toEqual(scores.groups);
+  });
+
   it('reads and scores every saved group as explicit public, never creating membership or admission', async () => {
     const f = await publicFixture();
     const keys = new Set(f.rows.keys());

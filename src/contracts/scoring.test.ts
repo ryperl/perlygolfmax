@@ -30,6 +30,17 @@ const change: ScoreChange = {
 };
 
 describe('owner gross scoring network contracts', () => {
+  it('validates explicit group starts against captured layout while preserving legacy groups', () => {
+    const base = round();
+    expect(isRoundScores(base)).toBe(true);
+    for (const startingHole of [1, 5, 9]) {
+      expect(isRoundScores({ ...base, groups: base.groups.map((group) => ({ ...group, startingHole })) })).toBe(true);
+    }
+    for (const startingHole of [0, -1, 10, 18, 19, 1.5, Number.NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, '1', null]) {
+      expect(isRoundScores({ ...base, groups: base.groups.map((group) => ({ ...group, startingHole })) })).toBe(false);
+    }
+  });
+
   it('requires exact event-scoped public score attribution and all-card non-admin permissions', () => {
     const base = round();
     const actor = { kind: 'public-score', eventId: base.eventId };

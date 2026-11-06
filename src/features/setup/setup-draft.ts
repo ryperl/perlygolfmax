@@ -32,7 +32,8 @@ export function sameRoundInput(left: RoundSetupInput, right: RoundSetupInput): b
     && sameTeeSelections(left.playerTeeSelections, right.playerTeeSelections, left.teeProfileId)
     && left.groups.length === right.groups.length && left.groups.every((group, index) => {
       const other = right.groups[index];
-      return other !== undefined && group.number === other.number && sameIds(group.playerIds, other.playerIds);
+      return other !== undefined && group.number === other.number
+        && (group.startingHole ?? 1) === (other.startingHole ?? 1) && sameIds(group.playerIds, other.playerIds);
     });
 }
 
@@ -65,6 +66,9 @@ export function setupProblems(draft: EventSetupInput): readonly string[] {
     const unassigned = draft.playerIds.filter((id) => !round.groups.some((group) => group.playerIds.includes(id)));
     if (unassigned.length > 0) problems.push(`${label}: assign ${String(unassigned.length)} ${unassigned.length === 1 ? 'player' : 'players'} to playing groups.`);
     for (const group of round.groups) {
+      if (group.startingHole !== undefined && (!Number.isSafeInteger(group.startingHole) || group.startingHole < 1 || group.startingHole > 18)) {
+        problems.push(`${label}, group ${String(group.number)}: choose a starting hole from 1 to 18.`);
+      }
       if (group.playerIds.length > 4) problems.push(`${label}, group ${String(group.number)}: move players to another group (maximum four).`);
     }
   }

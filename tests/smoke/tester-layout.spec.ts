@@ -124,6 +124,7 @@ test('guest edits any saved playing group with keyboard at narrow/enlarged width
         await expect(score).toHaveValue(String(5 + number));
         await fitsViewport(page, width);
       }
+      await page.getByText('Round details & tools', { exact: true }).click();
       await page.getByRole('button', { name: 'Games', exact: true }).click();
       await expect(page.getByText(/Settings are read-only/)).toBeVisible();
       await expect(page.getByRole('button', { name: /Add game|Edit Fictional|Save game|Configure|Update team/i })).toHaveCount(0);

@@ -5,6 +5,7 @@ import { PrivateRequestError } from '../../client/private-request';
 import type { CourseCatalogEntry, CourseVersion, PlayerProfile, TeeProfile } from '../../domain/catalog';
 import type { RoundSetupInput, RoundSnapshot } from '../../domain/setup';
 import { compatibleTeeLayouts } from '../../domain/tees';
+import { groupStartingHole } from '../../domain/round-navigation';
 import { SetupPager } from './SetupPager';
 
 const groupCapacity = 4;
@@ -146,6 +147,18 @@ export function RoundEditor({ round, number, saved, courses, players, rosterIds,
     </fieldset>}
     <fieldset><legend>Playing groups</legend>
       <p>Assign every selected player once, up to four per group. Playing groups are not competition teams.</p>
+      <p>Choose each group's starting hole for a normal, back-nine or shotgun start.</p>
+      {round.groups.map((group) => <label key={group.number}>Round {number} Group {group.number} starting hole
+        <select value={groupStartingHole(group, tee?.holes ?? []) ?? ''} disabled={!tee} onChange={(event) => {
+          onChange({ ...round, groups: round.groups.map((item) => item.number === group.number
+            ? { ...item, startingHole: Number(event.target.value) } : item) });
+        }}>
+          {!tee && <option value="">Choose a tee first</option>}
+          {tee && group.startingHole !== undefined && !tee.holes.some((hole) => hole.number === group.startingHole)
+            && <option value={group.startingHole}>Hole {group.startingHole} unavailable — choose again</option>}
+          {tee?.holes.map((hole) => <option key={hole.number} value={hole.number}>Hole {hole.number}</option>)}
+        </select>
+      </label>)}
       {assignmentError && <p role="alert">{assignmentError}</p>}
       {rosterIds.length === 0 && <p>Select the event players first.</p>}
       {unassigned.length > 0 && <p>{unassigned.length} {unassigned.length === 1 ? 'player needs' : 'players need'} a group.</p>}
@@ -165,7 +178,8 @@ export function RoundEditor({ round, number, saved, courses, players, rosterIds,
           if (number) {
             const existing = groups.find((group) => group.number === number);
             if (existing) onChange({ ...round, groups: groups.map((group) => group.number === number ? { ...group, playerIds: [...group.playerIds, id] } : group) });
-            else onChange({ ...round, groups: [...groups, { number, playerIds: [id] }] });
+            else onChange({ ...round, groups: [...groups, { number, playerIds: [id],
+              ...(target?.startingHole !== undefined ? { startingHole: target.startingHole } : {}) }] });
           } else onChange({ ...round, groups });
         }}><option value="">Assign manually</option>{groupChoices.map((number) => {
           const members = round.groups.find((group) => group.number === number)?.playerIds ?? [];

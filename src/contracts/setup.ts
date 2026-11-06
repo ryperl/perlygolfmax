@@ -30,13 +30,16 @@ function location(value: unknown): value is string {
   return value === '' || boundedText(value, 200);
 }
 
-function groups(value: unknown, playerIds: readonly string[]): boolean {
+function groups(value: unknown, playerIds: readonly string[], layout?: readonly { readonly number: number }[]): boolean {
   if (!Array.isArray(value) || value.length < 1) return false;
   const roster = new Set(playerIds);
   const numbers = new Set<number>();
   const assigned: string[] = [];
   for (const group of value) {
     if (!isRecord(group) || typeof group.number !== 'number' || !Number.isSafeInteger(group.number) || group.number < 1
+      || group.startingHole !== undefined && (typeof group.startingHole !== 'number'
+        || !Number.isSafeInteger(group.startingHole) || group.startingHole < 1 || group.startingHole > 18
+        || layout !== undefined && !layout.some((hole) => hole.number === group.startingHole))
       || !Array.isArray(group.playerIds) || group.playerIds.length < 1 || group.playerIds.length > 4) return false;
     const groupIds: unknown[] = group.playerIds;
     if (!groupIds.every((id): id is string => isUuid(id) && roster.has(id))) return false;
@@ -72,7 +75,7 @@ function isRoundSnapshot(value: unknown, playerIds: readonly string[]): value is
     && isCourseId(value.courseId) && isVersionId(value.courseVersionId)
     && isCourseMetadata(value.course) && isTeeProfile(value.teeProfile)
     && (value.playerTees === undefined || isPlayerTeeProfiles(value.playerTees, value.teeProfile, playerIds))
-    && groups(value.groups, playerIds) && Array.isArray(value.players)
+    && groups(value.groups, playerIds, value.teeProfile.holes) && Array.isArray(value.players)
     && value.players.length === playerIds.length
     && value.players.every((player: unknown) => isRecord(player) && isUuid(player.playerId)
       && roster.has(player.playerId) && boundedText(player.displayName)
@@ -82,6 +85,7 @@ function isRoundSnapshot(value: unknown, playerIds: readonly string[]): value is
 
 export function isEventWorkspace(value: unknown): value is EventWorkspace {
   if (!isRecord(value) || !isEventSummary(value.event) || !isEventRevision(value.etag)
+    || value.purseConfigured !== undefined && typeof value.purseConfigured !== 'boolean'
     || value.event.status === 'archived' && value.event.role !== 'owner'
     || value.canViewScores !== undefined && typeof value.canViewScores !== 'boolean'
     || value.testerAccess !== undefined && (value.testerAccess !== true || value.event.role !== 'viewer'

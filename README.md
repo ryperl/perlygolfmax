@@ -135,6 +135,25 @@ fresh server scores. Returning to a running/backgrounded page refreshes safely
 without resetting that position or overwriting local drafts. Failed/conflicting
 saves do not advance or claim confirmation.
 
+Enter scores opens a focused scoring region without opening the phone keyboard.
+Round guidance, the saved-round picker and other tools remain under **Round
+details & tools**. Save/discard actions and the unsaved count keep a stable place
+below the inputs; changing a score does not insert controls above the fields.
+Discard clears all local unsaved scores for this round, not saved server scores.
+
+Organizers select a starting hole for each playing group during round setup,
+including back-nine and shotgun starts. Existing groups without a saved start
+use the first hole in their captured layout. Hole arrows wrap in both directions
+without saving. **Save & Next Hole** follows one circuit from the group's start,
+then opens scorecards after the preceding hole (10–18, then 1–9 for a start on
+10). This is navigation, not round finalization; unplayed holes remain unplayed.
+Reopening uses the remembered hole instead of resetting to the starting hole.
+Starting holes follow the existing scored-round setup locks.
+
+Overview shows purse/winnings navigation only when the event has a configured
+purse. Availability comes from the existing workspace response, not an additional
+purse calculation request. Organizers can still configure one in organizer tools.
+
 Only allowlisted navigation fields are kept in localStorage: version, event ID,
 round ID, group number, hole number and view. No scores, drafts, credentials or
 personal identities are stored there. Storage failures are visible and allow

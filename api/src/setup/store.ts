@@ -102,11 +102,14 @@ export class TableWorkspaceStore {
 
   async get(identity: ScoreActor, id: string): Promise<EventWorkspace> {
     const before = await this.access(identity, id);
+    if (before.event.purseConfigured !== undefined && before.event.purseConfigured !== true) throw new ApiError(503, 'INVALID_STORED_PURSE');
     const workspace = await this.load(before.summary);
     await assertEventAccessUnchanged(this.table, identity, id, before);
     // Explicit allowlists prevent catalog/index/audit fields from leaking to event members.
     return {
       event: before.summary, location: workspace.location, etag: before.summary.etag,
+      ...(before.summary.role === 'owner' || before.admittedPlayer || before.publicAccess
+        ? { purseConfigured: before.event.purseConfigured === true } : {}),
       canViewScores: before.summary.role === 'owner' || before.admittedPlayer || before.testerLink !== undefined || before.publicAccess === true,
       ...(before.testerLink ? { testerAccess: true as const } : {}),
       ...(before.publicAccess ? { publicAccess: true as const } : {}),
@@ -122,7 +125,8 @@ export class TableWorkspaceStore {
           playerId: entry.playerId, profile: profile(entry.profile),
         })) } : {}),
         ...(round.scoringStarted ? { scoringStarted: true } : {}),
-        groups: round.groups.map((group) => ({ number: group.number, playerIds: [...group.playerIds] })),
+        groups: round.groups.map((group) => ({ number: group.number, playerIds: [...group.playerIds],
+          ...(group.startingHole === undefined ? {} : { startingHole: group.startingHole }) })),
         players: round.players.map((player) => before.summary.role === 'owner'
           ? {
             playerId: player.playerId, displayName: player.displayName,
@@ -264,7 +268,11 @@ export class TableWorkspaceStore {
       const requested = input.rounds.find((round) => round.id === saved.id);
       if (!requested || requested.name !== saved.name || requested.courseId !== saved.courseId
         || requested.courseVersionId !== saved.courseVersionId || requested.teeProfileId !== saved.teeProfile.id
-        || canonical(requested.groups) !== canonical(saved.groups)
+        || canonical(requested.groups.map((group) => ({
+          ...group, startingHole: group.startingHole ?? saved.teeProfile.holes[0]?.number,
+        }))) !== canonical(saved.groups.map((group) => ({
+          ...group, startingHole: group.startingHole ?? saved.teeProfile.holes[0]?.number,
+        })))
         || requested.playerTeeSelections !== undefined && !sameTeeSelections(requested.playerTeeSelections,
           saved.playerTees?.map((entry) => ({ playerId: entry.playerId, teeProfileId: entry.profile.id })), saved.teeProfile.id)) {
         throw new ApiError(409, 'ROUND_SCORING_STARTED');
@@ -287,6 +295,10 @@ export class TableWorkspaceStore {
       const version = await this.courses.getVersion(identity, round.courseId, round.courseVersionId);
       const teeProfile = version.data.teeProfiles.find((tee) => tee.id === round.teeProfileId);
       if (!teeProfile) throw new ApiError(400, 'TEE_PROFILE_NOT_FOUND');
+      if (round.groups.some((group) => group.startingHole !== undefined
+        && !teeProfile.holes.some((hole) => hole.number === group.startingHole))) {
+        throw new ApiError(400, 'INVALID_GROUP_STARTING_HOLE');
+      }
       const oldRound = previous.rounds.find((existing) => existing.id === round.id);
       if (allowPerGolferTees === true && round.playerTeeSelections === undefined && oldRound?.playerTees?.length
         && (oldRound.courseId !== round.courseId || oldRound.courseVersionId !== round.courseVersionId)) {
@@ -311,7 +323,8 @@ export class TableWorkspaceStore {
         id: round.id, name: round.name, courseId: round.courseId, courseVersionId: round.courseVersionId,
         course: metadata(version.data), teeProfile,
         ...(playerTees.length ? { playerTees } : {}),
-        groups: round.groups.map((group) => ({ number: group.number, playerIds: [...group.playerIds] })),
+        groups: round.groups.map((group) => ({ number: group.number, playerIds: [...group.playerIds],
+          ...(group.startingHole === undefined ? {} : { startingHole: group.startingHole }) })),
         players: profiles.map((player) => {
           const saved = oldPlayers.get(player.id);
           return {

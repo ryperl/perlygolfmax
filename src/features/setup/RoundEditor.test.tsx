@@ -53,6 +53,43 @@ function renderGroups(groups: readonly RoundGroup[]) {
 }
 
 describe('round setup editor', () => {
+  it('offers every captured hole for back-nine and shotgun starts on an eighteen-hole course', async () => {
+    const profile = { ...fictionalProfile, holeCount: 18 as const, totalPar: fictionalProfile.totalPar * 2,
+      totalYardage: fictionalProfile.totalYardage * 2, holes: [...fictionalProfile.holes,
+        ...fictionalProfile.holes.map((hole) => ({ ...hole, number: hole.number + 9, sourceId: hole.sourceId + 9, allocation: hole.allocation + 9 }))] };
+    const f = renderEditor([fictionalEntry], { ...fictionalVersion, data: { ...fictionalVersion.data, teeProfiles: [profile] } });
+    const start = screen.getByLabelText('Round 1 Group 1 starting hole');
+    await waitFor(() => { expect(within(start).getAllByRole('option')).toHaveLength(18); });
+    await userEvent.selectOptions(start, '10');
+    expect(f.changed.mock.lastCall?.[0].groups[0]?.startingHole).toBe(10);
+    await userEvent.selectOptions(start, '18');
+    expect(f.changed.mock.lastCall?.[0].groups[0]?.startingHole).toBe(18);
+  });
+  it('retains independent starting holes while moving golfers between playing groups', async () => {
+    const changed = renderGroups([
+      { number: 1, playerIds: groupPlayers.slice(0, 4).map((player) => player.id) },
+      { number: 2, startingHole: 7, playerIds: groupPlayers.slice(4).map((player) => player.id) },
+    ]);
+    const start = await screen.findByLabelText('Round 1 Group 1 starting hole');
+    await waitFor(() => { expect(start).toBeEnabled(); });
+    expect(start).toHaveValue('1');
+    expect(screen.getByLabelText('Round 1 Group 2 starting hole')).toHaveValue('7');
+    await userEvent.selectOptions(start, '5');
+    expect(changed.mock.lastCall?.[0].groups.map((group) => group.startingHole)).toEqual([5, 7]);
+    await userEvent.selectOptions(screen.getByLabelText('Fictional Player 1 — round 1 group'), '3');
+    expect(changed.mock.lastCall?.[0].groups.find((group) => group.number === 1)?.startingHole).toBe(5);
+    expect(screen.getByLabelText('Round 1 Group 3 starting hole')).toHaveValue('1');
+    expect(within(start).queryByRole('option', { name: 'Hole 10' })).not.toBeInTheDocument();
+  });
+  it('disables the starting hole together with captured groups after scoring', async () => {
+    const round = fictionalWorkspace.rounds[0];
+    if (!round) throw new Error('Missing fictional round.');
+    render(<RoundEditor round={roundInput(round)} saved={{ ...round, scoringStarted: true }} number={1}
+      courses={[fictionalEntry]} players={fictionalPlayers} rosterIds={fictionalSetup.playerIds}
+      client={fakeCatalog()} onPending={vi.fn()} onChange={vi.fn()} />);
+    await screen.findByText('Locked after scoring. Saved course, tee, players and groups cannot be changed.');
+    expect(screen.getByLabelText('Round 1 Group 1 starting hole')).toBeDisabled();
+  });
   it('distinguishes an optional new group from the one existing foursome without creating empty groups', async () => {
     const f = renderEditor();
     const user = userEvent.setup();

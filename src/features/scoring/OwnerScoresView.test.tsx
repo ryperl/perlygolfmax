@@ -39,6 +39,52 @@ async function loaded(user = userEvent.setup()) {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); document.documentElement.scrollTop = 0; });
 
 describe('hole-first owner scoring', () => {
+  it('focuses the scoring region without opening the keyboard, hides tools, and discards all local holes without writing', async () => {
+    const { client } = mount(memoryScores({ ...fictionalRoundScores, setupLocked: true }));
+    await loaded();
+    expect(screen.getByRole('region', { name: 'Round scores' })).toHaveFocus();
+    const summary = screen.getByText('Round details & tools');
+    expect(summary.closest('details')).not.toHaveAttribute('open');
+    const discard = screen.getByRole('button', { name: 'Discard unsaved scores' });
+    expect(discard).toBeDisabled();
+    expect(screen.getByText('0 unsaved scores')).toBeVisible();
+    const user = userEvent.setup();
+    await enter(user, '6');
+    expect(input()).toHaveFocus();
+    expect(discard).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Next hole' }));
+    await enter(user, '7');
+    expect(screen.getByText('2 unsaved scores')).toBeVisible();
+    await user.click(discard);
+    expect(discard).toBeDisabled();
+    expect(input()).toHaveValue('');
+    await user.click(screen.getByRole('button', { name: 'Previous hole' }));
+    expect(input()).toHaveValue('');
+    expect(client.save).not.toHaveBeenCalled();
+    await user.click(summary);
+    expect(summary.closest('details')).toHaveAttribute('open');
+    expect(screen.getByRole('button', { name: 'Games' })).toBeVisible();
+  });
+  it('begins at the group starting hole, wraps eighteen to one and ends immediately before its start', async () => {
+    const layout = [...fictionalRoundScores.layout, ...fictionalRoundScores.layout.map((hole) => ({ ...hole, number: hole.number + 9, allocation: hole.allocation + 9 }))];
+    const round = { ...fictionalRoundScores, layout, groups: fictionalRoundScores.groups.map((group) => ({ ...group, startingHole: 10 })),
+      cards: fictionalRoundScores.cards.map((card) => ({ ...card, holes: [...card.holes,
+        ...card.holes.map((hole) => ({ ...hole, number: hole.number + 9 }))] })) };
+    const { client } = mount(memoryScores(round));
+    await loaded();
+    expect(screen.getByRole('heading', { name: 'Hole 10' })).toBeVisible();
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText('Jump to hole'), '18');
+    await enter(user, '4');
+    await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
+    expect(await screen.findByRole('heading', { name: 'Hole 1' })).toHaveFocus();
+    await user.selectOptions(screen.getByLabelText('Jump to hole'), '9');
+    await enter(user, '5');
+    await user.click(screen.getByRole('button', { name: 'Save Hole' }));
+    expect(await screen.findByRole('heading', { name: 'Round scorecard' })).toBeVisible();
+    expect(vi.mocked(client.save).mock.calls.map((call) => call[3])).toEqual([18, 9]);
+    expect(screen.getByText(/round is not finalized/)).toBeVisible();
+  });
   it('wires personal hole details into group entry and seeds blank nudges from each captured tee', async () => {
     const { client } = mount(memoryScores(mixedTeeRound()));
     const user = userEvent.setup();
@@ -160,8 +206,10 @@ describe('hole-first owner scoring', () => {
     expect(screen.getAllByRole('textbox')).toHaveLength(4);
     expect(screen.getAllByRole('form')).toHaveLength(1);
     expect(screen.getByRole('heading', { name: 'Hole 1' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Previous hole' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Previous hole' })).toBeEnabled();
     for (const field of screen.getAllByRole('textbox')) expect(field).toHaveValue('');
+    expect(screen.getByText(/Unsaved drafts live only in this page/)).not.toBeVisible();
+    await userEvent.click(screen.getByText('Round details & tools'));
     expect(screen.getByText(/Unsaved drafts live only in this page/)).toBeVisible();
     expect(screen.getByText(/first accepted score locks course, tee, roster, groups and captured indices/)).toHaveTextContent('Clearing scores does not unlock setup.');
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
@@ -445,7 +493,7 @@ describe('hole-first owner scoring', () => {
     await loaded();
     const user = userEvent.setup();
     await user.selectOptions(screen.getByLabelText('Jump to hole'), '9');
-    expect(screen.getByRole('button', { name: 'Next hole' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Next hole' })).toBeEnabled();
     await enter(user, 'X7');
     await user.click(screen.getByRole('button', { name: 'Save Hole' }));
     expect(await screen.findByRole('heading', { name: 'Round scorecard' })).toBeVisible();
@@ -507,7 +555,7 @@ describe('hole-first owner scoring', () => {
     await act(async () => { pending.resolve(scoreResult()); await pending.promise; });
     expect(store.client.save).toHaveBeenCalledOnce();
     expect(input()).toHaveValue('');
-    expect(screen.queryByText(/^\d+ unsaved scores?$/)).not.toBeInTheDocument();
+    expect(screen.getByText('0 unsaved scores')).toBeVisible();
   });
   it('removes previously acknowledged score details as well as entry rows on authoritative owner revocation', async () => {
     const store = memoryScores();

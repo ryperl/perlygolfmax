@@ -143,6 +143,15 @@
 - Present golfer scores as hole-ordered scorecards, not audit records. Keep
   operation IDs, actor GUIDs, revisions and raw timestamps out of player
   entry/view screens; preserve backend audit and conditional-save safeguards.
+- Keep score entry focused without opening the keyboard: collapse round tools,
+  reserve save/discard feedback space, and never insert controls above fields
+  when drafting. Discard clears all local round drafts, never saved scores.
+- Each playing group captures its starting hole; legacy omission uses the first
+  captured layout hole. Arrows wrap without saving. Save & Next follows one
+  circuit then opens cards, not formal finalization. Preserve remembered places
+  and scored setup locks, treating explicit legacy defaults as unchanged.
+- Show event purse navigation only for authoritative workspace
+  `purseConfigured`; do not calculate winnings or add requests just to show a link.
 - Main trip tabs use the explicitly selected saved event, never demo fallback.
   Keep fictional views under Preview, clear private selection on sign-out and
   preserve server access checks independently of navigation or catalog rights.

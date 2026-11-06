@@ -30,6 +30,8 @@ export function sameOverallCompetition(
 export interface RoundGroup {
   readonly number: number;
   readonly playerIds: readonly string[];
+  /** Omission uses the first hole in the captured round layout. */
+  readonly startingHole?: number;
 }
 
 export interface RoundSetupInput {
@@ -85,4 +87,5 @@ export interface EventWorkspace {
   readonly canViewScores?: boolean;
   readonly testerAccess?: true;
   readonly publicAccess?: true;
+  readonly purseConfigured?: boolean;
 }

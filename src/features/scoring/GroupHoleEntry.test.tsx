@@ -17,7 +17,7 @@ function props(): GroupHoleEntryProps {
       playerId: card.playerId, displayName: card.displayName, saved: { kind: 'unplayed' }, canReview: false,
     })),
     busy: false, readOnly: false, unsavedCount: 0,
-    onGroupChange: vi.fn(), onHoleChange: vi.fn(), onEdit: vi.fn(), onReview: vi.fn(), onDiscard: vi.fn(), onSave: vi.fn(),
+    onGroupChange: vi.fn(), onHoleChange: vi.fn(), onEdit: vi.fn(), onReview: vi.fn(), onDiscard: vi.fn(), onDiscardAll: vi.fn(), onSave: vi.fn(),
   };
 }
 function ControlledEntry(input: GroupHoleEntryProps) {
@@ -41,6 +41,35 @@ function typeScore(index: number, value: string) {
 function pause(ms = 900) { act(() => { vi.advanceTimersByTime(ms); }); }
 afterEach(() => { vi.useRealTimers(); });
 describe('pure mobile group hole entry', () => {
+  it('reserves the count and discard action, keeps readonly drafts discardable, and blocks discard while saving', async () => {
+    const input = props();
+    const view = render(<GroupHoleEntry {...input} />);
+    const discard = screen.getByRole('button', { name: 'Discard unsaved scores' });
+    expect(screen.getByText('0 unsaved scores')).toBeVisible();
+    expect(discard).toBeDisabled();
+    expect(discard.closest('.group-save-actions')).toContainElement(screen.getByRole('button', { name: 'Save & Next Hole' }));
+    view.rerender(<GroupHoleEntry {...input} unsavedCount={1} readOnly />);
+    expect(screen.getByText('1 unsaved score')).toBeVisible();
+    expect(discard).toBeEnabled();
+    await userEvent.click(discard);
+    expect(input.onDiscardAll).toHaveBeenCalledOnce();
+    expect(input.onSave).not.toHaveBeenCalled();
+    view.rerender(<GroupHoleEntry {...input} unsavedCount={1} busy />);
+    expect(discard).toBeDisabled();
+  });
+  it('wraps both hole arrows without saving or treating the end as a pending request', async () => {
+    const input = props();
+    const last = input.layout.at(-1);
+    if (!last) throw new Error('Missing fictional last hole.');
+    const view = render(<GroupHoleEntry {...input} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Previous hole' }));
+    expect(input.onHoleChange).toHaveBeenLastCalledWith(last.number);
+    view.rerender(<GroupHoleEntry {...input} hole={last} />);
+    expect(screen.getByRole('button', { name: 'Next hole' })).toBeEnabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Next hole' }));
+    expect(input.onHoleChange).toHaveBeenLastCalledWith(input.hole.number);
+    expect(input.onSave).not.toHaveBeenCalled();
+  });
   it('uses each golfer’s own hole par for blank nudges and single-golfer quick scores without autosaving', async () => {
     const input = props();
     const rows = input.rows.map((row, index) => ({ ...row,
@@ -73,7 +102,7 @@ describe('pure mobile group hole entry', () => {
     expect(screen.getAllByRole('form')).toHaveLength(1);
     expect(input.onEdit).not.toHaveBeenCalled();
     for (const field of screen.getAllByRole('textbox')) expect(field).toHaveValue('');
-    expect(screen.getByRole('button', { name: 'Previous hole' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Previous hole' })).toBeEnabled();
     expect(screen.getByText('Par 4 · 100 yards · Stroke index 1')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Decrease score for Fictional Player 1' })).toBeEnabled();
     expect(screen.queryByText(/Other options|Number = strokes|Clear to unplayed|DNF for|Request ID|Base revision/)).not.toBeInTheDocument();

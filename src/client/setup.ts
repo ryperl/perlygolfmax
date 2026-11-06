@@ -4,6 +4,7 @@ import type { EventSetupInput, EventWorkspace } from '../domain/setup';
 import { maximumEventSetupBytes, sameOverallCompetition } from '../domain/setup';
 import { createPrivateRequest, readPrivateValue, writePrivateValue } from './private-request';
 import { sameTeeSelections } from '../domain/tees';
+import { groupStartingHole } from '../domain/round-navigation';
 
 export interface SetupClient {
   readonly load: (eventId: string, signal: AbortSignal) => Promise<EventWorkspace>;
@@ -22,16 +23,18 @@ export function createSetupClient(apiUrl: string, getToken: () => Promise<string
       return value;
     },
     async save(eventId, etag, input, signal) {
-      if (!isUuid(eventId) || !isEventRevision(etag) || !isEventSetupInput(input)) throw new Error('Check setup: select at least 1 saved player, 1–8 rounds, an explicit course version and tee, and assign every player once to numbered groups (maximum 4 per group).');
+      if (!isUuid(eventId) || !isEventRevision(etag) || !isEventSetupInput(input)) throw new Error('Check setup: select at least 1 saved player, 1–8 rounds, an explicit course version and tee, and assign every player once to numbered groups (maximum 4 per group) with valid starting holes.');
       const value = await writePrivateValue(setupRequest, `events/${encodeURIComponent(eventId)}/workspace`, signal, { method: 'PUT', body: input, etag }, maximumEventSetupBytes);
       if (!isEventWorkspace(value) || value.event.id !== eventId
         || input.overallCompetition !== undefined && !sameOverallCompetition(input.overallCompetition, value.overallCompetition)
         || input.allowPerGolferTees !== undefined && input.allowPerGolferTees !== (value.allowPerGolferTees ?? false)
         || input.rounds.some((requested) => {
-          if (requested.playerTeeSelections === undefined) return false;
           const saved = value.rounds.find((round) => round.id === requested.id);
-          return !saved || !sameTeeSelections(requested.playerTeeSelections,
-            saved.playerTees?.map((entry) => ({ playerId: entry.playerId, teeProfileId: entry.profile.id })), saved.teeProfile.id);
+          return !saved || requested.groups.some((group) => group.startingHole !== undefined
+            && !saved.groups.some((other) => other.number === group.number
+              && groupStartingHole(other, saved.teeProfile.holes) === group.startingHole))
+            || requested.playerTeeSelections !== undefined && !sameTeeSelections(requested.playerTeeSelections,
+              saved.playerTees?.map((entry) => ({ playerId: entry.playerId, teeProfileId: entry.profile.id })), saved.teeProfile.id);
         })) {
         throw new Error('Invalid saved workspace response. Refresh before retrying.');
       }
