@@ -1,4 +1,20 @@
+import { inflateSync } from 'node:zlib';
 import { expect, test } from './test';
+
+function contrastRatio(first: string, second: string): number {
+  function luminance(color: string): number {
+    const channels = color.match(/\d+/g)?.map(Number);
+    if (!channels || channels.length !== 3) throw new Error(`Expected an opaque RGB color: ${color}`);
+    return channels.reduce((total, channel, index) => {
+      const value = channel / 255;
+      const linear = value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      return total + linear * (index === 0 ? 0.2126 : index === 1 ? 0.7152 : 0.0722);
+    }, 0);
+  }
+  const firstLuminance = luminance(first);
+  const secondLuminance = luminance(second);
+  return (Math.max(firstLuminance, secondLuminance) + 0.05) / (Math.min(firstLuminance, secondLuminance) + 0.05);
+}
 
 test('production shell supports navigation, history, and keyboard access', async ({ page }) => {
   const errors: string[] = [];
@@ -59,6 +75,8 @@ test('manifest and correctly sized icons are served without service-worker claim
     name: 'Perly Golf Max',
     start_url: '/',
     display: 'standalone',
+    background_color: '#f3f6f3',
+    theme_color: '#f3f6f3',
     icons: expect.arrayContaining([
       expect.objectContaining({ src: '/icons/icon-192.png', sizes: '192x192' }),
       expect.objectContaining({ src: '/icons/icon-maskable-512.png', purpose: 'maskable' }),
@@ -71,9 +89,71 @@ test('manifest and correctly sized icons are served without service-worker claim
     const bytes = await icon.body();
     expect(bytes.readUInt32BE(16)).toBe(size);
     expect(bytes.readUInt32BE(20)).toBe(size);
+    expect(bytes[24]).toBe(8);
+    expect(bytes[25]).toBe(2);
+    expect(bytes.subarray(37, 41).toString()).toBe('IDAT');
+    const pixels = inflateSync(bytes.subarray(41, 41 + bytes.readUInt32BE(33)));
+    const stride = size * 3 + 1;
+    expect(pixels.length).toBe(stride * size);
+    expect(pixels[0]).toBe(0);
+    expect([...pixels.subarray(1, 4)]).toEqual([20, 92, 61]);
+    const poleRow = Math.floor(size * 0.4) * stride;
+    const polePixel = poleRow + 1 + Math.floor(size * 0.49) * 3;
+    expect(pixels[poleRow]).toBe(0);
+    expect([...pixels.subarray(polePixel, polePixel + 3)]).toEqual([255, 255, 255]);
   }
+  const favicon = await request.get('/icons/icon.svg');
+  expect(favicon.ok()).toBe(true);
+  expect(await favicon.text()).toMatch(/<rect[^>]+fill="#145c3d"/);
   expect(await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length)).toBe(0);
 });
+
+for (const palette of [
+  { theme: 'light', background: 'rgb(243, 246, 243)', accent: 'rgb(20, 92, 61)', hover: 'rgb(14, 68, 45)', gold: 'rgb(132, 99, 28)', chrome: '#f3f6f3' },
+  { theme: 'dark', background: 'rgb(21, 32, 25)', accent: 'rgb(128, 205, 165)', hover: 'rgb(160, 223, 189)', gold: 'rgb(225, 193, 116)', chrome: '#152019' },
+] as const) {
+  test(`forest palette keeps ${palette.theme} text, actions and keyboard focus readable`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: palette.theme });
+    await page.goto('/#preview');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', palette.theme);
+    await expect(page.locator('body')).toHaveCSS('background-color', palette.background);
+    await expect(page.locator(`meta[name="theme-color"][media="(prefers-color-scheme: ${palette.theme})"]`))
+      .toHaveAttribute('content', palette.chrome);
+    const primary = page.getByRole('link', { name: 'Explore the rounds' });
+    await expect(primary).toHaveCSS('background-color', palette.accent);
+    await expect(page.locator('.hero .eyebrow')).toHaveCSS('color', palette.gold);
+    const colors = await page.evaluate(() => {
+      function style(selector: string) {
+        const element = document.querySelector(selector);
+        if (!element) throw new Error(`Missing palette sample: ${selector}`);
+        return getComputedStyle(element);
+      }
+      return {
+        text: style('body').color,
+        background: style('body').backgroundColor,
+        primaryText: style('.primary-link').color,
+        primaryBackground: style('.primary-link').backgroundColor,
+        gold: style('.hero .eyebrow').color,
+        muted: style('.hero-description').color,
+        hero: style('.hero').backgroundColor,
+      };
+    });
+    expect(contrastRatio(colors.text, colors.background)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(colors.primaryText, colors.primaryBackground)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(colors.gold, colors.hero)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(colors.muted, colors.hero)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(palette.accent, colors.hero)).toBeGreaterThanOrEqual(3);
+    await primary.hover();
+    await expect(primary).toHaveCSS('background-color', palette.hover);
+    expect(contrastRatio(colors.primaryText, palette.hover)).toBeGreaterThanOrEqual(4.5);
+    await page.keyboard.press('Tab');
+    await primary.focus();
+    await expect(primary).toBeFocused();
+    await expect(primary).toHaveCSS('outline-style', 'solid');
+    await expect(primary).toHaveCSS('outline-color', palette.accent);
+    await expect(primary).toHaveCSS('outline-width', '3px');
+  });
+}
 
 test('theme supports system preference and explicit preview overrides', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' });
@@ -81,7 +161,11 @@ test('theme supports system preference and explicit preview overrides', async ({
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.goto('/?clawpilotTheme=light');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(243, 246, 243)');
   await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto('/?clawpilotTheme=dark');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(21, 32, 25)');
   await page.goto('/?clawpilotTheme=invalid');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 });

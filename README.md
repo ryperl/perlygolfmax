@@ -64,7 +64,8 @@ from npm installation and must also comply with your machine's policies.
   group; fictional data never substitutes for failed or missing private data.
 - Hash-based navigation with direct links, browser history, keyboard focus
   management, skip link, and semantic landmarks.
-- Light/dark presentation follows the system setting at page load.
+- Forest-green presentation with light surfaces, charcoal text and restrained
+  gold headings; a coordinated dark palette follows the system setting at page load.
 - Separate typed domain models, fictional fixtures, feature views, and app wiring.
 - Web app manifest, SVG favicon, Apple touch icon, standard PNG icons, and a
   dedicated maskable icon with inset artwork.
@@ -111,6 +112,11 @@ Never commit real trip data, contact details, account identifiers, credentials,
 corporate feed configuration, or secrets to this public repository.
 
 ### PWA and offline boundaries
+
+Colors are centralized in `src/app/styles.css` as `--cp-*` theme variables;
+feature styles consume them rather than hardcoding colors. Keep the HTML theme
+metadata, manifest, SVG favicon and `scripts/generate-icons.mjs` in sync when
+changing the brand palette, then run `npm run icons` to regenerate the PNG assets.
 
 The manifest and icons are a PWA foundation, not a guarantee of installation on
 every browser or platform. There is **no service worker**, explicit offline

@@ -28,7 +28,7 @@ function icon(size) {
       const pole = u >= 0.477 && u <= 0.508 && v >= 0.277 && v <= 0.688;
       const flag = u >= 0.508 && u <= 0.72 && v >= 0.285 + (u - 0.508) * 0.38 && v <= 0.451 - (u - 0.508) * 0.4;
       const hole = (u - 0.596) ** 2 + (v - 0.672) ** 2 <= 0.025 ** 2;
-      const color = (green || pole || flag) && !hole ? [247, 244, 239] : [177, 31, 75];
+      const color = (green || pole || flag) && !hole ? [255, 255, 255] : [20, 92, 61];
       const offset = y * (size * 3 + 1) + 1 + x * 3;
       for (let channel = 0; channel < 3; channel++) pixels[offset + channel] = color[channel];
     }
