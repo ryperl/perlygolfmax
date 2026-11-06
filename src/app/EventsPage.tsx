@@ -16,7 +16,7 @@ import type { ScoresClient } from '../client/scoring';
 import type { EventLeaderboardClient } from '../client/event-leaderboard';
 import { CoursesCatalog, PlayersCatalog } from '../features/catalog';
 import { EventWorkspaceView } from '../features/setup';
-import { OwnerScoresView } from '../features/scoring';
+import { OwnerRoundScoresPage } from './OwnerRoundScoresPage';
 import { eventTabHref, isEventTab, readEventRoute } from './navigation';
 import { SavedEventPage } from './SavedEventPage';
 import { EventLeaderboardPage } from './EventLeaderboardPage';
@@ -304,8 +304,8 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
           : <p role="alert">Overall results are unavailable in this connection. No scores were loaded.</p>
         : isEventTab(kind) && eventId ? <SavedEventPage key={eventId} eventId={eventId} view={kind}
           client={services.setup} scores={services.scores} onSessionExpired={expire} />
-        : route.startsWith('score:') ? <OwnerScoresView key={route} eventId={route.split(':')[1] ?? ''} roundId={route.split(':')[2] ?? ''}
-          client={services.scores} onSessionExpired={expire} />
+        : route.startsWith('score:') ? <OwnerRoundScoresPage key={eventId} eventId={route.split(':')[1] ?? ''} roundId={route.split(':')[2] ?? ''}
+          setup={services.setup} scores={services.scores} onSessionExpired={expire} />
         : route.startsWith('event:') ? <EventWorkspaceView key={route} eventId={route.slice(6)}
         canManageCatalog={state.capabilities.canManageCatalog} setup={services.setup} catalog={services.catalog}
         scores={services.scores} onSessionExpired={expire} />

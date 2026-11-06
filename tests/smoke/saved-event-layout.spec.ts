@@ -8,6 +8,9 @@ const players = Array.from({ length: 8 }, (_, index) => ({ playerId: id(index + 
 const workspace: EventWorkspace = {
   event: { id: id(50), name: 'Fictional Coastal Event', startDate: '2024-02-29', role: 'owner', status: 'active', etag: 'fictional-v1', createdAt: '2026-01-01' },
   location: 'Fictional County', roster: players, etag: 'fictional-v1',
+  overallCompetition: { kind: 'stableford', credit: 'team', roundGames: [
+    { roundId: id(71), gameId: id(81) }, { roundId: id(72), gameId: id(82) },
+  ] },
   rounds: [1, 2].map((number) => ({
     id: id(70 + number), name: `Fictional round ${String(number)}`, courseId: 'ghin:301:302', courseVersionId: 'a'.repeat(64),
     teeTime: number === 1 ? '08:30' : '13:00',
@@ -30,6 +33,7 @@ const workspace: EventWorkspace = {
 const progress: EventEntryProgress = Object.fromEntries(workspace.rounds.map((round, index) => [round.id, {
   kind: 'ready',
   summary: {
+    selectedGameName: index === 0 ? 'Fictional Better Ball' : 'Fictional Individual',
     status: index === 0 ? 'In progress' : 'No scores yet', entered: index === 0 ? 56 : 0,
     total: 72, completeHoles: index === 0 ? 5 : 0, totalHoles: 9,
     groups: [1, 2].map((number) => ({
@@ -54,6 +58,8 @@ for (const view of ['overview', 'rounds', 'group'] as const) {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(view === 'overview' ? workspace.event.name : view === 'rounds' ? 'Rounds' : 'The Group');
     await expect(page.getByText('8:30 AM (course local time)', { exact: true })).toBeVisible();
     await expect(page.getByText('1:00 PM (course local time)', { exact: true })).toBeVisible();
+    await expect(page.getByText('Overall game: Fictional Better Ball', { exact: true })).toBeVisible();
+    await expect(page.getByText('Overall game: Fictional Individual', { exact: true })).toBeVisible();
     await expect(page.getByText('February 29, 2024', { exact: true })).toHaveAttribute('datetime', '2024-02-29');
     await expect(page.getByText('November 7, 2026', { exact: true })).toHaveAttribute('datetime', '2026-11-07');
     await expect(page.locator('.event-trip-round h3')).toHaveText(['Fictional round 2', 'Fictional round 1']);

@@ -175,6 +175,7 @@ describe('EventsPage composition', () => {
   });
   it('restores owner score routes without catalog authority and returns expired scoring sessions to Sign in', async () => {
     const services = service();
+    vi.mocked(services.setup.load).mockResolvedValue(fictionalWorkspace);
     window.history.replaceState(null, '', `#events?event=${fictionalRoundScores.eventId}&round=${fictionalRoundScores.roundId}`);
     vi.mocked(services.scores.load).mockRejectedValueOnce(new SessionExpiredError('Your scoring session expired. Sign in again.'));
     render(<EventsPage services={services} />);
@@ -185,6 +186,7 @@ describe('EventsPage composition', () => {
   });
   it('shows owner scoring without manager permission and aborts its read on route change/signout', async () => {
     const services = service();
+    vi.mocked(services.setup.load).mockResolvedValue(fictionalWorkspace);
     window.history.replaceState(null, '', `#events?event=${fictionalRoundScores.eventId}&round=${fictionalRoundScores.roundId}`);
     render(<EventsPage services={services} />);
     expect(await screen.findByRole('heading', { name: 'Round scores' })).toBeVisible();
@@ -205,6 +207,7 @@ describe('EventsPage composition', () => {
   });
   it('aborts an in-flight score save on navigation and never restores private scoring UI from a late acknowledgement', async () => {
     const services = service();
+    vi.mocked(services.setup.load).mockResolvedValue(fictionalWorkspace);
     let finish: (() => void) | undefined;
     vi.mocked(services.scores.save).mockImplementationOnce((_eventId, _roundId, playerId, holeNumber, score, etag, id) => new Promise((resolve) => {
       finish = () => { resolve(scoreResult({

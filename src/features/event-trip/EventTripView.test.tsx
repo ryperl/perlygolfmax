@@ -31,6 +31,17 @@ function roundCard(name: string) {
 }
 
 describe('saved event overview', () => {
+  it('distinguishes unselected, loading and unavailable overall games without inventing a name', () => {
+    const enabled = { ...workspace, overallCompetition: { kind: 'stableford' as const, credit: 'team' as const,
+      roundGames: [{ roundId: firstRound.id, gameId: fictionalId(500) }] } };
+    const view = render(<EventTripView workspace={enabled} view="overview" progress={{ [firstRound.id]: { kind: 'loading' } }} />);
+    expect(screen.getByText('Overall game: Loading saved game…')).toBeVisible();
+    expect(screen.getByText('Overall game: Not selected')).toBeVisible();
+    view.rerender(<EventTripView workspace={enabled} view="overview" progress={{ [firstRound.id]: { kind: 'unavailable' } }} />);
+    expect(screen.getByText('Overall game: Selected game unavailable — refresh event')).toBeVisible();
+    view.rerender(<EventTripView workspace={workspace} view="overview" />);
+    expect(screen.queryByText(/Overall game:/)).not.toBeInTheDocument();
+  });
   it.each(['overview', 'rounds'] as const)('shows saved event/round dates and chronological rounds on %s without renumbering identities', (view) => {
     const dated: EventWorkspace = { ...workspace, event: { ...workspace.event, startDate: '2024-02-29' }, rounds: [
       { ...firstRound, startDate: '2026-11-08' }, { ...secondRound, startDate: '2026-11-07' },

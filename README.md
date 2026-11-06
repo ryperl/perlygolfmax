@@ -178,6 +178,13 @@ Overview shows purse/winnings navigation only when the event has a configured
 purse. Availability comes from the existing workspace response, not an additional
 purse calculation request. Organizers can still configure one in organizer tools.
 
+For an overall Stableford competition, Overview lists the selected saved game
+for each round using the existing round-progress reads. Missing selections,
+loading and unavailable saved games remain explicit; no default game is invented.
+Owner scorecards include a date-ordered saved-round switcher that keeps the
+current Scorecards/Games/Leaderboard view. Save or cancel game edits and save
+or discard score drafts before switching; active requests also block the switch.
+
 Only allowlisted navigation fields are kept in localStorage: version, event ID,
 round ID, group number, hole number and view. No scores, drafts, credentials or
 personal identities are stored there. Storage failures are visible and allow

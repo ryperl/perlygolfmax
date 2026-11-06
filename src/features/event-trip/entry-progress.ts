@@ -14,6 +14,7 @@ export interface EntryCoverage {
 
 export interface RoundEntryProgress extends EntryCoverage {
   readonly groups: readonly (EntryCoverage & { readonly number: number })[];
+  readonly selectedGameName?: string;
 }
 
 export type RoundEntryProgressState =
@@ -24,7 +25,7 @@ export type RoundEntryProgressState =
 export type EventEntryProgress = Readonly<Record<string, RoundEntryProgressState>>;
 
 /** Counts saved dispositions, not gross scores, approval, or competition results. */
-export function summarizeEntryProgress(eventId: string, round: RoundSnapshot, scores: RoundScores): RoundEntryProgressState {
+export function summarizeEntryProgress(eventId: string, round: RoundSnapshot, scores: RoundScores, selectedGameId?: string): RoundEntryProgressState {
   if (!isRoundScores(scores) || scores.eventId !== eventId || scores.roundId !== round.id
     || scores.layout.length !== round.teeProfile.holes.length || scores.layout.length !== round.teeProfile.holeCount
     || scores.cards.length !== round.players.length || new Set(round.players.map((player) => player.playerId)).size !== round.players.length
@@ -48,10 +49,12 @@ export function summarizeEntryProgress(eventId: string, round: RoundSnapshot, sc
       entered, total, completeHoles, totalHoles: scores.layout.length,
     };
   }
+  const selectedGameName = scores.games?.configuration.games.find((game) => game.id === selectedGameId)?.name;
   return {
     kind: 'ready',
     summary: {
       ...coverage(round.players.map((player) => player.playerId)),
+      ...(selectedGameName === undefined ? {} : { selectedGameName }),
       groups: round.groups.map((group) => ({ number: group.number, ...coverage(group.playerIds) })),
     },
   };

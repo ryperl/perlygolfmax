@@ -79,7 +79,9 @@ export function SavedEventPage({ client, scores, eventId, view, onSessionExpired
           const saved = await activeScores.load(eventId, round.id, controller.signal);
           if (!isActive()) return;
           publish(round.id, saved.eventStatus === activeWorkspace.event.status
-            ? summarizeEntryProgress(eventId, round, saved) : { kind: 'unavailable' });
+            ? summarizeEntryProgress(eventId, round, saved, activeWorkspace.overallCompetition?.kind === 'stableford'
+              ? activeWorkspace.overallCompetition.roundGames.find((binding) => binding.roundId === round.id)?.gameId : undefined)
+            : { kind: 'unavailable' });
         } catch (failure: unknown) {
           if (!isActive()) return;
           if (failure instanceof SessionExpiredError

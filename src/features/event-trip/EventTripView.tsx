@@ -80,6 +80,14 @@ function SavedRounds({ workspace, showGroups, progress }: {
   readonly showGroups: boolean;
   readonly progress: EventEntryProgress | undefined;
 }) {
+  function selectedGame(roundId: string): string {
+    const competition = workspace.overallCompetition;
+    if (competition?.kind !== 'stableford' || !competition.roundGames.some((binding) => binding.roundId === roundId)) return 'Not selected';
+    const state = progress?.[roundId];
+    if (state?.kind === 'loading') return 'Loading saved game…';
+    return state?.kind === 'ready' && state.summary.selectedGameName
+      ? state.summary.selectedGameName : 'Selected game unavailable — refresh event';
+  }
   return (
     <section className="event-trip-section" aria-label="Saved rounds">
       <h2>Saved rounds</h2>
@@ -95,6 +103,7 @@ function SavedRounds({ workspace, showGroups, progress }: {
                   {round.teeTime && <p>Tee time: <time dateTime={round.teeTime}>{teeTimeLabel(round.teeTime)}</time></p>}
                   <p>{round.course.name}</p>
                   <p><span>{round.teeProfile.name} tees</span> · {round.teeProfile.category}</p>
+                  {workspace.overallCompetition?.kind === 'stableford' && <p>Overall game: {selectedGame(round.id)}</p>}
                 </div>
                 <EntryProgress state={progress?.[round.id]} allowed={workspace.event.role === 'owner' || workspace.canViewScores === true} />
                 {(workspace.event.role === 'owner' || workspace.canViewScores) && (

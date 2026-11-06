@@ -6,7 +6,8 @@ import type { EventWorkspace } from '../domain/setup';
 import { PrivateRequestError } from '../client/private-request';
 import { SessionExpiredError } from '../client/events';
 import { SavedEventPage } from './SavedEventPage';
-import { fakeScores, fictionalRoundScores, scoreResult } from '../client/scoring.test-support';
+import { fakeScores, fictionalRoundScores, scoreResult, withGameResults } from '../client/scoring.test-support';
+import { stablefordPoints } from '../domain/stableford';
 import type { RoundScores } from '../domain/scoring';
 
 function mount() {
@@ -51,6 +52,23 @@ describe('saved event view loading', () => {
     })),
   };
   describe('saved event entry progress reads', () => {
+    it('shows only the overall-selected saved game using the existing progress read, and refreshes changed/missing games', async () => {
+      const game = { id: fictionalId(500), name: 'Fictional selected game', preset: 'standard' as const, basis: 'gross' as const,
+        handicapAllowancePercent: 95, points: stablefordPoints('standard') };
+      const other = { ...game, id: fictionalId(501), name: 'Fictional other game' };
+      const workspace = { ...fictionalWorkspace, overallCompetition: { kind: 'stableford' as const, credit: 'individual' as const,
+        roundGames: [{ roundId: fictionalRoundScores.roundId, gameId: game.id }] } };
+      const view = progressMount(workspace);
+      vi.mocked(view.scores.load).mockResolvedValue(withGameResults(fictionalRoundScores, [other, game], 'game-revision'));
+      expect(await screen.findByText('Overall game: Fictional selected game')).toBeVisible();
+      expect(screen.queryByText('Fictional other game')).not.toBeInTheDocument();
+      expect(view.scores.load).toHaveBeenCalledOnce();
+      vi.mocked(view.scores.load).mockResolvedValue(withGameResults(fictionalRoundScores, [other], 'next-game-revision'));
+      await userEvent.click(screen.getByRole('button', { name: 'Refresh event' }));
+      expect(await screen.findByText('Overall game: Selected game unavailable — refresh event')).toBeVisible();
+      expect(screen.queryByText('Overall game: Fictional selected game')).not.toBeInTheDocument();
+      expect(view.scores.load).toHaveBeenCalledTimes(2);
+    });
     it('loads once per workspace, retains summaries across tabs, and refreshes saved partial, complete and cleared entries', async () => {
       const view = progressMount();
       expect(await screen.findByText('Saved entry progress: No scores yet')).toBeVisible();

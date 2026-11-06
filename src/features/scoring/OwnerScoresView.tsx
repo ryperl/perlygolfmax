@@ -28,6 +28,7 @@ export interface OwnerScoresViewProps {
   readonly initialLocation?: ScoreLocation | undefined;
   readonly onLocationChange?: ((location: ScoreLocation) => void) | undefined;
   readonly roundTools?: ReactNode;
+  readonly onNavigationBlockedChange?: (blocked: boolean) => void;
 }
 
 export function OwnerScoresView(props: OwnerScoresViewProps) {
@@ -36,7 +37,7 @@ export function OwnerScoresView(props: OwnerScoresViewProps) {
   return <OwnerScoresController key={`${props.eventId}:${props.roundId}:${String(identity.generation)}`} {...props} />;
 }
 
-function OwnerScoresController({ client, eventId, roundId, onSessionExpired, overviewHref, initialLocation, onLocationChange, roundTools }: OwnerScoresViewProps) {
+function OwnerScoresController({ client, eventId, roundId, onSessionExpired, overviewHref, initialLocation, onLocationChange, roundTools, onNavigationBlockedChange }: OwnerScoresViewProps) {
   const [drafts, setDrafts] = useState<ReadonlyMap<string, HoleDraft>>(new Map());
   const currentDrafts = useRef(drafts);
   const draftAccess = useRef<string | null>(null);
@@ -57,6 +58,10 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
   const { round, busy, error, stale, run, refresh, accept, pauseForEdit, currentRound } = useOwnerScores(
     client, eventId, roundId, drafts.size > 0 || gamesDirty, onSessionExpired,
   );
+  useLayoutEffect(() => {
+    onNavigationBlockedChange?.(busy || drafts.size > 0 || gamesDirty);
+  }, [busy, drafts.size, gamesDirty, onNavigationBlockedChange]);
+  useEffect(() => () => { onNavigationBlockedChange?.(false); }, [onNavigationBlockedChange]);
   const gameDirtyChanged = useCallback((dirty: boolean) => {
     if (dirty) pauseForEdit();
     setGamesDirty(dirty);
