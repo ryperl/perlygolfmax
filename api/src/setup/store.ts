@@ -120,6 +120,7 @@ export class TableWorkspaceStore {
       roster: workspace.roster.map((player) => ({ playerId: player.playerId, displayName: player.displayName })),
       rounds: workspace.rounds.map((round) => ({
         id: round.id, name: round.name, courseId: round.courseId, courseVersionId: round.courseVersionId,
+        ...(round.teeTime === undefined ? {} : { teeTime: round.teeTime }),
         course: metadata(round.course), teeProfile: profile(round.teeProfile),
         ...(round.playerTees?.length ? { playerTees: round.playerTees.map((entry) => ({
           playerId: entry.playerId, profile: profile(entry.profile),
@@ -287,9 +288,13 @@ export class TableWorkspaceStore {
     const rounds: RoundSnapshot[] = [];
     const rosterIds = new Set(input.playerIds);
     for (const round of input.rounds) {
+      const oldRound = previous.rounds.find((existing) => existing.id === round.id);
+      const teeTime = round.teeTime === undefined ? oldRound?.teeTime : round.teeTime || undefined;
       const lockedRound = locked.find((existing) => existing.id === round.id);
       if (lockedRound) {
-        rounds.push(lockedRound);
+        const { teeTime: _previousTime, ...capture } = lockedRound;
+        void _previousTime;
+        rounds.push({ ...capture, ...(teeTime === undefined ? {} : { teeTime }) });
         continue;
       }
       const version = await this.courses.getVersion(identity, round.courseId, round.courseVersionId);
@@ -299,7 +304,6 @@ export class TableWorkspaceStore {
         && !teeProfile.holes.some((hole) => hole.number === group.startingHole))) {
         throw new ApiError(400, 'INVALID_GROUP_STARTING_HOLE');
       }
-      const oldRound = previous.rounds.find((existing) => existing.id === round.id);
       if (allowPerGolferTees === true && round.playerTeeSelections === undefined && oldRound?.playerTees?.length
         && (oldRound.courseId !== round.courseId || oldRound.courseVersionId !== round.courseVersionId)) {
         throw new ApiError(409, 'TEE_SELECTION_REVIEW_REQUIRED');
@@ -321,6 +325,7 @@ export class TableWorkspaceStore {
       const oldPlayers = new Map(oldRound?.players.map((player) => [player.playerId, player]));
       rounds.push({
         id: round.id, name: round.name, courseId: round.courseId, courseVersionId: round.courseVersionId,
+        ...(teeTime === undefined ? {} : { teeTime }),
         course: metadata(version.data), teeProfile,
         ...(playerTees.length ? { playerTees } : {}),
         groups: round.groups.map((group) => ({ number: group.number, playerIds: [...group.playerIds],

@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { EventChangedError } from '../../client/events';
@@ -43,6 +43,7 @@ function savedInput(input: EventSetupInput): EventWorkspace {
     ...(input.overallCompetition == null ? {} : { overallCompetition: input.overallCompetition }),
     rounds: input.rounds.map((round) => ({
       id: round.id, name: round.name, courseId: round.courseId, courseVersionId: round.courseVersionId,
+      ...(round.teeTime ? { teeTime: round.teeTime } : {}),
       teeProfile: fictionalVersion.data.teeProfiles.find((profile) => profile.id === round.teeProfileId) ?? fictionalProfile,
       course: fictionalManifest.course, groups: round.groups,
       playerTees: (round.playerTeeSelections ?? []).map((entry) => ({
@@ -77,6 +78,26 @@ async function openSetupSections(user = userEvent.setup()) {
 }
 
 describe('saved event workspace', () => {
+  it('retains a tee-time-only draft when a refresh reports that the round has started scoring', async () => {
+    const setup = fakeSetup();
+    vi.mocked(setup.load).mockResolvedValueOnce(fictionalWorkspace).mockResolvedValue({
+      ...fictionalWorkspace, rounds: fictionalWorkspace.rounds.map((round) => ({ ...round, scoringStarted: true })),
+    });
+    vi.mocked(setup.save).mockImplementation((_event, _etag, input) => Promise.resolve(savedInput(input)));
+    render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={fakeCatalog()} />);
+    await openSetupSections();
+    const time = screen.getByLabelText('Round 1 tee time');
+    fireEvent.change(time, { target: { value: '08:30' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh workspace' }));
+    await waitFor(() => { expect(screen.getByLabelText('Round 1 name')).toBeDisabled(); });
+    expect(time).toHaveValue('08:30');
+    expect(time).toBeEnabled();
+    const save = screen.getByRole('button', { name: 'Save event workspace' });
+    await waitFor(() => { expect(save).toBeEnabled(); });
+    await userEvent.click(save);
+    await screen.findByText(/Event workspace saved/);
+    expect(vi.mocked(setup.save).mock.calls[0]?.[2].rounds[0]?.teeTime).toBe('08:30');
+  });
   it.each([1, 2, 3])('saves a complete %i-player workspace while still blocking an empty roster', async (count) => {
     const setup = fakeSetup();
     vi.mocked(setup.load).mockResolvedValue(fictionalWorkspace);

@@ -15,6 +15,14 @@ import { stagePrivateContent, privateContent } from '../private-values.js';
 import { publicFixture } from './test-support.js';
 
 describe('active event public scoring authority', () => {
+  it('exposes saved course-local tee times in the existing public round projection', async () => {
+    const f = await publicFixture();
+    const before = await f.workspace.get(creator, event.id);
+    await f.workspace.save(creator, event.id, { ...f.input, rounds: f.input.rounds.map((round) => ({ ...round, teeTime: '08:30' })) }, before.etag);
+    const workspace = await f.workspace.get(f.actor, event.id);
+    expect(workspace.rounds[0]?.teeTime).toBe('08:30');
+    expect(isEventWorkspace(workspace)).toBe(true);
+  });
   it('publishes the purse-presence flag for public events without publishing configuration or money in the workspace', async () => {
     const f = await publicFixture();
     expect((await f.workspace.get(f.actor, event.id)).purseConfigured).toBe(false);

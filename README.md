@@ -150,6 +150,12 @@ then opens scorecards after the preceding hole (10–18, then 1–9 for a start 
 Reopening uses the remembered hole instead of resetting to the starting hole.
 Starting holes follow the existing scored-round setup locks.
 
+Round setup also accepts an optional first tee time in the course's local time.
+Overview and Rounds display that saved time. It is schedule metadata and remains
+editable after scoring starts; course, tees, players and group starts stay locked.
+No group stagger interval, date/time-zone conversion or reminder is inferred.
+Clearing the field removes the time; legacy requests omitting it retain saved times.
+
 Overview shows purse/winnings navigation only when the event has a configured
 purse. Availability comes from the existing workspace response, not an additional
 purse calculation request. Organizers can still configure one in organizer tools.

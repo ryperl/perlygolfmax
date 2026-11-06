@@ -30,6 +30,10 @@ function location(value: unknown): value is string {
   return value === '' || boundedText(value, 200);
 }
 
+export function isRoundTeeTime(value: unknown): value is string {
+  return typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
 function groups(value: unknown, playerIds: readonly string[], layout?: readonly { readonly number: number }[]): boolean {
   if (!Array.isArray(value) || value.length < 1) return false;
   const roster = new Set(playerIds);
@@ -60,6 +64,7 @@ export function isEventSetupInput(value: unknown): value is EventSetupInput {
   const players: readonly string[] = value.playerIds;
   const roster = new Set(players);
   return value.rounds.every((round: unknown) => isRecord(round) && isUuid(round.id) && boundedText(round.name)
+    && (round.teeTime === undefined || round.teeTime === '' || isRoundTeeTime(round.teeTime))
     && isCourseId(round.courseId) && isVersionId(round.courseVersionId) && typeof round.teeProfileId === 'number'
     && Number.isSafeInteger(round.teeProfileId) && round.teeProfileId > 0 && groups(round.groups, players)
     && (round.playerTeeSelections === undefined || isPlayerTeeSelections(round.playerTeeSelections)
@@ -71,6 +76,7 @@ export function isEventSetupInput(value: unknown): value is EventSetupInput {
 function isRoundSnapshot(value: unknown, playerIds: readonly string[]): value is RoundSnapshot {
   const roster = new Set(playerIds);
   return isRecord(value) && isUuid(value.id) && boundedText(value.name)
+    && (value.teeTime === undefined || isRoundTeeTime(value.teeTime))
     && (value.scoringStarted === undefined || typeof value.scoringStarted === 'boolean')
     && isCourseId(value.courseId) && isVersionId(value.courseVersionId)
     && isCourseMetadata(value.course) && isTeeProfile(value.teeProfile)

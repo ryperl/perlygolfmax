@@ -53,6 +53,16 @@ function renderGroups(groups: readonly RoundGroup[]) {
 }
 
 describe('round setup editor', () => {
+  it('edits and clears one round tee time without changing course, tee or groups', async () => {
+    const f = renderEditor();
+    const time = screen.getByLabelText('Round 1 tee time');
+    fireEvent.change(time, { target: { value: '08:30' } });
+    expect(f.changed.mock.lastCall?.[0]).toMatchObject({ teeTime: '08:30', groups: fictionalSetup.rounds[0]?.groups });
+    fireEvent.change(time, { target: { value: '' } });
+    expect(f.changed.mock.lastCall?.[0].teeTime).toBe('');
+    expect(screen.getByText(/course's local time/)).toBeVisible();
+    await waitFor(() => { expect(screen.getByLabelText('Round 1 tee profile')).toBeEnabled(); });
+  });
   it('offers every captured hole for back-nine and shotgun starts on an eighteen-hole course', async () => {
     const profile = { ...fictionalProfile, holeCount: 18 as const, totalPar: fictionalProfile.totalPar * 2,
       totalYardage: fictionalProfile.totalYardage * 2, holes: [...fictionalProfile.holes,
@@ -89,6 +99,7 @@ describe('round setup editor', () => {
       client={fakeCatalog()} onPending={vi.fn()} onChange={vi.fn()} />);
     await screen.findByText('Locked after scoring. Saved course, tee, players and groups cannot be changed.');
     expect(screen.getByLabelText('Round 1 Group 1 starting hole')).toBeDisabled();
+    expect(screen.getByLabelText('Round 1 tee time')).toBeEnabled();
   });
   it('distinguishes an optional new group from the one existing foursome without creating empty groups', async () => {
     const f = renderEditor();

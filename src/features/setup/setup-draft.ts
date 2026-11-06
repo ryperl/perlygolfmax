@@ -1,5 +1,5 @@
 import { boundedText, isCourseId, isVersionId } from '../../contracts/catalog';
-import { isEventSetupInput, isOverallCompetition } from '../../contracts/setup';
+import { isEventSetupInput, isOverallCompetition, isRoundTeeTime } from '../../contracts/setup';
 import type { EventSetupInput, EventWorkspace, RoundSetupInput, RoundSnapshot } from '../../domain/setup';
 import { sameOverallCompetition } from '../../domain/setup';
 import { sameTeeSelections } from '../../domain/tees';
@@ -7,6 +7,7 @@ import { sameTeeSelections } from '../../domain/tees';
 export function roundInput(round: RoundSnapshot): RoundSetupInput {
   return {
     id: round.id, name: round.name, courseId: round.courseId, courseVersionId: round.courseVersionId,
+    ...(round.teeTime === undefined ? {} : { teeTime: round.teeTime }),
     teeProfileId: round.teeProfile.id, groups: round.groups,
     playerTeeSelections: (round.playerTees ?? []).map((entry) => ({ playerId: entry.playerId, teeProfileId: entry.profile.id })),
   };
@@ -28,6 +29,7 @@ export function sameIds(left: readonly string[], right: readonly string[]): bool
 
 export function sameRoundInput(left: RoundSetupInput, right: RoundSetupInput): boolean {
   return left.id === right.id && left.name === right.name && left.courseId === right.courseId
+    && (left.teeTime ?? '') === (right.teeTime ?? '')
     && left.courseVersionId === right.courseVersionId && left.teeProfileId === right.teeProfileId
     && sameTeeSelections(left.playerTeeSelections, right.playerTeeSelections, left.teeProfileId)
     && left.groups.length === right.groups.length && left.groups.every((group, index) => {
@@ -60,6 +62,7 @@ export function setupProblems(draft: EventSetupInput): readonly string[] {
   for (const [index, round] of draft.rounds.entries()) {
     const label = `Round ${String(index + 1)}`;
     if (!boundedText(round.name)) problems.push(`${label}: enter a round name.`);
+    if (round.teeTime !== undefined && round.teeTime !== '' && !isRoundTeeTime(round.teeTime)) problems.push(`${label}: enter a valid course-local tee time.`);
     if (!isCourseId(round.courseId)) problems.push(`${label}: choose a saved course.`);
     else if (!isVersionId(round.courseVersionId)) problems.push(`${label}: choose a published course version.`);
     else if (!Number.isSafeInteger(round.teeProfileId) || round.teeProfileId <= 0) problems.push(`${label}: choose a tee profile.`);

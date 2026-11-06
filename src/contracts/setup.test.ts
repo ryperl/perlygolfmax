@@ -14,6 +14,14 @@ const input = {
 };
 
 describe('private setup and index contracts', () => {
+  it('validates optional course-local tee times and explicit clearing without dates or offsets', () => {
+    for (const teeTime of ['00:00', '08:30', '12:00', '23:59', '']) {
+      expect(isEventSetupInput({ ...input, rounds: input.rounds.map((round) => ({ ...round, teeTime })) })).toBe(true);
+    }
+    for (const teeTime of ['24:00', '08:60', '8:30', '8:30 AM', '08:30Z', '2026-01-01T08:30', null, 830]) {
+      expect(isEventSetupInput({ ...input, rounds: input.rounds.map((round) => ({ ...round, teeTime })) })).toBe(false);
+    }
+  });
   it('accepts legacy purse availability omission and explicit booleans, not truthy malformed values', () => {
     const workspace = { event: { id: ids[0], name: 'Fictional Event', createdAt: '2026-01-01', role: 'owner', status: 'active', etag: 'current' },
       location: '', roster: [], rounds: [], etag: 'current' };

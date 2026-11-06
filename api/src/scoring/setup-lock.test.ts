@@ -5,6 +5,22 @@ import { identifier } from '../../test/catalog-fixtures.js';
 import { creator, event } from '../../test/fixtures.js';
 
 describe('durable first-score setup lock', () => {
+  it('allows tee-time-only scheduling changes after scoring without changing captured setup or scores', async () => {
+    const f = await scoringFixture();
+    await f.write();
+    const before = await f.workspace.get(creator, event.id);
+    const scores = await f.scores.get(creator, event.id, f.roundId);
+    const scheduled = await f.workspace.save(creator, event.id, { ...f.input,
+      rounds: f.input.rounds.map((round) => ({ ...round, teeTime: '08:30' })) }, before.etag);
+    expect(scheduled.rounds[0]).toEqual({ ...before.rounds[0], teeTime: '08:30' });
+    expect(await f.scores.get(creator, event.id, f.roundId)).toEqual(scores);
+    const cleared = await f.workspace.save(creator, event.id, { ...f.input,
+      rounds: f.input.rounds.map((round) => ({ ...round, teeTime: '' })) }, scheduled.etag);
+    expect(cleared.rounds[0]).toEqual(before.rounds[0]);
+    await expect(f.workspace.save(creator, event.id, { ...f.input,
+      rounds: f.input.rounds.map((round) => ({ ...round, teeTime: '09:00', groups: round.groups.map((group) => ({ ...group, startingHole: 10 })) })) },
+    cleared.etag)).rejects.toMatchObject({ code: 'ROUND_SCORING_STARTED' });
+  });
   it.each([undefined, 1, 10, 18])('retains scored group start %s, permits equivalent defaults and rejects a different start', async (startingHole) => {
     const f = await scoringFixture();
     const input = { ...f.input, rounds: f.input.rounds.map((round) => ({

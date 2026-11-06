@@ -165,3 +165,9 @@
 - Read `docs/operations.md` before identity, infrastructure, deployment or
   recovery changes. Preserve existing SWA/DNS and identity/data continuity;
   IaC scaffolding and execution require their separate approvals.
+- Keep the Functions host request ceiling at 12288 bytes for the existing
+  12 KiB setup/game/purse transports; ordinary handlers retain 4 KiB limits.
+  Verify the host setting during production preparation, not just handler tests.
+- Round tee time is optional course-local HH:mm schedule metadata, not a scoring
+  input or generated group departure schedule. Preserve it on legacy omission;
+  explicit blank clears it. Scored setup locks remain independent of schedule edits.

@@ -178,7 +178,7 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
     const rosterSuperseded = lockedRounds.size > 0 && !sameIds(draft.playerIds, savedRosterIds);
     const roundsSuperseded = draft.rounds.filter((round) => {
       const saved = lockedRounds.get(round.id);
-      return saved !== undefined && !sameRoundInput(round, saved);
+      return saved !== undefined && !sameRoundInput({ ...round, teeTime: saved.teeTime ?? '' }, saved);
     });
     const superseded = rosterSuperseded || roundsSuperseded.length > 0;
     if (superseded) {
@@ -196,7 +196,10 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
         ? true : draft.allowPerGolferTees ?? false,
       playerIds: lockedRounds.size > 0 ? savedRosterIds : draft.playerIds,
       rounds: [
-        ...draft.rounds.map((round) => lockedRounds.get(round.id) ?? round),
+        ...draft.rounds.map((round) => {
+          const saved = lockedRounds.get(round.id);
+          return saved ? { ...saved, ...(round.teeTime === undefined ? {} : { teeTime: round.teeTime }) } : round;
+        }),
         ...value.rounds.filter((round) => !draft.rounds.some((item) => item.id === round.id)).map(roundInput),
       ],
     });
@@ -273,6 +276,7 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
         {!workspace.rounds.some((round) => round.id === selectedRound?.id) && <p>This new round has no saved inputs yet.</p>}
       <ol className="round-list">{workspace.rounds.map((round) => <li hidden={round.id !== selectedRound?.id} key={round.id}>
         <h3>{round.name} — {round.course.name}</h3>
+        {round.teeTime && <p>First tee time: <time dateTime={round.teeTime}>{round.teeTime}</time> (course local time)</p>}
         {workspace.event.role === 'owner' && <a href={`#organizer?event=${eventId}&round=${round.id}`}>Open owner scorecards for {round.name}</a>}
         {round.scoringStarted && <p>Scoring started: course, tee, players, groups and captured indices are locked. Clearing scores cannot unlock setup. Event name/location and unstarted new rounds remain editable.</p>}
         <p>Immutable saved course version; catalog edits do not replace these inputs.</p>

@@ -6,6 +6,19 @@ import type { EventSetupInput } from '../domain/setup';
 import { maximumEventSetupBytes } from '../domain/setup';
 
 describe('event workspace client', () => {
+  it('requires tee time changes and clearing to be acknowledged by saved setup', async () => {
+    const round = fictionalSetup.rounds[0];
+    if (!round) throw new Error('Missing fictional round.');
+    const scheduled = { ...fictionalWorkspace, rounds: fictionalWorkspace.rounds.map((snapshot) => ({ ...snapshot, teeTime: '08:30' })) };
+    const send = vi.fn<typeof fetch>().mockImplementation(() => Promise.resolve(new Response(JSON.stringify(scheduled))));
+    const client = createSetupClient('https://fictional.example.test/api', () => Promise.resolve('fictional'), send);
+    const input = { ...fictionalSetup, rounds: [{ ...round, teeTime: '08:30' }] };
+    await expect(client.save(fictionalEvent.id, 'v1', input, new AbortController().signal)).resolves.toEqual(scheduled);
+    await expect(client.save(fictionalEvent.id, 'v1', { ...input, rounds: [{ ...round, teeTime: '' }] }, new AbortController().signal)).rejects.toThrow('Invalid saved workspace');
+    send.mockImplementation(() => Promise.resolve(new Response(JSON.stringify(fictionalWorkspace))));
+    await expect(client.save(fictionalEvent.id, 'v1', input, new AbortController().signal)).rejects.toThrow('Invalid saved workspace');
+    await expect(client.save(fictionalEvent.id, 'v1', { ...input, rounds: [{ ...round, teeTime: '' }] }, new AbortController().signal)).resolves.toEqual(fictionalWorkspace);
+  });
   it('requires explicit group starts to be acknowledged rather than accepting a server that drops them', async () => {
     const round = fictionalSetup.rounds[0];
     if (!round) throw new Error('Missing fictional round.');

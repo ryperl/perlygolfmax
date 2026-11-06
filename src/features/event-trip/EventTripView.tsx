@@ -9,6 +9,11 @@ interface EventTripViewProps {
   readonly progress?: EventEntryProgress;
 }
 
+function teeTimeLabel(time: string): string {
+  const hour = Number(time.slice(0, 2));
+  return `${String(hour % 12 || 12)}:${time.slice(3)} ${hour < 12 ? 'AM' : 'PM'} (course local time)`;
+}
+
 function EntryProgress({ state, allowed }: { readonly state: RoundEntryProgressState | undefined; readonly allowed: boolean }) {
   if (!allowed) return <p>Entry progress requires approved player access.</p>;
   if (state?.kind === 'loading') return <p role="status">Loading entry progress…</p>;
@@ -85,6 +90,7 @@ function SavedRounds({ workspace, showGroups, progress }: {
               <div className="event-trip-round-heading">
                 <div>
                   <h3>{round.name}</h3>
+                  {round.teeTime && <p>Tee time: <time dateTime={round.teeTime}>{teeTimeLabel(round.teeTime)}</time></p>}
                   <p>{round.course.name}</p>
                   <p><span>{round.teeProfile.name} tees</span> · {round.teeProfile.category}</p>
                 </div>

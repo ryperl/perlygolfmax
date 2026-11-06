@@ -37,6 +37,7 @@ export interface RoundGroup {
 export interface RoundSetupInput {
   readonly id: string;
   readonly name: string;
+  readonly teeTime?: string;
   readonly courseId: string;
   readonly courseVersionId: string;
   readonly teeProfileId: number;
@@ -65,6 +66,7 @@ export interface RoundPlayerSnapshot extends EventRosterPlayer {
 export interface RoundSnapshot {
   readonly id: string;
   readonly name: string;
+  readonly teeTime?: string;
   readonly courseId: string;
   readonly courseVersionId: string;
   readonly course: CourseMetadata;

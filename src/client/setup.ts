@@ -30,7 +30,8 @@ export function createSetupClient(apiUrl: string, getToken: () => Promise<string
         || input.allowPerGolferTees !== undefined && input.allowPerGolferTees !== (value.allowPerGolferTees ?? false)
         || input.rounds.some((requested) => {
           const saved = value.rounds.find((round) => round.id === requested.id);
-          return !saved || requested.groups.some((group) => group.startingHole !== undefined
+          return !saved || requested.teeTime !== undefined && requested.teeTime !== (saved.teeTime ?? '')
+            || requested.groups.some((group) => group.startingHole !== undefined
             && !saved.groups.some((other) => other.number === group.number
               && groupStartingHole(other, saved.teeProfile.holes) === group.startingHole))
             || requested.playerTeeSelections !== undefined && !sameTeeSelections(requested.playerTeeSelections,

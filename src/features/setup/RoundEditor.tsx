@@ -80,6 +80,10 @@ export function RoundEditor({ round, number, saved, courses, players, rosterIds,
       setPlayerQuery(event.target.value); setPlayerPage(0);
     }} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }} /></label>
     <SetupPager page={page} count={visiblePlayers.length} size={pageSize} label="round golfers" onChange={setPlayerPage} />
+    <label>Round {number} tee time<input type="time" value={round.teeTime ?? ''} onChange={(event) => {
+      onChange({ ...round, teeTime: event.target.value });
+    }} /></label>
+    <p>First tee time, in the course's local time. Group departures are staggered separately; no interval is calculated.</p>
     <fieldset className="setup-round" disabled={saved?.scoringStarted === true}>
     <legend>Round {number}{saved ? ' (saved; retained)' : ''}</legend>
     {saved?.scoringStarted && <p>Locked after scoring. Saved course, tee, players and groups cannot be changed.</p>}

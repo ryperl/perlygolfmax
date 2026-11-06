@@ -3,6 +3,15 @@ import { fictionalId, fictionalSetup, fictionalWorkspace } from '../../client/ca
 import { inputFrom, sameRoundInput, sameSetupInput, setupProblems } from './setup-draft';
 
 describe('setup draft presentation', () => {
+  it('preserves saved tee times and detects edits/clear without treating an unset time as required', () => {
+    const round = fictionalSetup.rounds[0];
+    const saved = fictionalWorkspace.rounds[0];
+    if (!round || !saved) throw new Error('Missing fictional round.');
+    expect(inputFrom({ ...fictionalWorkspace, rounds: [{ ...saved, teeTime: '08:30' }] }).rounds[0]?.teeTime).toBe('08:30');
+    expect(sameRoundInput(round, { ...round, teeTime: '' })).toBe(true);
+    expect(sameRoundInput(round, { ...round, teeTime: '08:30' })).toBe(false);
+    expect(setupProblems({ ...fictionalSetup, rounds: [{ ...round, teeTime: '24:00' }] })).toContain('Round 1: enter a valid course-local tee time.');
+  });
   it('retains group starts and detects starting-hole edits while accepting legacy hole one', () => {
     const initial = fictionalSetup.rounds[0];
     const saved = fictionalWorkspace.rounds[0];

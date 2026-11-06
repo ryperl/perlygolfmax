@@ -28,6 +28,26 @@ function fixture() {
 }
 
 describe('bounded authorized catalog/setup HTTP handlers', () => {
+  it('saves and reloads a five-round twelve-golfer setup above the old host ceiling with course-local tee times', async () => {
+    const f = fixture();
+    f.seedEvent();
+    const version = await f.publish();
+    const golfers = await Promise.all(Array.from({ length: 12 }, (_, index) =>
+      f.players.create(creator, identifier(200 + index), `Fictional golfer ${String(index + 1)}`)));
+    const playerIds = golfers.map((player) => player.id);
+    const initial = await f.workspace.get(creator, event.id);
+    const body = { name: 'Fictional five-round event', location: 'Fictional location', playerIds,
+      rounds: Array.from({ length: 5 }, (_, index) => ({ id: identifier(500 + index), name: `Fictional round ${String(index + 1)}`,
+        teeTime: '08:30', courseId: version.courseId, courseVersionId: version.id, teeProfileId: tee.id,
+        groups: [0, 1, 2].map((number) => ({ number: number + 1, playerIds: playerIds.slice(number * 4, number * 4 + 4) })) })) };
+    expect(Buffer.byteLength(JSON.stringify(body))).toBeGreaterThan(4096);
+    expect(Buffer.byteLength(JSON.stringify(body))).toBeLessThanOrEqual(maximumEventSetupBytes);
+    const result = await f.call('workspace', 'PUT', body, { id: event.id }, { 'If-Match': initial.etag });
+    expect(result.status).toBe(200);
+    const saved = await f.workspace.get(creator, event.id);
+    expect(saved.rounds).toHaveLength(5);
+    expect(saved.rounds.every((round) => round.teeTime === '08:30')).toBe(true);
+  });
   it('scopes the larger exact UTF-8 budget to workspace PUT, not index refresh or catalogs', async () => {
     const f = fixture();
     const version = await f.publish();

@@ -31,6 +31,12 @@ function roundCard(name: string) {
 }
 
 describe('saved event overview', () => {
+  it.each([['00:00', '12:00 AM'], ['08:30', '8:30 AM'], ['12:00', '12:00 PM'], ['16:15', '4:15 PM']])('shows %s as the round course-local tee time without generated group departures', (teeTime, label) => {
+    const view = render(<EventTripView workspace={{ ...workspace, rounds: [{ ...firstRound, teeTime }] }} view="overview" />);
+    expect(screen.getByText(`${label} (course local time)`)).toHaveAttribute('datetime', teeTime);
+    view.rerender(<EventTripView workspace={workspace} view="overview" />);
+    expect(screen.queryByText(/Tee time:/)).not.toBeInTheDocument();
+  });
   it('shows purse navigation only for a configured purse and displays actual group starting holes', () => {
     const current = { ...workspace, canViewScores: true, event: { ...workspace.event, role: 'viewer' as const } };
     const view = render(<EventTripView workspace={current} view="overview" />);

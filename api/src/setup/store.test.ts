@@ -27,6 +27,22 @@ async function fixture(teeProfile = tee) {
 }
 
 describe('saved owner workspace', () => {
+  it('saves, retains legacy omission, changes and explicitly clears the optional round tee time', async () => {
+    const f = await fixture();
+    const scheduled = { ...f.input, rounds: f.input.rounds.map((round) => ({ ...round, teeTime: '08:30' })) };
+    const saved = await f.workspace.save(creator, event.id, scheduled, f.empty.etag);
+    expect(saved.rounds[0]?.teeTime).toBe('08:30');
+    const retained = await f.workspace.save(creator, event.id, f.input, saved.etag);
+    expect(retained.rounds[0]?.teeTime).toBe('08:30');
+    const updated = await f.workspace.save(creator, event.id, { ...scheduled,
+      rounds: scheduled.rounds.map((round) => ({ ...round, teeTime: '10:00' })) }, retained.etag);
+    expect(updated.rounds[0]?.teeTime).toBe('10:00');
+    const cleared = await f.workspace.save(creator, event.id, { ...scheduled,
+      rounds: scheduled.rounds.map((round) => ({ ...round, teeTime: '' })) }, updated.etag);
+    expect(cleared.rounds[0]).not.toHaveProperty('teeTime');
+    expect(cleared.rounds[0]?.teeProfile).toEqual(saved.rounds[0]?.teeProfile);
+    expect(isEventWorkspace({ ...cleared, rounds: cleared.rounds.map((round) => ({ ...round, teeTime: '' })) })).toBe(false);
+  });
   it('projects authoritative purse availability without an additional purse or round-score read', async () => {
     const f = await fixture();
     expect(f.empty.purseConfigured).toBe(false);

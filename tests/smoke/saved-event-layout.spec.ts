@@ -10,6 +10,7 @@ const workspace: EventWorkspace = {
   location: 'Fictional County', roster: players, etag: 'fictional-v1',
   rounds: [1, 2].map((number) => ({
     id: id(70 + number), name: `Fictional round ${String(number)}`, courseId: 'ghin:301:302', courseVersionId: 'a'.repeat(64),
+    teeTime: number === 1 ? '08:30' : '13:00',
     course: {
       provider: 'usga-ghin', sourceId: 302, name: 'Fictional Dunes', status: 'Active', number: null, city: 'Fictional City', state: 'Fictional State',
       facility: { id: 301, name: 'Fictional Club', status: 'Active', number: null, golfAssociationId: 303, address: 'Fictional address', longitude: 0, latitude: 0 },
@@ -50,6 +51,8 @@ for (const view of ['overview', 'rounds', 'group'] as const) {
       <body><div class="app"><main>${html}</main></div></body></html>`);
     await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(view === 'overview' ? workspace.event.name : view === 'rounds' ? 'Rounds' : 'The Group');
+    await expect(page.getByText('8:30 AM (course local time)', { exact: true })).toBeVisible();
+    await expect(page.getByText('1:00 PM (course local time)', { exact: true })).toBeVisible();
     const open = page.getByRole('link', { name: 'Open scorecard for Fictional round 1' });
     await expect(open).toHaveAttribute('href', `#organizer?event=${id(50)}&round=${id(71)}`);
     await open.focus();
