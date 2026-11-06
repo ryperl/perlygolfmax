@@ -8,6 +8,7 @@ import { isEventSetupInput } from '../../contracts/setup';
 import type { CourseCatalogEntry, IndexObservation, PlayerProfile } from '../../domain/catalog';
 import type { EventSetupInput, EventWorkspace, RoundSetupInput } from '../../domain/setup';
 import { playerTee } from '../../domain/tees';
+import { eventStartDateLabel, sortRoundsByStartDate } from '../../domain/event-schedule';
 import { RoundEditor } from './RoundEditor';
 import { SetupRoster } from './SetupRoster';
 import { OverallCompetitionEditor } from './OverallCompetitionEditor';
@@ -178,7 +179,7 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
     const rosterSuperseded = lockedRounds.size > 0 && !sameIds(draft.playerIds, savedRosterIds);
     const roundsSuperseded = draft.rounds.filter((round) => {
       const saved = lockedRounds.get(round.id);
-      return saved !== undefined && !sameRoundInput({ ...round, teeTime: saved.teeTime ?? '' }, saved);
+      return saved !== undefined && !sameRoundInput({ ...round, teeTime: saved.teeTime ?? '', startDate: saved.startDate ?? '' }, saved);
     });
     const superseded = rosterSuperseded || roundsSuperseded.length > 0;
     if (superseded) {
@@ -198,7 +199,8 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
       rounds: [
         ...draft.rounds.map((round) => {
           const saved = lockedRounds.get(round.id);
-          return saved ? { ...saved, ...(round.teeTime === undefined ? {} : { teeTime: round.teeTime }) } : round;
+          return saved ? { ...saved, ...(round.teeTime === undefined ? {} : { teeTime: round.teeTime }),
+            ...(round.startDate === undefined ? {} : { startDate: round.startDate }) } : round;
         }),
         ...value.rounds.filter((round) => !draft.rounds.some((item) => item.id === round.id)).map(roundInput),
       ],
@@ -247,6 +249,7 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
     {(initialPending || !workspace && !error) && <p role="status">Loading workspace...</p>}
     {!initialPending && workspace && <>
       <h2>{workspace.event.name}</h2><p>{workspace.location || 'General location not supplied'}</p>
+      {workspace.event.startDate && <p>Start date: <time dateTime={workspace.event.startDate}>{eventStartDateLabel(workspace.event.startDate)}</time></p>}
       <a href={`#overview?event=${eventId}`}>View event overview</a>
       {workspace.event.role === 'owner' && <a href={`#organizer?event=${encodeURIComponent(eventId)}&view=purse`}>
         {workspace.event.status === 'archived' ? 'View purse and winnings' : 'Configure purse and winnings'}
@@ -263,7 +266,8 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
       {workspace.rounds.length === 0 && <p>No saved rounds.</p>}
       {roundChoices.length > 0 && <label className="setup-round-picker">Selected round<select value={selectedRound?.id ?? ''}
         disabled={busy || initialPending} onChange={(event) => { setSelectedRoundId(event.target.value); }}>
-        {roundChoices.map((round, index) => {
+        {sortRoundsByStartDate<(typeof roundChoices)[number]>(roundChoices).map((round) => {
+          const index = roundChoices.findIndex((item) => item.id === round.id);
           const saved = workspace.rounds.find((item) => item.id === round.id);
           const state = saved?.scoringStarted ? 'Locked' : !saved ? 'Not saved'
             : editing && !sameRoundInput(roundInput(saved), draft?.rounds.find((item) => item.id === round.id) ?? roundInput(saved)) ? 'Unsaved changes' : 'Saved';
@@ -275,6 +279,7 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
         <p>Saved inputs only. Unsaved selections below are not reflected here.</p>
         {!workspace.rounds.some((round) => round.id === selectedRound?.id) && <p>This new round has no saved inputs yet.</p>}
       <ol className="round-list">{workspace.rounds.map((round) => <li hidden={round.id !== selectedRound?.id} key={round.id}>
+        {round.startDate && <p>Date: <time dateTime={round.startDate}>{eventStartDateLabel(round.startDate)}</time></p>}
         <h3>{round.name} — {round.course.name}</h3>
         {round.teeTime && <p>First tee time: <time dateTime={round.teeTime}>{round.teeTime}</time> (course local time)</p>}
         {workspace.event.role === 'owner' && <a href={`#organizer?event=${eventId}&round=${round.id}`}>Open owner scorecards for {round.name}</a>}
@@ -375,6 +380,8 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
         <details className="setup-section" open={workspace.rounds.length === 0}><summary>1. Event details</summary>
           <label>Workspace name<input required maxLength={100} value={draft.name} onChange={(event) => { editDraft({ ...draft, name: event.target.value }); }} /></label>
           <label>General location<input maxLength={200} value={draft.location} onChange={(event) => { editDraft({ ...draft, location: event.target.value }); }} /></label>
+          <label>Event start date (optional)<input type="date" min="0001-01-01" max="9999-12-31" value={draft.startDate ?? ''} onChange={(event) => { editDraft({ ...draft, startDate: event.target.value }); }} /></label>
+          <p>The event-local calendar date is separate from round tee times. Clearing it removes the date; past events are not automatically archived.</p>
           <label className="setup-check"><input type="checkbox" checked={draft.allowPerGolferTees ?? false} disabled={personalTeesLocked}
             onChange={(event) => {
               const enabled = event.target.checked;

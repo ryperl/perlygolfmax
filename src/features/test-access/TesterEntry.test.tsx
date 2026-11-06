@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { SessionExpiredError } from '../../client/events';
 import type { EventWorkspace } from '../../domain/setup';
@@ -6,6 +6,20 @@ import { TesterEntry } from './TesterEntry';
 import { credential, deferred, testerClient, testerLink, workspace } from './test-support';
 
 describe('no-account tester entry', () => {
+  it('sorts round choices chronologically without resetting the selected round or score read', async () => {
+    const { client, scores } = testerClient();
+    const first = workspace.rounds[0];
+    if (!first) throw new Error('Missing fictional round.');
+    vi.mocked(client.workspace).mockResolvedValue({ ...workspace, rounds: [
+      { ...first, startDate: '2026-11-08' },
+      { ...first, id: testerLink.revision, name: 'Fictional earlier round', startDate: '2026-11-07' },
+    ] });
+    render(<TesterEntry client={client} credential={credential} onExit={vi.fn()} />);
+    const selector = await screen.findByLabelText('Saved round');
+    expect(within(selector).getAllByRole('option').map((option) => option.textContent)).toEqual(['Fictional earlier round', first.name]);
+    expect(selector).toHaveValue(first.id);
+    await waitFor(() => { expect(scores.load).toHaveBeenLastCalledWith(credential.eventId, first.id, expect.any(AbortSignal)); });
+  });
   it('loads only the scoped workspace, selects saved rounds, and offers no login or management navigation', async () => {
     const { client, scores } = testerClient();
     const first = workspace.rounds[0];

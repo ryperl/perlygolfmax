@@ -1,5 +1,6 @@
 import type { EventWorkspace, RoundSnapshot } from '../../domain/setup';
 import { groupStartingHole } from '../../domain/round-navigation';
+import { eventStartDateLabel, sortRoundsByStartDate } from '../../domain/event-schedule';
 import type { EventEntryProgress, RoundEntryProgressState } from './entry-progress';
 import './event-trip.css';
 
@@ -85,11 +86,12 @@ function SavedRounds({ workspace, showGroups, progress }: {
       {(workspace.event.role === 'owner' || workspace.canViewScores) && workspace.rounds.length > 0 && <p>Saved entries, not finalization. Includes pickups and DNF.</p>}
       {workspace.rounds.length === 0 ? <p>No rounds saved for this event.</p> : (
         <ol className="event-trip-rounds">
-          {workspace.rounds.map((round) => (
+          {sortRoundsByStartDate(workspace.rounds).map((round) => (
             <li className="panel event-trip-round" key={round.id}>
               <div className="event-trip-round-heading">
                 <div>
                   <h3>{round.name}</h3>
+                  {round.startDate && <p>Date: <time dateTime={round.startDate}>{eventStartDateLabel(round.startDate)}</time></p>}
                   {round.teeTime && <p>Tee time: <time dateTime={round.teeTime}>{teeTimeLabel(round.teeTime)}</time></p>}
                   <p>{round.course.name}</p>
                   <p><span>{round.teeProfile.name} tees</span> · {round.teeProfile.category}</p>
@@ -134,6 +136,7 @@ export function EventTripView({ workspace, view, progress }: EventTripViewProps)
         <p className="eyebrow">{view === 'overview' ? 'Your saved event' : event.name}</p>
         <h1>{view === 'overview' ? event.name : view === 'rounds' ? 'Rounds' : 'The Group'}</h1>
         <p className="event-trip-location">{workspace.location || 'No location saved.'}</p>
+        {event.startDate && <p>Start date: <time dateTime={event.startDate}>{eventStartDateLabel(event.startDate)}</time></p>}
         {archived && <p className="event-trip-archive"><strong>Archived event · Read-only</strong></p>}
         <nav className="event-trip-links" aria-label={event.role === 'owner' ? 'Event setup' : 'Event links'}>
             {event.role === 'owner' && <a href={setupLink(event.id)}>{archived ? 'View event setup' : 'Configure event'}</a>}

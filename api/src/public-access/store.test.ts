@@ -7,6 +7,19 @@ import { readEventAccess } from '../event-access.js';
 import { createPublicApi } from './runtime.js';
 
 describe('unsigned bounded active-event discovery', () => {
+  it('projects dates, normalizes explicit stored clears and fails closed on malformed calendar dates', async () => {
+    const f = memoryTable();
+    const row = { partitionKey: event.id, rowKey: 'event', ...event, status: 'active', startDate: '2024-02-29',
+      creatorObjectId: member.objectId };
+    f.seed(row);
+    const store = new TablePublicEventStore(f.table);
+    expect((await store.list({ kind: 'public-browse' })).events[0]).toMatchObject({ startDate: '2024-02-29', role: 'viewer' });
+    expect((await store.list({ kind: 'public-browse' })).events[0]).not.toHaveProperty('creatorObjectId');
+    f.seed({ ...row, startDate: '' });
+    expect((await store.list({ kind: 'public-browse' })).events[0]).not.toHaveProperty('startDate');
+    f.seed({ ...row, startDate: '2026-02-29' });
+    await expect(store.list({ kind: 'public-browse' })).rejects.toMatchObject({ status: 503 });
+  });
   it('pages provider rows once per request, returns only active viewer summaries, no synthetic account admission', async () => {
     const f = memoryTable();
     for (let index = 0; index < 57; index++) f.seed({

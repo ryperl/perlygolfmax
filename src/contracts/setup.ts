@@ -2,7 +2,7 @@ import type { EventSetupInput, EventWorkspace, OverallCompetition, RoundSnapshot
 import {
   boundedText, isCourseId, isCourseMetadata, isIndexObservation, isTeeProfile, isVersionId,
 } from './catalog.js';
-import { isEventRevision, isEventSummary, isRecord, isUuid } from './events.js';
+import { isEventRevision, isEventStartDate, isEventSummary, isRecord, isUuid } from './events.js';
 import { isPlayerTeeProfiles, isPlayerTeeSelections } from './tees.js';
 
 export function isOverallCompetition(value: unknown): value is OverallCompetition {
@@ -56,6 +56,7 @@ function groups(value: unknown, playerIds: readonly string[], layout?: readonly 
 
 export function isEventSetupInput(value: unknown): value is EventSetupInput {
   if (!isRecord(value) || !boundedText(value.name) || !location(value.location)
+    || value.startDate !== undefined && value.startDate !== '' && !isEventStartDate(value.startDate)
     || value.allowPerGolferTees !== undefined && typeof value.allowPerGolferTees !== 'boolean'
     || value.overallCompetition !== undefined && value.overallCompetition !== null && !isOverallCompetition(value.overallCompetition)
     || !Array.isArray(value.playerIds) || value.playerIds.length < 1
@@ -65,6 +66,7 @@ export function isEventSetupInput(value: unknown): value is EventSetupInput {
   const roster = new Set(players);
   return value.rounds.every((round: unknown) => isRecord(round) && isUuid(round.id) && boundedText(round.name)
     && (round.teeTime === undefined || round.teeTime === '' || isRoundTeeTime(round.teeTime))
+    && (round.startDate === undefined || round.startDate === '' || isEventStartDate(round.startDate))
     && isCourseId(round.courseId) && isVersionId(round.courseVersionId) && typeof round.teeProfileId === 'number'
     && Number.isSafeInteger(round.teeProfileId) && round.teeProfileId > 0 && groups(round.groups, players)
     && (round.playerTeeSelections === undefined || isPlayerTeeSelections(round.playerTeeSelections)
@@ -77,6 +79,7 @@ function isRoundSnapshot(value: unknown, playerIds: readonly string[]): value is
   const roster = new Set(playerIds);
   return isRecord(value) && isUuid(value.id) && boundedText(value.name)
     && (value.teeTime === undefined || isRoundTeeTime(value.teeTime))
+    && (value.startDate === undefined || isEventStartDate(value.startDate))
     && (value.scoringStarted === undefined || typeof value.scoringStarted === 'boolean')
     && isCourseId(value.courseId) && isVersionId(value.courseVersionId)
     && isCourseMetadata(value.course) && isTeeProfile(value.teeProfile)

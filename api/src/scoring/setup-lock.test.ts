@@ -5,6 +5,25 @@ import { identifier } from '../../test/catalog-fixtures.js';
 import { creator, event } from '../../test/fixtures.js';
 
 describe('durable first-score setup lock', () => {
+  it('permits event/round date edits and clearing after scoring without changing captures or saved scores', async () => {
+    const f = await scoringFixture();
+    await f.write();
+    const before = await f.workspace.get(creator, event.id);
+    const scores = await f.scores.get(creator, event.id, f.roundId);
+    const input = { ...f.input, startDate: '2026-11-06',
+      rounds: f.input.rounds.map((round) => ({ ...round, startDate: '2026-11-07' })) };
+    const scheduled = await f.workspace.save(creator, event.id, input, before.etag);
+    expect(scheduled.event.startDate).toBe('2026-11-06');
+    expect(scheduled.rounds[0]).toEqual({ ...before.rounds[0], startDate: '2026-11-07' });
+    expect(await f.scores.get(creator, event.id, f.roundId)).toEqual(scores);
+    const cleared = await f.workspace.save(creator, event.id, { ...f.input, startDate: '',
+      rounds: f.input.rounds.map((round) => ({ ...round, startDate: '' })) }, scheduled.etag);
+    expect(cleared.rounds[0]).toEqual(before.rounds[0]);
+    expect(cleared.event).not.toHaveProperty('startDate');
+    await expect(f.workspace.save(creator, event.id, { ...input,
+      rounds: input.rounds.map((round) => ({ ...round, groups: round.groups.map((group) => ({ ...group, startingHole: 10 })) })) },
+    cleared.etag)).rejects.toMatchObject({ code: 'ROUND_SCORING_STARTED' });
+  });
   it('allows tee-time-only scheduling changes after scoring without changing captured setup or scores', async () => {
     const f = await scoringFixture();
     await f.write();

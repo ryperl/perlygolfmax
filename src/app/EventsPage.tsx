@@ -4,6 +4,9 @@ import { EventsView } from '../features/events';
 import type { EventsState } from '../features/events';
 import type { EventsClient } from '../client/events';
 import { EventChangedError, SessionExpiredError } from '../client/events';
+import { eventDirectoryFailure, loadEventDirectory } from '../client/event-directory';
+import type { EventDirectoryProgress } from '../client/event-directory';
+import { sortEventsByStartDate } from '../domain/event-schedule';
 import type { EventStatus } from '../domain/events';
 import type { EventSession } from '../client/identity';
 import { configureEventServices } from './event-services';
@@ -77,6 +80,7 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
   const [identityFailure, setIdentityFailure] = useState<EventServices>();
   const [accountNotice, setAccountNotice] = useState('');
   const request = useRef<AbortController | null>(null);
+  const directoryProgress = useRef<EventDirectoryProgress | undefined>(undefined);
   const pendingCreate = useRef<{ readonly name: string; readonly id: string } | null>(null);
   const mounted = useRef(false);
   const running = useRef(false);
@@ -91,6 +95,7 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
     request.current = controller;
     running.current = false;
     pendingCreate.current = null;
+    directoryProgress.current = undefined;
     if (testerMode) {
       setIdentity(undefined);
       setBusy(false);
@@ -130,11 +135,13 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
     if (!services || identity?.services !== services || !identity.signedIn || preview || testerMode) return;
     setView('active');
     setState({ kind: 'loading' });
+    directoryProgress.current = undefined;
     const controller = new AbortController();
     request.current = controller;
     void services.events.capabilities(controller.signal).then(async (capabilities) => {
       controller.signal.throwIfAborted();
-      const page = await services.events.list(controller.signal);
+      const page = await loadEventDirectory(services.events, controller.signal, 'active',
+        (progress) => { directoryProgress.current = progress; });
       if (!controller.signal.aborted) {
         setLoadedScope(privateScope);
         setState({ kind: 'ready', capabilities, page });
@@ -146,7 +153,7 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
         setState({ kind: 'signed-out', message: error.message });
         setAccountNotice(error.message);
         signedOutHandler.current?.();
-      } else setState({ kind: 'error', message: 'Could not connect to your event services. No saved data was loaded.' });
+      } else setState({ kind: 'error', message: eventDirectoryFailure(error) });
     });
     return () => { controller.abort(); };
   }, [services, identity, preview, privateScope, admissionRevision, testerMode]);
@@ -279,7 +286,7 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
           <ul className="round-list">{state.page.events.map((event) => <li className="panel" key={event.id}>
             <a href={eventTabHref(eventId, event.id)}>{event.name}</a>
           </li>)}</ul>
-          {state.page.events.length === 0 && <p>No events are available on this page.</p>}
+          {state.page.events.length === 0 && <p>No events are available.</p>}
           <a href="#events">Browse your events</a>
         </section>
         : kind === 'access' && eventId ? services.admissions
@@ -309,11 +316,8 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
     </section></>;
   }
 
-  return <>{accountControl}<EventsView
-    eventHref={(event) => `#organizer?event=${event.id}`}
-    state={services ? state : { kind: 'unconfigured', message: configurationError ?? 'Identity and API settings have not been supplied.' }}
-    busy={busy} notice={notice} view={view}
-    onReload={() => { void run(async (service, signal) => {
+  function reloadDirectory(restart = false) {
+    void run(async (service, signal) => {
       const signedIn = await service.session.initialize();
       signal.throwIfAborted();
       if (!signedIn) {
@@ -328,16 +332,29 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
         return;
       }
       const capabilities = await service.events.capabilities(signal);
-      const page = await service.events.list(signal, undefined, view);
-      if (!signal.aborted) {
-        setState({ kind: 'ready', capabilities, page });
+      const resume = !restart && state.kind === 'error' ? directoryProgress.current : undefined;
+      if (!resume) directoryProgress.current = undefined;
+      setState({ kind: 'loading' });
+      try {
+        const page = await loadEventDirectory(service.events, signal, view,
+          (progress) => { directoryProgress.current = progress; }, resume);
+        if (!signal.aborted) {
+          setLoadedScope(privateScope);
+          setState({ kind: 'ready', capabilities, page });
+        }
+      } catch (error) {
+        if (error instanceof SessionExpiredError) throw error;
+        if (!signal.aborted) setState({ kind: 'error', message: eventDirectoryFailure(error) });
       }
-    }); }}
-    onNextPage={() => { void run(async (service, signal) => {
-      if (state.kind !== 'ready') return;
-      const page = await service.events.list(signal, state.page.continuationToken, view);
-      if (!signal.aborted) setState({ ...state, page });
-    }); }}
+    });
+  }
+
+  return <>{accountControl}<EventsView
+    eventHref={(event) => `#organizer?event=${event.id}`}
+    state={services ? state : { kind: 'unconfigured', message: configurationError ?? 'Identity and API settings have not been supplied.' }}
+    busy={busy} notice={notice} view={view}
+    onReload={() => { reloadDirectory(); }}
+    onRestart={() => { reloadDirectory(true); }}
     onCreate={(name) => {
       if (state.kind !== 'ready') return Promise.resolve(false);
       return run(async (service, signal) => {
@@ -345,20 +362,26 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
         const saved = await service.events.create(name, pendingCreate.current.id, signal);
         if (!signal.aborted) {
           pendingCreate.current = null;
-          setState({ ...state, page: { events: [
+          setState({ ...state, page: { events: sortEventsByStartDate([
             ...(saved.status === view ? [saved] : []),
             ...state.page.events.filter((event) => event.id !== saved.id),
-          ] } });
+          ]) } });
           setNotice(saved.status === 'archived' ? 'The previously saved event is now archived. Find it in Archived events.' : 'Event saved.');
         }
       });
     }}
     onViewChange={(status) => { void run(async (service, signal) => {
       if (state.kind !== 'ready') return;
-      const page = await service.events.list(signal, undefined, status);
-      if (!signal.aborted) {
-        setView(status);
-        setState({ ...state, page });
+      setView(status);
+      setState({ kind: 'loading' });
+      directoryProgress.current = undefined;
+      try {
+        const page = await loadEventDirectory(service.events, signal, status,
+          (progress) => { directoryProgress.current = progress; });
+        if (!signal.aborted) setState({ ...state, page });
+      } catch (error) {
+        if (error instanceof SessionExpiredError) throw error;
+        if (!signal.aborted) setState({ kind: 'error', message: eventDirectoryFailure(error) });
       }
     }); }}
     onStatusChange={(event, status) => { void run(async (service, signal) => {

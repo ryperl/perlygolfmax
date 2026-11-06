@@ -5,6 +5,7 @@ import { EventsPage } from './EventsPage';
 import type { EventServices } from './EventsPage';
 import type { EventPage, EventSummary } from '../domain/events';
 import { EventChangedError, SessionExpiredError } from '../client/events';
+import { PrivateRequestError } from '../client/private-request';
 import { fakeCatalog, fakeSetup, fictionalEvent, fictionalWorkspace } from '../client/catalog.test-support';
 import { fakeScores, fictionalRoundScores, scoreResult } from '../client/scoring.test-support';
 
@@ -18,6 +19,19 @@ function service(): EventServices {
 }
 beforeEach(() => { window.history.replaceState(null, '', '/'); });
 describe('EventsPage composition', () => {
+  it('loads the complete owner directory before showing globally dated order and resumes a failed unread page', async () => {
+    const services = service();
+    vi.mocked(services.events.list).mockResolvedValueOnce({ events: [{ ...saved, startDate: '2026-11-08' }], continuationToken: 'next' })
+      .mockRejectedValueOnce(new PrivateRequestError(429, 'Fictional quota', 1))
+      .mockResolvedValueOnce({ events: [{ ...saved, id: '00000000-0000-4000-8000-000000000002', name: 'Fictional Earlier', startDate: '2024-02-29' }] });
+    render(<EventsPage services={services} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('incomplete');
+    expect(screen.queryByRole('heading', { name: saved.name })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    const list = await screen.findByRole('list', { name: 'Your events' });
+    expect(within(list).getAllByRole('heading').map((node) => node.textContent)).toEqual(['Fictional Earlier', saved.name]);
+    expect(services.events.list).toHaveBeenLastCalledWith(expect.any(AbortSignal), 'next', 'active');
+  });
   it('uses the aggregate-only overall route, never starts saved-event progress workers, and makes no Preview prefetch', async () => {
     const leaderboard = { load: vi.fn().mockResolvedValue({ workspace: fictionalWorkspace, roundScores: [],
       standings: { status: 'disabled', rounds: [], players: [], staleRoundIds: [] } }) };
@@ -303,9 +317,9 @@ describe('EventsPage composition', () => {
     const services = service();
     vi.mocked(services.events.list).mockRejectedValue(new Error('storage unavailable'));
     const { unmount } = render(<EventsPage services={services} />);
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not connect');
+    expect(await screen.findByRole('alert')).toHaveTextContent('directory is incomplete');
     expect(screen.getAllByRole('button', { name: 'Sign out' })).toHaveLength(1);
-    expect(screen.queryByText(/No events on this page/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/No events are available/)).not.toBeInTheDocument();
     unmount();
     expect(vi.mocked(services.events.list).mock.calls[0]?.[0].aborted).toBe(true);
   });
@@ -316,7 +330,7 @@ describe('EventsPage composition', () => {
     render(<EventsPage services={services} />);
     await screen.findByRole('alert');
     await user.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(await screen.findByText(/No events on this page/)).toBeVisible();
+    expect(await screen.findByText(/No events are available/)).toBeVisible();
     expect(services.session.initialize).toHaveBeenCalledTimes(2);
   });
   it('returns to sign-in when the API rejects a stale session', async () => {

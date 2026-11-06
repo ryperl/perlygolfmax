@@ -26,11 +26,13 @@ export function createSetupClient(apiUrl: string, getToken: () => Promise<string
       if (!isUuid(eventId) || !isEventRevision(etag) || !isEventSetupInput(input)) throw new Error('Check setup: select at least 1 saved player, 1–8 rounds, an explicit course version and tee, and assign every player once to numbered groups (maximum 4 per group) with valid starting holes.');
       const value = await writePrivateValue(setupRequest, `events/${encodeURIComponent(eventId)}/workspace`, signal, { method: 'PUT', body: input, etag }, maximumEventSetupBytes);
       if (!isEventWorkspace(value) || value.event.id !== eventId
+        || input.startDate !== undefined && input.startDate !== (value.event.startDate ?? '')
         || input.overallCompetition !== undefined && !sameOverallCompetition(input.overallCompetition, value.overallCompetition)
         || input.allowPerGolferTees !== undefined && input.allowPerGolferTees !== (value.allowPerGolferTees ?? false)
         || input.rounds.some((requested) => {
           const saved = value.rounds.find((round) => round.id === requested.id);
           return !saved || requested.teeTime !== undefined && requested.teeTime !== (saved.teeTime ?? '')
+            || requested.startDate !== undefined && requested.startDate !== (saved.startDate ?? '')
             || requested.groups.some((group) => group.startingHole !== undefined
             && !saved.groups.some((other) => other.number === group.number
               && groupStartingHole(other, saved.teeProfile.holes) === group.startingHole))

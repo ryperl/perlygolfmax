@@ -1,9 +1,12 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { PublicServices } from '../client/public-events';
 import { createPublicServices } from '../client/public-events';
 import { SessionExpiredError } from '../client/events';
 import { readPublicApiUrl } from '../client/config';
 import type { EventPage } from '../domain/events';
+import { eventDirectoryFailure, loadEventDirectory } from '../client/event-directory';
+import type { EventDirectoryProgress } from '../client/event-directory';
+import { eventStartDateLabel, sortRoundsByStartDate } from '../domain/event-schedule';
 import type { EventWorkspace } from '../domain/setup';
 import type { ScoreLocation } from '../domain/score-location';
 import { groupStartingHole } from '../domain/round-navigation';
@@ -60,32 +63,36 @@ export function PublicEventsPage({ services: override }: { readonly services?: P
 }
 
 function PublicEventDirectory({ services, selection }: { readonly services: PublicServices; readonly selection?: EventTab | undefined }) {
-  const [cursor, setCursor] = useState<string>();
   const [attempt, setAttempt] = useState(0);
-  const generation = useMemo(() => ({ services, cursor, attempt }), [services, cursor, attempt]);
+  const progress = useRef<EventDirectoryProgress | undefined>(undefined);
+  const scope = useRef(services);
+  const generation = useMemo(() => ({ services, attempt }), [services, attempt]);
   const [result, setResult] = useState<{ readonly generation: object; readonly page?: EventPage; readonly error?: string }>();
   const page = result?.generation === generation ? result.page : undefined;
   const error = result?.generation === generation ? result.error : undefined;
   useEffect(() => {
     const controller = new AbortController();
-    void services.events.list(controller.signal, cursor).then((value) => {
+    if (scope.current !== services) { scope.current = services; progress.current = undefined; }
+    void loadEventDirectory(services.events, controller.signal, 'active', (value) => { progress.current = value; }, progress.current).then((value) => {
       if (!controller.signal.aborted) setResult({ generation, page: value });
     }).catch((failure: unknown) => {
-      if (!controller.signal.aborted) setResult({ generation, error: failure instanceof Error ? failure.message : 'Events could not be loaded. Try again.' });
+      if (!controller.signal.aborted) setResult({ generation, error: eventDirectoryFailure(failure) });
     });
     return () => { controller.abort(); };
-  }, [services, cursor, generation]);
+  }, [services, generation]);
   return <section><p className="eyebrow">Golf scoreboard</p><h1>{selection ? 'Choose an event' : 'Events'}</h1>
     <p>No account needed. Open an active event to enter scores, view standings and see winnings.
       Anyone visiting can update scores; organizer management stays protected.</p>
-    <button disabled={!page && !error} onClick={() => { setCursor(undefined); setAttempt((value) => value + 1); }}>Refresh events</button>
-    {!page && !error && <p role="status">Loading active events…</p>}
-    {error && <p role="alert">{error}</p>}
-    {page?.events.length === 0 && <p>No active events on this page.</p>}
+    <button disabled={!page && !error} onClick={() => { progress.current = undefined; setAttempt((value) => value + 1); }}>Refresh events</button>
+    {!page && !error && <p role="status">Loading active events… All pages must load before date order is available.</p>}
+    {error && <><p role="alert">{error}</p><button onClick={() => { setAttempt((value) => value + 1); }}>Try again</button></>}
+    {page && <p>All dated events, earliest to latest, then undated events.</p>}
+    {page?.events.length === 0 && <p>No active events.</p>}
     {page && <ul className="round-list" aria-label="Active events">{page.events.map((event) => <li className="panel" key={event.id}>
-      <h2>{event.name}</h2><a href={eventTabHref(selection ?? 'overview', event.id)}>Open {event.name}</a>
+      <h2>{event.name}</h2>
+      {event.startDate && <p>Start date: <time dateTime={event.startDate}>{eventStartDateLabel(event.startDate)}</time></p>}
+      <a href={eventTabHref(selection ?? 'overview', event.id)}>Open {event.name}</a>
     </li>)}</ul>}
-    {page?.continuationToken && <button onClick={() => { setCursor(page.continuationToken); }}>Next page</button>}
   </section>;
 }
 
@@ -138,7 +145,7 @@ function PublicRoundPage({ services, eventId, roundId, onUnavailable }: {
           <p className="score-hint">Save &amp; Next Hole and wait for Saved before closing the app. Reopening restores your place and loads fresh scores. An internet connection is required.</p>
           <label>Saved round<select value={roundId} onChange={(event) => {
             window.location.hash = `#events?event=${eventId}&round=${event.target.value}`;
-          }}>{workspace.rounds.map((round) => <option key={round.id} value={round.id}>{round.name}</option>)}</select></label>
+          }}>{sortRoundsByStartDate(workspace.rounds).map((round) => <option key={round.id} value={round.id}>{round.name}</option>)}</select></label>
         </>}
         initialLocation={initial.location ?? defaultLocation} onLocationChange={remember} onSessionExpired={onUnavailable} />
     </>}

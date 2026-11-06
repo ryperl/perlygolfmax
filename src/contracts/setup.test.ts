@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { isHandicapIndex, isIndexObservation, isManualIndexInput, isPlayerProfile } from './catalog';
 import { isEventSetupInput, isEventWorkspace, isOverallCompetition } from './setup';
 import { maximumEventSetupBytes } from '../domain/setup.js';
+import { fictionalWorkspace } from '../client/catalog.test-support';
 
 const ids = [1, 2, 3, 4].map((value) => `00000000-0000-4000-8000-${String(value).padStart(12, '0')}`);
 const input = {
@@ -14,6 +15,20 @@ const input = {
 };
 
 describe('private setup and index contracts', () => {
+  it('accepts optional event/round dates and explicit input clearing, but never blank captured dates', () => {
+    expect(isEventSetupInput(input)).toBe(true);
+    for (const startDate of ['2024-02-29', '2026-11-06', '']) {
+      expect(isEventSetupInput({ ...input, startDate, rounds: input.rounds.map((round) => ({ ...round, startDate })) })).toBe(true);
+    }
+    for (const startDate of ['2026-02-29', '1900-02-29', '2026-04-31', '2026-11-06Z', '2026-11-06T00:00:00-08:00', null, 20261106]) {
+      expect(isEventSetupInput({ ...input, startDate })).toBe(false);
+      expect(isEventSetupInput({ ...input, rounds: input.rounds.map((round) => ({ ...round, startDate })) })).toBe(false);
+    }
+    for (const startDate of ['', '2026-02-29', null]) {
+      expect(isEventWorkspace({ ...fictionalWorkspace, rounds: fictionalWorkspace.rounds.map((round) => ({ ...round, startDate })) })).toBe(false);
+    }
+    expect(isEventWorkspace({ ...fictionalWorkspace, rounds: fictionalWorkspace.rounds.map((round) => ({ ...round, startDate: '2024-02-29' })) })).toBe(true);
+  });
   it('validates optional course-local tee times and explicit clearing without dates or offsets', () => {
     for (const teeTime of ['00:00', '08:30', '12:00', '23:59', '']) {
       expect(isEventSetupInput({ ...input, rounds: input.rounds.map((round) => ({ ...round, teeTime })) })).toBe(true);

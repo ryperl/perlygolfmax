@@ -36,7 +36,8 @@ function indexRow(name: string) {
 
 function savedInput(input: EventSetupInput): EventWorkspace {
   return {
-    ...fictionalWorkspace, event: { ...fictionalEvent, name: input.name, etag: 'workspace-v2' },
+    ...fictionalWorkspace, event: { ...fictionalEvent, name: input.name, etag: 'workspace-v2',
+      ...(input.startDate ? { startDate: input.startDate } : {}) },
     etag: 'workspace-v2', location: input.location,
     roster: fictionalWorkspace.roster.filter((player) => input.playerIds.includes(player.playerId)),
     allowPerGolferTees: input.allowPerGolferTees ?? false,
@@ -44,6 +45,7 @@ function savedInput(input: EventSetupInput): EventWorkspace {
     rounds: input.rounds.map((round) => ({
       id: round.id, name: round.name, courseId: round.courseId, courseVersionId: round.courseVersionId,
       ...(round.teeTime ? { teeTime: round.teeTime } : {}),
+      ...(round.startDate ? { startDate: round.startDate } : {}),
       teeProfile: fictionalVersion.data.teeProfiles.find((profile) => profile.id === round.teeProfileId) ?? fictionalProfile,
       course: fictionalManifest.course, groups: round.groups,
       playerTees: (round.playerTeeSelections ?? []).map((entry) => ({
@@ -78,6 +80,50 @@ async function openSetupSections(user = userEvent.setup()) {
 }
 
 describe('saved event workspace', () => {
+  it('retains date-only whole-event drafts when a refreshed round becomes scored and acknowledges saved dates', async () => {
+    const setup = fakeSetup();
+    vi.mocked(setup.load).mockResolvedValueOnce(fictionalWorkspace).mockResolvedValue({
+      ...fictionalWorkspace, rounds: fictionalWorkspace.rounds.map((round) => ({ ...round, scoringStarted: true })),
+    });
+    vi.mocked(setup.save).mockImplementation((_event, _etag, input) => Promise.resolve(savedInput(input)));
+    render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={fakeCatalog()} />);
+    await openSetupSections();
+    const date = screen.getByLabelText('Round 1 date');
+    const eventDate = screen.getByLabelText('Event start date (optional)');
+    fireEvent.change(date, { target: { value: '2026-11-07' } });
+    fireEvent.change(eventDate, { target: { value: '2024-02-29' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh workspace' }));
+    await waitFor(() => { expect(screen.getByLabelText('Round 1 name')).toBeDisabled(); });
+    expect(date).toHaveValue('2026-11-07');
+    expect(date).toBeEnabled();
+    expect(eventDate).toHaveValue('2024-02-29');
+    expect(eventDate).toBeEnabled();
+    expect(screen.queryByText('Superseded local setup edits')).not.toBeInTheDocument();
+    const save = screen.getByRole('button', { name: 'Save event workspace' });
+    await waitFor(() => { expect(save).toBeEnabled(); });
+    await userEvent.click(save);
+    await screen.findByText(/Event workspace saved/);
+    expect(vi.mocked(setup.save).mock.calls[0]?.[2]).toMatchObject({ startDate: '2024-02-29', rounds: [{ startDate: '2026-11-07' }] });
+    expect(screen.getByText('February 29, 2024')).toHaveAttribute('datetime', '2024-02-29');
+  });
+  it('sorts the saved round selector by dates while preserving round numbers, IDs and the selected round', async () => {
+    const setup = fakeSetup();
+    const first = fictionalWorkspace.rounds[0];
+    if (!first) throw new Error('Missing fictional round.');
+    vi.mocked(setup.load).mockResolvedValue({ ...fictionalWorkspace, rounds: [
+      { ...first, startDate: '2026-11-08' },
+      { ...first, id: fictionalId(72), name: 'Fictional earlier', startDate: '2026-11-07' },
+      { ...first, id: fictionalId(73), name: 'Fictional same date', startDate: '2026-11-08' },
+      { ...first, id: fictionalId(74), name: 'Fictional undated' },
+    ] });
+    render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={fakeCatalog()} />);
+    const selector = await screen.findByLabelText('Selected round');
+    expect(within(selector).getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'Round 2: Fictional earlier — Saved', `Round 1: ${first.name} — Saved`,
+      'Round 3: Fictional same date — Saved', 'Round 4: Fictional undated — Saved',
+    ]);
+    expect(selector).toHaveValue(first.id);
+  });
   it('retains a tee-time-only draft when a refresh reports that the round has started scoring', async () => {
     const setup = fakeSetup();
     vi.mocked(setup.load).mockResolvedValueOnce(fictionalWorkspace).mockResolvedValue({

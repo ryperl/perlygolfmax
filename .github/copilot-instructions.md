@@ -171,3 +171,9 @@
 - Round tee time is optional course-local HH:mm schedule metadata, not a scoring
   input or generated group departure schedule. Preserve it on legacy omission;
   explicit blank clears it. Scored setup locks remain independent of schedule edits.
+- Event/round start dates are optional real YYYY-MM-DD local calendar metadata.
+  Omission preserves dates, blank clears, and scoring locks do not prevent date
+  edits. Complete bounded directory reads precede global date ordering; failures
+  retain progress, never silently publish a partial list as globally sorted.
+  Sort dated events earliest-to-latest then undated (ID ties), and display rounds
+  by date with configured-order ties without changing stored order or score cursors.

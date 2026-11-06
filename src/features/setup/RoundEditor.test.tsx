@@ -14,6 +14,18 @@ const otherCourse: CourseCatalogEntry = {
   ...fictionalEntry, id: 'ghin:902:904', name: 'Fictional Links', location: 'Fictional Coast',
 };
 
+describe('round scheduling dates', () => {
+  it('edits and clears the course-local date without modifying other round inputs', () => {
+    const f = renderEditor();
+    const date = screen.getByLabelText('Round 1 date');
+    expect(date).toHaveAttribute('type', 'date');
+    fireEvent.change(date, { target: { value: '2024-02-29' } });
+    expect(f.changed.mock.lastCall?.[0]).toMatchObject({ startDate: '2024-02-29', groups: fictionalSetup.rounds[0]?.groups });
+    fireEvent.change(date, { target: { value: '' } });
+    expect(f.changed.mock.lastCall?.[0].startDate).toBe('');
+  });
+});
+
 function renderEditor(courses: readonly CourseCatalogEntry[] = [fictionalEntry, otherCourse], version: CourseVersion = fictionalVersion) {
   const client = fakeCatalog();
   vi.mocked(client.version).mockResolvedValue(version);

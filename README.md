@@ -156,6 +156,24 @@ editable after scoring starts; course, tees, players and group starts stay locke
 No group stagger interval, date/time-zone conversion or reminder is inferred.
 Clearing the field removes the time; legacy requests omitting it retain saved times.
 
+Events and rounds also have optional start dates in strict `YYYY-MM-DD` form.
+Create an event by name, then edit dates in whole-event organizer setup. Dates
+are event/course-local calendar metadata: no timezone conversion, inferred dates
+or automatic archiving. Event and round dates remain editable after scoring
+starts without unlocking captured scoring inputs. Legacy requests omitting dates
+preserve saved values; an explicit blank clears them.
+
+Public and organizer event directories load existing bounded pages serially,
+then show all dated events earliest-to-latest followed by undated events, with
+event ID order for ties. While pages remain unread, no partially sorted cards
+are presented as the complete directory. Errors and quota waits retain loaded
+pages for explicit retry; Refresh events restarts from the first page. Each page
+still uses the existing server authorization and shared request budgets. This
+is not a cross-page snapshot: concurrent event edits may require a refresh.
+Saved round displays and selectors sort dated rounds earliest-to-latest, then
+undated, preserving configured order for ties. Stored round order, IDs, game
+bindings and remembered score entry locations are unchanged.
+
 Overview shows purse/winnings navigation only when the event has a configured
 purse. Availability comes from the existing workspace response, not an additional
 purse calculation request. Organizers can still configure one in organizer tools.

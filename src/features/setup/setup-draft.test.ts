@@ -3,6 +3,20 @@ import { fictionalId, fictionalSetup, fictionalWorkspace } from '../../client/ca
 import { inputFrom, sameRoundInput, sameSetupInput, setupProblems } from './setup-draft';
 
 describe('setup draft presentation', () => {
+  it('retains event/round dates in whole-event drafts and detects schedule-only edits and clearing', () => {
+    const round = fictionalSetup.rounds[0];
+    const saved = fictionalWorkspace.rounds[0];
+    if (!round || !saved) throw new Error('Missing fictional round.');
+    const draft = inputFrom({ ...fictionalWorkspace, event: { ...fictionalWorkspace.event, startDate: '2024-02-29' },
+      rounds: [{ ...saved, startDate: '2026-11-06' }] });
+    expect(draft.startDate).toBe('2024-02-29');
+    expect(draft.rounds[0]?.startDate).toBe('2026-11-06');
+    expect(sameSetupInput(draft, { ...draft, startDate: '' })).toBe(false);
+    expect(sameRoundInput(round, { ...round, startDate: '' })).toBe(true);
+    expect(sameRoundInput(round, { ...round, startDate: '2026-11-06' })).toBe(false);
+    expect(setupProblems({ ...fictionalSetup, startDate: '2026-02-29',
+      rounds: [{ ...round, startDate: '2026-04-31' }] })).toEqual(expect.arrayContaining(['Enter a valid event start date.', 'Round 1: enter a valid round date.']));
+  });
   it('preserves saved tee times and detects edits/clear without treating an unset time as required', () => {
     const round = fictionalSetup.rounds[0];
     const saved = fictionalWorkspace.rounds[0];

@@ -9,6 +9,7 @@ export type EventStatus = 'active' | 'archived';
 export interface GolfEvent {
   readonly id: string;
   readonly name: string;
+  readonly startDate?: string;
   readonly createdAt: string;
 }
 

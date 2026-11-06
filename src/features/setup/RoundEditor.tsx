@@ -80,6 +80,10 @@ export function RoundEditor({ round, number, saved, courses, players, rosterIds,
       setPlayerQuery(event.target.value); setPlayerPage(0);
     }} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault(); }} /></label>
     <SetupPager page={page} count={visiblePlayers.length} size={pageSize} label="round golfers" onChange={setPlayerPage} />
+    <label>Round {number} date<input type="date" min="0001-01-01" max="9999-12-31" value={round.startDate ?? ''} onChange={(event) => {
+      onChange({ ...round, startDate: event.target.value });
+    }} /></label>
+    <p>Optional course-local calendar date, separate from tee time. Schedule edits do not unlock saved scoring inputs.</p>
     <label>Round {number} tee time<input type="time" value={round.teeTime ?? ''} onChange={(event) => {
       onChange({ ...round, teeTime: event.target.value });
     }} /></label>

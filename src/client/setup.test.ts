@@ -6,6 +6,29 @@ import type { EventSetupInput } from '../domain/setup';
 import { maximumEventSetupBytes } from '../domain/setup';
 
 describe('event workspace client', () => {
+  it('requires event and round date changes/clears to be acknowledged, while allowing legacy omission', async () => {
+    const scheduled = { ...fictionalWorkspace, event: { ...fictionalWorkspace.event, startDate: '2024-02-29' },
+      rounds: fictionalWorkspace.rounds.map((round) => ({ ...round, startDate: '2026-11-06' })) };
+    const send = vi.fn<typeof fetch>().mockImplementation(() => Promise.resolve(new Response(JSON.stringify(scheduled))));
+    const client = createSetupClient('https://fictional.example.test/api', () => Promise.resolve('fictional'), send);
+    const signal = new AbortController().signal;
+    const input = { ...fictionalSetup, startDate: '2024-02-29', rounds: fictionalSetup.rounds.map((round) => ({ ...round, startDate: '2026-11-06' })) };
+    await expect(client.save(fictionalEvent.id, 'v1', input, signal)).resolves.toEqual(scheduled);
+    send.mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ ...scheduled, rounds: fictionalWorkspace.rounds }))));
+    await expect(client.save(fictionalEvent.id, 'v1', input, signal)).rejects.toThrow('Invalid saved workspace');
+    send.mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ ...scheduled, event: fictionalWorkspace.event }))));
+    await expect(client.save(fictionalEvent.id, 'v1', input, signal)).rejects.toThrow('Invalid saved workspace');
+    send.mockImplementation(() => Promise.resolve(new Response(JSON.stringify(scheduled))));
+    await expect(client.save(fictionalEvent.id, 'v1', fictionalSetup, signal)).resolves.toEqual(scheduled);
+    const cleared = { ...input, startDate: '', rounds: input.rounds.map((round) => ({ ...round, startDate: '' })) };
+    await expect(client.save(fictionalEvent.id, 'v1', cleared, signal)).rejects.toThrow('Invalid saved workspace');
+    send.mockImplementation(() => Promise.resolve(new Response(JSON.stringify(fictionalWorkspace))));
+    await expect(client.save(fictionalEvent.id, 'v1', input, signal)).rejects.toThrow('Invalid saved workspace');
+    await expect(client.save(fictionalEvent.id, 'v1', cleared, signal)).resolves.toEqual(fictionalWorkspace);
+    send.mockClear();
+    await expect(client.save(fictionalEvent.id, 'v1', { ...input, startDate: '2026-02-29' }, signal)).rejects.toThrow('Check setup');
+    expect(send).not.toHaveBeenCalled();
+  });
   it('requires tee time changes and clearing to be acknowledged by saved setup', async () => {
     const round = fictionalSetup.rounds[0];
     if (!round) throw new Error('Missing fictional round.');

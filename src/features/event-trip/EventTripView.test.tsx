@@ -31,6 +31,21 @@ function roundCard(name: string) {
 }
 
 describe('saved event overview', () => {
+  it.each(['overview', 'rounds'] as const)('shows saved event/round dates and chronological rounds on %s without renumbering identities', (view) => {
+    const dated: EventWorkspace = { ...workspace, event: { ...workspace.event, startDate: '2024-02-29' }, rounds: [
+      { ...firstRound, startDate: '2026-11-08' }, { ...secondRound, startDate: '2026-11-07' },
+      { ...firstRound, id: fictionalId(73), name: 'Fictional same day', startDate: '2026-11-08' },
+      { ...firstRound, id: fictionalId(74), name: 'Fictional undated' },
+    ] };
+    render(<EventTripView workspace={dated} view={view} />);
+    expect(screen.getByText('February 29, 2024')).toHaveAttribute('datetime', '2024-02-29');
+    expect(screen.getAllByRole('heading', { level: 3 }).map((node) => node.textContent)).toEqual([
+      secondRound.name, firstRound.name, 'Fictional same day', 'Fictional undated',
+    ]);
+    expect(roundCard(secondRound.name).getByRole('link', { name: `Open scorecard for ${secondRound.name}` }))
+      .toHaveAttribute('href', `#organizer?${eventUrl}&round=${secondRound.id}`);
+    expect(dated.rounds[0]?.id).toBe(firstRound.id);
+  });
   it.each([['00:00', '12:00 AM'], ['08:30', '8:30 AM'], ['12:00', '12:00 PM'], ['16:15', '4:15 PM']])('shows %s as the round course-local tee time without generated group departures', (teeTime, label) => {
     const view = render(<EventTripView workspace={{ ...workspace, rounds: [{ ...firstRound, teeTime }] }} view="overview" />);
     expect(screen.getByText(`${label} (course local time)`)).toHaveAttribute('datetime', teeTime);

@@ -121,6 +121,7 @@ export class TableWorkspaceStore {
       rounds: workspace.rounds.map((round) => ({
         id: round.id, name: round.name, courseId: round.courseId, courseVersionId: round.courseVersionId,
         ...(round.teeTime === undefined ? {} : { teeTime: round.teeTime }),
+        ...(round.startDate === undefined ? {} : { startDate: round.startDate }),
         course: metadata(round.course), teeProfile: profile(round.teeProfile),
         ...(round.playerTees?.length ? { playerTees: round.playerTees.map((entry) => ({
           playerId: entry.playerId, profile: profile(entry.profile),
@@ -290,11 +291,13 @@ export class TableWorkspaceStore {
     for (const round of input.rounds) {
       const oldRound = previous.rounds.find((existing) => existing.id === round.id);
       const teeTime = round.teeTime === undefined ? oldRound?.teeTime : round.teeTime || undefined;
+      const startDate = round.startDate === undefined ? oldRound?.startDate : round.startDate || undefined;
       const lockedRound = locked.find((existing) => existing.id === round.id);
       if (lockedRound) {
-        const { teeTime: _previousTime, ...capture } = lockedRound;
+        const { teeTime: _previousTime, startDate: _previousDate, ...capture } = lockedRound;
         void _previousTime;
-        rounds.push({ ...capture, ...(teeTime === undefined ? {} : { teeTime }) });
+        void _previousDate;
+        rounds.push({ ...capture, ...(teeTime === undefined ? {} : { teeTime }), ...(startDate === undefined ? {} : { startDate }) });
         continue;
       }
       const version = await this.courses.getVersion(identity, round.courseId, round.courseVersionId);
@@ -326,6 +329,7 @@ export class TableWorkspaceStore {
       rounds.push({
         id: round.id, name: round.name, courseId: round.courseId, courseVersionId: round.courseVersionId,
         ...(teeTime === undefined ? {} : { teeTime }),
+        ...(startDate === undefined ? {} : { startDate }),
         course: metadata(version.data), teeProfile,
         ...(playerTees.length ? { playerTees } : {}),
         groups: round.groups.map((group) => ({ number: group.number, playerIds: [...group.playerIds],
@@ -346,7 +350,8 @@ export class TableWorkspaceStore {
     const roundContent = new Map<string, string>();
     for (const round of rounds) roundContent.set(round.id, await stagePrivateContent(this.table, id, `round:${round.id}`, identity, canonical(round)));
     const actions: TransactionAction[] = [
-      ['update', { partitionKey: id, rowKey: 'event', name: input.name }, 'Merge', { etag }],
+      ['update', { partitionKey: id, rowKey: 'event', name: input.name,
+        ...(input.startDate === undefined ? {} : { startDate: input.startDate }) }, 'Merge', { etag }],
       ['update', {
         partitionKey: id, rowKey: `member:${identity.objectId}`, tenantId: identity.tenantId, objectId: identity.objectId, role: 'owner',
       }, 'Merge', { etag: revision(access.member) }],

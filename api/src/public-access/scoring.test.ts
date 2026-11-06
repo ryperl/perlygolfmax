@@ -15,6 +15,18 @@ import { stagePrivateContent, privateContent } from '../private-values.js';
 import { publicFixture } from './test-support.js';
 
 describe('active event public scoring authority', () => {
+  it('projects saved event/round dates for public readers without raw indices or owner identity', async () => {
+    const f = await publicFixture();
+    const before = await f.workspace.get(creator, event.id);
+    await f.workspace.save(creator, event.id, { ...f.input, startDate: '2024-02-29',
+      rounds: f.input.rounds.map((round) => ({ ...round, startDate: '2026-11-06' })) }, before.etag);
+    const workspace = await f.workspace.get(f.actor, event.id);
+    expect(workspace.event).toMatchObject({ startDate: '2024-02-29', role: 'viewer' });
+    expect(workspace.rounds[0]?.startDate).toBe('2026-11-06');
+    expect(isEventWorkspace(workspace)).toBe(true);
+    expect(JSON.stringify(workspace)).not.toContain(creator.objectId);
+    expect(workspace.rounds[0]?.players.every((player) => player.handicapIndex === undefined)).toBe(true);
+  });
   it('exposes saved course-local tee times in the existing public round projection', async () => {
     const f = await publicFixture();
     const before = await f.workspace.get(creator, event.id);

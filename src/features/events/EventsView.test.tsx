@@ -5,10 +5,17 @@ import { EventsView } from './EventsView';
 import type { EventsState } from './EventsView';
 
 const actions = {
-  onReload: vi.fn(), onNextPage: vi.fn(), onCreate: vi.fn().mockResolvedValue(false),
+  onReload: vi.fn(), onCreate: vi.fn().mockResolvedValue(false),
   view: 'active', onViewChange: vi.fn(), onStatusChange: vi.fn(),
 } as const;
 describe('EventsView', () => {
+  it('shows a saved event date as calendar text without deriving a date for undated events', () => {
+    render(<EventsView {...actions} state={{ kind: 'ready', capabilities: { canCreateEvents: false, canManageCatalog: false },
+      page: { events: [{ id: 'fictional', name: 'Fictional Dated', startDate: '2024-02-29', createdAt: '2026-01-01', role: 'owner', status: 'active', etag: 'v1' }] },
+    }} busy={false} notice="" />);
+    expect(screen.getByText('February 29, 2024')).toHaveAttribute('datetime', '2024-02-29');
+    expect(screen.queryByText('January 1, 2026')).not.toBeInTheDocument();
+  });
   it('leaves account controls to its hosting controller', () => {
     render(<EventsView {...actions} state={{ kind: 'signed-out' }} busy={false} notice="" />);
     expect(screen.getByText(/Use Sign in above/)).toBeVisible();
@@ -26,7 +33,7 @@ describe('EventsView', () => {
   });
   it('shows empty membership without treating it as invitation or creation authority', () => {
     render(<EventsView {...actions} state={{ kind: 'ready', page: { events: [] }, capabilities: { canCreateEvents: false, canManageCatalog: false } }} busy={false} notice="" />);
-    expect(screen.getByText(/No events on this page/)).toBeVisible();
+    expect(screen.getByText(/No events are available/)).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Create event' })).not.toBeInTheDocument();
   });
   it('renders authorized saved events and submits a bounded name only through its callback', async () => {

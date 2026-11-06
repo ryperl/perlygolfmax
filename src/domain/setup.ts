@@ -38,6 +38,7 @@ export interface RoundSetupInput {
   readonly id: string;
   readonly name: string;
   readonly teeTime?: string;
+  readonly startDate?: string;
   readonly courseId: string;
   readonly courseVersionId: string;
   readonly teeProfileId: number;
@@ -47,6 +48,7 @@ export interface RoundSetupInput {
 
 export interface EventSetupInput {
   readonly name: string;
+  readonly startDate?: string;
   readonly location: string;
   readonly playerIds: readonly string[];
   readonly rounds: readonly RoundSetupInput[];
@@ -67,6 +69,7 @@ export interface RoundSnapshot {
   readonly id: string;
   readonly name: string;
   readonly teeTime?: string;
+  readonly startDate?: string;
   readonly courseId: string;
   readonly courseVersionId: string;
   readonly course: CourseMetadata;

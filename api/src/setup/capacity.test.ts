@@ -22,9 +22,10 @@ async function fixture(count: number) {
       { value: '12.3', effectiveDate: '2026-01-01', source: `Fictional source ${'S'.repeat(150)}` })));
   const playerIds = players.map((player) => player.id);
   const input: EventSetupInput = {
-    name: 'Fictional Large Event', location: 'Fictional location', playerIds,
+    name: 'Fictional Large Event', startDate: '2026-11-06', location: 'Fictional location', playerIds,
     rounds: Array.from({ length: 2 }, (_, index) => ({
       id: identifier(500 + index), name: `Fictional Round ${String(index)}`,
+      startDate: index === 0 ? '2026-11-08' : '2026-11-07',
       courseId: version.courseId, courseVersionId: version.id, teeProfileId: tee.id,
       groups: Array.from({ length: Math.ceil(count / 4) }, (_, group) => ({
         number: group === 0 ? Number.MAX_SAFE_INTEGER : group + 10, playerIds: playerIds.slice(group * 4, (group + 1) * 4),
@@ -51,6 +52,8 @@ describe('large event capacity and atomic publication', () => {
     const f = await fixture(count);
     const saved = await f.workspace.save(creator, event.id, f.input, f.empty.etag);
     expect(isEventWorkspace(saved)).toBe(true);
+    expect(saved.event.startDate).toBe('2026-11-06');
+    expect(saved.rounds.map((round) => round.startDate)).toEqual(['2026-11-08', '2026-11-07']);
     expect(saved.roster).toHaveLength(count);
     expect(saved.rounds[0]?.groups.at(-1)?.number).toBe(9 + count / 4);
     expect(saved.rounds[0]?.groups).toEqual(f.input.rounds[0]?.groups);

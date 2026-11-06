@@ -7,6 +7,22 @@ import { identifier, memoryTable } from '../../test/catalog-fixtures.js';
 function table() { return new TableClient('https://fictional.table.core.windows.net', 'Events'); }
 
 describe('Table event persistence', () => {
+  it('includes only the saved date in owner directory/status and name-only creation retry projections', async () => {
+    const f = memoryTable();
+    f.seed({ partitionKey: event.id, rowKey: 'event', ...event, startDate: '2024-02-29', status: 'active',
+      creatorTenantId: creator.tenantId, creatorObjectId: creator.objectId, privateAudit: 'Fictional private audit' });
+    f.seed({ partitionKey: event.id, rowKey: `member:${creator.objectId}`, ...creator, role: 'owner' });
+    const store = new TableEventStore(f.table);
+    const page = await store.list(creator);
+    expect(page.events[0]?.startDate).toBe('2024-02-29');
+    expect(page.events[0]).not.toHaveProperty('privateAudit');
+    expect((await store.create(creator, event)).startDate).toBe('2024-02-29');
+    const current = page.events[0];
+    if (!current) throw new Error('Missing fictional event.');
+    expect((await store.setStatus(creator, event.id, 'archived', current.etag)).startDate).toBe('2024-02-29');
+    expect((await store.list(creator)).events).toEqual([]);
+    expect((await store.list(creator, undefined, 'archived')).events[0]?.startDate).toBe('2024-02-29');
+  });
   it('creates metadata and owner membership in one event-partition transaction', async () => {
     const client = table();
     const submit = vi.spyOn(client, 'submitTransaction').mockResolvedValue({ status: 202, subResponses: [], getResponseForEntity: () => undefined });

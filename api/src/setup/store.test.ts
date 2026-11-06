@@ -27,6 +27,38 @@ async function fixture(teeProfile = tee) {
 }
 
 describe('saved owner workspace', () => {
+  it('saves, projects, preserves omission and explicitly clears event and round dates under owner revision checks', async () => {
+    const f = await fixture();
+    const input = { ...f.input, startDate: '2024-02-29',
+      rounds: f.input.rounds.map((round) => ({ ...round, startDate: '2026-11-06' })) };
+    const saved = await f.workspace.save(creator, event.id, input, f.empty.etag);
+    expect(saved.event.startDate).toBe(input.startDate);
+    expect(saved.rounds[0]?.startDate).toBe('2026-11-06');
+    const actions = f.submit.mock.calls.at(-1)?.[0];
+    expect(actions?.[0]).toEqual(['update', expect.objectContaining({ rowKey: 'event', startDate: input.startDate }), 'Merge', { etag: f.empty.etag }]);
+    expect(actions?.[1]?.[3]?.etag).toEqual(expect.any(String));
+    f.seed({ partitionKey: event.id, rowKey: `member:${member.objectId}`, ...member, role: 'member' });
+    const projected = await f.workspace.get(member, event.id);
+    expect(projected.event.startDate).toBe(input.startDate);
+    expect(projected.rounds[0]?.startDate).toBe('2026-11-06');
+    expect(projected.rounds[0]?.players.every((player) => player.handicapIndex === undefined)).toBe(true);
+    const retained = await f.workspace.save(creator, event.id, f.input, saved.etag);
+    expect(retained.event.startDate).toBe(input.startDate);
+    expect(retained.rounds[0]?.startDate).toBe('2026-11-06');
+    const cleared = await f.workspace.save(creator, event.id, { ...f.input, startDate: '',
+      rounds: f.input.rounds.map((round) => ({ ...round, startDate: '' })) }, retained.etag);
+    expect(cleared.event).not.toHaveProperty('startDate');
+    expect(cleared.rounds[0]).not.toHaveProperty('startDate');
+    await expect(f.workspace.save(creator, event.id, input, retained.etag)).rejects.toMatchObject({ code: 'EVENT_CHANGED' });
+  });
+  it.each(['2026-02-29', '1900-02-29', '2026-04-31', '2026-11-06T00:00:00Z'])('rejects invalid event and round dates %s before writes', async (startDate) => {
+    const f = await fixture();
+    f.submit.mockClear();
+    for (const input of [{ ...f.input, startDate }, { ...f.input, rounds: f.input.rounds.map((round) => ({ ...round, startDate })) }]) {
+      await expect(f.workspace.save(creator, event.id, input, f.empty.etag)).rejects.toMatchObject({ code: 'INVALID_EVENT_SETUP' });
+    }
+    expect(f.submit).not.toHaveBeenCalled();
+  });
   it('saves, retains legacy omission, changes and explicitly clears the optional round tee time', async () => {
     const f = await fixture();
     const scheduled = { ...f.input, rounds: f.input.rounds.map((round) => ({ ...round, teeTime: '08:30' })) };

@@ -6,6 +6,18 @@ import { admissionIndexKey, admissionIndexPartition, assertEventAccessUnchanged,
 import { admissionFixture } from './test-support.js';
 
 describe('private player invitation admission', () => {
+  it('retains saved dates in bound-member and global-viewer discovery without changing admission authority', async () => {
+    const f = admissionFixture();
+    f.seed({ ...f.row('event'), startDate: '2024-02-29' });
+    const otherEvent = identifier(999);
+    f.seed({ partitionKey: otherEvent, rowKey: 'event', ...event, id: otherEvent, startDate: '2026-11-06' });
+    await f.invite();
+    await f.claim();
+    await f.approve();
+    expect(await readEventAccess(f.table, member, event.id)).toMatchObject({ summary: { role: 'member', startDate: '2024-02-29' }, admittedPlayer: true });
+    expect(await readEventAccess(f.table, member, otherEvent)).toMatchObject({ summary: { role: 'viewer', startDate: '2026-11-06' }, admittedPlayer: true });
+    expect((await new TableEventStore(f.table).list(member)).events.map((item) => item.startDate)).toEqual(['2024-02-29', '2026-11-06']);
+  });
   it('creates a digest-only link, claims pending, publishes a bound player and global viewer, then revokes without deleting scores', async () => {
     const f = admissionFixture();
     const otherEvent = identifier(999);

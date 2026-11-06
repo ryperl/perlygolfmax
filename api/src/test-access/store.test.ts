@@ -11,6 +11,17 @@ import { testerFixture } from './test-support.js';
 afterEach(() => vi.useRealTimers());
 
 describe('owner-managed private tester links', () => {
+  it('retains saved event and round dates in the scoped tester projection without exposing owner fields', async () => {
+    const f = await testerFixture();
+    const before = await f.workspace.get(creator, event.id);
+    await f.workspace.save(creator, event.id, { ...f.input, startDate: '2024-02-29',
+      rounds: f.input.rounds.map((round) => ({ ...round, startDate: '2026-11-06' })) }, before.etag);
+    const workspace = await f.workspace.get(f.actor, event.id);
+    expect(workspace.event).toMatchObject({ role: 'viewer', startDate: '2024-02-29' });
+    expect(workspace.rounds[0]?.startDate).toBe('2026-11-06');
+    expect(JSON.stringify(workspace)).not.toContain(creator.objectId);
+    expect(workspace.rounds[0]?.players.every((player) => player.handicapIndex === undefined)).toBe(true);
+  });
   it('creates server-expiring hash-only grants and allowlists owner projections', async () => {
     const f = await testerFixture();
     const management = await f.testers.list(creator, event.id);

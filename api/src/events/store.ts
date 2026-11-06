@@ -15,6 +15,7 @@ export interface EventStore {
 function summary(id: string, event: Readonly<Record<string, unknown>>, membership: Readonly<Record<string, unknown>>): EventSummary {
   const result = {
     id, name: event.name, createdAt: event.createdAt, role: membership.role,
+    ...(event.startDate === undefined || event.startDate === '' ? {} : { startDate: event.startDate }),
     status: event.status === undefined ? 'active' : event.status, etag: event.etag,
   };
   if (!isEventSummary(result)) throw new ApiError(503, 'INVALID_STORED_EVENT');

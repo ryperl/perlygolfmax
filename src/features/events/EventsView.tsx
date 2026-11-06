@@ -1,4 +1,5 @@
 import type { EventCapabilities, EventPage, EventStatus, EventSummary } from '../../domain/events';
+import { eventStartDateLabel } from '../../domain/event-schedule';
 
 export type EventsState =
   | { readonly kind: 'unconfigured'; readonly message: string }
@@ -13,33 +14,36 @@ interface EventsViewProps {
   readonly notice: string;
   readonly view: EventStatus;
   readonly onReload: () => void;
-  readonly onNextPage: () => void;
+  readonly onRestart?: () => void;
   readonly onCreate: (name: string) => Promise<boolean>;
   readonly onViewChange: (status: EventStatus) => void;
   readonly onStatusChange: (event: EventSummary, status: EventStatus) => void;
   readonly eventHref?: (event: EventSummary) => string;
 }
 
-export function EventsView({ state, busy, notice, view, onReload, onNextPage, onCreate, onViewChange, onStatusChange, eventHref }: EventsViewProps) {
+export function EventsView({ state, busy, notice, view, onReload, onRestart, onCreate, onViewChange, onStatusChange, eventHref }: EventsViewProps) {
   return <section>
     <p className="eyebrow">Organizer workspace</p>
     <h1>Events</h1>
     <p className="page-description">Sign in here for course, player and event management. Golfers use the public scoreboard without an account. Organizer settings stay protected.</p>
     {state.kind === 'unconfigured' && <div className="panel"><h2>Event services are not configured</h2><p>{state.message}</p><p>No sign-in or saved-event connection is active. Fictional content is available separately under Preview.</p></div>}
     {state.kind === 'signed-out' && <div className="panel"><h2>Sign in with an email code</h2><p>Use Sign in above. No Microsoft account is needed. Signing in does not grant event access.</p>{state.message && <p role="status">{state.message}</p>}</div>}
-    {state.kind === 'loading' && <p role="status">Loading your events...</p>}
-    {state.kind === 'error' && <div className="panel"><p role="alert">{state.message}</p><button disabled={busy} onClick={onReload}>Try again</button></div>}
+    {state.kind === 'loading' && <p role="status">Loading your events... All pages must load before date order is available.</p>}
+    {state.kind === 'error' && <div className="panel"><p role="alert">{state.message}</p><button disabled={busy} onClick={onReload}>Try again</button>
+      {onRestart && <button disabled={busy} onClick={onRestart}>Refresh events</button>}</div>}
     {state.kind === 'ready' && <>
       <div className="event-actions"><button disabled={busy} onClick={onReload}>Refresh events</button></div>
+      <p>All dated events, earliest to latest, then undated events.</p>
       {state.capabilities.canManageCatalog && <nav className="event-actions" aria-label="Catalog navigation"><a href="#events?catalog=courses">Course catalog</a><a href="#events?catalog=players">Player catalog</a></nav>}
       <div className="event-actions" role="group" aria-label="Event lists">
         <button disabled={busy} aria-pressed={view === 'active'} onClick={() => { onViewChange('active'); }}>Active events</button>
         <button disabled={busy} aria-pressed={view === 'archived'} onClick={() => { onViewChange('archived'); }}>Archived events</button>
       </div>
       {view === 'archived' && <p>Archived events are visible only to their owners. Their data is preserved and can be restored.</p>}
-      {state.page.events.length === 0 ? <p>{view === 'archived' ? 'No archived events you own on this page.' : 'No events on this page. Signing in alone does not add you to an event.'}</p>
+      {state.page.events.length === 0 ? <p>{view === 'archived' ? 'No archived events you own.' : 'No events are available. Signing in alone does not add you to an event.'}</p>
         : <ul className="round-list" aria-label="Your events">{state.page.events.map((event) => <li className="panel" key={event.id}>
           <h2>{event.name}</h2><p>{event.role === 'owner' ? 'Event owner' : event.role === 'viewer' ? 'Read-only viewer' : 'Event member'} / Private</p>
+          {event.startDate && <p>Start date: <time dateTime={event.startDate}>{eventStartDateLabel(event.startDate)}</time></p>}
           <div className="event-card-actions" role="group" aria-label={`Actions for ${event.name}`}>
             <a href={eventHref?.(event) ?? `#overview?event=${encodeURIComponent(event.id)}`}>Open {event.name}</a>
             {event.role === 'owner' && <button disabled={busy} onClick={() => {
@@ -47,7 +51,6 @@ export function EventsView({ state, busy, notice, view, onReload, onNextPage, on
             }} aria-label={`${event.status === 'active' ? 'Archive' : 'Restore'} ${event.name}`}>{event.status === 'active' ? 'Archive event' : 'Restore event'}</button>}
           </div>
         </li>)}</ul>}
-      {state.page.continuationToken && <button disabled={busy} onClick={onNextPage}>Next page</button>}
       {view === 'active' && state.capabilities.canCreateEvents && <form className="panel event-form" onSubmit={(event) => {
         event.preventDefault();
         const form = event.currentTarget;
