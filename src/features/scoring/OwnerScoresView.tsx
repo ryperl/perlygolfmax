@@ -14,6 +14,7 @@ import { scorecardHoles, scorecardTee } from '../../domain/tees';
 import { useOwnerScores } from './useOwnerScores';
 import { GroupHoleEntry } from './GroupHoleEntry';
 import { ScoreActionIcon } from './ScoreActionIcon';
+import type { ScoreFeedbackState } from './ScoreSaveIndicator';
 import { SavedScorecards } from './SavedScorecards';
 import { cardFor, conflictedDraft, editedDraft, entryKey, entryScore, savedHole } from './entry-state';
 import type { HoleDraft } from './entry-state';
@@ -52,7 +53,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
   const groupHoles = useRef(new Map<number, number>());
   useLayoutEffect(() => { locationHandler.current = onLocationChange; }, [onLocationChange]);
   const [gamesDirty, setGamesDirty] = useState(false);
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useState<{ readonly kind: 'attention'; readonly message: string } | { readonly kind: 'saved' } | null>(null);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const saving = useRef(false);
   const alive = useRef(false);
@@ -103,7 +104,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     draftAccess.current = null;
     setDrafts(new Map());
     setGamesDirty(false);
-    setNotice('');
+    setNotice(null);
   }, [round]);
 
   function update(key: string, draft: HoleDraft | null) {
@@ -118,7 +119,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     pauseForEdit();
     const key = entryKey(playerId, hole.number);
     update(key, editedDraft(text, cardFor(round, playerId), currentDrafts.current.get(key)));
-    setNotice('');
+    setNotice(null);
   }
   function review(playerId: string) {
     if (!round || !hole || busy || !canEditGroup || !writeIds.includes(playerId)) return;
@@ -126,7 +127,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     const local = currentDrafts.current.get(key);
     if (!local || local.status !== 'conflict' || local.conflictAt === undefined || refreshVersion <= local.conflictAt) return;
     update(key, { text: local.text, baseEtag: cardFor(round, playerId).etag, status: 'draft', mustWrite: true });
-    setNotice('Reviewed against the refreshed saved card. Your value is a new unsaved intent; save the group to apply it.');
+    setNotice(null);
   }
   async function refreshSavedRound(): Promise<RoundScores | null> {
     const value = await refresh();
@@ -140,7 +141,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
       }
     }
     setRefreshVersion((previous) => previous + 1);
-    setNotice('Saved round refreshed. Local values are preserved; compare saved vs intended before reviewing a conflict.');
+    setNotice(null);
     return value;
   }
   async function saveGameSettings(games: readonly RoundGameDefinition[], etag: string | null, requestId: string): Promise<GameWriteResult | null> {
@@ -159,7 +160,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     if (!round || !group || !hole || busy || saving.current || !canEditGroup) return;
     const plan = planGroup(round, group.playerIds, hole.number, currentDrafts.current);
     if (plan.invalid.length > 0) {
-      setNotice('Nothing sent. Check every intended entry: use a positive number, X / X7, DNF, or blank for unplayed.');
+      setNotice({ kind: 'attention', message: 'Nothing sent. Check every intended entry: use a positive number, X / X7, DNF, or blank for unplayed.' });
       return;
     }
     if (plan.conflicts.length > 0) {
@@ -169,23 +170,21 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
         const score = local && entryScore(local.text);
         if (local && score && local.status !== 'conflict') update(key, conflictedDraft(score, cardFor(round, playerId), refreshVersion, local));
       }
-      setNotice('Nothing sent. Refresh saved round and review each conflict before saving this group.');
+      setNotice({ kind: 'attention', message: 'Nothing sent. Refresh saved round and review each conflict before saving this group.' });
       return;
     }
     for (const key of plan.unchanged) update(key, null);
     const currentHole = hole.number;
     const following = adjacentHole(round.layout, currentHole, 1);
     const next = following?.number === groupStartingHole(group, round.layout) ? undefined : following;
-    const unplayed = [...plan.targets.values()].filter((score) => score.kind === 'unplayed').length;
     function complete(writes: number) {
-      const movement = next ? ` Viewing hole ${String(next.number)}.` : ' Scorecards opened for review; the round is not finalized.';
-      setNotice(`${writes === 0 ? 'No changes sent' : `Saved — ${String(writes)} player changes acknowledged`}; ${String(unplayed)} unplayed.${movement}`);
+      setNotice(writes > 0 ? { kind: 'saved' } : null);
       if (next) { setHoleNumber(next.number); setFocusHole(next.number); }
       else setScreen('cards');
     }
     if (plan.writes.length === 0) { complete(0); return; }
     saving.current = true;
-    setNotice('Saving one player at a time…');
+    setNotice(null);
     let latest: RoundScores = round;
     let operationSignal: AbortSignal | undefined;
     try {
@@ -201,7 +200,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
         });
       });
       if (result && alive.current) complete(plan.writes.length);
-      else if (alive.current) setNotice('No new requests sent. Wait for the active operation or service retry delay, then retry; entries are kept on this page.');
+      else if (alive.current) setNotice({ kind: 'attention', message: 'No new requests sent. Wait for the active operation or service retry delay, then retry; entries are kept on this page.' });
     } catch {
       if (!alive.current || operationSignal?.aborted) return;
       const confirmed = [...plan.targets].filter(([playerId, score]) =>
@@ -209,7 +208,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
           && sameHoleScore(savedHole(cardFor(latest, playerId), currentHole), score)
           && (score.kind !== 'unplayed' || plan.writes.some((write) => write.playerId === playerId))).length;
       const remaining = group.playerIds.filter((playerId) => currentDrafts.current.has(entryKey(playerId, currentHole))).length;
-      setNotice(`${String(confirmed)} saved / ${String(remaining)} remaining not confirmed or need review. Stayed on hole ${String(currentHole)}. Retry only the remaining values; acknowledged changes are not sent again.`);
+      setNotice({ kind: 'attention', message: `${String(confirmed)} saved / ${String(remaining)} remaining not confirmed or need review. Stayed on hole ${String(currentHole)}. Retry only the remaining values; acknowledged changes are not sent again.` });
     } finally {
       saving.current = false;
     }
@@ -219,13 +218,13 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     currentDrafts.current = new Map();
     draftAccess.current = null;
     setDrafts(new Map());
-    setNotice('Unsaved scores discarded. Saved scores are unchanged.');
+    setNotice(null);
   }
   function selectGroup(number: number) {
     setGroupNumber(number);
     setHoleNumber(groupHoles.current.get(number)
       ?? groupStartingHole(round?.groups.find((item) => item.number === number), round?.layout ?? []) ?? null);
-    setNotice('');
+    setNotice(null);
   }
   if (round?.eventStatus === 'archived' && permissions?.role !== 'owner') return <p role="alert">Archived scorecards are available to the event owner only.</p>;
   const tools = <>
@@ -259,6 +258,10 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
   const connection = (busy || stale) && <p className="score-connection" role="status">
     {busy ? 'Contacting score service…' : 'Saved data may be stale — refresh to review.'}
   </p>;
+  const needsAttention = !!error || stale || accessChanged || notice?.kind === 'attention'
+    || [...drafts.values()].some((draft) => draft.status === 'failed' || draft.status === 'conflict');
+  const feedbackState: ScoreFeedbackState = needsAttention ? 'attention' : drafts.size > 0 ? 'unsaved'
+    : notice?.kind === 'saved' ? 'saved' : 'idle';
   return <section ref={entryRegion} tabIndex={-1} aria-label="Round scores" className="owner-scores">
     <h1>Round scores</h1>
     {roundPicker && <div className="score-round-picker">{roundPicker}</div>}
@@ -296,8 +299,10 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
           const local = drafts.get(entryKey(playerId, hole.number));
           const personal = scorecardTee(round, playerId);
           const playerHole = scorecardHoles(round, playerId).find((item) => item.number === hole.number);
+          const courseHandicap = round.courseHandicaps?.find((entry) => entry.playerId === playerId);
           return {
             playerId, displayName: card.displayName, saved: savedHole(card, hole.number),
+            ...(courseHandicap ? { courseHandicap } : {}),
             ...(playerHole ? { hole: playerHole } : {}),
             ...((round.playerTees?.length ?? 0) > 0 ? {
               teeLabel: `${personal?.name ?? round.teeName} / ${personal?.category ?? round.teeCategory} · ${personal ? 'personal' : 'default'} tee`,
@@ -306,9 +311,9 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
             canReview: local?.conflictAt !== undefined && refreshVersion > local.conflictAt,
           };
         })} busy={busy} readOnly={!canEditGroup} unsavedCount={drafts.size} focusHole={focusHole}
-        saveStatus={busy ? 'Working…' : notice.startsWith('Saved —') ? 'Saved' : notice.startsWith('No changes sent') ? 'No changes' : drafts.size > 0 ? 'Unsaved changes' : ''}
+        feedbackState={feedbackState}
         onGroupChange={selectGroup}
-        onHoleChange={(number) => { setHoleNumber(number); setNotice(''); }} onEdit={edit} onReview={review}
+        onHoleChange={(number) => { setHoleNumber(number); setNotice(null); }} onEdit={edit} onReview={review}
         onDiscard={(playerId) => { update(entryKey(playerId, hole.number), null); }}
         onDiscardAll={discardAll}
         onRefresh={() => { void refreshSavedRound().catch(() => undefined); }}
@@ -325,8 +330,11 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
         <RoundLeaderboard round={round} busy={busy} onManageGames={() => { setScreen('games'); }} />
       </div>
     </>}
-    {screen === 'entry' && connection}
-    {notice && <p className="score-notice" role="status">{notice}</p>}
+    {notice?.kind === 'attention' && <p className="score-notice" role="status">{notice.message}</p>}
+    <span className="score-indicator-label" role="status" aria-live="polite"
+      aria-label={screen !== 'entry' && notice?.kind === 'saved' ? 'Scores saved' : undefined}>
+      {screen !== 'entry' && notice?.kind === 'saved' ? 'Scores saved' : ''}
+    </span>
     {(screen !== 'entry' || !group || !hole) && drafts.size > 0 && <button disabled={busy} onClick={discardAll}>Discard unsaved scores</button>}
   </section>;
 }

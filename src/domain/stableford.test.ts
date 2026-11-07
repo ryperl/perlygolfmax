@@ -5,7 +5,8 @@ import { defaultHandicapAllowancePercent, maximumExactGamePoints, maximumExactPo
 import type { HoleScore, Scorecard } from './scoring.js';
 import { summarizeGross } from './scoring.js';
 import type { RoundSnapshot } from './setup.js';
-import { calculateGameResults, stablefordPoints } from './stableford.js';
+import { calculateCourseHandicap, calculateGameResults, calculatePlayingHandicap, stablefordPoints } from './stableford.js';
+import { publishedCourseHandicaps } from './playing-handicaps.js';
 
 const id = (number: number) => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
 function game(preset: StablefordPreset = 'standard', overrides: Partial<IndividualGameDefinition> = {}): IndividualGameDefinition {
@@ -60,6 +61,45 @@ function scores(cards: readonly Scorecard[], values: readonly HoleScore[]): read
     ...card, holes: card.holes.map((hole, index) => ({ ...hole, score: values[index] ?? { kind: 'unplayed' } })),
   }));
 }
+
+describe('course handicaps from captured inputs', () => {
+  it.each([
+    [18, '0', 0], [18, '10.5', 11], [18, '+2.5', -2],
+    [9, '5.5', 3], [9, '+5.5', -3],
+  ] as const)('calculates %s holes with index %s as %s, using exact rounding', (count, index, expected) => {
+    expect(calculateCourseHandicap(index, fixture(count, index).round.teeProfile)).toBe(expected);
+  });
+  it('does not apply a game allowance or require stroke allocations for a course handicap', () => {
+    const tee = fixture(18, '10.5').round.teeProfile;
+    expect(calculateCourseHandicap('10.5', tee)).toBe(11);
+    expect(calculatePlayingHandicap('10.5', tee, 95)).toBe(10);
+    const missing = { ...tee, strokeAllocation: false, holes: tee.holes.map((hole) => ({ ...hole, allocation: 0 })) };
+    expect(calculateCourseHandicap('10.5', missing)).toBe(11);
+    expect(calculatePlayingHandicap('10.5', missing, 100)).toBe('missing-stroke-index');
+    expect(calculateCourseHandicap('not-an-index', tee)).toBe('invalid-handicap-index');
+    expect(calculateCourseHandicap('10.5', { ...tee, ratings: [] })).toBe('missing-tee-ratings');
+  });
+  it('publishes each golfer own captured tee and distinguishes NH from unavailable ratings', () => {
+    const { round } = fixture(18, '10.5');
+    const player = round.players[0];
+    if (!player) throw new Error('Missing fictional golfer.');
+    const personal = { ...round.teeProfile, id: 701,
+      ratings: round.teeProfile.ratings.map((rating) => rating.type === 'Total' ? { ...rating, course: 74 } : rating) };
+    const captured = { ...round, playerTees: [{ playerId: player.playerId, profile: personal }] };
+    const unchanged = structuredClone(captured);
+    expect(publishedCourseHandicaps(captured).map((entry) => entry.courseHandicap)).toEqual([13, 11, 11, 11]);
+    expect(captured).toEqual(unchanged);
+    expect(publishedCourseHandicaps(fixture(18, null).round)[0]).toMatchObject({
+      courseHandicap: null, unavailableReason: 'missing-handicap-index',
+    });
+    expect(publishedCourseHandicaps({ ...round,
+      players: round.players.map(({ playerId, displayName }) => ({ playerId, displayName })),
+    })[0]).toMatchObject({ courseHandicap: null, unavailableReason: 'uncaptured-handicap-index' });
+    expect(publishedCourseHandicaps({ ...round, teeProfile: { ...round.teeProfile, ratings: [] } })[0]).toMatchObject({
+      courseHandicap: null, unavailableReason: 'missing-tee-ratings',
+    });
+  });
+});
 
 describe('individual captured tees in shared round games', () => {
   it('uses each golfer own par for gross points, without changing others or raw strokes', () => {

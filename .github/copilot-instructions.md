@@ -55,8 +55,10 @@
   a separate scope decision.
 - Public app access is an explicit product decision: any visitor may read all
   active events/rosters/cards/standings/purse amounts and score any saved group,
-  without accounts or links. Never expose raw indices, audits, archives,
-  catalogs or any management writes. Keep organizer sign-in separate. Public
+  without accounts or links. Public roster/group displays may publish only the
+  scalar current/captured HI or explicit NH, never observation/history metadata,
+  audits, archives, catalogs or management writes. Legacy private projections
+  retain their narrower index restrictions. Keep organizer sign-in separate. Public
   audits use a distinct unverified public-event actor, never a fake account or
   owner row. Preserve event/card concurrency, locks, idempotency and shared
   durable site/event request budgets.
@@ -103,6 +105,9 @@
   silently use current global indices.
   Pickup/DNF award minimum configured points; unplayed remains pending.
   Missing net inputs are unavailable, never a zero handicap.
+- Scoring names show server-derived Course Handicap from captured HI and each
+  golfer's captured tee, without game allowance or a stroke-allocation requirement.
+  Keep scratch/plus values distinct from NH and other unavailable inputs.
 - Leaderboards order saved server game points, not local drafts or projected
   totals. Mixed progress is provisional with holes shown. Equal points share
   positions without a tie-break; unplayed/unavailable golfers are not ranked
@@ -149,6 +154,8 @@
   Keep navigation buttons below the styled Round picker; block switching while
   foreground requests or local score/game edits are pending. Avoid repeated static
   public disclaimers; retain actionable errors and unsaved/save feedback.
+  Use a compact accessible indicator/count rather than routine success/status
+  boxes. Only acknowledged writes claim Saved; no-op blanks do not.
   Entry has one Save & Next action with Refresh below it; Refresh never saves.
   Keep toolbar Refresh available in scorecards/games/leaderboard and recovery states.
 - Each playing group captures its starting hole; legacy omission uses the first

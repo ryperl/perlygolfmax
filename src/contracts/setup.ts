@@ -1,6 +1,6 @@
 import type { EventSetupInput, EventWorkspace, OverallCompetition, RoundSnapshot } from '../domain/setup.js';
 import {
-  boundedText, isCourseId, isCourseMetadata, isIndexObservation, isTeeProfile, isVersionId,
+  boundedText, isCourseId, isCourseMetadata, isHandicapIndex, isIndexObservation, isTeeProfile, isVersionId,
 } from './catalog.js';
 import { isEventRevision, isEventStartDate, isEventSummary, isRecord, isUuid } from './events.js';
 import { isPlayerTeeProfiles, isPlayerTeeSelections } from './tees.js';
@@ -91,7 +91,10 @@ function isRoundSnapshot(value: unknown, playerIds: readonly string[]): value is
     && value.players.length === playerIds.length
     && value.players.every((player: unknown) => isRecord(player) && isUuid(player.playerId)
       && roster.has(player.playerId) && boundedText(player.displayName)
-      && (player.handicapIndex === undefined || player.handicapIndex === null || isIndexObservation(player.handicapIndex)))
+      && (player.handicapIndexValue === undefined || player.handicapIndexValue === null || isHandicapIndex(player.handicapIndexValue))
+      && (player.handicapIndex === undefined || player.handicapIndex === null || isIndexObservation(player.handicapIndex))
+      && (player.handicapIndexValue === undefined || player.handicapIndex === undefined
+        || player.handicapIndexValue === (player.handicapIndex === null ? null : player.handicapIndex.value)))
     && new Set(value.players.map((player: Record<string, unknown>) => player.playerId)).size === playerIds.length;
 }
 
@@ -109,7 +112,8 @@ export function isEventWorkspace(value: unknown): value is EventWorkspace {
     || value.allowPerGolferTees !== undefined && typeof value.allowPerGolferTees !== 'boolean'
     || value.overallCompetition !== undefined && !isOverallCompetition(value.overallCompetition)
     || !location(value.location) || !Array.isArray(value.roster)
-    || !value.roster.every((player: unknown) => isRecord(player) && isUuid(player.playerId) && boundedText(player.displayName))
+    || !value.roster.every((player: unknown) => isRecord(player) && isUuid(player.playerId) && boundedText(player.displayName)
+      && (player.handicapIndexValue === undefined || player.handicapIndexValue === null || isHandicapIndex(player.handicapIndexValue)))
     || !Array.isArray(value.rounds) || value.rounds.length > 8) return false;
   const ids = value.roster.map((player: { readonly playerId: string }) => player.playerId);
   return value.etag === value.event.etag && new Set(ids).size === ids.length
@@ -119,5 +123,8 @@ export function isEventWorkspace(value: unknown): value is EventWorkspace {
     && (value.allowPerGolferTees === true || value.rounds.every((round: RoundSnapshot) => !round.playerTees?.length))
     && new Set(value.rounds.map((round: RoundSnapshot) => round.id)).size === value.rounds.length
     && (value.event.role === 'owner' || value.rounds.every((round: RoundSnapshot) =>
-      round.players.every((player) => player.handicapIndex === undefined)));
+      round.players.every((player) => player.handicapIndex === undefined)))
+    && (value.event.role === 'owner' || value.publicAccess === true
+      || value.roster.every((player: unknown) => isRecord(player) && player.handicapIndexValue === undefined)
+        && value.rounds.every((round: RoundSnapshot) => round.players.every((player) => player.handicapIndexValue === undefined)));
 }

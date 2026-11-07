@@ -60,6 +60,7 @@ export interface EventSetupInput {
 export interface EventRosterPlayer {
   readonly playerId: string;
   readonly displayName: string;
+  readonly handicapIndexValue?: string | null;
 }
 
 export interface RoundPlayerSnapshot extends EventRosterPlayer {

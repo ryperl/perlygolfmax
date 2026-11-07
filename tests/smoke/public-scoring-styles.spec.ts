@@ -11,7 +11,7 @@ test('the production public shell loads scoring styles without visiting organize
   await page.evaluate(() => {
     const controls = document.createElement('section');
     controls.className = 'owner-scores';
-    controls.innerHTML = '<div class="score-round-picker"><label>Round<select aria-label="Round"><option>Fictional round</option></select></label></div>';
+    controls.innerHTML = '<div class="score-round-picker"><label>Round<select aria-label="Round"><option>Fictional round</option></select></label></div><span class="score-save-indicator" data-state="working"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /></svg><span class="score-indicator-label">Updating scores</span></span>';
     const main = document.querySelector('main');
     if (!main) throw new Error('Missing public app main region.');
     main.append(controls);
@@ -21,5 +21,9 @@ test('the production public shell loads scoring styles without visiting organize
   expect(await picker.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
   await picker.focus();
   await expect(picker).toBeFocused();
+  const indicator = page.locator('.score-save-indicator');
+  expect(await indicator.locator('.score-indicator-label').evaluate((element) => getComputedStyle(element).clipPath)).toBe('inset(50%)');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  expect(await indicator.locator('svg').evaluate((element) => getComputedStyle(element).animationName)).toBe('none');
   await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toHaveCount(0);
 });

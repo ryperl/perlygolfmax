@@ -1,6 +1,6 @@
 import type { CourseHole } from '../../domain/catalog';
 import { useCallback, useLayoutEffect, useRef } from 'react';
-import type { HoleScore } from '../../domain/scoring';
+import type { HoleScore, PlayerCourseHandicap } from '../../domain/scoring';
 import type { RoundGroup } from '../../domain/setup';
 import { parseScoreEntry, scoreEntryText } from '../../contracts/scoring';
 import { maximumExactHoleStrokes } from '../../domain/scoring';
@@ -8,6 +8,8 @@ import { adjacentHole, groupStartingHole } from '../../domain/round-navigation';
 import type { HoleDraft } from './entry-state';
 import { scoreLabel } from './entry-state';
 import { ScoreActionIcon } from './ScoreActionIcon';
+import { ScoreSaveIndicator } from './ScoreSaveIndicator';
+import type { ScoreFeedbackState } from './ScoreSaveIndicator';
 import './scoring.css';
 
 // Allow a pause between digits (including 10/12) before moving to another score.
@@ -17,6 +19,7 @@ export interface GroupHoleEntryRow {
   readonly playerId: string;
   readonly displayName: string;
   readonly saved: HoleScore;
+  readonly courseHandicap?: PlayerCourseHandicap;
   readonly draft?: HoleDraft;
   readonly canReview: boolean;
   readonly hole?: CourseHole;
@@ -32,7 +35,7 @@ export interface GroupHoleEntryProps {
   readonly readOnly: boolean;
   readonly unsavedCount: number;
   readonly focusHole?: number | null;
-  readonly saveStatus?: string;
+  readonly feedbackState?: ScoreFeedbackState;
   readonly onGroupChange: (number: number) => void;
   readonly onHoleChange: (number: number) => void;
   readonly onEdit: (playerId: string, text: string) => void;
@@ -43,7 +46,7 @@ export interface GroupHoleEntryProps {
   readonly onRefresh: () => void;
 }
 
-export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, readOnly, unsavedCount, focusHole, saveStatus,
+export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, readOnly, unsavedCount, focusHole, feedbackState,
   onGroupChange, onHoleChange, onEdit, onReview, onDiscard, onDiscardAll, onSave, onRefresh }: GroupHoleEntryProps) {
   const previous = adjacentHole(layout, hole.number, -1);
   const next = adjacentHole(layout, hole.number, 1);
@@ -126,8 +129,15 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
           ? row.draft.acknowledged ? 'Saved, then changed — review' : 'Conflict — review'
           : row.draft.status === 'saving' ? 'Saving…' : row.draft.status === 'failed' ? 'Failed — retry' : 'Unsaved'
           : row.saved.kind === 'unplayed' ? 'Unplayed' : 'Saved';
+        const handicap = row.courseHandicap?.courseHandicap;
+        const handicapText = typeof handicap === 'number'
+          ? `CH ${handicap < 0 ? `+${String(Math.abs(handicap))}` : String(handicap)}`
+          : row.courseHandicap?.unavailableReason === 'missing-handicap-index' ? 'NH' : 'CH —';
         return <article className="player-entry" key={row.playerId} aria-label={`${row.displayName} scorecard`}>
-          <div className="entry-heading"><h3>{row.displayName}</h3><span className={`score-badge score-badge-${row.draft?.status ?? 'saved'}`}>{status}</span></div>
+          <div className="entry-heading"><h3>{row.displayName} <span className="entry-handicap"
+            title={typeof handicap === 'number' ? 'Course handicap from captured round inputs' : 'Course handicap unavailable'}
+            aria-label={typeof handicap === 'number' ? `Course handicap: ${handicapText.slice(3)}` : handicapText === 'NH' ? 'No captured Handicap Index' : 'Course handicap unavailable'}>{handicapText}</span></h3>
+            <span className={`score-badge score-badge-${row.draft?.status ?? 'saved'}`}>{status}</span></div>
           {row.teeLabel && <p className="entry-tee">{row.teeLabel} · Par {playerHole.par} · {playerHole.length} yards · Stroke index {playerHole.allocation}</p>}
           <div className="entry-value">
             <button type="button" aria-label={`Decrease score for ${row.displayName}`} disabled={disabled || (!blank && (numeric === undefined || numeric <= 1))} onClick={() => {
@@ -199,8 +209,7 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
             <ScoreActionIcon kind="refresh" /><span className="score-action-label">Refresh</span>
           </button>
           <div className="score-secondary-summary">
-            <p className="score-hint">{unsavedCount} unsaved {unsavedCount === 1 ? 'score' : 'scores'}</p>
-            <p className="score-save-status" aria-live="polite">{saveStatus ?? (busy ? 'Working…' : unsavedCount > 0 ? 'Unsaved changes' : '')}</p>
+            <ScoreSaveIndicator state={busy ? 'working' : feedbackState ?? (unsavedCount > 0 ? 'unsaved' : 'idle')} unsavedCount={unsavedCount} />
           </div>
           <button className="discard-score-action" type="button" aria-label="Discard unsaved scores" disabled={busy || unsavedCount === 0} onClick={onDiscardAll}>Discard changes</button>
         </div>

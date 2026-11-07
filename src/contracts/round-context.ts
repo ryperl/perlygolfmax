@@ -2,7 +2,7 @@ import type { RoundScores } from '../domain/scoring.js';
 import type { EventWorkspace, RoundSnapshot } from '../domain/setup.js';
 import { calculateGameResults } from '../domain/stableford.js';
 import { isRecord } from './events.js';
-import { publishedPlayingHandicaps } from '../domain/playing-handicaps.js';
+import { publishedCourseHandicaps, publishedPlayingHandicaps } from '../domain/playing-handicaps.js';
 
 export function sameJsonValue(value: unknown, expected: unknown): boolean {
   if (Array.isArray(expected)) {
@@ -36,6 +36,8 @@ export function roundMatchesSnapshot(workspace: EventWorkspace, snapshot: RoundS
     && round.teeCategory === snapshot.teeProfile.category
     && permissionsMatch
     && publishedMatches
+    && (round.courseHandicaps === undefined || workspace.event.role !== 'owner'
+      || sameJsonValue(round.courseHandicaps, publishedCourseHandicaps(snapshot)))
     && sameJsonValue(round.playerTees ?? [], snapshot.playerTees ?? [])
     && sameJsonValue(round.groups, snapshot.groups)
     && round.layout.length === holes.size

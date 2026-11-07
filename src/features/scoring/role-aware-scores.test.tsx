@@ -54,7 +54,7 @@ describe('role-aware round score access', () => {
     expect(screen.getByRole('textbox', { name: 'Fictional Player 1 score' })).toHaveValue('5');
     expect(screen.getByRole('textbox', { name: 'Fictional Player 2 score' })).toHaveValue('4');
     fireEvent.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
-    await screen.findByText(/4 player changes acknowledged/);
+    await screen.findByRole('status', { name: 'Scores saved' });
     expect(vi.mocked(store.client.save).mock.calls.map((call) => call[2])).toEqual([1, 2, 3, 4].map(fictionalId));
     expect(store.client.history).not.toHaveBeenCalled();
   });

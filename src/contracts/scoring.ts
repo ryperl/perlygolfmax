@@ -142,6 +142,20 @@ export function isRoundScores(value: unknown): value is RoundScores {
       seen.add(player.playerId);
     }
   }
+  if (value.courseHandicaps !== undefined) {
+    if (!Array.isArray(value.courseHandicaps) || value.courseHandicaps.length !== cards.length) return false;
+    const seen = new Set<string>();
+    for (const player of value.courseHandicaps) {
+      if (!isRecord(player) || !isUuid(player.playerId) || !roster.has(player.playerId) || seen.has(player.playerId)
+        || !Object.keys(player).every((key) => ['playerId', 'courseHandicap', 'unavailableReason'].includes(key))) return false;
+      if (player.courseHandicap === null) {
+        if (typeof player.unavailableReason !== 'string'
+          || !['missing-handicap-index', 'uncaptured-handicap-index', 'invalid-handicap-index', 'missing-tee-ratings'].includes(player.unavailableReason)) return false;
+      } else if (typeof player.courseHandicap !== 'number' || !Number.isSafeInteger(player.courseHandicap)
+        || player.unavailableReason !== undefined) return false;
+      seen.add(player.playerId);
+    }
+  }
   if (value.playerTees !== undefined && !isPlayerTeeProfiles(value.playerTees, { holeCount: count, holes: layout }, ids)) return false;
   const playerLayouts = new Map(value.playerTees?.map((entry) => [entry.playerId, entry.profile.holes]));
   if (value.games !== undefined) {

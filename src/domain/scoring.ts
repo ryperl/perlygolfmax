@@ -40,6 +40,12 @@ export interface OverallHandicaps {
   }[];
 }
 
+export interface PlayerCourseHandicap {
+  readonly playerId: string;
+  readonly courseHandicap: number | null;
+  readonly unavailableReason?: 'missing-handicap-index' | 'uncaptured-handicap-index' | 'invalid-handicap-index' | 'missing-tee-ratings';
+}
+
 export interface RoundScores {
   readonly eventId: string;
   readonly eventName: string;
@@ -59,6 +65,7 @@ export interface RoundScores {
   readonly playerTees?: readonly PlayerTeeProfile[];
   readonly permissions?: ScorePermissions;
   readonly overallHandicaps?: OverallHandicaps;
+  readonly courseHandicaps?: readonly PlayerCourseHandicap[];
 }
 
 export function scorePermissions(round: RoundScores): ScorePermissions {

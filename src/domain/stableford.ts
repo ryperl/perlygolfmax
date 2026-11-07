@@ -55,26 +55,37 @@ function rounded(value: Fraction): bigint {
   return floorDivide(2n * value.numerator + value.denominator, 2n * value.denominator);
 }
 
-export function calculatePlayingHandicap(index: string, tee: TeeProfile, allowance: number): number | GameUnavailableReason {
+function unroundedCourseHandicap(index: string, tee: TeeProfile): Fraction | 'invalid-handicap-index' | 'missing-tee-ratings' {
   if (!/^\+?(?:0|[1-9]\d?)(?:\.\d)?$/.test(index)) return 'invalid-handicap-index';
   const count = tee.holes.length;
   const rating = tee.ratings.find((candidate) => candidate.type === 'Total');
   if (!rating || !Number.isFinite(rating.course) || rating.course <= 0
     || !Number.isFinite(rating.slope) || rating.slope <= 0) return 'missing-tee-ratings';
-  if (!tee.strokeAllocation || tee.holes.some((hole) => !Number.isSafeInteger(hole.allocation)
-    || hole.allocation < 1 || hole.allocation > count)
-    || new Set(tee.holes.map((hole) => hole.allocation)).size !== count) return 'missing-stroke-index';
   let handicap = decimal(Number(index.replace('+', '')));
   if (index.startsWith('+')) handicap = { ...handicap, numerator: -handicap.numerator };
   if (count === 9) {
     const tenths = rounded(multiply(handicap, { numerator: 5n, denominator: 1n }));
     handicap = { numerator: tenths, denominator: 10n };
   }
-  const courseHandicap = add(
+  return add(
     multiply(handicap, multiply(decimal(rating.slope), { numerator: 1n, denominator: 113n })),
     add(decimal(rating.course), { numerator: -BigInt(tee.holes.reduce((sum, hole) => sum + hole.par, 0)), denominator: 1n }),
   );
-  return Number(rounded(multiply(courseHandicap, { numerator: BigInt(allowance), denominator: 100n })));
+}
+
+export function calculateCourseHandicap(index: string, tee: TeeProfile): number | 'invalid-handicap-index' | 'missing-tee-ratings' {
+  const result = unroundedCourseHandicap(index, tee);
+  return typeof result === 'string' ? result : Number(rounded(result));
+}
+
+export function calculatePlayingHandicap(index: string, tee: TeeProfile, allowance: number): number | GameUnavailableReason {
+  const result = unroundedCourseHandicap(index, tee);
+  if (typeof result === 'string') return result;
+  const count = tee.holes.length;
+  if (!tee.strokeAllocation || tee.holes.some((hole) => !Number.isSafeInteger(hole.allocation)
+    || hole.allocation < 1 || hole.allocation > count)
+    || new Set(tee.holes.map((hole) => hole.allocation)).size !== count) return 'missing-stroke-index';
+  return Number(rounded(multiply(result, { numerator: BigInt(allowance), denominator: 100n })));
 }
 
 export function handicapStrokesForHole(handicap: number, allocation: number, count: number): number {

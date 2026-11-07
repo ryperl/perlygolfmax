@@ -62,7 +62,7 @@ describe('saved round games and authoritative results', () => {
     const saved = f.saved.rounds[0];
     if (!saved) throw new Error('Missing fictional round.');
     const captured = {
-      ...saved, players: saved.players.map((player) => ({ ...player, handicapIndex: {
+      ...saved, players: saved.players.map(({ playerId, displayName }) => ({ playerId, displayName, handicapIndex: {
         id: identifier(900), value: '18.0', effectiveDate: '2026-01-01', source: 'Fictional capture',
         recordedAt: '2026-01-01T00:00:00Z', recordedBy: creator, previousObservationId: null,
       } })),

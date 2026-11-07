@@ -129,7 +129,8 @@ Production PWA capabilities require HTTPS and platform-specific verification.
 ### Returning between holes
 
 Select an event, round and playing group once. Enter scores, tap **Save & Next
-Hole**, and wait for **Saved** before closing the app. A cold launch from the
+Hole**, and wait for the green saved indicator before closing the app. A cold
+launch from the
 site/home-screen entry restores the last round, group, hole and view and fetches
 fresh server scores. Returning to a running/backgrounded page refreshes safely
 without resetting that position or overwriting local drafts. Failed/conflicting
@@ -143,8 +144,11 @@ Board captions; Refresh uses an icon. Full accessible action names and 44px
 touch targets remain, while wider screens retain full text labels.
 **Save & Next Hole** is the only entry save action; **Refresh**
 sits below it and never submits scores. Other views retain toolbar Refresh.
-Save/discard actions and the unsaved count keep a stable place
+Save/discard actions and the compact status indicator keep a stable place
 below the inputs; changing a score does not insert controls above the fields.
+The indicator shows a pending count only when needed, announces its state to
+assistive technology, and confirms only acknowledged writes. Routine successful
+refreshes have no message box; failures, conflicts and partial saves stay explicit.
 Discard clears all local unsaved scores for this round, not saved server scores.
 
 Organizers select a starting hole for each playing group during round setup,
@@ -170,10 +174,20 @@ archive events or change round dates automatically.
 
 Player catalog renames appear on subsequent event/round/card/result reads,
 including already-scored rounds, without resaving each event. The server resolves
-only names for the authorized roster; public readers never receive catalog
+names and scalar current indices for the authorized roster; public readers never
+receive catalog
 profiles or current Handicap Index observations. Captured inputs, saved scores,
 score revisions and historical audits remain unchanged. Refresh an open view
 to see a rename; unconfirmed local drafts still keep their existing protection.
+
+Public event rosters show current linked **HI**, while round groups and competition
+teams show the **HI captured for that round**. **NH** means no index is connected;
+legacy projections without this display field show unavailable rather than NH.
+Observation sources, dates, histories and audit identities remain private.
+Scoring names show server-derived **CH** using captured HI and the golfer's
+captured tee, before any game allowance. Scratch is CH 0, plus handicaps use
+CH +N, and missing ratings show CH unavailable rather than zero. These displays
+never rewrite saved course/index inputs, scores or revisions.
 
 Events and rounds also have optional start dates in strict `YYYY-MM-DD` form.
 Create an event by name, then edit dates in whole-event organizer setup. Dates

@@ -11,7 +11,7 @@ import { canonical, decode, isConflict, optionalRow, revision, transaction } fro
 import { requireManager } from '../catalog/courses.js';
 import type { CatalogPermission, TableCourseCatalog } from '../catalog/courses.js';
 import type { TablePlayerCatalog } from '../catalog/players.js';
-import { currentRosterNames } from '../catalog/players.js';
+import { currentRosterDisplay } from '../catalog/players.js';
 import { metadata, profile } from '../catalog/projections.js';
 import { isIndexRefreshAudit } from './index-refresh.js';
 import type { IndexRefreshAudit } from './index-refresh.js';
@@ -106,7 +106,7 @@ export class TableWorkspaceStore {
     if (before.event.purseConfigured !== undefined && before.event.purseConfigured !== true) throw new ApiError(503, 'INVALID_STORED_PURSE');
     const workspace = await this.forDisplay(await this.load(before.summary));
     await assertEventAccessUnchanged(this.table, identity, id, before);
-    // Explicit allowlists prevent catalog/index/audit fields from leaking to event members.
+    // Explicit allowlists keep private profiles, observations and audits out of viewer projections.
     return {
       event: before.summary, location: workspace.location, etag: before.summary.etag,
       ...(before.summary.role === 'owner' || before.admittedPlayer || before.publicAccess
@@ -118,7 +118,10 @@ export class TableWorkspaceStore {
         ? { viewerPlayerId: before.viewerPlayerId } : {}),
       ...(workspace.allowPerGolferTees === undefined ? {} : { allowPerGolferTees: workspace.allowPerGolferTees }),
       ...(workspace.overallCompetition ? { overallCompetition: workspace.overallCompetition } : {}),
-      roster: workspace.roster.map((player) => ({ playerId: player.playerId, displayName: player.displayName })),
+      roster: workspace.roster.map((player) => ({
+        playerId: player.playerId, displayName: player.displayName,
+        ...(before.summary.role === 'owner' || before.publicAccess ? { handicapIndexValue: player.handicapIndexValue ?? null } : {}),
+      })),
       rounds: workspace.rounds.map((round) => ({
         id: round.id, name: round.name, courseId: round.courseId, courseVersionId: round.courseVersionId,
         ...(round.teeTime === undefined ? {} : { teeTime: round.teeTime }),
@@ -133,17 +136,21 @@ export class TableWorkspaceStore {
         players: round.players.map((player) => before.summary.role === 'owner'
           ? {
             playerId: player.playerId, displayName: player.displayName,
-            handicapIndex: player.handicapIndex ?? null,
+            ...(player.handicapIndex === undefined ? {} : {
+              handicapIndex: player.handicapIndex,
+              handicapIndexValue: player.handicapIndex?.value ?? null,
+            }),
           }
-
-          : { playerId: player.playerId, displayName: player.displayName }),
+          : { playerId: player.playerId, displayName: player.displayName,
+            ...(before.publicAccess && player.handicapIndex !== undefined
+              ? { handicapIndexValue: player.handicapIndex?.value ?? null } : {}) }),
       })),
     };
   }
 
-  /** Current names are presentation metadata; captured course/index/score inputs stay immutable. */
+  /** Current names and roster HI are display metadata; captured inputs stay immutable. */
   async forDisplay(workspace: EventWorkspace): Promise<EventWorkspace> {
-    const roster = await currentRosterNames(this.table, workspace.roster);
+    const roster = await currentRosterDisplay(this.table, workspace.roster);
     const names = new Map(roster.map((entry) => [entry.playerId, entry.displayName]));
     return { ...workspace, roster, rounds: workspace.rounds.map((round) => ({
       ...round, players: round.players.map((entry) => {

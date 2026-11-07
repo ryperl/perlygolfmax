@@ -27,7 +27,7 @@ describe('stable scoring place', () => {
     expect(input()).toBe(field);
     expect(input()).toHaveValue('6');
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save & Next Hole' })); await Promise.resolve(); });
-    expect(screen.getByText(/Saved — 1 player changes acknowledged/)).toBeVisible();
+    expect(screen.getByRole('status', { name: 'Scores saved' })).toBeVisible();
     expect(input()).toBe(field);
     expect(input()).toHaveValue('');
     expect(screen.getByRole('heading', { name: 'Hole 4' })).toBeVisible();
@@ -80,7 +80,7 @@ describe('stable scoring place', () => {
     expect(changed).toHaveBeenLastCalledWith(initial);
     expect(screen.getByRole('heading', { name: 'Hole 2' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Save & Next Hole' })).toBeDisabled();
-    expect(screen.queryByText(/Saved —/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Scores saved' })).not.toBeInTheDocument();
     const call = vi.mocked(store.client.save).mock.calls[0];
     if (!call) throw new Error('Missing fictional score write');
     await act(async () => {
@@ -89,9 +89,9 @@ describe('stable scoring place', () => {
     });
     expect(screen.getByRole('heading', { name: 'Hole 3' })).toHaveFocus();
     expect(changed).toHaveBeenLastCalledWith({ ...initial, holeNumber: 3 });
-    expect(screen.getByText(/Saved — 1 player changes acknowledged/)).toBeVisible();
+    expect(screen.getByRole('status', { name: 'Scores saved' })).toBeVisible();
     fireEvent.change(input(), { target: { value: '5' } });
-    expect(screen.queryByText(/Saved —/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Scores saved' })).not.toBeInTheDocument();
     expect(screen.getByText('Unsaved')).toBeVisible();
   });
 
@@ -106,12 +106,14 @@ describe('stable scoring place', () => {
     expect(changed).toHaveBeenLastCalledWith(initial);
     expect(input()).toHaveValue('4');
     expect(screen.getByText(/remaining not confirmed/)).toBeVisible();
-    expect(screen.queryByText(/Saved —/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Scores saved' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Discard unsaved scores' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
-    expect(screen.getByText(/No changes sent/)).toBeVisible();
-    expect(screen.queryByText(/Saved —/)).not.toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Scores need attention' })).toHaveAttribute('data-state', 'attention');
+    expect(screen.queryByRole('status', { name: 'Scores saved' })).not.toBeInTheDocument();
     expect(store.client.save).toHaveBeenCalledOnce();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Refresh saved round' })); await Promise.resolve(); });
+    expect(screen.getByRole('status', { name: 'No unsaved scores' })).toHaveAttribute('data-state', 'idle');
   });
 
   it('keeps hole/group/view and local values through an actual hidden-to-visible refresh', async () => {

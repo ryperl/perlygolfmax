@@ -30,6 +30,28 @@ const change: ScoreChange = {
 };
 
 describe('owner gross scoring network contracts', () => {
+  it('validates complete unique course handicaps, unavailable reasons and legacy omission', () => {
+    const saved = round();
+    const courseHandicaps = saved.cards.map((card, index) => ({
+      playerId: card.playerId, courseHandicap: index === 0 ? -2 : 0,
+    }));
+    expect(isRoundScores(saved)).toBe(true);
+    expect(isRoundScores({ ...saved, courseHandicaps })).toBe(true);
+    expect(isRoundScores({ ...saved, courseHandicaps: courseHandicaps.map((entry) => ({
+      ...entry, courseHandicap: null, unavailableReason: 'missing-handicap-index',
+    })) })).toBe(true);
+    for (const malformed of [
+      [], courseHandicaps.slice(1), [...courseHandicaps, courseHandicaps[0]],
+      courseHandicaps.map((entry) => ({ ...entry, playerId: id(999) })),
+      courseHandicaps.map((entry) => ({ ...entry, playerId: id(1) })),
+      courseHandicaps.map((entry) => ({ ...entry, courseHandicap: 2.5 })),
+      courseHandicaps.map((entry) => ({ ...entry, courseHandicap: Number.MAX_SAFE_INTEGER + 1 })),
+      courseHandicaps.map((entry) => ({ ...entry, courseHandicap: null })),
+      courseHandicaps.map((entry) => ({ ...entry, unavailableReason: 'missing-handicap-index' })),
+      courseHandicaps.map((entry) => ({ ...entry, courseHandicap: null, unavailableReason: 'missing-stroke-index' })),
+      courseHandicaps.map((entry) => ({ ...entry, handicapIndex: { value: '18.9' } })),
+    ]) expect(isRoundScores({ ...saved, courseHandicaps: malformed })).toBe(false);
+  });
   it('validates explicit group starts against captured layout while preserving legacy groups', () => {
     const base = round();
     expect(isRoundScores(base)).toBe(true);

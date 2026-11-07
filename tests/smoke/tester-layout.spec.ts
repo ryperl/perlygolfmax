@@ -120,7 +120,7 @@ test('guest edits any saved playing group with keyboard at narrow/enlarged width
         const save = page.getByRole('button', { name: 'Save & Next Hole', exact: true });
         await save.focus();
         await page.keyboard.press('Enter');
-        await expect(page.getByText(/1 player changes acknowledged/)).toBeVisible();
+        await expect(page.getByRole('status', { name: 'Scores saved', exact: true })).toBeVisible();
         await expect(page.getByRole('heading', { name: 'Hole 2', exact: true })).toBeVisible();
         await page.getByRole('button', { name: 'Previous hole', exact: true }).click();
         await expect(score).toHaveValue(String(5 + number));

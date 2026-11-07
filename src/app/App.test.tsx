@@ -112,7 +112,7 @@ describe('public app and organizer boundary', () => {
     await user.type(screen.getByLabelText('Fictional Player 4 score'), '5');
     await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     expect(await screen.findByRole('form', { name: 'Group 2 hole 2 entry' })).toBeVisible();
-    expect(screen.getByText(/^Saved —/)).toBeVisible();
+    expect(screen.getByRole('status', { name: 'Scores saved' })).toBeVisible();
     expect(loadScoreLocation().location).toEqual(position);
     expect(window.location.hash).toBe(scoreLocationHref(position));
     expect(screen.getByRole('main')).not.toHaveFocus();
@@ -144,7 +144,7 @@ describe('public app and organizer boundary', () => {
     expect(screen.getByRole('form', { name: 'Group 1 hole 1 entry' })).toBeVisible();
     expect(loadScoreLocation().location?.holeNumber).toBe(1);
     expect(screen.getByLabelText('Fictional Player 1 score')).toHaveValue('7');
-    expect(screen.queryByText(/^Saved —/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Scores saved' })).not.toBeInTheDocument();
   });
 
   it('keeps the explicit event chooser available instead of immediately reopening the remembered round', async () => {

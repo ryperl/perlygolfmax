@@ -98,7 +98,12 @@ The `/api/public` namespace exposes only active event discovery, workspace,
 round scores, per-player hole writes, overall leaderboard and purse reads.
 There are no public catalog, setup/game/purse/access mutation, archive or audit
 history routes. Private management endpoints remain JWT-only. Public projections
-exclude raw Handicap Index observations and audit identities.
+exclude raw Handicap Index observations and audit identities. The approved scalar
+display projection includes current roster HI and captured round HI (or explicit
+null for NH), without observation IDs, sources, dates or histories. Legacy private
+viewer/tester projections continue to omit these fields. Scoring projections publish
+Course Handicap from captured HI and the golfer's captured tee, without applying
+game allowances or requiring stroke allocation. Reads never refresh stored captures.
 
 Scores use the same validated raw dispositions, conditional card/event revision,
 UUID idempotency, immutable audit and first-score setup lock. Public authority
@@ -403,6 +408,9 @@ Partial acknowledgements stay saved, pending/unattempted drafts retain their
 intent/revision/request identity and a failure never advances the hole. A later
 owner projection must not silently rebase another player's draft or be reported
 as matching the user's intended value.
+Compact accessible feedback distinguishes idle, unsaved, working, acknowledged
+and attention states. Routine refresh/discard/success boxes are omitted, but failed
+or partial writes and conflicts remain explicit. No-op blanks never claim Saved.
 Foursome entry uses one compact card rather than four expanded player panels.
 Routine polling has separate background semantics: no foreground busy/control
 pulses and no replacement of unchanged projections. An edit that starts during

@@ -187,11 +187,14 @@ describe('saved owner workspace', () => {
           ...previousRound,
           players: previousRound?.players.map((entry) => ({
             ...entry, handicapIndex: entry.playerId === identifier(200) ? f.latest.currentIndex : entry.handicapIndex,
+            handicapIndexValue: entry.playerId === identifier(200) ? f.latest.currentIndex?.value ?? null : entry.handicapIndexValue,
           })),
         });
         expect(refreshed.rounds[0]?.players[1]?.handicapIndex).toBeNull();
         expect(refreshed.rounds[1]).toEqual(f.saved.rounds[1]);
-        expect(refreshed.roster).toEqual(f.saved.roster);
+        expect(refreshed.roster.map(({ playerId, displayName }) => ({ playerId, displayName })))
+          .toEqual(f.saved.roster.map(({ playerId, displayName }) => ({ playerId, displayName })));
+        expect(refreshed.roster[0]?.handicapIndexValue).toBe('7.5');
         expect(refreshed.location).toBe(f.saved.location);
         expect(refreshed.event.name).toBe(f.saved.event.name);
         expect(refreshed.etag).not.toBe(f.saved.etag);

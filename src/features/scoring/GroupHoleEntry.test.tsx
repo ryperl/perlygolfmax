@@ -41,6 +41,25 @@ function typeScore(index: number, value: string) {
 function pause(ms = 900) { act(() => { vi.advanceTimersByTime(ms); }); }
 afterEach(() => { vi.useRealTimers(); });
 describe('pure mobile group hole entry', () => {
+  it.each([
+    { courseHandicap: 0, expected: 'CH 0' },
+    { courseHandicap: -2, expected: 'CH +2' },
+    { courseHandicap: null, unavailableReason: 'missing-handicap-index', expected: 'NH' },
+    { courseHandicap: null, unavailableReason: 'missing-tee-ratings', expected: 'CH —' },
+    { courseHandicap: null, unavailableReason: 'uncaptured-handicap-index', expected: 'CH —' },
+  ] as const)('labels $expected beside names without changing score-field accessibility', (sample) => {
+    const { expected, ...handicap } = sample;
+    const input = props();
+    render(<GroupHoleEntry {...input} rows={input.rows.map((row) => ({
+      ...row, courseHandicap: { playerId: row.playerId, ...handicap },
+    }))} />);
+    const player = input.rows[0];
+    if (!player) throw new Error('Missing fictional golfer.');
+    const entry = screen.getByRole('article', { name: `${player.displayName} scorecard` });
+    expect(within(entry).getByRole('heading', { level: 3 })).toHaveTextContent(`${player.displayName} ${expected}`);
+    expect(within(entry).getByRole('textbox')).toHaveAccessibleName(`${player.displayName} score`);
+    expect(input.onEdit).not.toHaveBeenCalled();
+  });
   it('places Refresh after the only save action without submitting, including readonly and busy states', async () => {
     const input = props();
     const view = render(<GroupHoleEntry {...input} />);
@@ -61,30 +80,30 @@ describe('pure mobile group hole entry', () => {
     await userEvent.click(refresh);
     expect(input.onRefresh).toHaveBeenCalledOnce();
   });
-  it('keeps idle feedback blank while preserving the live save-status area for drafts and requests', () => {
+  it('uses accessible compact feedback for idle, draft, working and saved states', () => {
     const input = props();
     const view = render(<GroupHoleEntry {...input} />);
-    const feedback = screen.getByRole('region', { name: 'Group hole entry' }).querySelector('.score-save-status');
-    if (!feedback) throw new Error('Missing score feedback region.');
+    const feedback = screen.getByRole('status', { name: 'No unsaved scores' });
     expect(feedback).toHaveAttribute('aria-live', 'polite');
-    expect(feedback).toBeEmptyDOMElement();
+    expect(feedback).toHaveAttribute('data-state', 'idle');
     view.rerender(<GroupHoleEntry {...input} unsavedCount={1} />);
-    expect(feedback).toHaveTextContent('Unsaved changes');
+    expect(feedback).toHaveAttribute('data-state', 'unsaved');
+    expect(feedback).toHaveAttribute('aria-label', '1 unsaved score');
     view.rerender(<GroupHoleEntry {...input} busy />);
-    expect(feedback).toHaveTextContent('Working…');
-    view.rerender(<GroupHoleEntry {...input} saveStatus="Saved" />);
-    expect(feedback).toHaveTextContent('Saved');
+    expect(feedback).toHaveAttribute('data-state', 'working');
+    view.rerender(<GroupHoleEntry {...input} feedbackState="saved" />);
+    expect(feedback).toHaveAttribute('aria-label', 'Scores saved');
     expect(screen.queryByText('Ready for scores')).not.toBeInTheDocument();
   });
   it('reserves the count and discard action, keeps readonly drafts discardable, and blocks discard while saving', async () => {
     const input = props();
     const view = render(<GroupHoleEntry {...input} />);
     const discard = screen.getByRole('button', { name: 'Discard unsaved scores' });
-    expect(screen.getByText('0 unsaved scores')).toBeVisible();
+    expect(screen.getByRole('status', { name: 'No unsaved scores' })).toBeVisible();
     expect(discard).toBeDisabled();
     expect(discard.closest('.group-save-actions')).toContainElement(screen.getByRole('button', { name: 'Save & Next Hole' }));
     view.rerender(<GroupHoleEntry {...input} unsavedCount={1} readOnly />);
-    expect(screen.getByText('1 unsaved score')).toBeVisible();
+    expect(screen.getByRole('status', { name: '1 unsaved score' })).toBeVisible();
     expect(discard).toBeEnabled();
     await userEvent.click(discard);
     expect(input.onDiscardAll).toHaveBeenCalledOnce();

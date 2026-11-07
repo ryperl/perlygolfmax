@@ -6,6 +6,7 @@ import type { ScoreWriteResult } from '../../src/domain/scoring';
 import type { EventWorkspace } from '../../src/domain/setup';
 import { fictionalResumeRound } from './score-resume-fixture-data';
 import { fictionalCapturedRound } from './games-fixture-data';
+import { calculateCourseHandicap } from '../../src/domain/stableford';
 
 test('the full public app resumes the next hole across eighteen home-screen-style cold visits', async ({ page }, testInfo) => {
   test.setTimeout(90000);
@@ -16,6 +17,20 @@ test('the full public app resumes the next hole across eighteen home-screen-styl
     logLevel: 'error',
   });
   let stored = structuredClone(fictionalResumeRound);
+  const capturedIndices = new Map(stored.cards.map((card, index) => [
+    card.playerId, index === 0 ? '18.9' : index === 1 ? '0' : index === 2 ? '+2.1' : null,
+  ]));
+  const capturedIndex = (playerId: string) => {
+    const value = capturedIndices.get(playerId);
+    if (value === undefined) throw new Error('Missing fictional captured index.');
+    return value;
+  };
+  stored = { ...stored, courseHandicaps: stored.cards.map((card) => {
+    const value = capturedIndex(card.playerId);
+    const result = value == null ? 'missing-handicap-index' : calculateCourseHandicap(value, fictionalCapturedRound.teeProfile);
+    return typeof result === 'number' ? { playerId: card.playerId, courseHandicap: result }
+      : { playerId: card.playerId, courseHandicap: null, unavailableReason: result };
+  }) };
   stored = { ...stored, groups: stored.groups.map((group) => ({ ...group, startingHole: group.number === 2 ? 10 : 1 })) };
   let writes = 0;
   let reads = 0;
@@ -43,10 +58,14 @@ test('the full public app resumes the next hole across eighteen home-screen-styl
           event: { id: stored.eventId, name: stored.eventName, role: 'viewer', status: 'active',
             etag: 'public-event', createdAt: '2026-01-01T00:00:00Z' },
           etag: 'public-event', location: 'Fictional location', publicAccess: true, canViewScores: true,
-          roster: stored.cards.map(({ playerId, displayName }) => ({ playerId, displayName })),
+          roster: stored.cards.map(({ playerId, displayName }, index) => ({
+            playerId, displayName, handicapIndexValue: index === 0 ? '29.2' : capturedIndex(playerId),
+          })),
           rounds: [{ ...fictionalCapturedRound, id: stored.roundId, name: stored.roundName,
             groups: stored.groups, scoringStarted: stored.setupLocked,
-            players: stored.cards.map(({ playerId, displayName }) => ({ playerId, displayName })),
+            players: stored.cards.map(({ playerId, displayName }) => ({
+              playerId, displayName, handicapIndexValue: capturedIndex(playerId),
+            })),
           }],
         };
         await route.fulfill({ json: workspace }); return;
@@ -93,7 +112,24 @@ test('the full public app resumes the next hole across eighteen home-screen-styl
       const form = page.getByRole('form', { name: `Group ${String(visit === 1 ? 1 : 2)} hole ${String(visit === 1 ? 1 : hole)} entry`, exact: true });
       await expect(form).toBeVisible();
       await expect(page.getByRole('region', { name: 'Round scores', exact: true })).toBeFocused();
-      if (visit === 1) await page.getByLabel('View group').selectOption('2');
+      if (visit === 1) {
+        const headings = page.locator('.entry-heading h3');
+        await expect(headings.nth(1)).toContainText('CH 0');
+        await page.setViewportSize({ width: 320, height: 874 });
+        await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
+        for (const heading of await headings.all()) {
+          expect(await heading.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+        }
+        await expect(form.getByRole('status', { name: 'No unsaved scores', exact: true })).toHaveAttribute('data-state', 'idle');
+        await expect(form.locator('.score-indicator-count')).toHaveCount(0);
+        await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
+        await page.setViewportSize({ width: 402, height: 874 });
+      }
+      if (visit === 1) {
+        await page.getByLabel('View group').selectOption('2');
+        await expect(page.locator('.entry-heading h3').nth(0)).toContainText('CH +');
+        await expect(page.locator('.entry-heading h3').nth(1)).toContainText('NH');
+      }
       expect(await page.evaluate(() => window.innerWidth)).toBe(402);
       await expect(page.getByRole('button', { name: /^Sign (in|out)$/ })).toHaveCount(0);
       const roundPicker = page.getByRole('combobox', { name: 'Round', exact: true });
@@ -136,7 +172,7 @@ test('the full public app resumes the next hole across eighteen home-screen-styl
       expect(await field.evaluate((element) => element.getBoundingClientRect().top + scrollY)).toBeCloseTo(before, 0);
       if (visit === 1) await page.screenshot({ path: testInfo.outputPath('focused-group-entry.png') });
       await page.getByRole('button', { name: visit === 18 ? 'Save Hole' : 'Save & Next Hole', exact: true }).click();
-      await expect(page.getByText(/^Saved —/)).toBeVisible();
+      await expect(page.getByRole('status', { name: 'Scores saved', exact: true })).toBeVisible();
       await expect(roundPicker).toBeEnabled();
       expect(stored.cards[2]?.holes[hole - 1]?.score).toEqual({ kind: 'strokes', strokes: 4 });
       if (visit < 18) {
@@ -154,6 +190,13 @@ test('the full public app resumes the next hole across eighteen home-screen-styl
     }
     expect(writes).toBe(18);
     expect(reads).toBeGreaterThanOrEqual(18);
+    await page.setViewportSize({ width: 320, height: 874 });
+    await page.goto(`${origin}/#group?event=${stored.eventId}`);
+    const roster = page.getByRole('region', { name: 'Event roster', exact: true });
+    await expect(roster.getByLabel('Current Handicap Index: 29.2', { exact: true })).toHaveText('HI 29.2');
+    await expect(page.getByLabel('Captured Handicap Index: 18.9', { exact: true })).toHaveText('HI 18.9');
+    await expect(roster.getByLabel('No Handicap Index', { exact: true })).toHaveCount(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     expect(errors).toEqual([]);
   } finally { await server.close(); }
 });

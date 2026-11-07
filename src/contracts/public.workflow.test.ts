@@ -39,7 +39,8 @@ describe('public app client/HTTP/storage workflow', () => {
     expect((await client.events.list(signal)).events).toEqual([expect.objectContaining({ id: event.id, role: 'viewer' })]);
     const workspace = await client.setup.load(event.id, signal);
     expect(workspace.publicAccess).toBe(true);
-    expect(JSON.stringify(workspace)).not.toContain('handicapIndex');
+    expect(JSON.stringify(workspace)).not.toContain('"handicapIndex":');
+    expect(workspace.roster.every((player) => player.handicapIndexValue === null)).toBe(true);
     const first = await client.scores.load(event.id, f.roundId, signal);
     expect(first.permissions?.role).toBe('public');
     const result = await client.scores.save(event.id, f.roundId, f.peerId, 1, { kind: 'strokes', strokes: 4 },

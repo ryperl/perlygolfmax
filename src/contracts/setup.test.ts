@@ -15,6 +15,31 @@ const input = {
 };
 
 describe('private setup and index contracts', () => {
+  it('validates scalar roster/captured index displays without relaxing private observation boundaries', () => {
+    for (const value of ['0', '+2.1', '18.9', null]) {
+      expect(isEventWorkspace({ ...fictionalWorkspace,
+        roster: fictionalWorkspace.roster.map((player) => ({ ...player, handicapIndexValue: value })) })).toBe(true);
+      expect(isEventWorkspace({ ...fictionalWorkspace, event: { ...fictionalWorkspace.event, role: 'viewer' },
+        publicAccess: true, canViewScores: true, rounds: fictionalWorkspace.rounds.map((round) => ({
+          ...round, players: round.players.map((player) => ({
+            playerId: player.playerId, displayName: player.displayName, handicapIndexValue: value,
+          })),
+        })) })).toBe(true);
+    }
+    for (const value of ['', 18.9, {}, 'NH', '100', '-2', 'NaN']) {
+      expect(isEventWorkspace({ ...fictionalWorkspace,
+        roster: fictionalWorkspace.roster.map((player) => ({ ...player, handicapIndexValue: value })) })).toBe(false);
+      expect(isEventWorkspace({ ...fictionalWorkspace, rounds: fictionalWorkspace.rounds.map((round) => ({
+        ...round, players: round.players.map((player) => ({ ...player, handicapIndexValue: value })),
+      })) })).toBe(false);
+    }
+    expect(isEventWorkspace({ ...fictionalWorkspace, event: { ...fictionalWorkspace.event, role: 'viewer' },
+      testerAccess: true, canViewScores: true, roster: fictionalWorkspace.roster.map((player) => ({ ...player, handicapIndexValue: null })),
+      rounds: [] })).toBe(false);
+    expect(isEventWorkspace({ ...fictionalWorkspace, rounds: fictionalWorkspace.rounds.map((round) => ({
+      ...round, players: round.players.map((player) => ({ ...player, handicapIndex: null, handicapIndexValue: '18.9' })),
+    })) })).toBe(false);
+  });
   it('accepts optional end dates and clearing but rejects an end before the supplied start', () => {
     expect(isEventSetupInput({ ...input, startDate: '2026-11-06', endDate: '2026-11-06' })).toBe(true);
     expect(isEventSetupInput({ ...input, endDate: '' })).toBe(true);

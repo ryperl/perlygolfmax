@@ -56,7 +56,7 @@ describe('no-account tester entry', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     await waitFor(() => { expect(scores.save).toHaveBeenCalledTimes(1); });
     expect(vi.mocked(scores.save).mock.calls[0]?.[2]).toBe(workspace.roster[1]?.playerId);
-    await screen.findByText(/1 player changes acknowledged/);
+    await screen.findByRole('status', { name: 'Scores saved' });
     fireEvent.click(screen.getByRole('button', { name: 'Games' }));
     expect(screen.getByText(/Settings are read-only/)).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Add game' })).not.toBeInTheDocument();

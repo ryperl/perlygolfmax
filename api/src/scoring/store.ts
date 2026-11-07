@@ -23,7 +23,7 @@ import { privateContent, stagePrivateContent } from '../private-values.js';
 import { receivePrivateWrite } from '../private-transport.js';
 import { assertEventAccessUnchanged, readEventAccess } from '../event-access.js';
 import type { EventAccess } from '../event-access.js';
-import { publishedPlayingHandicaps } from '../../../src/domain/playing-handicaps.js';
+import { publishedCourseHandicaps, publishedPlayingHandicaps } from '../../../src/domain/playing-handicaps.js';
 import { activeTesterLink, testerLinkKey } from '../test-access/authority.js';
 
 function cardKey(roundId: string, playerId: string): string {
@@ -141,6 +141,7 @@ export class TableScoreStore {
         type: rating.type, course: rating.course, slope: rating.slope, bogey: rating.bogey,
       })),
       groups: round.groups, cards, setupLocked: round.scoringStarted === true,
+      courseHandicaps: publishedCourseHandicaps(capturedRound),
       permissions: { role: access.publicAccess ? 'public' : access.testerLink ? 'tester' : owner ? 'owner' : viewerPlayerId ? 'player' : 'viewer',
         ...(viewerPlayerId ? { viewerPlayerId } : {}),
         writePlayerIds: !active ? [] : owner || access.testerLink || access.publicAccess ? round.players.map((player) => player.playerId) : ownGroup?.playerIds ?? [],

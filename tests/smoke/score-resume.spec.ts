@@ -70,7 +70,7 @@ test('public group entry survives repeated cold visits with navigation-only stor
       await field.press('Enter');
       await expect(page.getByRole('textbox', { name: 'Fictional golfer 4 score' })).toBeFocused();
       await page.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
-      await expect(page.getByText('Saved — 1 player changes acknowledged', { exact: false })).toBeVisible();
+      await expect(page.getByRole('status', { name: 'Scores saved', exact: true })).toBeVisible();
       await expect(page.getByRole('heading', { name: `Hole ${String(hole + 1)}`, exact: true })).toBeFocused();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       const payload = await page.evaluate(() => JSON.parse(localStorage.getItem('perly-golf-max:last-score-location:v1') ?? 'null') as unknown);

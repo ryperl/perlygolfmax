@@ -81,14 +81,14 @@ describe('hole-first owner scoring', () => {
     }
     const discard = screen.getByRole('button', { name: 'Discard unsaved scores' });
     expect(discard).toBeDisabled();
-    expect(screen.getByText('0 unsaved scores')).toBeVisible();
+    expect(screen.getByRole('status', { name: 'No unsaved scores' })).toBeVisible();
     const user = userEvent.setup();
     await enter(user, '6');
     expect(input()).toHaveFocus();
     expect(discard).toBeEnabled();
     await user.click(screen.getByRole('button', { name: 'Next hole' }));
     await enter(user, '7');
-    expect(screen.getByText('2 unsaved scores')).toBeVisible();
+    expect(screen.getByRole('status', { name: '2 unsaved scores' })).toBeVisible();
     await user.click(discard);
     expect(discard).toBeDisabled();
     expect(input()).toHaveValue('');
@@ -115,7 +115,8 @@ describe('hole-first owner scoring', () => {
     await user.click(screen.getByRole('button', { name: 'Save Hole' }));
     expect(await screen.findByRole('heading', { name: 'Round scorecard' })).toBeVisible();
     expect(vi.mocked(client.save).mock.calls.map((call) => call[3])).toEqual([18, 9]);
-    expect(screen.getByText(/round is not finalized/)).toBeVisible();
+    expect(screen.getByRole('status', { name: 'Scores saved' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Scorecards' })).toHaveAttribute('aria-pressed', 'true');
   });
   it('wires personal hole details into group entry and seeds blank nudges from each captured tee', async () => {
     const { client } = mount(memoryScores(mixedTeeRound()));
@@ -131,7 +132,7 @@ describe('hole-first owner scoring', () => {
     expect(input(2)).toHaveValue('4');
     expect(client.save).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
-    await screen.findByText(/player changes acknowledged/);
+    await screen.findByRole('status', { name: 'Scores saved' });
     expect(vi.mocked(client.save).mock.calls[0]?.[4]).toEqual({ kind: 'strokes', strokes: 5 });
   });
   it('does not pulse status or disable entry during unchanged polls, preserving DOM, focus, caret and scroll while exposing real changes', async () => {
@@ -144,24 +145,24 @@ describe('hole-first owner scoring', () => {
     field.focus();
     field.setSelectionRange(0, 1);
     document.documentElement.scrollTop = 180;
-    const status = screen.getByRole('region', { name: 'Group hole entry' }).querySelector('.score-save-status');
+    const status = screen.getByRole('region', { name: 'Group hole entry' }).querySelector('.score-save-indicator');
     if (!status) throw new Error('Missing score feedback region.');
-    expect(status).toBeEmptyDOMElement();
+    expect(status).toHaveAttribute('data-state', 'idle');
     const poll = deferred<RoundScores>();
     vi.mocked(store.client.load).mockReturnValueOnce(poll.promise);
     await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
     expect(field).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Save & Next Hole' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Refresh saved round' })).toBeEnabled();
-    expect(status).toBeEmptyDOMElement();
+    expect(status).toHaveAttribute('data-state', 'idle');
     await act(async () => { poll.resolve(structuredClone(store.read())); await poll.promise; });
     expect(input()).toBe(field);
     expect(field).toHaveFocus();
     expect(field.selectionStart).toBe(0);
     expect(field.selectionEnd).toBe(1);
     expect(document.documentElement.scrollTop).toBe(180);
-    expect(screen.getByRole('region', { name: 'Group hole entry' }).querySelector('.score-save-status')).toBe(status);
-    expect(status).toBeEmptyDOMElement();
+    expect(screen.getByRole('region', { name: 'Group hole entry' }).querySelector('.score-save-indicator')).toBe(status);
+    expect(status).toHaveAttribute('data-state', 'idle');
     const changed = scoreResult({ ...fictionalChange, playerId: fictionalId(2), after: { kind: 'strokes', strokes: 6 } }, store.read()).round;
     vi.mocked(store.client.load).mockResolvedValueOnce(changed);
     await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
@@ -192,7 +193,7 @@ describe('hole-first owner scoring', () => {
     expect(field).toHaveValue('47');
     expect(field).toHaveFocus();
     expect(field.selectionStart).toBe(1);
-    expect(screen.getByRole('status')).toHaveTextContent('Saved data may be stale');
+    expect(screen.getByRole('status', { name: /Scores need attention/ })).toHaveAttribute('data-state', 'attention');
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save & Next Hole' })); await Promise.resolve(); });
     expect(screen.getByText(/remaining not confirmed/)).toBeVisible();
     expect(vi.mocked(store.client.save).mock.calls[0]?.[5]).toBeNull();
@@ -231,7 +232,7 @@ describe('hole-first owner scoring', () => {
       await write.promise;
     });
     expect(screen.getByRole('heading', { name: 'Hole 2' })).toBeVisible();
-    expect(screen.getByText(/1 player changes acknowledged/)).toBeVisible();
+    expect(screen.getByRole('status', { name: 'Scores saved' })).toBeVisible();
     expect(store.client.load).toHaveBeenCalledTimes(2);
     expect(store.client.save).toHaveBeenCalledOnce();
   });
@@ -275,14 +276,14 @@ describe('hole-first owner scoring', () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     await screen.findByRole('heading', { name: 'Hole 2' });
-    expect(screen.getByText(/No changes sent; 4 unplayed/)).toBeVisible();
+    expect(screen.getByRole('status', { name: 'No unsaved scores' })).toHaveAttribute('data-state', 'idle');
     expect(client.save).not.toHaveBeenCalled();
     await enter(user, '4');
     await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     await screen.findByRole('heading', { name: 'Hole 3' });
     expect(client.save).toHaveBeenCalledOnce();
     expect(vi.mocked(client.save).mock.calls[0]?.[3]).toBe(2);
-    expect(screen.getByText(/1 player changes acknowledged; 3 unplayed/)).toBeVisible();
+    expect(screen.getByRole('status', { name: 'Scores saved' })).toBeVisible();
   });
   it('prevalidates every intended row before sending anything, including invalid pickup and exact-safe bounds', async () => {
     const { client } = mount();
@@ -324,7 +325,7 @@ describe('hole-first owner scoring', () => {
     expect(input(2)).toHaveValue('5');
     await user.click(screen.getByRole('button', { name: 'Previous hole' }));
     expect(input()).toHaveValue('X7');
-    expect(screen.getByText('3 unsaved scores')).toBeVisible();
+    expect(screen.getByRole('status', { name: '3 unsaved scores' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Scorecards' }));
     expect(screen.getByText(/3 unsaved scores are not included in this card/)).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Enter scores' }));
@@ -342,7 +343,7 @@ describe('hole-first owner scoring', () => {
     await enter(user, 'DNF', 2);
     await user.click(row(3).getByRole('button', { name: 'Pickup X for Fictional Player 3' }));
     await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
-    await screen.findByText(/3 player changes acknowledged/);
+    await screen.findByRole('status', { name: 'Scores saved' });
     expect(screen.getByRole('heading', { name: 'Hole 2' })).toBeVisible();
     expect(vi.mocked(client.save).mock.calls.map((call) => call[4])).toEqual([
       { kind: 'picked-up', reportedStrokes: 7 }, { kind: 'did-not-finish' }, { kind: 'picked-up' },
@@ -362,7 +363,7 @@ describe('hole-first owner scoring', () => {
     expect(input()).toHaveValue('4');
     await user.clear(input());
     await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
-    await screen.findByText(/1 player changes acknowledged; 4 unplayed/);
+    await screen.findByRole('status', { name: 'Scores saved' });
     expect(client.save).toHaveBeenCalledOnce();
     expect(vi.mocked(client.save).mock.calls[0]?.[4]).toEqual({ kind: 'unplayed' });
     expect(vi.mocked(client.save).mock.calls[0]?.[5]).toBe('card-v2');
@@ -413,7 +414,7 @@ describe('hole-first owner scoring', () => {
     await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     await screen.findByText(/0 saved \/ 1 remaining not confirmed/);
     await user.click(screen.getByRole('button', { name: 'Refresh saved round' }));
-    await screen.findByText(/Saved round refreshed/);
+    await waitFor(() => { expect(store.client.load).toHaveBeenCalledTimes(2); expect(screen.getByRole('button', { name: 'Refresh saved round' })).toBeEnabled(); });
     expect(input()).toHaveValue('X7');
     expect(row().queryByText(/Saved:/)).not.toBeInTheDocument();
     expect(row().getByText('Failed — retry')).toBeVisible();
@@ -532,7 +533,7 @@ describe('hole-first owner scoring', () => {
     await enter(user, 'X7');
     await user.click(screen.getByRole('button', { name: 'Save Hole' }));
     expect(await screen.findByRole('heading', { name: 'Round scorecard' })).toBeVisible();
-    expect(screen.getByText(/Scorecards opened for review; the round is not finalized/)).toBeVisible();
+    expect(screen.getByRole('status', { name: 'Scores saved' })).toBeInTheDocument();
     expect(client.save).toHaveBeenCalledOnce();
     expect(vi.mocked(client.save).mock.calls[0]?.[3]).toBe(9);
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
@@ -590,7 +591,7 @@ describe('hole-first owner scoring', () => {
     await act(async () => { pending.resolve(scoreResult()); await pending.promise; });
     expect(store.client.save).toHaveBeenCalledOnce();
     expect(input()).toHaveValue('');
-    expect(screen.getByText('0 unsaved scores')).toBeVisible();
+    expect(screen.getByRole('status', { name: 'No unsaved scores' })).toHaveAttribute('data-state', 'idle');
   });
   it('removes previously acknowledged score details as well as entry rows on authoritative owner revocation', async () => {
     const store = memoryScores();
@@ -599,7 +600,7 @@ describe('hole-first owner scoring', () => {
     const user = userEvent.setup();
     await enter(user, '4');
     await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
-    await screen.findByText(/1 player changes acknowledged/);
+    await screen.findByRole('status', { name: 'Scores saved' });
     const id = vi.mocked(store.client.save).mock.calls[0]?.[6];
     if (!id) throw new Error('Missing fictional request ID');
     vi.mocked(store.client.load).mockRejectedValueOnce(new PrivateRequestError(403, 'Owner access revoked.'));

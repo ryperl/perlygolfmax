@@ -29,7 +29,8 @@
 .event-trip-group-list > li { background: var(--cp-bg-elevated); border: 1px solid var(--cp-border); border-radius: 8px; padding: 16px; min-width: 0; }
 .event-trip-groups ul ul, .event-trip-groups > div > ul { padding-left: 20px; }
 .event-trip-roster { grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); }
-.event-trip-roster > li { padding: 12px 16px; border: 1px solid var(--cp-border); border-radius: 8px; }
+.event-trip-roster > li { padding: 12px 16px; border: 1px solid var(--cp-border); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.event-trip-index { display: inline-block; flex-shrink: 0; padding: .1rem .35rem; border: 1px solid var(--cp-border-strong); border-radius: .4rem; font-size: .8rem; color: var(--cp-text-muted); white-space: nowrap; }
 
 @media (max-width: 600px) {
   .event-trip .panel { padding: 20px; }

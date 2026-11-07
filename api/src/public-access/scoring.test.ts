@@ -161,7 +161,7 @@ describe('active event public scoring authority', () => {
     expect(publicPurse.configuration).toEqual(ownerPurse.configuration);
     expect(publicPurse.view).toEqual(ownerPurse.view);
     const text = JSON.stringify({ saved, publicStandings, publicPurse });
-    for (const privateText of ['handicapIndex', 'observationId', 'Fictional protected public-model observation',
+    for (const privateText of ['"handicapIndex":', 'observationId', 'Fictional protected public-model observation',
       creator.objectId, creator.tenantId, 'recordedBy', 'startedBy']) {
       // The write receipt deliberately identifies only the explicit shared public actor.
       if (privateText !== 'recordedBy') expect(text).not.toContain(privateText);

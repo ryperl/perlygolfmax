@@ -28,14 +28,14 @@ function player(row: StoredRow, id: string): PlayerProfile {
 }
 
 /** Resolve only already-authorized roster identities; this never exposes catalog profiles. */
-export async function currentRosterNames(table: TableClient, roster: readonly EventRosterPlayer[]): Promise<readonly EventRosterPlayer[]> {
+export async function currentRosterDisplay(table: TableClient, roster: readonly EventRosterPlayer[]): Promise<readonly EventRosterPlayer[]> {
   const names: EventRosterPlayer[] = [];
   for (let index = 0; index < roster.length; index += 16) {
     names.push(...await Promise.all(roster.slice(index, index + 16).map(async (entry) => {
       const row = await optionalRow(table, partitionKey, playerKey(entry.playerId));
       if (!row) throw new ApiError(503, 'INVALID_STORED_PLAYER_NAME');
       const current = player(row, entry.playerId);
-      return { playerId: entry.playerId, displayName: current.displayName };
+      return { playerId: entry.playerId, displayName: current.displayName, handicapIndexValue: current.currentIndex?.value ?? null };
     })));
   }
   return names;

@@ -29,8 +29,8 @@ function capturedZeroIndices(f: Fixture): readonly string[] {
   if (!round) throw new Error('Missing fictional round.');
   f.seed({
     partitionKey: event.id, rowKey: `round:${f.roundId}`, content: canonical({
-      ...round, players: round.players.map((player, index) => ({
-        ...player, handicapIndex: {
+      ...round, players: round.players.map(({ playerId, displayName }, index) => ({
+        playerId, displayName, handicapIndex: {
           id: identifier(900 + index), value: '0.0', effectiveDate: '2026-01-01', source: 'Fictional capture',
           recordedAt: '2026-01-01T00:00:00Z', recordedBy: creator, previousObservationId: null,
         },

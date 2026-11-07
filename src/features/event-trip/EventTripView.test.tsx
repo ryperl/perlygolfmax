@@ -209,7 +209,7 @@ describe('saved event rounds', () => {
       .toEqual(['Group 3', 'Group 2', 'Not assigned to a group']);
     const group = first.getByRole('heading', { name: 'Group 3' }).closest('li');
     if (!group) throw new Error('Missing fictional group.');
-    expect(within(group).getAllByRole('listitem').map((item) => item.textContent))
+    expect(within(group).getAllByRole('listitem').map((item) => item.querySelector('.event-trip-player-name')?.textContent))
       .toEqual(['Fictional Player 3', 'Fictional Player 1']);
     expect(first.getByText('No players assigned.')).toBeVisible();
     const closing = roundCard(secondRound.name);
@@ -233,10 +233,27 @@ describe('saved event rounds', () => {
 });
 
 describe('saved event group', () => {
+  it('shows current public roster indices separately from captured group indices and explicit NH', () => {
+    const current = { ...fictionalWorkspace, event: { ...fictionalWorkspace.event, role: 'viewer' as const },
+      publicAccess: true as const, canViewScores: true,
+      roster: fictionalWorkspace.roster.map((player, index) => ({ ...player, handicapIndexValue: index === 0 ? '29.2' : null })),
+      rounds: [ { ...openingRound, players: openingRound.players.map((player, index) => ({
+        playerId: player.playerId, displayName: player.displayName, handicapIndexValue: index === 0 ? '18.9' : null,
+      })) } ],
+    };
+    render(<EventTripView workspace={current} view="group" />);
+    const roster = screen.getByRole('region', { name: 'Event roster' });
+    expect(within(roster).getByLabelText('Current Handicap Index: 29.2')).toHaveTextContent('HI 29.2');
+    expect(within(roster).getAllByLabelText('No Handicap Index')).toHaveLength(3);
+    const captured = roundCard(openingRound.name);
+    expect(captured.getByLabelText('Captured Handicap Index: 18.9')).toHaveTextContent('HI 18.9');
+    expect(captured.queryByLabelText('Current Handicap Index: 29.2')).not.toBeInTheDocument();
+    expect(captured.getAllByLabelText('No Handicap Index')).toHaveLength(3);
+  });
   it('preserves roster order and distinguishes per-round groups and account access', () => {
     render(<EventTripView workspace={workspace} view="group" />);
     const roster = screen.getByRole('region', { name: 'Event roster' });
-    expect(within(roster).getAllByRole('listitem').map((item) => item.textContent))
+    expect(within(roster).getAllByRole('listitem').map((item) => item.querySelector('.event-trip-player-name')?.textContent))
       .toEqual(workspace.roster.map((player) => player.displayName));
     expect(within(roster).queryByText(/not a list of sign-in accounts or access permissions/)).not.toBeInTheDocument();
     expect(roundCard(firstRound.name).getByRole('heading', { name: 'Group 3' })).toBeVisible();

@@ -1,10 +1,15 @@
-import type { EventWorkspace, RoundSnapshot } from '../../domain/setup';
+import type { EventWorkspace, RoundPlayerSnapshot, RoundSnapshot } from '../../domain/setup';
 import { groupStartingHole } from '../../domain/round-navigation';
 import { gameTeamsMatchRoster, isTeamGameDefinition } from '../../domain/games';
 import { gameScoringLabel } from '../games';
 import { eventStartDateLabel, numericEventDateLabel, sortRoundsByStartDate } from '../../domain/event-schedule';
 import type { EventEntryProgress, RoundEntryProgressState } from './entry-progress';
 import './event-trip.css';
+import { HandicapIndexBadge } from './HandicapIndexBadge';
+
+function capturedIndexValue(player: RoundPlayerSnapshot): string | null | undefined {
+  return player.handicapIndex === undefined ? player.handicapIndexValue : player.handicapIndex?.value ?? null;
+}
 
 interface EventTripViewProps {
   readonly workspace: EventWorkspace;
@@ -55,11 +60,12 @@ function PlayingGroups({ round }: { readonly round: RoundSnapshot }) {
               <p>Starting hole: {groupStartingHole(group, round.teeProfile.holes)}</p>
               {group.playerIds.length === 0 ? <p>No players assigned.</p> : (
                 <ul>
-                  {group.playerIds.map((playerId) => (
-                    <li key={playerId}>
-                      {round.players.find((player) => player.playerId === playerId)?.displayName ?? 'Player unavailable'}
-                    </li>
-                  ))}
+                  {group.playerIds.map((playerId) => {
+                    const player = round.players.find((entry) => entry.playerId === playerId);
+                    return <li key={playerId}><span className="event-trip-player-name">{player?.displayName ?? 'Player unavailable'}</span>
+                      {player && <> <HandicapIndexBadge value={capturedIndexValue(player)} context="captured" /></>}
+                    </li>;
+                  })}
                 </ul>
               )}
             </li>
@@ -70,7 +76,8 @@ function PlayingGroups({ round }: { readonly round: RoundSnapshot }) {
       {unassigned.length > 0 && (
         <div>
           <h5>Not assigned to a group</h5>
-          <ul>{unassigned.map((player) => <li key={player.playerId}>{player.displayName}</li>)}</ul>
+          <ul>{unassigned.map((player) => <li key={player.playerId}><span className="event-trip-player-name">{player.displayName}</span>
+            {' '}<HandicapIndexBadge value={capturedIndexValue(player)} context="captured" /></li>)}</ul>
         </div>
       )}
     </div>
@@ -87,9 +94,12 @@ function CompetitionTeams({ round, state }: { readonly round: RoundSnapshot; rea
           {!gameTeamsMatchRoster(game, round.players.map((player) => player.playerId))
             && <p>Saved team assignments need organizer repair before team results are available.</p>}
           <ul className="event-trip-group-list">{game.teams.map((team) => <li key={team.id}>
-            <h5>{team.name}</h5><ul>{team.playerIds.map((id) => <li key={id}>
-              {round.players.find((player) => player.playerId === id)?.displayName ?? 'Player unavailable'}
-            </li>)}</ul>
+            <h5>{team.name}</h5><ul>{team.playerIds.map((id) => {
+              const player = round.players.find((entry) => entry.playerId === id);
+              return <li key={id}><span className="event-trip-player-name">{player?.displayName ?? 'Player unavailable'}</span>
+                {player && <> <HandicapIndexBadge value={capturedIndexValue(player)} context="captured" /></>}
+              </li>;
+            })}</ul>
           </li>)}</ul>
         </>}
   </section>;
@@ -199,7 +209,8 @@ export function EventTripView({ workspace, view, progress }: EventTripViewProps)
           <h2>Event roster</h2>
           {workspace.roster.length === 0 ? <p>No golfers saved to this event roster.</p> : (
             <ul className="event-trip-roster">
-              {workspace.roster.map((player) => <li key={player.playerId}>{player.displayName}</li>)}
+              {workspace.roster.map((player) => <li key={player.playerId}><span className="event-trip-player-name">{player.displayName}</span>
+                {' '}<HandicapIndexBadge value={player.handicapIndexValue} context="current" /></li>)}
             </ul>
           )}
         </section>
