@@ -70,14 +70,16 @@ for (const view of ['overview', 'rounds', 'group'] as const) {
     await expect(page.getByText('Overall game: Fictional Individual', { exact: true })).toBeVisible();
     if (view === 'overview') {
       await expect(page.locator('dt').filter({ hasText: /^Event Start$/ }).locator('..').locator('time')).toHaveAttribute('datetime', '2024-02-29');
+      await expect(page.locator('dt').filter({ hasText: /^Event Start$/ }).locator('..').locator('time')).toHaveText('02/29/2024');
       await expect(page.locator('dt').filter({ hasText: /^Event End$/ }).locator('..').locator('time')).toHaveAttribute('datetime', '2024-03-04');
+      await expect(page.locator('dt').filter({ hasText: /^Event End$/ }).locator('..').locator('time')).toHaveText('03/04/2024');
     }
     if (view !== 'overview') {
       await expect(page.getByRole('heading', { name: 'Groups', exact: true })).toHaveCount(2);
       await expect(page.getByRole('heading', { name: 'Fictional team 1', exact: true })).toBeVisible();
       await expect(page.getByText('Individual game — no competition teams.', { exact: true })).toBeVisible();
     }
-    await expect(page.getByText('February 29, 2024', { exact: true })).toHaveAttribute('datetime', '2024-02-29');
+    await expect(page.getByText(view === 'overview' ? '02/29/2024' : 'February 29, 2024', { exact: true })).toHaveAttribute('datetime', '2024-02-29');
     await expect(page.getByText('November 7, 2026', { exact: true })).toHaveAttribute('datetime', '2026-11-07');
     await expect(page.locator('.event-trip-round h3')).toHaveText(['Fictional round 2', 'Fictional round 1']);
     const open = page.getByRole('link', { name: 'Open scorecard for Fictional round 1' });

@@ -22,3 +22,7 @@ export function eventStartDateLabel(date: string): string {
   const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   return `${months[Number(month) - 1] ?? ''} ${String(Number(day))}, ${year}`;
 }
+
+export function numericEventDateLabel(date: string): string {
+  return `${date.slice(5, 7)}/${date.slice(8, 10)}/${date.slice(0, 4)}`;
+}

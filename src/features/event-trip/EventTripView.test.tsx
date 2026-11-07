@@ -83,7 +83,9 @@ describe('saved event overview', () => {
     const view = render(<EventTripView workspace={{ ...workspace, event: { ...workspace.event,
       startDate: '2026-11-06', endDate: '2026-11-10' } }} view="overview" />);
     expect(screen.getByText('Event Start').nextElementSibling?.querySelector('time')).toHaveAttribute('datetime', '2026-11-06');
+    expect(screen.getByText('Event Start').nextElementSibling).toHaveTextContent('11/06/2026');
     expect(screen.getByText('Event End').nextElementSibling?.querySelector('time')).toHaveAttribute('datetime', '2026-11-10');
+    expect(screen.getByText('Event End').nextElementSibling).toHaveTextContent('11/10/2026');
     view.rerender(<EventTripView workspace={workspace} view="overview" />);
     expect(screen.getByText('Event Start').nextElementSibling).toHaveTextContent('Not set');
     expect(screen.getByText('Event End').nextElementSibling).toHaveTextContent('Not set');
@@ -106,7 +108,7 @@ describe('saved event overview', () => {
       { ...firstRound, id: fictionalId(74), name: 'Fictional undated' },
     ] };
     render(<EventTripView workspace={dated} view={view} />);
-    expect(screen.getByText('February 29, 2024')).toHaveAttribute('datetime', '2024-02-29');
+    expect(screen.getByText(view === 'overview' ? '02/29/2024' : 'February 29, 2024')).toHaveAttribute('datetime', '2024-02-29');
     expect(screen.getAllByRole('heading', { level: 3 }).map((node) => node.textContent)).toEqual([
       secondRound.name, firstRound.name, 'Fictional same day', 'Fictional undated',
     ]);

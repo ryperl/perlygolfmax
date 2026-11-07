@@ -2,7 +2,7 @@ import type { EventWorkspace, RoundSnapshot } from '../../domain/setup';
 import { groupStartingHole } from '../../domain/round-navigation';
 import { gameTeamsMatchRoster, isTeamGameDefinition } from '../../domain/games';
 import { gameScoringLabel } from '../games';
-import { eventStartDateLabel, sortRoundsByStartDate } from '../../domain/event-schedule';
+import { eventStartDateLabel, numericEventDateLabel, sortRoundsByStartDate } from '../../domain/event-schedule';
 import type { EventEntryProgress, RoundEntryProgressState } from './entry-progress';
 import './event-trip.css';
 
@@ -174,8 +174,8 @@ export function EventTripView({ workspace, view, progress }: EventTripViewProps)
         <h1>{view === 'overview' ? event.name : view === 'rounds' ? 'Rounds' : 'The Group'}</h1>
         <p className="event-trip-location">{workspace.location || 'No location saved.'}</p>
         {view === 'overview' && <dl className="event-trip-stats">
-          <div><dt>Event Start</dt><dd>{event.startDate ? <time dateTime={event.startDate}>{eventStartDateLabel(event.startDate)}</time> : 'Not set'}</dd></div>
-          <div><dt>Event End</dt><dd>{event.endDate ? <time dateTime={event.endDate}>{eventStartDateLabel(event.endDate)}</time> : 'Not set'}</dd></div>
+          <div><dt>Event Start</dt><dd>{event.startDate ? <time dateTime={event.startDate}>{numericEventDateLabel(event.startDate)}</time> : 'Not set'}</dd></div>
+          <div><dt>Event End</dt><dd>{event.endDate ? <time dateTime={event.endDate}>{numericEventDateLabel(event.endDate)}</time> : 'Not set'}</dd></div>
         </dl>}
         {view !== 'overview' && event.startDate && <p>Start date: <time dateTime={event.startDate}>{eventStartDateLabel(event.startDate)}</time></p>}
         {archived && <p className="event-trip-archive"><strong>Archived event · Read-only</strong></p>}

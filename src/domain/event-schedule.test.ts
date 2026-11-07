@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { EventSummary } from './events';
-import { eventStartDateLabel, sortEventsByStartDate, sortRoundsByStartDate } from './event-schedule';
+import { eventStartDateLabel, numericEventDateLabel, sortEventsByStartDate, sortRoundsByStartDate } from './event-schedule';
 const fictionalEvent: EventSummary = { id: 'fictional', name: 'Fictional Event', createdAt: '2026-01-01', etag: 'v1', role: 'owner', status: 'active' };
 
 describe('calendar scheduling order', () => {
+  it.each([
+    ['2026-12-04', '12/04/2026'],
+    ['2024-02-29', '02/29/2024'],
+    ['0001-01-01', '01/01/0001'],
+  ])('formats %s numerically without timezone conversion or dropping leading zeros', (date, label) => {
+    expect(numericEventDateLabel(date)).toBe(label);
+  });
   it('orders all dated events before undated, including past events, with deterministic ID ties', () => {
     const events = [
       { ...fictionalEvent, id: 'b', startDate: '2026-11-01' },

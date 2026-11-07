@@ -159,7 +159,8 @@ No group stagger interval, date/time-zone conversion or reminder is inferred.
 Clearing the field removes the time; legacy requests omitting it retain saved times.
 
 Event setup has optional start and end calendar dates. Overview labels these
-**Event Start** and **Event End**; missing dates say Not set. End dates cannot
+**Event Start** and **Event End** in MM/DD/YYYY format; missing dates say Not set.
+End dates cannot
 precede start dates. Sorting still uses the event start date; end dates do not
 archive events or change round dates automatically.
 
