@@ -7,10 +7,14 @@ import { isEventRevision, isEventStatus, isRecord, isUuid } from './events.js';
 import { isGameChange, isRoundGamesView } from './games.js';
 import { handicapStrokesForHole, stablefordScorePoints } from '../domain/stableford.js';
 import type { CourseHole } from '../domain/catalog.js';
+import type { PlayerCourseHandicap } from '../domain/scoring.js';
 import { isPlayerTeeProfiles } from './tees.js';
 import type { ScoreActor } from '../domain/test-access.js';
 import { isEventTesterIdentity } from './test-access.js';
 import { isPublicScoreIdentity } from './public-access.js';
+import { isStablefordGame } from '../domain/games.js';
+import { calculateStrokeGameResults } from '../domain/stroke-games.js';
+import { sameJsonValue } from './round-context.js';
 
 export function isScoreActor(value: unknown): value is ScoreActor {
   return isPublicScoreIdentity(value) || isEventTesterIdentity(value) || isRecord(value) && !Object.hasOwn(value, 'kind')
@@ -19,6 +23,15 @@ export function isScoreActor(value: unknown): value is ScoreActor {
 
 function instant(value: unknown): value is string {
   return typeof value === 'string' && value.length <= 40 && Number.isFinite(Date.parse(value));
+}
+
+function isCourseHandicap(value: unknown): value is PlayerCourseHandicap {
+  if (!isRecord(value) || !isUuid(value.playerId)
+    || !Object.keys(value).every((key) => ['playerId', 'courseHandicap', 'unavailableReason'].includes(key))) return false;
+  return value.courseHandicap === null
+    ? typeof value.unavailableReason === 'string'
+      && ['missing-handicap-index', 'uncaptured-handicap-index', 'invalid-handicap-index', 'missing-tee-ratings'].includes(value.unavailableReason)
+    : typeof value.courseHandicap === 'number' && Number.isSafeInteger(value.courseHandicap) && value.unavailableReason === undefined;
 }
 
 export function isHoleScore(value: unknown): value is HoleScore {
@@ -142,8 +155,11 @@ export function isRoundScores(value: unknown): value is RoundScores {
       seen.add(player.playerId);
     }
   }
+  let courseHandicaps: readonly PlayerCourseHandicap[] | undefined;
   if (value.courseHandicaps !== undefined) {
-    if (!Array.isArray(value.courseHandicaps) || value.courseHandicaps.length !== cards.length) return false;
+    if (!Array.isArray(value.courseHandicaps) || value.courseHandicaps.length !== cards.length
+      || !value.courseHandicaps.every(isCourseHandicap)) return false;
+    courseHandicaps = value.courseHandicaps;
     const seen = new Set<string>();
     for (const player of value.courseHandicaps) {
       if (!isRecord(player) || !isUuid(player.playerId) || !roster.has(player.playerId) || seen.has(player.playerId)
@@ -169,6 +185,19 @@ export function isRoundScores(value: unknown): value is RoundScores {
     for (const result of value.games.results) {
       const game = value.games.configuration.games.find((entry) => entry.id === result.gameId);
       if (!game) return false;
+      if (!isStablefordGame(game)) {
+        const expected = calculateStrokeGameResults(game, result.players.map((player) => {
+          const published = courseHandicaps?.find((entry) => entry.playerId === player.playerId);
+          return { playerId: player.playerId, displayName: player.displayName,
+            layout: playerLayouts.get(player.playerId) ?? layout,
+            handicap: game.basis === 'gross' ? null : player.unavailableReason === 'missing-stroke-index'
+              ? 'missing-stroke-index' : published ? published.courseHandicap
+                ?? (published.unavailableReason === 'uncaptured-handicap-index' ? 'missing-handicap-index' : published.unavailableReason)
+                ?? 'missing-handicap-index' : player.playingHandicap ?? player.unavailableReason ?? 'missing-handicap-index' };
+        }), cards);
+        if (!sameJsonValue(result, expected)) return false;
+        continue;
+      }
       const minimum = Math.min(game.points.betterScorePoints, game.points.worseScorePoints, ...game.points.rows.map((row) => row.points));
       for (const player of result.players) {
         if (player.status === 'unavailable') continue;

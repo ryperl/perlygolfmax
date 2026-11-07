@@ -159,7 +159,7 @@ describe('self-contained round game result contracts', () => {
   }
   function teamDefinition(value: RoundGamesView): TeamGameDefinition {
     const definition = value.configuration.games[0];
-    if (!definition || definition.format === undefined) throw new Error('Missing fictional team definition');
+    if (!definition || definition.format === undefined || definition.kind === 'ball-drop') throw new Error('Missing fictional team definition');
     return definition;
   }
 

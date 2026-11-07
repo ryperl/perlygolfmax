@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { GamePlayerResult, GameTeamResult } from '../../domain/games';
-import { isTeamGameDefinition } from '../../domain/games';
+import { gameResultDirection, gameResultTotal, gameResultUnit, isTeamGameDefinition } from '../../domain/games';
 import type { RoundScores } from '../../domain/scoring';
 import { scorePermissions } from '../../domain/scoring';
 import { scorecardTee } from '../../domain/tees';
@@ -12,22 +12,23 @@ function standingId(player: GamePlayerResult | GameTeamResult): string {
   return 'teamId' in player ? player.teamId : player.playerId;
 }
 
-function PlayerStanding({ player, position, tied = false, members }: {
+function PlayerStanding({ player, position, tied = false, members, unit }: {
   readonly player: GamePlayerResult | GameTeamResult;
   readonly position?: number;
   readonly tied?: boolean;
   readonly members?: string | undefined;
+  readonly unit: string;
 }) {
-  const points = position === undefined ? null : player.totalPoints;
-  const detail = player.status === 'unavailable' ? gameUnavailableMessage(player.unavailableReason)
+  const points = position === undefined ? null : gameResultTotal(player);
+  const detail = player.status === 'unavailable' ? gameUnavailableMessage(player.strokeGame?.unavailableReason ?? player.unavailableReason)
     : `${String(player.holesScored)}/${String(player.totalHoles)} holes · ${position === undefined ? 'Awaiting scores' : player.status === 'complete' ? 'Complete' : 'In progress'}`;
   return <li className="leaderboard-row">
     <span className="leaderboard-position" aria-label={position === undefined ? 'Unranked' : `${tied ? 'Tied position' : 'Position'} ${String(position)}`}>
       {position === undefined ? '—' : `${tied ? 'T' : ''}${String(position)}`}
     </span>
     <div className="leaderboard-player"><h4>{player.displayName}</h4>{members && <p>{members}</p>}<p>{detail}</p></div>
-    <div className="leaderboard-points" aria-label={points === null ? 'No ranked points' : `${String(points)} points`}>
-      <strong>{points ?? '—'}</strong><small>points</small>
+    <div className="leaderboard-points" aria-label={points === null ? `No ranked ${unit}` : `${String(points)} ${unit}`}>
+      <strong>{points ?? '—'}</strong><small>{unit}</small>
     </div>
   </li>;
 }
@@ -46,7 +47,8 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
   const result = game && round.games?.results.find((entry) => entry.gameId === game.id);
   const teamGame = game !== undefined && isTeamGameDefinition(game);
   const rows: readonly (GamePlayerResult | GameTeamResult)[] = (teamGame ? result?.teams : result?.players) ?? [];
-  const standings = result && !result.teamSetupRequired && gameStandings(rows);
+  const standings = result && !result.teamSetupRequired && gameStandings(rows, gameResultDirection(game));
+  const unit = game ? gameResultUnit(game) : 'points';
   function members(player: GamePlayerResult | GameTeamResult): string | undefined {
     function teeLabel(id: string) {
       const tee = scorecardTee(round, id);
@@ -84,8 +86,8 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
         {canManage && <button type="button" disabled={busy} onClick={onManageGames}>Update team assignments</button>}
       </> : !result || !standings || rows.length === 0 ? <p>Leaderboard results are unavailable. Refresh the saved round to retry.</p> : <>
         <p className="leaderboard-qualifier">{standings.provisional
-          ? `Provisional standings · Points earned so far. ${teamGame ? 'Teams' : 'Golfers'} may have played different numbers of holes.`
-          : 'Saved points · All game cards complete. This is not round finalization.'}</p>
+          ? `Provisional standings · ${unit === 'points' ? 'Points earned so far.' : 'Saved results so far; no winner declared.'} ${teamGame ? 'Teams' : 'Golfers'} may have played different numbers of holes.`
+          : `Saved ${unit} · All game cards complete. This is not round finalization.`}</p>
         {ordered.length > pageSize && <div className="leaderboard-controls">
           <label>Find leaderboard golfers or teams<input type="search" value={query} onChange={(event) => {
             setQuery(event.target.value); setPageIndex(0);
@@ -100,16 +102,16 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
         </div>}
         {standings.ranked.length === 0 ? <p>No ranked scores yet.</p> :
           <section><h3>{teamGame ? 'Team standings' : 'Standings'}</h3><ol className="leaderboard-list" role="list" aria-label="Standings">
-            {standings.ranked.filter((entry) => visible.has(standingId(entry.player))).map((entry) => <PlayerStanding key={standingId(entry.player)} player={entry.player} members={members(entry.player)} position={entry.position} tied={entry.tied} />)}
+            {standings.ranked.filter((entry) => visible.has(standingId(entry.player))).map((entry) => <PlayerStanding key={standingId(entry.player)} player={entry.player} unit={unit} members={members(entry.player)} position={entry.position} tied={entry.tied} />)}
           </ol></section>}
         {standings.awaiting.length > 0 && <section aria-label="Awaiting scores">
           <h3>Awaiting scores</h3><ul className="leaderboard-list" role="list">
-            {standings.awaiting.filter((player) => visible.has(standingId(player))).map((player) => <PlayerStanding key={standingId(player)} player={player} members={members(player)} />)}
+            {standings.awaiting.filter((player) => visible.has(standingId(player))).map((player) => <PlayerStanding key={standingId(player)} player={player} unit={unit} members={members(player)} />)}
           </ul>
         </section>}
         {standings.unavailable.length > 0 && <section aria-label="Unavailable results">
           <h3>Unavailable results</h3><ul className="leaderboard-list" role="list">
-            {standings.unavailable.filter((player) => visible.has(standingId(player))).map((player) => <PlayerStanding key={standingId(player)} player={player} members={members(player)} />)}
+            {standings.unavailable.filter((player) => visible.has(standingId(player))).map((player) => <PlayerStanding key={standingId(player)} player={player} unit={unit} members={members(player)} />)}
           </ul>
         </section>}
         <p className="leaderboard-hint">All {teamGame ? 'teams' : 'golfers'} in this round. Ties share a position; no tie-break is applied. Saved scores only.</p>

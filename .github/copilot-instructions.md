@@ -105,6 +105,20 @@
   silently use current global indices.
   Pickup/DNF award minimum configured points; unplayed remains pending.
   Missing net inputs are unavailable, never a zero handicap.
+- Ball Drop and Skins are versioned stroke games, never Stableford presets.
+  Net always uses 100% captured Course Handicap and each golfer's captured tee;
+  keep their points/allowance controls absent. Ball Drop uses explicit foursomes:
+  minimum two-ball combination from different golfers, 1 Net + 1 Gross/2 Net/
+  2 Gross, summed relative to personal par, lowest first. Wait for all four saved
+  dispositions; fewer than two numeric balls is unavailable. Skins compares
+  individual numeric gross/net strokes round-wide, unique lowest wins, highest
+  awarded count ranks first; ties optionally carry in hole-number order.
+  Earlier pending holes block later carry awards; final unclaimed skins remain
+  unawarded. Pickup/X7/DNF are ineligible, not penalties. Keep exact overflow,
+  pending/unavailable/known-zero, stale teams and saved/draft separation explicit.
+  New metrics may fund existing place-based purse prizes with team-member
+  attribution, never per-skin transfers. Overall Stableford accepts Stableford
+  only; reject converting a bound game until its selection is removed.
 - Scoring names show server-derived Course Handicap from captured HI and each
   golfer's captured tee, without game allowance or a stroke-allocation requirement.
   Keep scratch/plus values distinct from NH and other unavailable inputs.

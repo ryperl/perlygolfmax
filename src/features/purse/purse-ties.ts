@@ -1,5 +1,5 @@
 import { calculateEventStandings } from '../../domain/event-leaderboard';
-import { isTeamGameDefinition } from '../../domain/games';
+import { gameResultDirection, gameResultTotal, isTeamGameDefinition } from '../../domain/games';
 import type { EventPurseView } from '../../domain/purse-settings';
 import { calculatePurse } from '../../domain/purse';
 import type { PursePlan, PurseTieResolution } from '../../domain/purse';
@@ -27,12 +27,15 @@ export function currentTies(plan: PursePlan, value: EventPurseView): readonly Aw
       const game = round?.games?.configuration.games.find((entry) => entry.id === source.gameId);
       const result = round?.games?.results.find((entry) => entry.gameId === source.gameId);
       const entries = game && isTeamGameDefinition(game) ? result?.teams ?? [] : result?.players ?? [];
-      const ranked = entries.filter((entry) => entry.holesScored > 0 && entry.totalPoints !== null)
-        .sort((left, right) => left.totalPoints === right.totalPoints ? 0
-          : left.totalPoints !== null && right.totalPoints !== null && left.totalPoints > right.totalPoints ? -1 : 1);
+      const ranked = entries.filter((entry) => entry.holesScored > 0 && gameResultTotal(entry) !== null)
+        .sort((left, right) => {
+          const a = gameResultTotal(left);
+          const b = gameResultTotal(right);
+          return !game || a === null || b === null || a === b ? 0 : (a < b ? -1 : 1) * gameResultDirection(game);
+        });
       entrants = ranked.map((entry) => ({
         id: 'teamId' in entry ? entry.teamId : entry.playerId, name: entry.displayName,
-        rank: ranked.findIndex((other) => other.totalPoints === entry.totalPoints) + 1,
+        rank: ranked.findIndex((other) => gameResultTotal(other) === gameResultTotal(entry)) + 1,
       }));
     }
     return [...new Set(entrants.flatMap((entry) => entry.rank === null ? [] : [entry.rank]))].flatMap((rank) => {

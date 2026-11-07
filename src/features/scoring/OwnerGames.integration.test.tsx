@@ -35,7 +35,7 @@ describe('games integrated with owner stroke entry', () => {
     await screen.findByText('Game settings saved.');
     expect(view.client.saveGames).toHaveBeenCalledOnce();
     expect(vi.mocked(view.client.saveGames).mock.calls[0]?.[3]).toBeNull();
-    expect(view.read().games?.configuration.games[0]?.points.betterScorePoints).toBe(14);
+    expect(view.read().games?.configuration.games[0]?.points?.betterScorePoints).toBe(14);
     expect(screen.getByRole('region', { name: 'Fictional custom gross results' })).toHaveTextContent('Custom points');
     await user.click(screen.getByRole('button', { name: 'Add game' }));
     await user.clear(screen.getByLabelText('Game name'));

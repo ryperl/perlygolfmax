@@ -41,6 +41,27 @@ async function saved() {
 }
 
 describe('RoundGamesPanel', () => {
+  it.each(['skins', 'ball-drop'] as const)('creates %s with dedicated wire fields and retains the complete draft/request on unconfirmed save', async (kind) => {
+    const view = setup();
+    view.onSave.mockResolvedValue(null);
+    click('Add game');
+    field('Game type', kind);
+    field('Game name', `Fictional new ${kind}`);
+    if (kind === 'ball-drop') {
+      for (const [index, card] of fictionalRoundScores.cards.entries()) field(`Team 1 member ${String(index + 1)}`, card.playerId);
+    } else fireEvent.click(screen.getByLabelText('Carry tied skins forward'));
+    click('Save game');
+    await screen.findByText('Save is not confirmed. Your draft is retained; retry when other work finishes.');
+    expect(screen.getByLabelText('Game name')).toHaveValue(`Fictional new ${kind}`);
+    const first = view.onSave.mock.calls[0];
+    expect(first?.[0][0]).toMatchObject({ kind, version: 1 });
+    expect(first?.[0][0]).not.toHaveProperty('points');
+    expect(first?.[0][0]).not.toHaveProperty('handicapAllowancePercent');
+    click('Retry save');
+    await waitFor(() => { expect(view.onSave).toHaveBeenCalledTimes(2); });
+    expect(view.onSave.mock.calls[1]).toEqual(first);
+    expect(view.onDirtyChange).not.toHaveBeenCalledWith(false);
+  });
   it('renders saved results directly for players and discards an owner editor on permission loss without permitting save', () => {
     const view = setup(configured);
     click(`Edit ${original.name}`);

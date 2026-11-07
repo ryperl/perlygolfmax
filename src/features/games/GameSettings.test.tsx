@@ -75,6 +75,8 @@ describe('GameSettings', () => {
     await user.tab();
     expect(screen.getByLabelText('Game name')).toHaveFocus();
     await user.tab();
+    expect(screen.getByLabelText('Game type')).toHaveFocus();
+    await user.tab();
     expect(screen.getByLabelText('Points preset')).toHaveFocus();
     await user.tab();
     expect(screen.getByLabelText('Game format')).toHaveFocus();

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CourseRating } from './catalog.js';
 import type { IndividualGameDefinition, RoundGameDefinition, TeamGameDefinition } from './games.js';
-import { maximumExactGamePoints } from './games.js';
+import { isStablefordGame, maximumExactGamePoints } from './games.js';
 import type { HoleScore, RoundScores, Scorecard } from './scoring.js';
 import { maximumExactHoleStrokes } from './scoring.js';
 import type { EventWorkspace, OverallCompetition, RoundSnapshot } from './setup.js';
@@ -361,6 +361,7 @@ describe('live individual gross and exact net stroke-play standings', () => {
       const snapshot = f.workspace.rounds.find((round) => round.id === source.roundId);
       if (!snapshot || !source.games) throw new Error('Missing fictional round');
       const game = first(source.games.configuration.games);
+      if (!isStablefordGame(game)) throw new Error('Missing fictional Stableford game');
       const changed = { ...game, points: { rows: [{ scoreToPar: 0, points: maximumExactGamePoints }],
         betterScorePoints: maximumExactGamePoints, worseScorePoints: maximumExactGamePoints } };
       const cards = source.cards.map((card) => ({ ...card, holes: card.holes.map((hole) => ({
@@ -380,7 +381,9 @@ describe('live individual gross and exact net stroke-play standings', () => {
       const snapshot = f.workspace.rounds.find((round) => round.id === source.roundId);
       if (!snapshot || !source.games) throw new Error('Missing fictional round');
       const points = maximumExactGamePoints * (index < 4 ? 1 : -1);
-      const changed = { ...first(source.games.configuration.games),
+      const game = first(source.games.configuration.games);
+      if (!isStablefordGame(game)) throw new Error('Missing fictional Stableford game');
+      const changed = { ...game,
         points: { rows: [{ scoreToPar: 0, points }], betterScorePoints: points, worseScorePoints: points } };
       return { ...source, games: { configuration: { ...source.games.configuration, games: [changed] },
         results: calculateGameResults([changed], snapshot, source.cards) } };

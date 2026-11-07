@@ -77,7 +77,9 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
     const game = buildGame(editor.draft, editor.roster.map((card) => card.playerId));
     const intended = game && replaceGame(editor.base, game);
     if (!intended) {
-      setMessage('Check the game name (1–100 characters), whole-number points, net allowance (1–100), and complete team assignments. Values must be safe integers within the supported points range.');
+      setMessage(editor.draft.kind === 'ball-drop' || editor.draft.kind === 'skins'
+        ? 'Check the game name (1–100 characters), supported format, and complete four-person Ball Drop teams. Skins are individual; net always uses 100% Course Handicap.'
+        : 'Check the game name (1–100 characters), whole-number points, net allowance (1–100), and complete team assignments. Values must be safe integers within the supported points range.');
       return;
     }
     const attempt = editor.attempt ?? { games: intended, etag: editor.etag, id: crypto.randomUUID() };

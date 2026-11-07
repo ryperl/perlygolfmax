@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { RoundGameDefinition } from '../../../src/domain/games.js';
+import type { StablefordGameDefinition } from '../../../src/domain/games.js';
 import { stablefordPoints } from '../../../src/domain/stableford.js';
 import { isGameWriteResult, isRoundScores } from '../../../src/contracts/scoring.js';
 import { scoringFixture } from '../../test/scoring-fixtures.js';
@@ -9,7 +9,7 @@ import { canonical } from '../catalog/entities.js';
 import { TableEventStore } from '../events/store.js';
 import { gameChangeKey, gameConfigurationKey } from './games.js';
 
-function game(number = 700, basis: 'gross' | 'net' = 'gross', preset: 'standard' | 'modified' = 'standard'): RoundGameDefinition {
+function game(number = 700, basis: 'gross' | 'net' = 'gross', preset: 'standard' | 'modified' = 'standard'): StablefordGameDefinition {
   return { id: identifier(number), name: `Fictional ${basis} ${preset}`, preset, basis,
     handicapAllowancePercent: 95, points: stablefordPoints(preset) };
 }

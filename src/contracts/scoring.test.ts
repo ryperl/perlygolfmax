@@ -189,7 +189,7 @@ describe('owner gross scoring network contracts', () => {
       const view = value.games;
       const definition = view?.configuration.games[0];
       const result = view?.results[0];
-      if (!view || !definition || definition.format === undefined || !result) throw new Error('Missing fictional game');
+      if (!view || !definition || definition.format === undefined || definition.kind === 'ball-drop' || !result) throw new Error('Missing fictional game');
       const players = result.players.map((player, index) => index !== 0 ? player : ({
         ...player, frontPoints: 19, totalPoints: 19,
         holes: player.holes.map((hole) => hole.number !== 1 ? hole : ({ ...hole, points: 3 })),
@@ -206,7 +206,7 @@ describe('owner gross scoring network contracts', () => {
       const view = value.games;
       const definition = view?.configuration.games[0];
       const result = view?.results[0];
-      if (!view || !definition || definition.format === undefined || !result) throw new Error('Missing fictional game');
+      if (!view || !definition || definition.format === undefined || definition.kind === 'ball-drop' || !result) throw new Error('Missing fictional game');
       const cards = value.cards.map((card, index): Scorecard => ({
         ...card, holes: card.holes.map((hole) => hole.number !== 1 ? hole : ({
           ...hole, score: index === 0 ? { kind: 'picked-up', reportedStrokes: 7 }

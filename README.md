@@ -90,6 +90,8 @@ from npm installation and must also comply with your machine's policies.
 - Configurable individual Stableford games derived server-side from the same
   stroke cards: gross/net, Standard/Modified Stableford presets, editable scoring
   bands and per-game handicap allowance. Multiple games can share one round.
+- Ball Drop foursomes (1 Net + 1 Gross, 2 Net or 2 Gross) and individual Gross/
+  Net Skins with optional carryovers, derived from saved numeric strokes.
   No golfer account, admission or tester link is required in the public app.
   This is not offline recording or a finalized tournament scoreboard.
 
@@ -289,9 +291,9 @@ Select a golfer for their individual card, or choose **Enter scores** for the
 hole-first editor. Front/back controls and locally scrolling tables with fixed
 player labels support narrow screens. Circles/squares mark raw gross strokes
 relative to source par, not net or handicap-adjusted results.
-The round scorecard overview lists its configured games and Gross/Net allowance;
-the Game selector still chooses the points shown. The round's back link returns
-to that event's overview, not its setup editor.
+The round scorecard overview lists its configured games and scoring rules;
+the Game selector chooses saved points, team-to-par or skins shown. The round's
+back link returns to that event's overview, not its setup editor.
 Cards include source yardage, par and stroke index, exact hole shorthand and
 recorded totals. Normal score entry has no extra disposition menu or format
 instruction paragraph; blank and X shorthand remain supported.
@@ -426,11 +428,57 @@ These games remain editable but show no team result until assignments are
 repaired. Games can be repaired individually without discarding other stale
 games. This adds no finalization, payout or event-wide credit policy.
 
+### Ball Drop and Skins
+
+Choose **Game type** in a saved round's Games editor. These version-1 stroke
+competitions share the existing saved cards, conditional settings writes, audit
+receipts and bounded transport; they are not Stableford presets.
+
+**Ball Drop** uses explicitly assigned four-person competition teams, separate
+from playing groups. Choose **1 Net + 1 Gross**, **2 Net**, or **2 Gross**.
+Exactly two different golfers count on each hole. The server automatically
+chooses the lowest valid combination, summing each selected golfer's strokes
+relative to their own captured tee's par: par is 0, birdie −1, bogey +1.
+Lowest cumulative team-to-par wins; equal totals share positions. All four
+golfers must save a disposition before a hole is evaluated. Pickup/`X7`/DNF
+cannot supply a numeric ball. Fewer than two eligible scores makes the team
+result unavailable, not a fabricated penalty. Stale roster assignments stay
+visible for repair and produce no team result.
+
+**Gross Skins** and **Net Skins** are individual, round-wide competitions.
+After every golfer has saved a disposition for a hole, its unique lowest
+eligible stroke score wins a skin. Tied lows remain unawarded with carryovers
+off; with carryovers on they carry to the next unique winner. Holes are
+evaluated in captured hole-number order, not a group's starting-hole circuit.
+An earlier pending hole blocks later carryover awards. Final tied or otherwise
+unclaimed skins remain unawarded; they never roll into another round.
+Highest awarded skin count ranks first. A resolved zero wins is distinct from
+pending or unavailable awards.
+
+Both formats use **100% of captured Course Handicap** for net, including
+plus handicaps and personal tees; there is no allowance or points-table editor
+for these kinds. Missing required net inputs remain unavailable. Calculations
+use exact arithmetic and report unavailable overflow without reducing the
+existing stroke-input limit. Only saved numeric strokes are eligible; local
+drafts never enter results. Partial standings are explicitly provisional and
+never declare a winner or finalize a round.
+
+Games, Leaderboard and golfer scorecards display the appropriate to-par or
+skins units. Ball Drop member scorecards repeat their saved team projection;
+Games identifies the counting golfers. Existing round-game purse place prizes
+rank these same saved metrics and split team awards among members, with existing
+tie/remainder/projection rules. This is not a per-skin money transfer.
+Overall Stableford selection accepts only Stableford games; remove a selected
+binding before converting that game to Ball Drop or Skins. Legacy Stableford
+definitions/results remain readable without migration and retain their existing
+points tables and allowances.
+
 ### Round leaderboard
 
 Open **Leaderboard** beside Scorecards, Enter scores and Games. Select a saved
-Stableford game to rank golfers or its configured teams by server-derived
-points earned so far, highest first. Holes scored and complete/in-progress
+game to rank golfers or its configured teams by server-derived totals:
+Stableford points and Skins awards highest first, Ball Drop team-to-par lowest
+first. Holes scored and complete/in-progress
 states stay visible; mixed-progress standings are explicitly provisional.
 No projected totals, raw-gross ranking or client-side handicap recalculation
 is used.

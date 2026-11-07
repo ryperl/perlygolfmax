@@ -1,9 +1,11 @@
 import { isRoundGameDefinition, isRoundGameDefinitions } from '../../contracts/games';
-import type { GameTeam, RoundGameDefinition, StablefordPreset, TeamGameFormat } from '../../domain/games';
-import { defaultHandicapAllowancePercent, defaultTeamHandicapAllowancePercent, gameTeamsMatchRoster, isTeamGameDefinition, maximumPointsRows, teamSize } from '../../domain/games';
+import type { GameTeam, RoundGameDefinition, StablefordPreset, CompetitionTeamFormat } from '../../domain/games';
+import { defaultHandicapAllowancePercent, defaultTeamHandicapAllowancePercent, gameTeamsMatchRoster, isStablefordGame, isTeamGameDefinition, maximumPointsRows, teamSize } from '../../domain/games';
 import { stablefordPoints } from '../../domain/stableford';
 
 export interface GameDraft {
+  readonly kind?: 'stableford' | 'ball-drop' | 'skins';
+  readonly carryovers?: boolean;
   readonly id: string;
   readonly name: string;
   readonly preset: StablefordPreset;
@@ -12,13 +14,18 @@ export interface GameDraft {
   readonly rows: readonly { readonly scoreToPar: number; readonly points: string }[];
   readonly better: string;
   readonly worse: string;
-  readonly format?: TeamGameFormat;
+  readonly format?: CompetitionTeamFormat;
   readonly teams?: readonly GameTeam[] | undefined;
   readonly allowanceConfigured?: boolean;
   readonly assignmentsCleared?: boolean;
 }
 
 export function draftFromGame(game: RoundGameDefinition): GameDraft {
+  if (!isStablefordGame(game)) return {
+    ...newGameDraft(), id: game.id, name: game.name, kind: game.kind, basis: game.basis,
+    allowance: '100', allowanceConfigured: true,
+    ...(game.kind === 'skins' ? { carryovers: game.carryovers } : { format: game.format, teams: game.teams }),
+  };
   return {
     id: game.id, name: game.name, preset: game.preset, basis: game.basis,
     allowance: String(game.handicapAllowancePercent),
@@ -36,7 +43,7 @@ export function newGameDraft(): GameDraft {
   }), allowanceConfigured: false };
 }
 
-function emptyTeams(format: TeamGameFormat, rosterCount: number): readonly GameTeam[] {
+function emptyTeams(format: CompetitionTeamFormat, rosterCount: number): readonly GameTeam[] {
   return Array.from({ length: rosterCount % teamSize(format) === 0 ? rosterCount / teamSize(format) : 0 }, (_, index) => ({
     id: crypto.randomUUID(), name: `Team ${String(index + 1)}`,
     playerIds: Array.from({ length: teamSize(format) }, () => ''),
@@ -47,7 +54,7 @@ export function resetTeamAssignments(draft: GameDraft, rosterCount: number): Gam
   return draft.format ? { ...draft, teams: emptyTeams(draft.format, rosterCount), assignmentsCleared: false } : draft;
 }
 
-export function setFormat(draft: GameDraft, format: TeamGameFormat | undefined, rosterCount: number): GameDraft {
+export function setFormat(draft: GameDraft, format: CompetitionTeamFormat | undefined, rosterCount: number): GameDraft {
   const changedSize = draft.format !== undefined && format !== undefined && teamSize(draft.format) !== teamSize(format);
   const teams = format === undefined ? undefined
     : draft.format !== undefined && !changedSize ? draft.teams
@@ -58,11 +65,20 @@ export function setFormat(draft: GameDraft, format: TeamGameFormat | undefined, 
   void previousTeams;
   return {
     ...rest, ...(format === undefined ? {} : { format, teams: teams ?? [] }),
-    basis: format === undefined ? draft.basis : 'net',
+    basis: format === 'ball-drop-two-gross' ? 'gross' : format === undefined ? draft.basis : 'net',
     allowance: draft.allowanceConfigured === false
       ? String(format === undefined ? defaultHandicapAllowancePercent : defaultTeamHandicapAllowancePercent) : draft.allowance,
     assignmentsCleared: changedSize,
   };
+}
+
+export function setGameKind(draft: GameDraft, kind: 'stableford' | 'ball-drop' | 'skins', rosterCount: number): GameDraft {
+  if ((draft.kind ?? 'stableford') === kind) return draft;
+  const reset = setFormat(draft, undefined, rosterCount);
+  return kind === 'ball-drop'
+    ? { ...setFormat(reset, 'ball-drop-net-gross', rosterCount), kind, name: 'Ball Drop', allowance: '100' }
+    : { ...reset, kind, name: kind === 'skins' ? 'Skins' : 'Standard Stableford',
+      ...(kind === 'skins' ? { carryovers: false, allowance: '100' } : {}) };
 }
 
 export function teamDraftFeedback(draft: GameDraft, playerIds: readonly string[]): string | null {
@@ -98,6 +114,14 @@ function integer(text: string): number | undefined {
 }
 
 export function buildGame(draft: GameDraft, playerIds: readonly string[] = []): RoundGameDefinition | null {
+  if (draft.kind === 'ball-drop' || draft.kind === 'skins') {
+    const game = draft.kind === 'skins'
+      ? { id: draft.id, name: draft.name.trim(), kind: draft.kind, version: 1, basis: draft.basis, carryovers: draft.carryovers ?? false }
+      : { id: draft.id, name: draft.name.trim(), kind: draft.kind, version: 1,
+        basis: draft.format === 'ball-drop-two-gross' ? 'gross' : 'net', format: draft.format,
+        teams: (draft.teams ?? []).map((team) => ({ ...team, name: team.name.trim() })) };
+    return isRoundGameDefinition(game) && gameTeamsMatchRoster(game, playerIds) ? game : null;
+  }
   const parsedAllowance = integer(draft.allowance);
   const allowance = draft.basis === 'gross'
     && (parsedAllowance === undefined || parsedAllowance < 1 || parsedAllowance > 100)

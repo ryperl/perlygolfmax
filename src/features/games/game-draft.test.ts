@@ -45,7 +45,7 @@ describe('game drafts', () => {
     const extended = addBand(addBand({ ...modified, better: '12', worse: '-7' }, 'better'), 'worse');
     expect(buildGame(extended)?.points).toMatchObject({
       betterScorePoints: 12, worseScorePoints: -7,
-      rows: [{ scoreToPar: -4, points: 12 }, ...buildGame(modified)?.points.rows ?? [], { scoreToPar: 3, points: -7 }],
+      rows: [{ scoreToPar: -4, points: 12 }, ...buildGame(modified)?.points?.rows ?? [], { scoreToPar: 3, points: -7 }],
     });
     expect(draftFromGame(buildGame(extended) ?? failGame())).toEqual({ ...extended, allowanceConfigured: true });
   });

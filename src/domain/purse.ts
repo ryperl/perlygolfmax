@@ -1,5 +1,5 @@
 import { calculateEventStandings } from './event-leaderboard.js';
-import { isTeamGameDefinition, teamSize } from './games.js';
+import { gameResultDirection, gameResultTotal, isTeamGameDefinition, teamSize } from './games.js';
 import type { RoundGameDefinition } from './games.js';
 import type { RoundScores } from './scoring.js';
 import type { EventWorkspace } from './setup.js';
@@ -319,22 +319,26 @@ function sourceFor(pool: PurseRankedPool, workspace: EventWorkspace, rounds: rea
   }
   const entries = isTeamGameDefinition(game) ? result.teams ?? [] : result.players;
   if (entries.some((entry) => entry.status === 'unavailable')) {
-    return blocked('source-unavailable', entries.find((entry) => entry.status === 'unavailable')?.unavailableReason);
+    const unavailable = entries.find((entry) => entry.status === 'unavailable');
+    return blocked('source-unavailable', unavailable?.strokeGame?.unavailableReason ?? unavailable?.unavailableReason);
   }
-  if (entries.some((entry) => entry.totalPoints !== null && !Number.isSafeInteger(entry.totalPoints))) return blocked('arithmetic-range');
-  if (entries.some((entry) => entry.totalPoints === null && (entry.status === 'complete' || entry.holesScored > 0)
+  if (entries.some((entry) => gameResultTotal(entry) !== null && !Number.isSafeInteger(gameResultTotal(entry)))) return blocked('arithmetic-range');
+  if (entries.some((entry) => gameResultTotal(entry) === null && (entry.status === 'complete' || entry.holesScored > 0)
     || entry.status === 'complete' && (entry.totalHoles < 1 || entry.holesScored !== entry.totalHoles))) {
     return blocked('missing-score-data');
   }
   // Saved totals are the ranking authority; no strokes, points tables or tee math are reconstructed here.
-  const ranked = entries.filter((entry) => entry.holesScored > 0 && entry.totalPoints !== null)
-    .sort((a, b) => a.totalPoints === b.totalPoints ? 0
-      : a.totalPoints !== null && b.totalPoints !== null && a.totalPoints > b.totalPoints ? -1 : 1);
+  const ranked = entries.filter((entry) => entry.holesScored > 0 && gameResultTotal(entry) !== null)
+    .sort((a, b) => {
+      const left = gameResultTotal(a);
+      const right = gameResultTotal(b);
+      return left === null || right === null || left === right ? 0 : (left < right ? -1 : 1) * gameResultDirection(game);
+    });
   return {
     complete: entries.length > 0 && entries.every((entry) => entry.status === 'complete'), issues: [],
     entrants: entries.map((entry) => {
-      const index = entry.totalPoints === null || entry.holesScored === 0 ? -1
-        : ranked.findIndex((other) => other.totalPoints === entry.totalPoints);
+      const index = gameResultTotal(entry) === null || entry.holesScored === 0 ? -1
+        : ranked.findIndex((other) => gameResultTotal(other) === gameResultTotal(entry));
       return {
         id: 'teamId' in entry ? entry.teamId : entry.playerId,
         playerIds: 'playerIds' in entry ? entry.playerIds : [entry.playerId],

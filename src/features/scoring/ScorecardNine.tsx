@@ -2,9 +2,10 @@ import { scoreEntryText } from '../../contracts/scoring';
 import type { CourseHole } from '../../domain/catalog';
 import type { HoleScore, Scorecard } from '../../domain/scoring';
 import type { PlayerTeeProfile } from '../../domain/tees';
-import { cardTotalText, pointsTotalText } from './scorecard-presentation';
+import { cardTotalText, pointsTotalText, scorecardGamePlayer } from './scorecard-presentation';
 import type { ScorecardGame } from './scorecard-presentation';
 import { gameUnavailableMessage } from '../games';
+import { gameResultTotal, gameResultUnit } from '../../domain/games';
 import './scorecard-recap.css';
 
 function scoreMark(score: HoleScore | undefined, par: number) {
@@ -46,6 +47,7 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
 }) {
   const showTotal = subtotal === 'In' || fullLayout.length === layout.length;
   const mixed = (playerTees?.length ?? 0) > 0;
+  const unit = game ? gameResultUnit(game.definition) : 'points';
   return <section className="recap-nine">
     <h4>{label}</h4>
     <div className="recap-scroll" role="region" aria-label={`${label} scorecard`} tabIndex={0}>
@@ -60,8 +62,9 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
             const playerFullLayout = tee?.holes ?? fullLayout;
             const playerLayout = layout.map((hole) => playerFullLayout.find((item) => item.number === hole.number) ?? hole);
             const saved = new Map(card.holes.map((hole) => [hole.number, hole.score]));
-            const player = game?.result?.players.find((entry) => entry.playerId === card.playerId);
-            const holePoints = new Map(player?.holes.map((hole) => [hole.number, hole.points]));
+            const player = scorecardGamePlayer(game, card.playerId);
+            const holePoints = new Map(player?.strokeGame ? player.strokeGame.holes.map((hole) => [hole.number, hole.value])
+              : player?.holes.map((hole) => [hole.number, hole.points]));
             const available = player !== undefined && player.status !== 'unavailable';
             const completeNine = layout.every((hole) => typeof holePoints.get(hole.number) === 'number');
             return <Fragment key={card.playerId}>
@@ -82,18 +85,22 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
               })}
               <td className="recap-subtotal">{cardTotalText(card, layout)}</td>{showTotal && <td className="recap-subtotal">{cardTotalText(card, fullLayout)}</td>}
             </tr>
-            {game && <tr className="recap-game-row" aria-label={`${card.displayName} · ${game.definition.name} points`}>
-              <th scope="row" aria-label={`${card.displayName} game points`}
-                title={!available ? gameUnavailableMessage(player?.unavailableReason) : undefined}>Points{!available && <small>Unavailable</small>}</th>
+            {game && <tr className="recap-game-row" aria-label={`${card.displayName} · ${game.definition.name} ${unit}`}>
+              <th scope="row" aria-label={`${card.displayName} game ${unit}`}
+                title={!available ? gameUnavailableMessage(player?.strokeGame?.unavailableReason ?? player?.unavailableReason) : undefined}>
+                {unit === 'points' ? 'Points' : unit === 'skins' ? 'Skins' : 'Team to par'}
+                {player && 'teamId' in player && <small>{player.displayName}</small>}{!available && <small>Unavailable</small>}</th>
               {layout.map((hole) => {
                 const points = holePoints.get(hole.number);
                 const description = !available ? 'unavailable' : typeof points === 'number' ? String(points) : 'pending';
-                return <td key={hole.number} aria-label={`${card.displayName}, hole ${String(hole.number)} game points: ${description}`}>
-                  {points ?? '—'}
+                return <td key={hole.number} aria-label={`${card.displayName}, hole ${String(hole.number)} game ${unit}: ${description}`}>
+                  {available ? points ?? '—' : '—'}
                 </td>;
               })}
-              <td className="recap-subtotal">{pointsTotalText(subtotal === 'Out' ? player?.frontPoints ?? null : player?.backPoints ?? null, completeNine)}</td>
-              {showTotal && <td className="recap-subtotal">{pointsTotalText(player?.totalPoints ?? null, player?.status === 'complete')}</td>}
+              <td className="recap-subtotal">{pointsTotalText(!available ? null : player.strokeGame
+                ? subtotal === 'Out' ? player.strokeGame.frontTotal : player.strokeGame.backTotal
+                : subtotal === 'Out' ? player.frontPoints : player.backPoints, completeNine)}</td>
+              {showTotal && <td className="recap-subtotal">{pointsTotalText(available ? gameResultTotal(player) : null, player?.status === 'complete')}</td>}
             </tr>}
             </Fragment>;
           })}

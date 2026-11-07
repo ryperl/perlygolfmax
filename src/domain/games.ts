@@ -17,6 +17,7 @@ export interface StablefordPointsTable {
 interface CommonGameDefinition {
   readonly id: string;
   readonly name: string;
+  readonly kind?: 'stableford';
   readonly preset: StablefordPreset;
   readonly handicapAllowancePercent: number;
   readonly points: StablefordPointsTable;
@@ -28,7 +29,10 @@ export interface IndividualGameDefinition extends CommonGameDefinition {
   readonly teams?: never;
 }
 
-export type TeamGameFormat = 'two-net-better-ball' | 'two-net-aggregate' | 'four-two-net';
+export type StablefordTeamFormat = 'two-net-better-ball' | 'two-net-aggregate' | 'four-two-net';
+export type BallDropFormat = 'ball-drop-net-gross' | 'ball-drop-two-net' | 'ball-drop-two-gross';
+export type TeamGameFormat = StablefordTeamFormat;
+export type CompetitionTeamFormat = TeamGameFormat | BallDropFormat;
 
 export interface GameTeam {
   readonly id: string;
@@ -38,21 +42,54 @@ export interface GameTeam {
 
 export interface TeamGameDefinition extends CommonGameDefinition {
   readonly basis: 'net';
-  readonly format: TeamGameFormat;
+  readonly format: StablefordTeamFormat;
   readonly teams: readonly GameTeam[];
 }
 
-export type RoundGameDefinition = IndividualGameDefinition | TeamGameDefinition;
+interface StrokeGameDefinition {
+  readonly id: string;
+  readonly name: string;
+  readonly version: 1;
+  readonly preset?: never;
+  readonly points?: never;
+  readonly handicapAllowancePercent?: never;
+}
 
-export function isTeamGameDefinition(game: RoundGameDefinition): game is TeamGameDefinition {
+export interface BallDropGameDefinition extends StrokeGameDefinition {
+  readonly kind: 'ball-drop';
+  readonly basis: 'gross' | 'net';
+  readonly format: BallDropFormat;
+  readonly teams: readonly GameTeam[];
+  readonly carryovers?: never;
+}
+
+export interface SkinsGameDefinition extends StrokeGameDefinition {
+  readonly kind: 'skins';
+  readonly basis: GameScoreBasis;
+  readonly carryovers: boolean;
+  readonly format?: never;
+  readonly teams?: never;
+}
+
+export type StablefordGameDefinition = IndividualGameDefinition | TeamGameDefinition;
+export type NewRoundGameDefinition = BallDropGameDefinition | SkinsGameDefinition;
+export type RoundGameDefinition = StablefordGameDefinition | NewRoundGameDefinition;
+
+export function isStablefordGame(game: RoundGameDefinition): game is StablefordGameDefinition {
+  return game.kind === undefined || game.kind === 'stableford';
+}
+
+export function isTeamGameDefinition(game: StablefordGameDefinition): game is TeamGameDefinition;
+export function isTeamGameDefinition(game: RoundGameDefinition): game is TeamGameDefinition | BallDropGameDefinition;
+export function isTeamGameDefinition(game: RoundGameDefinition): game is TeamGameDefinition | BallDropGameDefinition {
   return game.format !== undefined;
 }
 
-export function teamSize(format: TeamGameFormat): 2 | 4 {
-  return format === 'four-two-net' ? 4 : 2;
+export function teamSize(format: CompetitionTeamFormat): 2 | 4 {
+  return format === 'four-two-net' || format.startsWith('ball-drop-') ? 4 : 2;
 }
 
-export function teamCountingSize(format: TeamGameFormat): 1 | 2 {
+export function teamCountingSize(format: CompetitionTeamFormat): 1 | 2 {
   return format === 'two-net-better-ball' ? 1 : 2;
 }
 
@@ -83,6 +120,28 @@ export type GameUnavailableReason =
   | 'missing-stroke-index'
   | 'missing-score-data';
 
+export type StrokeGameUnavailableReason = GameUnavailableReason | 'invalid-stroke-score' | 'arithmetic-range';
+
+export interface StrokeGameHole {
+  readonly number: number;
+  readonly par: number | null;
+  readonly status: 'complete' | 'pending' | 'ineligible' | 'unavailable';
+  readonly grossToPar: number | null;
+  readonly netToPar: number | null;
+  readonly value: number | null;
+  readonly countingPlayerIds: readonly string[];
+}
+
+export interface StrokeGameScore {
+  readonly kind: 'ball-drop' | 'skins';
+  readonly version: 1;
+  readonly holes: readonly StrokeGameHole[];
+  readonly frontTotal: number | null;
+  readonly backTotal: number | null;
+  readonly total: number | null;
+  readonly unavailableReason?: StrokeGameUnavailableReason;
+}
+
 export interface GameHoleResult {
   readonly number: number;
   readonly points: number | null;
@@ -90,6 +149,7 @@ export interface GameHoleResult {
 }
 
 export interface GamePlayerResult {
+  readonly strokeGame?: StrokeGameScore;
   readonly playerId: string;
   readonly displayName: string;
   readonly playingHandicap: number | null;
@@ -104,6 +164,10 @@ export interface GamePlayerResult {
 }
 
 export interface RoundGameResult {
+  readonly kind?: 'ball-drop' | 'skins';
+  readonly version?: 1;
+  readonly unawardedSkins?: number;
+  readonly pendingSkins?: number;
   readonly gameId: string;
   readonly players: readonly GamePlayerResult[];
   readonly teams?: readonly GameTeamResult[];
@@ -116,6 +180,7 @@ export interface GameTeamHoleResult {
 }
 
 export interface GameTeamResult {
+  readonly strokeGame?: StrokeGameScore;
   readonly teamId: string;
   readonly displayName: string;
   readonly playerIds: readonly string[];
@@ -159,7 +224,21 @@ export function maximumExactPointsForGame(game: RoundGameDefinition): number {
 export function sameGameDefinitions(left: readonly RoundGameDefinition[], right: readonly RoundGameDefinition[]): boolean {
   return left.length === right.length && left.every((game, index) => {
     const other = right[index];
-    return other !== undefined && game.id === other.id && game.name === other.name
+    if (!other) return false;
+    if (!isStablefordGame(game) || !isStablefordGame(other)) {
+      return !isStablefordGame(game) && !isStablefordGame(other)
+        && game.id === other.id && game.name === other.name && game.kind === other.kind
+        && game.basis === other.basis && game.format === other.format
+        && (game.kind === 'skins' && other.kind === 'skins' ? game.carryovers === other.carryovers
+          : game.kind === 'ball-drop' && other.kind === 'ball-drop'
+            && game.teams.length === other.teams.length && game.teams.every((team, index) => {
+              const counterpart = other.teams[index];
+              return counterpart !== undefined && team.id === counterpart.id && team.name === counterpart.name
+                && team.playerIds.length === counterpart.playerIds.length
+                && team.playerIds.every((id, memberIndex) => id === counterpart.playerIds[memberIndex]);
+            }));
+    }
+    return game.id === other.id && game.name === other.name
       && game.preset === other.preset && game.basis === other.basis
       && game.handicapAllowancePercent === other.handicapAllowancePercent
       && game.format === other.format
@@ -178,4 +257,16 @@ export function sameGameDefinitions(left: readonly RoundGameDefinition[], right:
         return counterpart !== undefined && row.scoreToPar === counterpart.scoreToPar && row.points === counterpart.points;
       });
   });
+}
+
+export function gameResultTotal(result: GamePlayerResult | GameTeamResult): number | null {
+  return result.strokeGame ? result.strokeGame.total : result.totalPoints;
+}
+
+export function gameResultDirection(game: RoundGameDefinition): 1 | -1 {
+  return game.kind === 'ball-drop' ? 1 : -1;
+}
+
+export function gameResultUnit(game: RoundGameDefinition): string {
+  return game.kind === 'ball-drop' ? 'to par' : game.kind === 'skins' ? 'skins' : 'points';
 }

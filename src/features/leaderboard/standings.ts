@@ -1,10 +1,10 @@
 import type { GamePlayerResult, GameTeamResult } from '../../domain/games';
+import { gameResultTotal } from '../../domain/games';
 
 type StandingResult = GamePlayerResult | GameTeamResult;
-type ScoredPlayer<T extends StandingResult> = T & { readonly totalPoints: number };
 
 export interface RankedStanding<T extends StandingResult = GamePlayerResult> {
-  readonly player: ScoredPlayer<T>;
+  readonly player: T;
   readonly position: number;
   readonly tied: boolean;
 }
@@ -15,22 +15,30 @@ interface GameStandings<T extends StandingResult> {
   readonly provisional: boolean;
 }
 
-export function gameStandings<T extends StandingResult>(players: readonly T[]): GameStandings<T> {
-  const scored = players.filter((player): player is ScoredPlayer<T> =>
-    player.status !== 'unavailable' && player.totalPoints !== null && player.holesScored > 0);
-  scored.sort((left, right) => left.totalPoints === right.totalPoints ? 0 : left.totalPoints > right.totalPoints ? -1 : 1);
+export function gameStandings<T extends StandingResult>(players: readonly T[], direction: 1 | -1 = -1): GameStandings<T> {
+  const scored = players.filter((player) =>
+    player.status !== 'unavailable' && gameResultTotal(player) !== null && player.holesScored > 0);
+  scored.sort((left, right) => {
+    const a = gameResultTotal(left);
+    const b = gameResultTotal(right);
+    return a === null || b === null || a === b ? 0 : (a < b ? -1 : 1) * direction;
+  });
   const counts = new Map<number, number>();
-  for (const player of scored) counts.set(player.totalPoints, (counts.get(player.totalPoints) ?? 0) + 1);
+  for (const player of scored) {
+    const total = gameResultTotal(player);
+    if (total !== null) counts.set(total, (counts.get(total) ?? 0) + 1);
+  }
   let position = 0;
   let previous: number | null = null;
   const ranked: readonly RankedStanding<T>[] = scored.map((player, index) => {
-    if (previous !== player.totalPoints) position = index + 1;
-    previous = player.totalPoints;
-    return { player, position, tied: (counts.get(player.totalPoints) ?? 0) > 1 };
+    const total = gameResultTotal(player);
+    if (previous !== total) position = index + 1;
+    previous = total;
+    return { player, position, tied: total !== null && (counts.get(total) ?? 0) > 1 };
   });
   return {
     ranked,
-    awaiting: players.filter((player) => player.status !== 'unavailable' && (player.totalPoints === null || player.holesScored === 0)),
+    awaiting: players.filter((player) => player.status !== 'unavailable' && (gameResultTotal(player) === null || player.holesScored === 0)),
     unavailable: players.filter((player) => player.status === 'unavailable'),
     provisional: players.some((player) => player.status !== 'complete'),
   };

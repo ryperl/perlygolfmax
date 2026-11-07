@@ -1,5 +1,5 @@
 import type { GamePlayerResult, GameTeamResult, GameUnavailableReason } from './games.js';
-import { gameTeamsMatchRoster, isTeamGameDefinition } from './games.js';
+import { gameTeamsMatchRoster, isStablefordGame, isTeamGameDefinition } from './games.js';
 import type { RoundScores } from './scoring.js';
 import type { EventWorkspace, OverallCompetition, RoundSnapshot } from './setup.js';
 import { calculatePlayingHandicap, handicapStrokesForHole } from './stableford.js';
@@ -90,7 +90,7 @@ function stablefordCell(
   if (!binding) return emptyCell(round, 'not-configured');
   const game = source.games?.configuration.games.find((entry) => entry.id === binding.gameId);
   const result = source.games?.results.find((entry) => entry.gameId === binding.gameId);
-  if (!game || !result) return emptyCell(round, 'missing-game');
+  if (!game || !result || !isStablefordGame(game)) return emptyCell(round, 'missing-game');
   const individual = result.players.find((entry) => entry.playerId === playerId);
   if (isTeamGameDefinition(game)) {
     if (result.teamSetupRequired || !gameTeamsMatchRoster(game, round.players.map((player) => player.playerId))) {

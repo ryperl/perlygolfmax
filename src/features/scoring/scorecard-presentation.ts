@@ -1,6 +1,6 @@
 import type { CourseHole } from '../../domain/catalog';
 import type { RoundScores, Scorecard } from '../../domain/scoring';
-import type { RoundGameDefinition, RoundGameResult } from '../../domain/games';
+import type { GamePlayerResult, GameTeamResult, RoundGameDefinition, RoundGameResult } from '../../domain/games';
 import { gameUnavailableMessage } from '../games';
 import { summarizeGross } from '../../domain/scoring';
 
@@ -40,12 +40,19 @@ export function pointsTotalText(value: number | null, complete: boolean): string
   return value === null ? '—' : `${String(value)}${complete ? '' : '*'}`;
 }
 
+export function scorecardGamePlayer(game: ScorecardGame | undefined, playerId: string): GamePlayerResult | GameTeamResult | undefined {
+  return game?.definition.kind === 'ball-drop'
+    ? game.result?.teams?.find((entry) => entry.playerIds.includes(playerId))
+    : game?.result?.players.find((entry) => entry.playerId === playerId);
+}
+
 export function scorecardGameWarnings(game: ScorecardGame | undefined, cards: readonly Scorecard[]): readonly string[] {
   const unavailable = new Map<string, string[]>();
   if (game) for (const card of cards) {
-    const player = game.result?.players.find((entry) => entry.playerId === card.playerId);
+    const player = scorecardGamePlayer(game, card.playerId);
     if (!player || player.status === 'unavailable') {
-      const reason = player ? gameUnavailableMessage(player.unavailableReason) : 'Game results are unavailable.';
+      const reason = game.result?.teamSetupRequired ? 'Update team assignments before relying on team scores.'
+        : player ? gameUnavailableMessage(player.strokeGame?.unavailableReason ?? player.unavailableReason) : 'Game results are unavailable.';
       unavailable.set(reason, [...(unavailable.get(reason) ?? []), card.displayName]);
     }
   }

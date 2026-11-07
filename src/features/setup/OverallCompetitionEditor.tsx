@@ -3,6 +3,7 @@ import type { ScoresClient } from '../../client/scoring';
 import { SessionExpiredError } from '../../client/events';
 import { PrivateRequestError } from '../../client/private-request';
 import type { EventSetupInput, EventWorkspace, OverallCompetition } from '../../domain/setup';
+import { isStablefordGame } from '../../domain/games';
 
 type GameChoice = { readonly id: string; readonly name: string };
 type Options = Readonly<Record<string, readonly GameChoice[]>>;
@@ -36,7 +37,7 @@ export function OverallCompetitionEditor({ workspace, draft, scores, disabled, o
         if (!round) return;
         const value = await client.load(workspace.event.id, round.id, controller.signal);
         controller.signal.throwIfAborted();
-        options[round.id] = value.games?.configuration.games.map((game) => ({ id: game.id, name: game.name })) ?? [];
+        options[round.id] = value.games?.configuration.games.filter(isStablefordGame).map((game) => ({ id: game.id, name: game.name })) ?? [];
       }
     }
     void Promise.all(Array.from({ length: Math.min(3, workspace.rounds.length) }, worker)).then(() => {
@@ -83,7 +84,7 @@ export function OverallCompetitionEditor({ workspace, draft, scores, disabled, o
         }}><option value="individual">Individual components (default for new competition)</option>
           <option value="team">Full team points to each team member</option></select></label>
         <p>Credit applies to team games. Individual games always contribute each golfer’s own points.</p>
-        <p>Select one saved game per round. Its actual saved points rules are unchanged. No game is selected automatically.
+        <p>Select one saved Stableford game per round. Ball Drop and Skins are not overall points sources. Its actual saved points rules are unchanged. No game is selected automatically.
           Missing selections or incomplete team setup leave standings pending or unavailable, never zero.</p>
         {competition.roundGames.some((binding) => !draft.rounds.some((round) => round.id === binding.roundId)) && <div>
           <p>A saved game selection refers to a round no longer in this event draft.</p>

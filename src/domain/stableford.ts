@@ -1,11 +1,12 @@
 import type { CourseHole, TeeProfile } from './catalog.js';
 import type {
   GamePlayerResult, GameUnavailableReason, RoundGameDefinition, RoundGameResult,
-  StablefordPointsTable, StablefordPreset,
+  StablefordGameDefinition, StablefordPointsTable, StablefordPreset,
 } from './games.js';
 import type { Scorecard } from './scoring.js';
 import type { RoundPlayerSnapshot, RoundSnapshot } from './setup.js';
-import { gameTeamsMatchRoster, isTeamGameDefinition } from './games.js';
+import { gameTeamsMatchRoster, isStablefordGame, isTeamGameDefinition } from './games.js';
+import { calculateStrokeGameResults } from './stroke-games.js';
 import { aggregateTeamGameResults } from './team-games.js';
 import { playerTee } from './tees.js';
 
@@ -117,7 +118,7 @@ function sumPoints(holes: GamePlayerResult['holes']): number | null {
 }
 
 function playerResult(
-  game: RoundGameDefinition, tee: TeeProfile, player: RoundPlayerSnapshot,
+  game: StablefordGameDefinition, tee: TeeProfile, player: RoundPlayerSnapshot,
   cards: readonly Scorecard[],
 ): GamePlayerResult {
   const layout = [...tee.holes].sort((left, right) => left.number - right.number);
@@ -157,6 +158,12 @@ export function calculateGameResults(
 ): readonly RoundGameResult[] {
   const layout = [...round.teeProfile.holes].sort((left, right) => left.number - right.number);
   return games.map((game) => {
+    if (!isStablefordGame(game)) return calculateStrokeGameResults(game, round.players.map((player) => {
+      const tee = playerTee(round, player.playerId);
+      return { playerId: player.playerId, displayName: player.displayName, layout: tee.holes,
+        handicap: game.basis === 'gross' ? null : player.handicapIndex == null ? 'missing-handicap-index'
+          : calculatePlayingHandicap(player.handicapIndex.value, tee, 100) };
+    }), cards);
     const players = round.players.map((player) => playerResult(game, playerTee(round, player.playerId), player, cards));
     return {
       gameId: game.id, players,

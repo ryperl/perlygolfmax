@@ -278,7 +278,9 @@ export class TableWorkspaceStore {
       for (const binding of overallCompetition.roundGames) {
         if (!input.rounds.some((round) => round.id === binding.roundId)) throw new ApiError(400, 'INVALID_OVERALL_ROUND');
         const games = await readGameConfiguration(this.table, id, binding.roundId, configuredGameRounds(access.event.gameRoundIds));
-        if (!games?.games.some((game) => game.id === binding.gameId)) throw new ApiError(400, 'INVALID_OVERALL_GAME');
+        if (!games?.games.some((game) => game.id === binding.gameId && (game.kind === undefined || game.kind === 'stableford'))) {
+          throw new ApiError(400, 'INVALID_OVERALL_GAME');
+        }
       }
     }
     if (previous.rounds.some((round) => !input.rounds.some((configured) => configured.id === round.id))) {

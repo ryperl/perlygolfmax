@@ -1,4 +1,4 @@
-import type { RoundGameDefinition } from '../../domain/games';
+import type { StablefordGameDefinition } from '../../domain/games';
 import type { RoundScores, Scorecard } from '../../domain/scoring';
 import { calculateGameResults, stablefordPoints } from '../../domain/stableford';
 import { fictionalId, fictionalWorkspace } from '../../client/catalog.test-support';
@@ -24,7 +24,7 @@ export function scorecardGamesFixture(count: 9 | 18 = 18) {
       } };
     }),
   };
-  const games: readonly RoundGameDefinition[] = [
+  const games: readonly StablefordGameDefinition[] = [
     { id: fictionalId(700), name: 'Fictional standard', preset: 'standard', basis: 'gross', handicapAllowancePercent: 95, points: stablefordPoints('standard') },
     { id: fictionalId(701), name: 'Fictional modified', preset: 'modified', basis: 'gross', handicapAllowancePercent: 95, points: stablefordPoints('modified') },
     { id: fictionalId(702), name: 'Fictional net', preset: 'standard', basis: 'net', handicapAllowancePercent: 95, points: stablefordPoints('standard') },

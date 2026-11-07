@@ -2,7 +2,7 @@ import type { FormEvent } from 'react';
 import { useId, useState } from 'react';
 import { maximumPointsRows, teamSize } from '../../domain/games';
 import type { GameDraft } from './game-draft';
-import { addBand, buildGame, resetTeamAssignments, setFormat, setPreset, teamDraftFeedback } from './game-draft';
+import { addBand, buildGame, resetTeamAssignments, setFormat, setGameKind, setPreset, teamDraftFeedback } from './game-draft';
 
 interface GameSettingsProps {
   readonly draft: GameDraft;
@@ -30,6 +30,7 @@ export function GameSettings({
   draft, disabled, saveDisabled, cancelDisabled, retry, onChange, onSave, onCancel, roster = [],
 }: GameSettingsProps) {
   const allowanceHint = useId();
+  const stableford = draft.kind === undefined || draft.kind === 'stableford';
   const [teamQuery, setTeamQuery] = useState('');
   const [golferQuery, setGolferQuery] = useState('');
   const [teamPage, setTeamPage] = useState(0);
@@ -52,7 +53,13 @@ export function GameSettings({
         <label>Game name
           <input value={draft.name} maxLength={100} onChange={(event) => { onChange({ ...draft, name: event.target.value }); }} />
         </label>
-        <label>Points preset
+        <label>Game type<select value={draft.kind ?? 'stableford'} onChange={(event) => {
+          const kind = event.target.value;
+          if (kind === 'stableford' || kind === 'ball-drop' || kind === 'skins') onChange(setGameKind(draft, kind, roster.length));
+        }}>
+          <option value="stableford">Stableford</option><option value="ball-drop">Ball Drop</option><option value="skins">Skins</option>
+        </select></label>
+        {stableford && <label>Points preset
           <select value={draft.preset} onChange={(event) => {
             if (event.target.value === 'standard' || event.target.value === 'modified') {
               onChange(setPreset(draft, event.target.value));
@@ -61,20 +68,24 @@ export function GameSettings({
             <option value="standard">Standard</option>
             <option value="modified">Modified Stableford</option>
           </select>
-        </label>
-        <label>Game format
+        </label>}
+        {draft.kind !== 'skins' && <label>Game format
           <select value={draft.format ?? 'individual'} onChange={(event) => {
             const value = event.target.value;
-            if (value === 'individual' || value === 'two-net-better-ball' || value === 'two-net-aggregate' || value === 'four-two-net') {
+            if (value === 'individual' || value === 'two-net-better-ball' || value === 'two-net-aggregate' || value === 'four-two-net'
+              || value === 'ball-drop-net-gross' || value === 'ball-drop-two-net' || value === 'ball-drop-two-gross') {
               onChange(setFormat(draft, value === 'individual' ? undefined : value, roster.length));
             }
           }}>
-            <option value="individual">Individual Stableford</option>
+            {stableford ? <><option value="individual">Individual Stableford</option>
             <option value="two-net-better-ball">2-man net Better Ball · best one</option>
             <option value="four-two-net">4-man 2-net Stableford · Standard or Modified preset</option>
-            <option value="two-net-aggregate">2-man net Aggregate · both count</option>
+            <option value="two-net-aggregate">2-man net Aggregate · both count</option></> : <>
+              <option value="ball-drop-net-gross">1 Net + 1 Gross</option>
+              <option value="ball-drop-two-net">2 Net</option><option value="ball-drop-two-gross">2 Gross</option>
+            </>}
           </select>
-        </label>
+        </label>}
         <label>Score basis
           <select value={draft.basis} disabled={draft.format !== undefined} onChange={(event) => {
             if (event.target.value === 'gross' || event.target.value === 'net') {
@@ -85,16 +96,25 @@ export function GameSettings({
             <option value="net">Net</option>
           </select>
         </label>
-        {draft.basis === 'net' && <div><label>Handicap allowance (%)
+        {draft.kind === 'skins' && <label>Carry tied skins forward
+          <input type="checkbox" checked={draft.carryovers ?? false} onChange={(event) => {
+            onChange({ ...draft, carryovers: event.target.checked });
+          }} />
+        </label>}
+        {!stableford && <p>Net uses 100% of captured Course Handicap. Numeric saved strokes only; pickup and DNF are ineligible.
+          {draft.kind === 'skins' ? ' All golfers must save a disposition before a hole is awarded. Final unclaimed skins remain unawarded.'
+            : ' The lowest valid two-ball combination counts, from two different golfers. Par is 0, birdie −1, bogey +1. Lowest team total wins.'}</p>}
+        {stableford && draft.basis === 'net' && <div><label>Handicap allowance (%)
           <input inputMode="numeric" aria-describedby={allowanceHint} value={draft.allowance}
             onChange={(event) => { onChange({ ...draft, allowance: event.target.value, allowanceConfigured: true }); }} />
         </label><small id={allowanceHint}>Whole percent, 1–100.</small></div>}
         {draft.format && <section className="game-teams" aria-label="Team assignments">
           <h4>Team assignments · this round and game only</h4>
           <p>Teams are separate from playing groups. Assign every current round golfer exactly once. Partners are never chosen automatically.</p>
-          <p>{draft.format === 'two-net-better-ball' ? 'Highest one net points score per hole.'
+          {stableford ? <p>{draft.format === 'two-net-better-ball' ? 'Highest one net points score per hole.'
             : draft.format === 'four-two-net' ? 'Highest two net points scores per hole; counting golfers may change each hole.' : 'Both net points scores count each hole.'}
             {' '}Team-hole points remain pending until every teammate has saved individual points.</p>
+            : <p>Two different golfers count. Wait for all four saved dispositions; fewer than two numeric scores makes that hole unavailable.</p>}
           {draft.assignmentsCleared && <p role="status">Team size changed. Previous assignments were cleared; choose all members again.</p>}
           <p>{draft.teams?.length ?? 0} teams · {new Set(assigned.filter((id) => rosterIds.includes(id))).size}/{roster.length} golfers assigned</p>
           <label>Find teams or assigned golfers<input type="search" value={teamQuery} onChange={(event) => {
@@ -143,7 +163,7 @@ export function GameSettings({
               onClick={() => { onChange(resetTeamAssignments(draft, roster.length)); }}>Reset team assignments</button>
           </div>}
         </section>}
-        <div className="game-scroll" role="region" aria-label="Editable points table" tabIndex={0}>
+        {stableford && <><div className="game-scroll" role="region" aria-label="Editable points table" tabIndex={0}>
           <table>
             <caption>Points by strokes relative to par</caption>
             <thead><tr><th scope="col">Relative to par</th><th scope="col">Points</th></tr></thead>
@@ -173,7 +193,7 @@ export function GameSettings({
           <button type="button" disabled={draft.rows.length >= maximumPointsRows}
             onClick={() => { onChange(addBand(draft, 'worse')); }}>Add worse band</button>
         </div>
-        <p className="game-hint">Pickup and DNF receive the lowest configured points. Enter strokes on the scorecard.</p>
+        <p className="game-hint">Pickup and DNF receive the lowest configured points. Enter strokes on the scorecard.</p></>}
       </fieldset>
       <div className="game-actions">
         <button type="submit" disabled={disabled || saveDisabled || draft.format !== undefined && !buildGame(draft, rosterIds)}>{retry ? 'Retry save' : 'Save game'}</button>

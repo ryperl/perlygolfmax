@@ -1,13 +1,14 @@
 import type {
-  GameChange, GameConfiguration, GamePlayerResult, GameTeamResult, RoundGameDefinition, RoundGamesView,
+  GameChange, GameConfiguration, GamePlayerResult, GameTeamResult, RoundGameDefinition, RoundGamesView, StablefordGameDefinition,
 } from '../domain/games.js';
 import {
-  gameTeamsMatchRoster, isTeamGameDefinition, maximumExactGamePoints, maximumExactPointsForGame,
+  gameTeamsMatchRoster, isStablefordGame, isTeamGameDefinition, maximumExactGamePoints, maximumExactPointsForGame,
   maximumGamesPerRound, maximumPointsRows, teamCountingSize, teamSize,
 } from '../domain/games.js';
 import { aggregateTeamGameResults } from '../domain/team-games.js';
 import { boundedText, isDateOnly } from './catalog.js';
 import { isEventRevision, isRecord, isUuid } from './events.js';
+import { isStrokeGameResult } from './stroke-games.js';
 
 function keys(value: Record<string, unknown>, required: readonly string[], optional: readonly string[] = []): boolean {
   return required.every((key) => Object.hasOwn(value, key))
@@ -36,13 +37,36 @@ function pointsTable(value: unknown, maximum: number): boolean {
 }
 
 export function isRoundGameDefinition(value: unknown): value is RoundGameDefinition {
+  if (isRecord(value) && (value.kind === 'ball-drop' || value.kind === 'skins')) {
+    if (!isUuid(value.id) || !boundedText(value.name) || value.version !== 1
+      || value.basis !== 'gross' && value.basis !== 'net') return false;
+    if (value.kind === 'skins') return keys(value, ['id', 'name', 'kind', 'version', 'basis', 'carryovers'])
+      && typeof value.carryovers === 'boolean';
+    if (!keys(value, ['id', 'name', 'kind', 'version', 'basis', 'format', 'teams'])
+      || !['ball-drop-net-gross', 'ball-drop-two-net', 'ball-drop-two-gross'].includes(String(value.format))
+      || value.basis !== (value.format === 'ball-drop-two-gross' ? 'gross' : 'net')
+      || !Array.isArray(value.teams) || value.teams.length === 0) return false;
+    const ids = new Set<string>();
+    const members = new Set<string>();
+    for (const team of value.teams) {
+      if (!isRecord(team) || !keys(team, ['id', 'name', 'playerIds']) || !isUuid(team.id) || ids.has(team.id)
+        || !boundedText(team.name) || !Array.isArray(team.playerIds) || team.playerIds.length !== 4) return false;
+      ids.add(team.id);
+      for (const id of team.playerIds) {
+        if (!isUuid(id) || members.has(id)) return false;
+        members.add(id);
+      }
+    }
+    return true;
+  }
   if (!isRecord(value) || !isUuid(value.id) || !boundedText(value.name)
     || value.preset !== 'standard' && value.preset !== 'modified'
     || value.basis !== 'gross' && value.basis !== 'net'
     || !integer(value.handicapAllowancePercent) || value.handicapAllowancePercent < 1 || value.handicapAllowancePercent > 100) return false;
   const common = ['id', 'name', 'preset', 'basis', 'handicapAllowancePercent', 'points'];
-  if (!Object.hasOwn(value, 'format')) return keys(value, common) && pointsTable(value.points, maximumExactGamePoints);
-  if (!keys(value, [...common, 'format', 'teams']) || value.basis !== 'net'
+  if (value.kind !== undefined && value.kind !== 'stableford') return false;
+  if (!Object.hasOwn(value, 'format')) return keys(value, common, ['kind']) && pointsTable(value.points, maximumExactGamePoints);
+  if (!keys(value, [...common, 'format', 'teams'], ['kind']) || value.basis !== 'net'
     || value.format !== 'two-net-better-ball' && value.format !== 'two-net-aggregate' && value.format !== 'four-two-net'
     || !Array.isArray(value.teams)) return false;
   const size = teamSize(value.format);
@@ -91,7 +115,7 @@ function total(holes: GamePlayerResult['holes']): number | null {
   return scored.length ? scored.reduce((sum, hole) => sum + (hole.points ?? 0), 0) : null;
 }
 
-function isPlayerResult(value: unknown, game: RoundGameDefinition): value is GamePlayerResult {
+function isPlayerResult(value: unknown, game: StablefordGameDefinition): value is GamePlayerResult {
   if (!isRecord(value)
     || !keys(value, ['playerId', 'displayName', 'playingHandicap', 'status', 'holes', 'holesScored',
       'totalHoles', 'frontPoints', 'backPoints', 'totalPoints'], ['unavailableReason'])
@@ -159,11 +183,27 @@ export function isRoundGamesView(value: unknown): value is RoundGamesView {
     || !Array.isArray(value.results) || value.results.length !== value.configuration.games.length) return false;
   const seen = new Set<string>();
   const players = new Map<string, GamePlayerResult>();
+  const names = new Map<string, string>();
   let expectedIds: string | undefined;
   let totalHoles: number | undefined;
   for (const result of value.results) {
     if (!isRecord(result) || !isUuid(result.gameId) || seen.has(result.gameId)) return false;
     const game = value.configuration.games.find((candidate) => candidate.id === result.gameId);
+    if (game && !isStablefordGame(game)) {
+      if (!isStrokeGameResult(result, game)) return false;
+      const ids = result.players.map((player) => player.playerId).sort().join(',');
+      if (expectedIds !== undefined && expectedIds !== ids) return false;
+      expectedIds = ids;
+      for (const player of result.players) {
+        if (totalHoles !== undefined && totalHoles !== player.totalHoles) return false;
+        totalHoles = player.totalHoles;
+        const previous = names.get(player.playerId);
+        if (previous !== undefined && previous !== player.displayName) return false;
+        names.set(player.playerId, player.displayName);
+      }
+      seen.add(result.gameId);
+      continue;
+    }
     if (!game || !keys(result, isTeamGameDefinition(game) ? ['gameId', 'players', 'teams'] : ['gameId', 'players'],
       isTeamGameDefinition(game) ? ['teamSetupRequired'] : [])
       || !Array.isArray(result.players) || result.players.length < 1) return false;
@@ -171,6 +211,9 @@ export function isRoundGamesView(value: unknown): value is RoundGamesView {
     const components: GamePlayerResult[] = [];
     for (const player of result.players) {
       if (!isPlayerResult(player, game) || ids.has(player.playerId)) return false;
+      const name = names.get(player.playerId);
+      if (name !== undefined && name !== player.displayName) return false;
+      names.set(player.playerId, player.displayName);
       if (totalHoles !== undefined && totalHoles !== player.totalHoles) return false;
       totalHoles = player.totalHoles;
       ids.add(player.playerId);

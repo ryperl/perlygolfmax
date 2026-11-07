@@ -11,6 +11,7 @@
 .game-teams { display: grid; gap: .75rem; min-width: 0; overflow-wrap: anywhere; }
 .game-teams h4, .game-teams p { margin: 0; }
 .game-settings input, .game-settings select { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; padding: .5rem; font: inherit; color: var(--cp-text); background: var(--cp-bg); border: 1px solid var(--cp-border-strong); border-radius: .4rem; }
+.game-settings select { height: 44px; }
 .game-settings td input { min-width: 7rem; }
 .game-scroll { overflow-x: auto; max-width: 100%; min-width: 0; }
 .round-games table { width: 100%; border-collapse: collapse; }

@@ -13,6 +13,8 @@
 .leaderboard-heading p, .leaderboard-format, .leaderboard-hint { color: var(--cp-text-muted); font-size: .9rem; }
 .leaderboard-game { display: grid; gap: 6px; min-width: 0; font-weight: 600; }
 .leaderboard-game select { width: 100%; min-width: 0; min-height: 44px; padding: 10px; font: inherit; color: var(--cp-text); background: var(--cp-surface); border: 1px solid var(--cp-border-strong); border-radius: .625rem; }
+/* Native WebKit option contents must use the selector's layout bounds. */
+.leaderboard-game select { contain: layout; height: 44px; }
 .round-leaderboard :is(button, select):focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
 .leaderboard-qualifier { padding: 12px; background: var(--cp-accent-soft); border-left: 3px solid var(--cp-accent); }
 .leaderboard-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; min-width: 0; }

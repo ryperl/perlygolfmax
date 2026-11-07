@@ -4,7 +4,7 @@ import type { ScoreActor } from '../../../src/domain/test-access.js';
 import type { EventWorkspace, RoundPlayerSnapshot, RoundSnapshot } from '../../../src/domain/setup.js';
 import type { GameWriteResult, HoleScore, RoundScores, Scorecard, ScoreChange, ScoreHistoryPage, ScoreWriteResult } from '../../../src/domain/scoring.js';
 import type { GameChange, GameConfiguration, RoundGameDefinition } from '../../../src/domain/games.js';
-import { gameTeamsMatchRoster, sameGameDefinitions } from '../../../src/domain/games.js';
+import { gameTeamsMatchRoster, isStablefordGame, sameGameDefinitions } from '../../../src/domain/games.js';
 import { maximumPrivateWriteBytes } from '../../../src/contracts/private-values.js';
 import { calculateGameResults } from '../../../src/domain/stableford.js';
 import { isGameChange, isRoundGameDefinitions } from '../../../src/contracts/games.js';
@@ -235,6 +235,11 @@ export class TableScoreStore {
     if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     const replay = await this.replayGames(identity, eventId, roundId, games, expectedEtag, requestId);
     if (replay) return replay;
+    const competition = state.workspace.overallCompetition;
+    if (competition?.kind === 'stableford' && competition.roundGames.some((binding) => binding.roundId === roundId
+      && !games.some((game) => game.id === binding.gameId && isStablefordGame(game)))) {
+      throw new ApiError(400, 'INVALID_OVERALL_GAME');
+    }
     // Unchanged stale peers must survive while their assignments are repaired one game at a time.
     if (games.some((game) => {
       const previous = state.games?.games.find((saved) => saved.id === game.id);

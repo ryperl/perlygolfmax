@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import type { GamePlayerResult, GameTeamResult, RoundGameDefinition, RoundGameResult } from '../../domain/games';
-import { isTeamGameDefinition } from '../../domain/games';
+import { gameResultTotal, gameResultUnit, isTeamGameDefinition } from '../../domain/games';
 import { gameScoringLabel, gameUnavailableMessage } from './game-presentation';
 
 function progress(player: GamePlayerResult | GameTeamResult): string {
@@ -31,6 +31,7 @@ export function GameResults({ game, result, holeNumbers }: {
   const label = showBack ? 'Back nine' : 'Front nine';
   const unavailable = new Map<string, string[]>();
   const teamGame = isTeamGameDefinition(game);
+  const unit = gameResultUnit(game);
   const rows = teamGame ? result?.teams ?? [] : result?.players ?? [];
   const matching = rows.filter((player) => `${player.displayName} ${'playerIds' in player
     ? player.playerIds.map((id) => result?.players.find((member) => member.playerId === id)?.displayName ?? '').join(' ') : ''}`
@@ -39,7 +40,7 @@ export function GameResults({ game, result, holeNumbers }: {
   const page = Math.min(pageIndex, Math.max(0, Math.ceil(matching.length / pageSize) - 1));
   for (const player of matching.slice(page * pageSize, (page + 1) * pageSize)) {
     if (player.status !== 'unavailable') continue;
-    const reason = gameUnavailableMessage(player.unavailableReason);
+    const reason = gameUnavailableMessage(player.strokeGame?.unavailableReason ?? player.unavailableReason);
     unavailable.set(reason, [...(unavailable.get(reason) ?? []), player.displayName]);
   }
   function showNine(value: 'front' | 'back') {
@@ -51,7 +52,10 @@ export function GameResults({ game, result, holeNumbers }: {
     <section className="game-results" aria-label={`${game.name} results`}>
       <h3>{game.name}</h3>
       <p>{gameScoringLabel(game)}</p>
-      {teamGame && <p className="game-hint">Team-hole points wait for every teammate&apos;s saved individual points. Blank means pending; zero is a saved points score.</p>}
+      {game.kind === 'ball-drop' ? <p className="game-hint">Lowest two-ball score relative to each golfer&apos;s par, from different golfers. All four saved dispositions are required. Totals are provisional while holes are pending.</p>
+        : game.kind === 'skins' ? <p className="game-hint">Skins wait for every golfer&apos;s saved disposition. Pickup and DNF are ineligible; zero means a resolved hole without a win.
+          {' '}{result?.unawardedSkins ?? 0} unawarded · {result?.pendingSkins ?? holeNumbers.length} pending. Final tied skins stay unawarded.</p>
+          : teamGame && <p className="game-hint">Team-hole points wait for every teammate&apos;s saved individual points. Blank means pending; zero is a saved points score.</p>}
       {teamGame && result?.teamSetupRequired ? <p>Update team assignments. The saved teams no longer match this round&apos;s golfers. Edit this game to repair assignments.</p>
         : !result || rows.length === 0 ? <p>Results are unavailable.</p> : <>
         {rows.length > pageSize && <div>
@@ -69,9 +73,9 @@ export function GameResults({ game, result, holeNumbers }: {
           <button type="button" aria-pressed={!showBack} onClick={() => { showNine('front'); }}>Front 9</button>
           <button type="button" aria-pressed={showBack} onClick={() => { showNine('back'); }}>Back 9</button>
         </div>}
-        <div className="game-scroll game-card-scroll" role="region" aria-label={`${game.name} points scorecard`} tabIndex={0} ref={scroll}>
+        <div className="game-scroll game-card-scroll" role="region" aria-label={`${game.name} ${unit} scorecard`} tabIndex={0} ref={scroll}>
           <table>
-            <caption>{label} · Points</caption>
+            <caption>{label} · {unit === 'points' ? 'Points' : unit === 'skins' ? 'Skins awarded' : 'Strokes to par'}</caption>
             <thead><tr><th scope="col">{teamGame ? 'Team' : 'Player'}</th>
               {visible.map((number) => <th scope="col" key={number}>{number}</th>)}
               <th scope="col">Out</th><th scope="col">In</th><th scope="col">Total</th>
@@ -84,13 +88,15 @@ export function GameResults({ game, result, holeNumbers }: {
                 <small className="game-player-meta">{progress(player)}</small>
               </th>
               {visible.map((number) => {
-                const points = player.holes.find((hole) => hole.number === number)?.points;
+                const outcome = player.strokeGame?.holes.find((hole) => hole.number === number);
+                const points = player.strokeGame ? outcome?.value : player.holes.find((hole) => hole.number === number)?.points;
+                const counting = outcome?.countingPlayerIds.map((id) => result.players.find((entry) => entry.playerId === id)?.displayName ?? 'Golfer unavailable').join(' + ');
                 return <td key={number} aria-label={teamGame && player.status !== 'unavailable' && points == null ? 'Pending' : undefined}>{player.status === 'unavailable'
                   ? <span aria-label="Unavailable">—</span>
-                  : points ?? (teamGame ? null : <span aria-label="Pending">—</span>)}</td>;
+                  : <span title={counting || undefined}>{points ?? (teamGame ? null : <span aria-label="Pending">—</span>)}</span>}</td>;
               })}
-              <td>{player.frontPoints ?? '—'}</td><td>{player.backPoints ?? '—'}</td>
-              <td>{player.totalPoints ?? '—'}{player.status === 'in-progress' && player.totalPoints !== null && ' (partial)'}</td>
+              <td>{(player.strokeGame ? player.strokeGame.frontTotal : player.frontPoints) ?? '—'}</td><td>{(player.strokeGame ? player.strokeGame.backTotal : player.backPoints) ?? '—'}</td>
+              <td>{gameResultTotal(player) ?? '—'}{player.status === 'in-progress' && gameResultTotal(player) !== null && ' (partial)'}</td>
             </tr>)}</tbody>
           </table>
         </div>

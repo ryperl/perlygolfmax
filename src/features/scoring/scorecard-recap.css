@@ -44,6 +44,8 @@
 .scorecard-controls { display: flex; flex-wrap: wrap; gap: 16px; }
 .scorecard-controls label { display: grid; gap: 4px; flex: 1 1 10rem; min-width: 0; font-size: .85rem; font-weight: 600; }
 .scorecard-controls select { width: 100%; min-width: 0; min-height: 48px; padding: 8px; font: inherit; color: var(--cp-text); background: var(--cp-surface); border: 1px solid var(--cp-border-strong); border-radius: 10px; }
+/* Native WebKit option contents must use the selector's layout bounds. */
+.scorecard-controls select { contain: layout; height: 48px; }
 .scorecard-player-link { margin: 0; padding: 6px 0; min-height: 44px; text-align: left; border: 0; background: transparent; color: var(--cp-text); font-size: .85rem; font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
 .scorecard-nine-picker { display: flex; flex-wrap: wrap; gap: 8px; }
 .scorecard-nine-picker button, .scorecard-back { margin: 0; min-height: 44px; }

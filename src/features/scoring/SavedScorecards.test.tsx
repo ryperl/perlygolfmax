@@ -8,11 +8,29 @@ import { scorecardGamesFixture } from './scorecard-games.test-support';
 import { withGameResults } from '../../client/scoring.test-support';
 import { teamLeaderboardRound } from '../../client/leaderboard.test-support';
 import { gameScoringLabel } from '../games';
+import { strokeGameCards, strokeGameFixture, strokeGamesRound } from '../../domain/stroke-games.test-support';
 
 function props() {
   return { round: fictionalRoundScores, groupNumber: 1, busy: false, onGroupChange: vi.fn(), onEnterScores: vi.fn() };
 }
 describe('golfer-facing round scorecards', () => {
+  it('shows saved Ball Drop team projections and Skins awards on group and individual cards, never fictitious points', async () => {
+    const f = strokeGameFixture();
+    const cards = strokeGameCards(f.cards, 1, [{ kind: 'strokes', strokes: 3 }, { kind: 'strokes', strokes: 4 },
+      { kind: 'strokes', strokes: 5 }, { kind: 'strokes', strokes: 6 }]);
+    const round = strokeGamesRound({ ...f, cards });
+    render(<SavedScorecards {...props()} round={round} />);
+    const row = screen.getByRole('row', { name: 'Fictional golfer 1 · Fictional Ball Drop to par' });
+    expect(row).toHaveTextContent('Team to par');
+    expect(row).toHaveTextContent('-1');
+    expect(screen.getByText(/same saved team score to par/)).toBeVisible();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Open scorecard for Fictional golfer 1' }));
+    expect(screen.getByRole('row', { name: 'Fictional golfer 1 · Fictional Ball Drop to par' })).toHaveTextContent('-1');
+    await userEvent.setup().selectOptions(screen.getByLabelText('Game'), f.skins.id);
+    expect(screen.getByRole('row', { name: 'Fictional golfer 1 · Fictional Skins skins' })).toHaveTextContent('1');
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Back to group scorecard' }));
+    expect(screen.getByRole('row', { name: 'Fictional golfer 2 · Fictional Skins skins' })).toHaveTextContent('0');
+  });
   it('shows personal and default source rows per golfer and marks identical strokes relative to their own pars', () => {
     const round = mixedTeeRound();
     render(<SavedScorecards {...props()} round={round} />);
