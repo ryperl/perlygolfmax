@@ -17,7 +17,7 @@ function props(): GroupHoleEntryProps {
       playerId: card.playerId, displayName: card.displayName, saved: { kind: 'unplayed' }, canReview: false,
     })),
     busy: false, readOnly: false, unsavedCount: 0,
-    onGroupChange: vi.fn(), onHoleChange: vi.fn(), onEdit: vi.fn(), onReview: vi.fn(), onDiscard: vi.fn(), onDiscardAll: vi.fn(), onSave: vi.fn(),
+    onGroupChange: vi.fn(), onHoleChange: vi.fn(), onEdit: vi.fn(), onReview: vi.fn(), onDiscard: vi.fn(), onDiscardAll: vi.fn(), onSave: vi.fn(), onRefresh: vi.fn(),
   };
 }
 function ControlledEntry(input: GroupHoleEntryProps) {
@@ -41,6 +41,25 @@ function typeScore(index: number, value: string) {
 function pause(ms = 900) { act(() => { vi.advanceTimersByTime(ms); }); }
 afterEach(() => { vi.useRealTimers(); });
 describe('pure mobile group hole entry', () => {
+  it('places Refresh after the only save action without submitting, including readonly and busy states', async () => {
+    const input = props();
+    const view = render(<GroupHoleEntry {...input} />);
+    const save = screen.getByRole('button', { name: 'Save & Next Hole' });
+    const refresh = screen.getByRole('button', { name: 'Refresh saved round' });
+    expect(save.closest('.group-save-actions')).toContainElement(refresh);
+    expect(save.compareDocumentPosition(refresh) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+    await userEvent.click(refresh);
+    expect(input.onRefresh).toHaveBeenCalledOnce();
+    expect(input.onSave).not.toHaveBeenCalled();
+    view.rerender(<GroupHoleEntry {...input} readOnly />);
+    expect(save).toBeDisabled();
+    expect(refresh).toBeEnabled();
+    view.rerender(<GroupHoleEntry {...input} busy />);
+    expect(refresh).toBeDisabled();
+    await userEvent.click(refresh);
+    expect(input.onRefresh).toHaveBeenCalledOnce();
+  });
   it('keeps idle feedback blank while preserving the live save-status area for drafts and requests', () => {
     const input = props();
     const view = render(<GroupHoleEntry {...input} />);
@@ -157,13 +176,14 @@ describe('pure mobile group hole entry', () => {
     expect(screen.getByRole('button', { name: 'Save & Next Hole' })).toHaveFocus();
     expect(input.onSave).not.toHaveBeenCalled();
     await user.keyboard('{Enter}');
-    expect(input.onSave).toHaveBeenCalledWith(true);
+    expect(input.onSave).toHaveBeenCalledWith();
     await user.click(screen.getByRole('button', { name: 'Next hole' }));
     expect(input.onHoleChange).toHaveBeenCalledWith(2);
     expect(input.onSave).toHaveBeenCalledOnce();
-    screen.getByRole('button', { name: 'Save changes' }).focus();
+    screen.getByRole('button', { name: 'Refresh saved round' }).focus();
     await user.keyboard(' ');
-    expect(input.onSave).toHaveBeenLastCalledWith(false);
+    expect(input.onRefresh).toHaveBeenCalledOnce();
+    expect(input.onSave).toHaveBeenCalledOnce();
   });
   it.each([3, 4, 5])('seeds blank +/- at par %i only on the first explicit tap, then adjusts normally', (par) => {
     const input = props();

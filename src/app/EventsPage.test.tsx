@@ -221,7 +221,7 @@ describe('EventsPage composition', () => {
     const form = within(await screen.findByRole('form', { name: 'Group 1 hole 1 entry' }));
     const user = userEvent.setup();
     await user.type(form.getByRole('textbox', { name: 'Fictional Player 1 score' }), 'X7');
-    await user.click(form.getByRole('button', { name: 'Save changes' }));
+    await user.click(form.getByRole('button', { name: 'Save & Next Hole' }));
     expect(services.scores.save).toHaveBeenCalledOnce();
     act(() => {
       window.history.replaceState(null, '', '#events');

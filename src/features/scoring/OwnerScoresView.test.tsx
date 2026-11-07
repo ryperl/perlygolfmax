@@ -39,12 +39,44 @@ async function loaded(user = userEvent.setup()) {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); document.documentElement.scrollTop = 0; });
 
 describe('hole-first owner scoring', () => {
-  it('focuses the scoring region without opening the keyboard, hides tools, and discards all local holes without writing', async () => {
+  it('keeps navigation visible and entry Refresh below Save & Next, blocking refresh until the save is acknowledged', async () => {
+    const store = memoryScores();
+    const original = vi.mocked(store.client.save).getMockImplementation();
+    if (!original) throw new Error('Missing fictional save implementation.');
+    mount(store);
+    await loaded();
+    const user = userEvent.setup();
+    const save = screen.getByRole('button', { name: 'Save & Next Hole' });
+    const refresh = screen.getByRole('button', { name: 'Refresh saved round' });
+    const toolbar = screen.getByRole('button', { name: 'Games' }).closest('.score-toolbar');
+    expect(toolbar).not.toContainElement(refresh);
+    expect(save.closest('.group-save-actions')).toContainElement(refresh);
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+    await enter(user, '6');
+    const pending = deferred<ScoreWriteResult>();
+    vi.mocked(store.client.save).mockReturnValueOnce(pending.promise);
+    await user.click(save);
+    expect(refresh).toBeDisabled();
+    expect(screen.getByRole('heading', { name: 'Hole 1' })).toBeVisible();
+    await user.click(refresh);
+    expect(store.client.load).toHaveBeenCalledOnce();
+    const call = vi.mocked(store.client.save).mock.calls[0];
+    if (!call) throw new Error('Missing fictional score request.');
+    await act(async () => { pending.resolve(await original(...call)); await pending.promise; });
+    expect(await screen.findByRole('heading', { name: 'Hole 2' })).toBeVisible();
+    expect(refresh).toBeEnabled();
+    expect(store.client.save).toHaveBeenCalledOnce();
+    await user.click(screen.getByRole('button', { name: 'Scorecards' }));
+    expect(screen.getByRole('button', { name: 'Refresh saved round' }).closest('.score-toolbar')).not.toBeNull();
+  });
+  it('focuses the scoring region without opening the keyboard, keeps tools visible, and discards all local holes without writing', async () => {
     const { client } = mount(memoryScores({ ...fictionalRoundScores, setupLocked: true }));
     await loaded();
     expect(screen.getByRole('region', { name: 'Round scores' })).toHaveFocus();
-    const summary = screen.getByText('Round details & tools');
-    expect(summary.closest('details')).not.toHaveAttribute('open');
+    expect(screen.queryByText('Round details & tools')).not.toBeInTheDocument();
+    for (const name of ['Scorecards', 'Enter scores', 'Games', 'Leaderboard']) {
+      expect(screen.getByRole('button', { name })).toBeVisible();
+    }
     const discard = screen.getByRole('button', { name: 'Discard unsaved scores' });
     expect(discard).toBeDisabled();
     expect(screen.getByText('0 unsaved scores')).toBeVisible();
@@ -61,8 +93,6 @@ describe('hole-first owner scoring', () => {
     await user.click(screen.getByRole('button', { name: 'Previous hole' }));
     expect(input()).toHaveValue('');
     expect(client.save).not.toHaveBeenCalled();
-    await user.click(summary);
-    expect(summary.closest('details')).toHaveAttribute('open');
     expect(screen.getByRole('button', { name: 'Games' })).toBeVisible();
   });
   it('begins at the group starting hole, wraps eighteen to one and ends immediately before its start', async () => {
@@ -98,7 +128,7 @@ describe('hole-first owner scoring', () => {
     expect(input()).toHaveValue('5');
     expect(input(2)).toHaveValue('4');
     expect(client.save).not.toHaveBeenCalled();
-    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     await screen.findByText(/player changes acknowledged/);
     expect(vi.mocked(client.save).mock.calls[0]?.[4]).toEqual({ kind: 'strokes', strokes: 5 });
   });
@@ -212,7 +242,7 @@ describe('hole-first owner scoring', () => {
     expect(screen.getByRole('button', { name: 'Previous hole' })).toBeEnabled();
     for (const field of screen.getAllByRole('textbox')) expect(field).toHaveValue('');
     expect(screen.queryByText(/Unsaved drafts live only in this page/)).not.toBeInTheDocument();
-    await userEvent.click(screen.getByText('Round details & tools'));
+    expect(screen.getByRole('button', { name: 'Games' })).toBeVisible();
     expect(screen.queryByText(/Unsaved drafts live only in this page|first accepted score locks course|Ready for scores/)).not.toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /Group 2/ })).not.toBeInTheDocument();
@@ -262,10 +292,10 @@ describe('hole-first owner scoring', () => {
     expect(client.save).not.toHaveBeenCalled();
     expect(screen.getByText(/Nothing sent. Check every intended entry/)).toBeVisible();
     await enter(user, 'X0', 2);
-    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     expect(client.save).not.toHaveBeenCalled();
     await enter(user, String(maximumExactHoleStrokes + 1), 2);
-    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     expect(client.save).not.toHaveBeenCalled();
     expect(input()).toHaveValue('4');
     expect(screen.getByRole('heading', { name: 'Hole 1' })).toBeVisible();
@@ -309,12 +339,13 @@ describe('hole-first owner scoring', () => {
     expect(input()).toHaveValue('X7');
     await enter(user, 'DNF', 2);
     await user.click(row(3).getByRole('button', { name: 'Pickup X for Fictional Player 3' }));
-    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     await screen.findByText(/3 player changes acknowledged/);
-    expect(screen.getByRole('heading', { name: 'Hole 1' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Hole 2' })).toBeVisible();
     expect(vi.mocked(client.save).mock.calls.map((call) => call[4])).toEqual([
       { kind: 'picked-up', reportedStrokes: 7 }, { kind: 'did-not-finish' }, { kind: 'picked-up' },
     ]);
+    await user.click(screen.getByRole('button', { name: 'Previous hole' }));
     expect(input()).toHaveValue('X7');
     await user.click(screen.getByRole('button', { name: 'Scorecards' }));
     await user.click(screen.getByRole('button', { name: 'Open scorecard for Fictional Player 1' }));
@@ -328,7 +359,7 @@ describe('hole-first owner scoring', () => {
     const user = userEvent.setup();
     expect(input()).toHaveValue('4');
     await user.clear(input());
-    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     await screen.findByText(/1 player changes acknowledged; 4 unplayed/);
     expect(client.save).toHaveBeenCalledOnce();
     expect(vi.mocked(client.save).mock.calls[0]?.[4]).toEqual({ kind: 'unplayed' });
@@ -480,7 +511,7 @@ describe('hole-first owner scoring', () => {
     const review = row().getByRole('button', { name: 'Review my value for Fictional Player 1' });
     expect(review).toBeDisabled();
     await enter(user, '5');
-    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     expect(client.save).toHaveBeenCalledOnce();
     await user.click(screen.getByRole('button', { name: 'Refresh saved round' }));
     await waitFor(() => { expect(review).toBeEnabled(); });
@@ -565,7 +596,7 @@ describe('hole-first owner scoring', () => {
     await loaded();
     const user = userEvent.setup();
     await enter(user, '4');
-    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     await screen.findByText(/1 player changes acknowledged/);
     const id = vi.mocked(store.client.save).mock.calls[0]?.[6];
     if (!id) throw new Error('Missing fictional request ID');

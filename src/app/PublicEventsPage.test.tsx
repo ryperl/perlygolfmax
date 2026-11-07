@@ -28,7 +28,7 @@ describe('public directory date order', () => {
   });
 
   describe('public round navigation', () => {
-    it('keeps the styled Round picker outside collapsed tools and blocks switching during loads and drafts', async () => {
+    it('keeps the styled Round picker and tools visible and blocks switching during loads and drafts', async () => {
       const services = fakePublicServices();
       const first = fictionalPublicWorkspace.rounds[0];
       if (!first) throw new Error('Missing fictional round.');
@@ -47,8 +47,10 @@ describe('public directory date order', () => {
       expect(picker.closest('.score-round-picker')).not.toBeNull();
       await act(async () => { finish?.(fictionalPublicScores); await Promise.resolve(); });
       await waitFor(() => { expect(picker).toBeEnabled(); });
-      const tools = screen.getByText('Round details & tools').closest('details');
-      expect(tools).not.toHaveAttribute('open');
+      expect(screen.queryByText('Round details & tools')).not.toBeInTheDocument();
+      for (const name of ['Scorecards', 'Enter scores', 'Games', 'Leaderboard']) {
+        expect(screen.getByRole('button', { name })).toBeVisible();
+      }
       expect(picker).toBeVisible();
       expect(screen.queryByText(/Online only|Finish setup first|Enter scores for any saved playing group|Reopening restores|Saved scores loaded|Auto-checks while visible|Ready for scores/))
         .not.toBeInTheDocument();

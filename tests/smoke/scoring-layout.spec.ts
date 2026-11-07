@@ -42,7 +42,7 @@ test('one-hole group entry fits a narrow screen with usable touch targets', asyn
       draft: { text: String(index + 3), baseEtag: null, status: 'draft' },
     })),
     busy: false, readOnly: false, unsavedCount: 4,
-    onGroupChange: noop, onHoleChange: noop, onEdit: noop, onReview: noop, onDiscard: noop, onSave: noop,
+    onGroupChange: noop, onHoleChange: noop, onEdit: noop, onReview: noop, onDiscard: noop, onSave: noop, onRefresh: noop,
   });
   await page.setContent(`<html><head>${stylesheets.map((href) => `<link rel="stylesheet" href="${href}">`).join('')}</head>
     <body><div class="app"><main><section class="owner-scores">${entry}</section></main></div></body></html>`);

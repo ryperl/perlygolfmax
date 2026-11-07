@@ -33,7 +33,10 @@ test('owner switches dated rounds in Games without leaving unsaved edits or over
     await picker.selectOption({ label: 'Fictional opening round' });
     await expect(page.getByRole('heading', { name: 'Games · Fictional opening round', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Enter scores', exact: true }).click();
-    await expect(page.locator('.score-round-tools')).not.toHaveAttribute('open');
+    await expect(page.locator('.score-round-tools')).toHaveCount(0);
+    for (const name of ['Scorecards', 'Enter scores', 'Games', 'Leaderboard']) {
+      await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
+    }
     await expect(picker).toBeVisible();
     await expect(picker).toBeEnabled();
     expect(await picker.evaluate((element) => element.closest('details'))).toBeNull();

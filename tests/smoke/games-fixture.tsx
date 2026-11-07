@@ -28,7 +28,8 @@ export function EntryPreview() {
     layout={fictionalGamesRound.layout} hole={hole} rows={rows} busy={false} readOnly={false}
     unsavedCount={rows.filter((row) => row.draft !== undefined).length} onGroupChange={() => undefined} onHoleChange={setNumber}
     onEdit={(playerId, text) => { setValues((previous) => ({ ...previous, [`${String(number)}:${playerId}`]: text })); }}
-    onReview={() => undefined} onDiscard={() => undefined} onDiscardAll={() => { setValues({}); }} onSave={() => { setSaves((previous) => previous + 1); }} />
+    onReview={() => undefined} onDiscard={() => undefined} onDiscardAll={() => { setValues({}); }}
+    onRefresh={() => undefined} onSave={() => { setSaves((previous) => previous + 1); }} />
     <p aria-label="Fictional save count">{saves}</p>
   </section>;
 }

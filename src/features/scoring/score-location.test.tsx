@@ -26,12 +26,11 @@ describe('stable scoring place', () => {
     expect(screen.getByRole('heading', { name: 'Hole 3' })).toBeVisible();
     expect(input()).toBe(field);
     expect(input()).toHaveValue('6');
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save changes' })); await Promise.resolve(); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save & Next Hole' })); await Promise.resolve(); });
     expect(screen.getByText(/Saved — 1 player changes acknowledged/)).toBeVisible();
     expect(input()).toBe(field);
-    expect(input()).toHaveValue('6');
-    expect(screen.getByRole('heading', { name: 'Hole 3' })).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
+    expect(input()).toHaveValue('');
+    expect(screen.getByRole('heading', { name: 'Hole 4' })).toBeVisible();
     expect(next).toHaveBeenLastCalledWith({ ...initial, holeNumber: 4 });
     fireEvent.click(screen.getByRole('button', { name: 'Scorecards' }));
     expect(next).toHaveBeenLastCalledWith({ ...initial, holeNumber: 4, view: 'cards' });

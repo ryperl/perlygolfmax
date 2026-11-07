@@ -47,21 +47,21 @@ describe('owner round navigation', () => {
     expect(f.props.scores.load).toHaveBeenLastCalledWith(f.props.eventId, f.second.id, expect.any(AbortSignal));
   });
 
-  it('blocks round switching for score drafts and in-flight reads without losing drafts on disclosure toggles', async () => {
+  it('blocks round switching for score drafts and in-flight reads without losing drafts when changing views', async () => {
     const f = fixture();
     await screen.findByRole('heading', { name: 'Round scorecard' });
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Enter scores' }));
     const field = screen.getByRole('textbox', { name: 'Fictional Player 1 score' });
     fireEvent.change(field, { target: { value: '6' } });
-    await user.click(screen.getByText('Round details & tools', { exact: true }));
+    await user.click(screen.getByRole('button', { name: 'Scorecards' }));
     expect(screen.getByLabelText('Round')).toBeDisabled();
     expect(screen.getByLabelText('Round')).toBeVisible();
     expect(screen.getByLabelText('Round').closest('details')).toBeNull();
-    await user.click(screen.getByText('Round details & tools', { exact: true }));
-    expect(field).toHaveValue('6');
+    await user.click(screen.getByRole('button', { name: 'Enter scores' }));
+    expect(screen.getByRole('textbox', { name: 'Fictional Player 1 score' })).toHaveValue('6');
     await user.click(screen.getByRole('button', { name: 'Discard unsaved scores' }));
-    await user.click(screen.getByText('Round details & tools', { exact: true }));
+    expect(screen.getByRole('button', { name: 'Games' })).toBeVisible();
     expect(screen.getByLabelText('Round')).toBeEnabled();
     let finish: (() => void) | undefined;
     vi.mocked(f.props.scores.load).mockImplementationOnce(() => new Promise((resolve) => {

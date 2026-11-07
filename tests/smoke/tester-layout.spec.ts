@@ -117,14 +117,16 @@ test('guest edits any saved playing group with keyboard at narrow/enlarged width
         await page.keyboard.press('ControlOrMeta+A');
         await page.keyboard.type(String(5 + number));
         await expect(score).toHaveValue(String(5 + number));
-        const save = page.getByRole('button', { name: 'Save changes', exact: true });
+        const save = page.getByRole('button', { name: 'Save & Next Hole', exact: true });
         await save.focus();
         await page.keyboard.press('Enter');
         await expect(page.getByText(/1 player changes acknowledged/)).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Hole 2', exact: true })).toBeVisible();
+        await page.getByRole('button', { name: 'Previous hole', exact: true }).click();
         await expect(score).toHaveValue(String(5 + number));
         await fitsViewport(page, width);
       }
-      await page.getByText('Round details & tools', { exact: true }).click();
+      await expect(page.getByText('Round details & tools', { exact: true })).toHaveCount(0);
       await page.getByRole('button', { name: 'Games', exact: true }).click();
       await expect(page.getByText(/Settings are read-only/)).toBeVisible();
       await expect(page.getByRole('button', { name: /Add game|Edit Fictional|Save game|Configure|Update team/i })).toHaveCount(0);

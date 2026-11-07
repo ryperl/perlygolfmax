@@ -53,7 +53,7 @@ describe('no-account tester entry', () => {
     const input = screen.getByRole('textbox', { name: 'Fictional Player 2 score' });
     expect(input).toBeEnabled();
     fireEvent.change(input, { target: { value: '5' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     await waitFor(() => { expect(scores.save).toHaveBeenCalledTimes(1); });
     expect(vi.mocked(scores.save).mock.calls[0]?.[2]).toBe(workspace.roster[1]?.playerId);
     await screen.findByText(/1 player changes acknowledged/);

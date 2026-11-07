@@ -43,7 +43,7 @@ describe('role-aware round score access', () => {
     expect(screen.getByLabelText('View group')).toHaveValue('2');
     fireEvent.change(screen.getByLabelText('View group'), { target: { value: '1' } });
     for (const input of screen.getAllByRole('textbox')) expect(input).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save & Next Hole' })).toBeDisabled();
     fireEvent.submit(screen.getByRole('form'));
     expect(store.client.save).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText('View group'), { target: { value: '2' } });
@@ -53,7 +53,7 @@ describe('role-aware round score access', () => {
     }
     expect(screen.getByRole('textbox', { name: 'Fictional Player 1 score' })).toHaveValue('5');
     expect(screen.getByRole('textbox', { name: 'Fictional Player 2 score' })).toHaveValue('4');
-    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     await screen.findByText(/4 player changes acknowledged/);
     expect(vi.mocked(store.client.save).mock.calls.map((call) => call[2])).toEqual([1, 2, 3, 4].map(fictionalId));
     expect(store.client.history).not.toHaveBeenCalled();
@@ -83,7 +83,7 @@ describe('role-aware round score access', () => {
     store.replace({ ...store.read(), groups: [...store.read().groups].reverse().map((group) => ({ ...group, number: 3 - group.number })) });
     fireEvent.click(screen.getByRole('button', { name: 'Refresh saved round' }));
     await screen.findByRole('alert');
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save & Next Hole' })).toBeDisabled();
     fireEvent.submit(screen.getByRole('form'));
     expect(store.client.save).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText('View group'), { target: { value: '1' } });
@@ -93,7 +93,7 @@ describe('role-aware round score access', () => {
     expect(screen.getByRole('textbox', { name: 'Fictional Player 1 score' })).toHaveValue('6');
     expect(screen.getByRole('textbox', { name: 'Fictional Player 1 score' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Discard unsaved scores' }));
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Save & Next Hole' })).toBeEnabled();
   });
 
   it('adopts revoked permissions from an inflight poll despite typing, and does not send a waiting save', async () => {
@@ -105,12 +105,12 @@ describe('role-aware round score access', () => {
     vi.mocked(store.client.load).mockReturnValueOnce(pending.promise);
     await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
     fireEvent.change(screen.getByRole('textbox', { name: 'Fictional Player 1 score' }), { target: { value: '6' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     await act(async () => { pending.resolve({ ...store.read(), permissions: viewer }); await pending.promise; });
     expect(store.client.save).not.toHaveBeenCalled();
     expect(screen.getByRole('textbox', { name: 'Fictional Player 1 score' })).toHaveValue('6');
     expect(screen.getByRole('textbox', { name: 'Fictional Player 1 score' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save & Next Hole' })).toBeDisabled();
   });
 
   it('stops remaining writes when the first acknowledgement changes permissions', async () => {
@@ -120,13 +120,13 @@ describe('role-aware round score access', () => {
     for (const input of screen.getAllByRole('textbox')) fireEvent.change(input, { target: { value: '6' } });
     const pending = deferred<ScoreWriteResult>();
     vi.mocked(store.client.save).mockReturnValueOnce(pending.promise);
-    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     const call = vi.mocked(store.client.save).mock.calls[0];
     if (!call) throw new Error('Missing fictional save.');
     const saved = scoreResult({ ...fictionalChange, playerId: call[2], id: call[6], after: call[4] }, store.read());
     await act(async () => { pending.resolve({ ...saved, round: { ...saved.round, permissions: viewer } }); await pending.promise; });
     expect(store.client.save).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save & Next Hole' })).toBeDisabled();
     expect(within(screen.getByRole('form')).getAllByRole('textbox')).toHaveLength(4);
   });
 

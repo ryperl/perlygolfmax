@@ -101,7 +101,19 @@ test('the full public app resumes the next hole across eighteen home-screen-styl
       await expect(roundPicker).toBeVisible();
       await expect(roundPicker).toBeEnabled();
       expect(await roundPicker.evaluate((element) => element.closest('details'))).toBeNull();
-      await expect(page.locator('.score-round-tools')).not.toHaveAttribute('open');
+      await expect(page.locator('.score-round-tools')).toHaveCount(0);
+      const toolbar = page.locator('.score-toolbar');
+      for (const name of ['Scorecards', 'Enter scores', 'Games', 'Leaderboard']) {
+        await expect(toolbar.getByRole('button', { name, exact: true })).toBeVisible();
+      }
+      await expect(toolbar.getByRole('button', { name: 'Refresh saved round', exact: true })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toHaveCount(0);
+      const save = page.getByRole('button', { name: visit === 18 ? 'Save Hole' : 'Save & Next Hole', exact: true });
+      const refresh = page.getByRole('button', { name: 'Refresh saved round', exact: true });
+      const saveBounds = await save.boundingBox();
+      const refreshBounds = await refresh.boundingBox();
+      if (!saveBounds || !refreshBounds) throw new Error('Missing scoring actions.');
+      expect(refreshBounds.y).toBeGreaterThanOrEqual(saveBounds.y + saveBounds.height);
       const field = page.getByLabel('Fictional golfer 3 score', { exact: true });
       await expect(field).toBeInViewport({ ratio: 1 });
       const before = await field.evaluate((element) => element.getBoundingClientRect().top + scrollY);

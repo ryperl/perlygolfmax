@@ -38,11 +38,12 @@ export interface GroupHoleEntryProps {
   readonly onReview: (playerId: string) => void;
   readonly onDiscard: (playerId: string) => void;
   readonly onDiscardAll: () => void;
-  readonly onSave: (advance: boolean) => void;
+  readonly onSave: () => void;
+  readonly onRefresh: () => void;
 }
 
 export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, readOnly, unsavedCount, focusHole, saveStatus,
-  onGroupChange, onHoleChange, onEdit, onReview, onDiscard, onDiscardAll, onSave }: GroupHoleEntryProps) {
+  onGroupChange, onHoleChange, onEdit, onReview, onDiscard, onDiscardAll, onSave, onRefresh }: GroupHoleEntryProps) {
   const previous = adjacentHole(layout, hole.number, -1);
   const next = adjacentHole(layout, hole.number, 1);
   const last = next?.number === groupStartingHole(groups.find((group) => group.number === groupNumber), layout);
@@ -111,7 +112,7 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
       <div><h2 ref={heading} tabIndex={-1}>Hole {hole.number}</h2><p>{personalContext ? 'Golfer tee details shown below' : `Par ${String(hole.par)} · ${String(hole.length)} yards · Stroke index ${String(hole.allocation)}`}</p></div>
       <button type="button" aria-label="Next hole" disabled={busy || !next || layout.length < 2} onClick={() => { if (next) onHoleChange(next.number); }}>→</button>
     </header>
-    <form aria-label={`Group ${String(groupNumber)} hole ${String(hole.number)} entry`} onSubmit={(event) => { event.preventDefault(); onSave(true); }}>
+    <form aria-label={`Group ${String(groupNumber)} hole ${String(hole.number)} entry`} onSubmit={(event) => { event.preventDefault(); onSave(); }}>
       <div className="group-entry-rows">{rows.slice(0, 4).map((row, rowIndex) => {
         const playerHole = row.hole ?? hole;
         const quickScores = [...new Set([playerHole.par - 1, playerHole.par, playerHole.par + 1, playerHole.par + 2])].filter((value) => value > 0);
@@ -192,8 +193,8 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
       })}</div>
       <div className="group-save-actions">
         <button ref={primaryAction} className="primary-score-action" disabled={disabled}>{last ? 'Save Hole' : 'Save & Next Hole'}</button>
-        <button type="button" disabled={disabled} onClick={() => { onSave(false); }}>Save changes</button>
         <div className="score-secondary-actions">
+          <button className="refresh-score-action" type="button" aria-label="Refresh saved round" disabled={busy} onClick={onRefresh}>Refresh</button>
           <div className="score-secondary-summary">
             <p className="score-hint">{unsavedCount} unsaved {unsavedCount === 1 ? 'score' : 'scores'}</p>
             <p className="score-save-status" aria-live="polite">{saveStatus ?? (busy ? 'Working…' : unsavedCount > 0 ? 'Unsaved changes' : '')}</p>

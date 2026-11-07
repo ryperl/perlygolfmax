@@ -143,12 +143,14 @@
 - Present golfer scores as hole-ordered scorecards, not audit records. Keep
   operation IDs, actor GUIDs, revisions and raw timestamps out of player
   entry/view screens; preserve backend audit and conditional-save safeguards.
-- Keep score entry focused without opening the keyboard: collapse round tools,
+- Keep score entry focused without opening the keyboard: show round navigation,
   reserve save/discard feedback space, and never insert controls above fields
   when drafting. Discard clears all local round drafts, never saved scores.
-  Keep the styled Round picker outside collapsed tools; block switching while
+  Keep navigation buttons below the styled Round picker; block switching while
   foreground requests or local score/game edits are pending. Avoid repeated static
   public disclaimers; retain actionable errors and unsaved/save feedback.
+  Entry has one Save & Next action with Refresh below it; Refresh never saves.
+  Keep toolbar Refresh available in scorecards/games/leaderboard and recovery states.
 - Each playing group captures its starting hole; legacy omission uses the first
   captured layout hole. Arrows wrap without saving. Save & Next follows one
   circuit then opens cards, not formal finalization. Preserve remembered places
