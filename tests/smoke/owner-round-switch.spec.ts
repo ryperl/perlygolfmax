@@ -18,7 +18,7 @@ test('owner switches dated rounds in Games without leaving unsaved edits or over
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${origin}/__owner-round-switch`);
     await page.getByRole('button', { name: 'Games', exact: true }).click();
-    const picker = page.getByLabel('Saved round', { exact: true });
+    const picker = page.getByLabel('Round', { exact: true });
     await expect(picker.locator('option')).toHaveText(['Fictional earlier round', 'Fictional opening round']);
     await page.getByRole('button', { name: 'Add game', exact: true }).click();
     await expect(picker).toBeDisabled();
@@ -32,6 +32,22 @@ test('owner switches dated rounds in Games without leaving unsaved edits or over
     await expect(page.getByRole('button', { name: 'Add game', exact: true })).toBeEnabled();
     await picker.selectOption({ label: 'Fictional opening round' });
     await expect(page.getByRole('heading', { name: 'Games · Fictional opening round', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Enter scores', exact: true }).click();
+    await expect(page.locator('.score-round-tools')).not.toHaveAttribute('open');
+    await expect(picker).toBeVisible();
+    await expect(picker).toBeEnabled();
+    expect(await picker.evaluate((element) => element.closest('details'))).toBeNull();
+    expect(await picker.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+    await picker.focus();
+    await expect(picker).toBeFocused();
+    expect(await picker.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe('none');
+    const groupPicker = page.getByRole('combobox', { name: 'View group', exact: true });
+    for (const property of ['backgroundColor', 'color', 'borderRadius', 'fontSize'] as const) {
+      expect(await picker.evaluate((element, name) => getComputedStyle(element)[name], property))
+        .toBe(await groupPicker.evaluate((element, name) => getComputedStyle(element)[name], property));
+    }
+    await picker.selectOption({ label: 'Fictional earlier round' });
+    await expect(page.getByRole('form', { name: /hole 1 entry/ })).toBeVisible();
     for (const width of [390, 320]) {
       await page.setViewportSize({ width, height: 844 });
       await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });

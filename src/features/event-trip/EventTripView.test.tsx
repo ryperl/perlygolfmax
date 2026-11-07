@@ -236,7 +236,7 @@ describe('saved event group', () => {
     const roster = screen.getByRole('region', { name: 'Event roster' });
     expect(within(roster).getAllByRole('listitem').map((item) => item.textContent))
       .toEqual(workspace.roster.map((player) => player.displayName));
-    expect(within(roster).getByText(/not a list of sign-in accounts or access permissions/)).toBeVisible();
+    expect(within(roster).queryByText(/not a list of sign-in accounts or access permissions/)).not.toBeInTheDocument();
     expect(roundCard(firstRound.name).getByRole('heading', { name: 'Group 3' })).toBeVisible();
     expect(roundCard(secondRound.name).getByRole('heading', { name: 'Group 4' })).toBeVisible();
     expect(screen.queryByText(/handicap|invitation|net score/i)).not.toBeInTheDocument();

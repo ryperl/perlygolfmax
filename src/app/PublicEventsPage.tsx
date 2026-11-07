@@ -81,12 +81,10 @@ function PublicEventDirectory({ services, selection }: { readonly services: Publ
     return () => { controller.abort(); };
   }, [services, generation]);
   return <section><p className="eyebrow">Golf scoreboard</p><h1>{selection ? 'Choose an event' : 'Events'}</h1>
-    <p>No account needed. Open an active event to enter scores, view standings and see winnings.
-      Anyone visiting can update scores; organizer management stays protected.</p>
+    <p>Open an event to enter scores, view standings and see winnings.</p>
     <button disabled={!page && !error} onClick={() => { progress.current = undefined; setAttempt((value) => value + 1); }}>Refresh events</button>
-    {!page && !error && <p role="status">Loading active events… All pages must load before date order is available.</p>}
+    {!page && !error && <p role="status">Loading events…</p>}
     {error && <><p role="alert">{error}</p><button onClick={() => { setAttempt((value) => value + 1); }}>Try again</button></>}
-    {page && <p>All dated events, earliest to latest, then undated events.</p>}
     {page?.events.length === 0 && <p>No active events.</p>}
     {page && <ul className="round-list" aria-label="Active events">{page.events.map((event) => <li className="panel" key={event.id}>
       <h2>{event.name}</h2>
@@ -103,6 +101,7 @@ function PublicRoundPage({ services, eventId, roundId, onUnavailable }: {
   const [workspace, setWorkspace] = useState<EventWorkspace>();
   const [error, setError] = useState('');
   const [storageNotice, setStorageNotice] = useState('');
+  const [blocked, setBlocked] = useState(false);
   const initial = useMemo(() => {
     const explicit = readScoreLocation(window.location.hash);
     if (explicit?.eventId === eventId && explicit.roundId === roundId) return { location: explicit };
@@ -141,12 +140,12 @@ function PublicRoundPage({ services, eventId, roundId, onUnavailable }: {
     {!workspace && !error && <p role="status">Loading saved round…</p>}
     {workspace && <>
       <OwnerScoresView client={services.scores} eventId={eventId} roundId={roundId}
-        roundTools={<>
-          <p className="score-hint">Save &amp; Next Hole and wait for Saved before closing the app. Reopening restores your place and loads fresh scores. An internet connection is required.</p>
-          <label>Saved round<select value={roundId} onChange={(event) => {
+        onNavigationBlockedChange={setBlocked}
+        roundPicker={
+          <label>Round<select aria-label="Round" value={roundId} disabled={blocked} onChange={(event) => {
+            if (blocked) return;
             window.location.hash = `#events?event=${eventId}&round=${event.target.value}`;
-          }}>{sortRoundsByStartDate(workspace.rounds).map((round) => <option key={round.id} value={round.id}>{round.name}</option>)}</select></label>
-        </>}
+          }}>{sortRoundsByStartDate(workspace.rounds).map((round) => <option key={round.id} value={round.id}>{round.name}</option>)}</select></label>}
         initialLocation={initial.location ?? defaultLocation} onLocationChange={remember} onSessionExpired={onUnavailable} />
     </>}
   </section>;

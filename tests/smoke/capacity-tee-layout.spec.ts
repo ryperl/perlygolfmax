@@ -65,7 +65,8 @@ test('real large controls and mixed-tee cards retain choices at 390/320 and enla
     await entry.getByRole('textbox', { name: 'Fictional golfer 01 score', exact: true }).clear();
     await entry.getByRole('button', { name: 'Increase score for Fictional golfer 01', exact: true }).click();
     await expect(entry.getByRole('textbox', { name: 'Fictional golfer 01 score', exact: true })).toHaveValue('5');
-    await expect(page.locator('.score-connection[role="status"]')).toContainText('Auto-check paused for local edits.');
+    await expect(entry.locator('.score-save-status')).toHaveText('Unsaved changes');
+    await expect(page.getByText('Auto-check paused for local edits.', { exact: true })).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath('mixed-tee-large-controls.png'), fullPage: true });
     expect(errors).toEqual([]);

@@ -136,8 +136,10 @@ without resetting that position or overwriting local drafts. Failed/conflicting
 saves do not advance or claim confirmation.
 
 Enter scores opens a focused scoring region without opening the phone keyboard.
-Round guidance, the saved-round picker and other tools remain under **Round
-details & tools**. Save/discard actions and the unsaved count keep a stable place
+The **Round** picker stays visible above **Round details & tools**, with the same
+styling as the entry selectors. Foreground requests and unsaved score/game edits
+block round switching. Other tools remain collapsible. Save/discard actions and
+the unsaved count keep a stable place
 below the inputs; changing a score does not insert controls above the fields.
 Discard clears all local unsaved scores for this round, not saved server scores.
 

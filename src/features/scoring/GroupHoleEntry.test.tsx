@@ -41,6 +41,21 @@ function typeScore(index: number, value: string) {
 function pause(ms = 900) { act(() => { vi.advanceTimersByTime(ms); }); }
 afterEach(() => { vi.useRealTimers(); });
 describe('pure mobile group hole entry', () => {
+  it('keeps idle feedback blank while preserving the live save-status area for drafts and requests', () => {
+    const input = props();
+    const view = render(<GroupHoleEntry {...input} />);
+    const feedback = screen.getByRole('region', { name: 'Group hole entry' }).querySelector('.score-save-status');
+    if (!feedback) throw new Error('Missing score feedback region.');
+    expect(feedback).toHaveAttribute('aria-live', 'polite');
+    expect(feedback).toBeEmptyDOMElement();
+    view.rerender(<GroupHoleEntry {...input} unsavedCount={1} />);
+    expect(feedback).toHaveTextContent('Unsaved changes');
+    view.rerender(<GroupHoleEntry {...input} busy />);
+    expect(feedback).toHaveTextContent('Working…');
+    view.rerender(<GroupHoleEntry {...input} saveStatus="Saved" />);
+    expect(feedback).toHaveTextContent('Saved');
+    expect(screen.queryByText('Ready for scores')).not.toBeInTheDocument();
+  });
   it('reserves the count and discard action, keeps readonly drafts discardable, and blocks discard while saving', async () => {
     const input = props();
     const view = render(<GroupHoleEntry {...input} />);

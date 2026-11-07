@@ -51,11 +51,10 @@ export function OwnerRoundScoresPage({ setup, scores, eventId, roundId, onSessio
   return <OwnerScoresView client={scores} eventId={eventId} roundId={roundId}
     initialLocation={initialLocation} onLocationChange={rememberView} onSessionExpired={onSessionExpired}
     onNavigationBlockedChange={setBlocked} overviewHref={`#overview?event=${encodeURIComponent(eventId)}`}
-    roundTools={<>
-      <label>Saved round<select aria-label="Saved round" value={roundId} disabled={blocked} onChange={(event) => {
+    roundPicker={
+      <label>Round<select aria-label="Round" value={roundId} disabled={blocked} onChange={(event) => {
         if (blocked) return;
         window.location.hash = `#organizer?${new URLSearchParams({ event: eventId, round: event.target.value }).toString()}`;
-      }}>{sortRoundsByStartDate(workspace.rounds).map((round) => <option key={round.id} value={round.id}>{round.name}</option>)}</select></label>
-      <p className="score-hint">Switching rounds requires active requests to finish and local edits to be saved or discarded. Save or cancel game settings first.</p>
-    </>} />;
+      }}>{sortRoundsByStartDate(workspace.rounds).map((round) => <option key={round.id} value={round.id}>{round.name}</option>)}</select></label>}
+    roundTools={<p className="score-hint">Switching rounds requires active requests to finish and local edits to be saved or discarded. Save or cancel game settings first.</p>} />;
 }

@@ -25,7 +25,7 @@ describe('owner round navigation', () => {
   it('orders saved rounds by date, retains Games across a switch, and blocks leaving unsaved game settings', async () => {
     const f = fixture();
     await screen.findByRole('heading', { name: 'Round scorecard' });
-    const picker = screen.getByLabelText('Saved round');
+    const picker = screen.getByLabelText('Round');
     expect(within(picker).getAllByRole('option').map((option) => option.textContent))
       .toEqual([f.second.name, fictionalWorkspace.rounds[0]?.name]);
     const user = userEvent.setup();
@@ -55,20 +55,22 @@ describe('owner round navigation', () => {
     const field = screen.getByRole('textbox', { name: 'Fictional Player 1 score' });
     fireEvent.change(field, { target: { value: '6' } });
     await user.click(screen.getByText('Round details & tools', { exact: true }));
-    expect(screen.getByLabelText('Saved round')).toBeDisabled();
+    expect(screen.getByLabelText('Round')).toBeDisabled();
+    expect(screen.getByLabelText('Round')).toBeVisible();
+    expect(screen.getByLabelText('Round').closest('details')).toBeNull();
     await user.click(screen.getByText('Round details & tools', { exact: true }));
     expect(field).toHaveValue('6');
     await user.click(screen.getByRole('button', { name: 'Discard unsaved scores' }));
     await user.click(screen.getByText('Round details & tools', { exact: true }));
-    expect(screen.getByLabelText('Saved round')).toBeEnabled();
+    expect(screen.getByLabelText('Round')).toBeEnabled();
     let finish: (() => void) | undefined;
     vi.mocked(f.props.scores.load).mockImplementationOnce(() => new Promise((resolve) => {
       finish = () => { resolve(fictionalRoundScores); };
     }));
     await user.click(screen.getByRole('button', { name: 'Refresh saved round' }));
-    expect(screen.getByLabelText('Saved round')).toBeDisabled();
+    expect(screen.getByLabelText('Round')).toBeDisabled();
     await act(async () => { finish?.(); await Promise.resolve(); });
-    await waitFor(() => { expect(screen.getByLabelText('Saved round')).toBeEnabled(); });
+    await waitFor(() => { expect(screen.getByLabelText('Round')).toBeEnabled(); });
     expect(f.props.scores.save).not.toHaveBeenCalled();
   });
 
@@ -94,10 +96,10 @@ describe('owner round navigation', () => {
     vi.mocked(f.props.scores.saveGames).mockImplementationOnce((_event, id, games, etag, requestId) =>
       new Promise((resolve) => { acknowledge = () => { resolve(gameResult(games, etag, requestId, { ...fictionalRoundScores, roundId: id })); }; }));
     await user.click(screen.getByRole('button', { name: 'Save game' }));
-    expect(screen.getByLabelText('Saved round')).toBeDisabled();
+    expect(screen.getByLabelText('Round')).toBeDisabled();
     await act(async () => { acknowledge?.(); await Promise.resolve(); });
     await screen.findByText('Game settings saved.');
-    expect(screen.getByLabelText('Saved round')).toBeEnabled();
+    expect(screen.getByLabelText('Round')).toBeEnabled();
     const replacement = fakeSetup();
     vi.mocked(replacement.load).mockRejectedValueOnce(new Error('Fictional temporary failure.')).mockResolvedValue(fictionalWorkspace);
     f.rerender(<OwnerRoundScoresPage {...f.props} setup={replacement} />);

@@ -28,6 +28,7 @@ export interface OwnerScoresViewProps {
   readonly initialLocation?: ScoreLocation | undefined;
   readonly onLocationChange?: ((location: ScoreLocation) => void) | undefined;
   readonly roundTools?: ReactNode;
+  readonly roundPicker?: ReactNode;
   readonly onNavigationBlockedChange?: (blocked: boolean) => void;
 }
 
@@ -37,7 +38,7 @@ export function OwnerScoresView(props: OwnerScoresViewProps) {
   return <OwnerScoresController key={`${props.eventId}:${props.roundId}:${String(identity.generation)}`} {...props} />;
 }
 
-function OwnerScoresController({ client, eventId, roundId, onSessionExpired, overviewHref, initialLocation, onLocationChange, roundTools, onNavigationBlockedChange }: OwnerScoresViewProps) {
+function OwnerScoresController({ client, eventId, roundId, onSessionExpired, overviewHref, initialLocation, onLocationChange, roundTools, roundPicker, onNavigationBlockedChange }: OwnerScoresViewProps) {
   const [drafts, setDrafts] = useState<ReadonlyMap<string, HoleDraft>>(new Map());
   const currentDrafts = useRef(drafts);
   const draftAccess = useRef<string | null>(null);
@@ -229,10 +230,8 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
   const tools = <>
     {overviewHref !== null && <a href={overviewHref ?? `#overview?event=${encodeURIComponent(eventId)}`}>Back to event overview</a>}
     {roundTools}
-    <p className="score-warning"><strong>Online only.</strong> Unsaved drafts live only in this page. Keep a paper backup.</p>
     {permissions?.role === 'player' && assignedGroup && <p>Your assigned playing group: Group {assignedGroup.number}. You can view every group; enter scores only for your assigned group.</p>}
     {permissions?.role === 'tester' && <p>Tester link: enter scores for any saved playing group in this event. Game settings are read-only.</p>}
-    {permissions?.role === 'public' && <p>Enter scores for any saved playing group in this active event. Organizer settings are read-only.</p>}
     {round && writeIds.length === 0 && <p>Read-only scorecards and results. Score entry is not available for this round.</p>}
     {accessChanged && <button disabled={busy} onClick={() => { setScreen('entry'); }}>Review unsaved scores</button>}
     <div className="score-toolbar">
@@ -248,13 +247,14 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
       }}>Refresh</button>
     </div>
   </>;
-  const connection = <p className="score-connection" role="status">{busy ? 'Contacting score service…' : stale ? 'Saved data may be stale — refresh to review.' : 'Saved scores loaded.'}
-    {drafts.size > 0 || gamesDirty ? ' Auto-check paused for local edits.' : ' Auto-checks while visible.'}</p>;
+  const connection = (busy || stale) && <p className="score-connection" role="status">
+    {busy ? 'Contacting score service…' : 'Saved data may be stale — refresh to review.'}
+  </p>;
   return <section ref={entryRegion} tabIndex={-1} aria-label="Round scores" className="owner-scores">
     <h1>Round scores</h1>
+    {roundPicker && <div className="score-round-picker">{roundPicker}</div>}
     {screen === 'entry' ? <details className="score-round-tools"><summary>Round details &amp; tools</summary><div>{tools}</div></details> : tools}
     {accessChanged && <p role="alert">Score permissions or playing groups changed. Your drafts are retained for review only. Discard them before starting new entries.</p>}
-    {screen === 'entry' && round?.eventStatus === 'active' && !round.setupLocked && <p className="score-warning"><strong>Finish setup first.</strong> The first accepted score locks course, tee, roster, groups and captured indices. Clearing scores does not unlock setup.</p>}
     {screen !== 'entry' && connection}
     {error && <p role="alert">{error} {round ? 'Unconfirmed entries are kept on this page.' : 'Private score data is not displayed.'}</p>}
     {gamesDirty && screen !== 'games' && <p className="score-notice" role="status">Unsaved game settings. Open Games to save or cancel them.</p>}
@@ -297,7 +297,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
             canReview: local?.conflictAt !== undefined && refreshVersion > local.conflictAt,
           };
         })} busy={busy} readOnly={!canEditGroup} unsavedCount={drafts.size} focusHole={focusHole}
-        saveStatus={busy ? 'Working…' : notice.startsWith('Saved —') ? 'Saved' : notice.startsWith('No changes sent') ? 'No changes' : drafts.size > 0 ? 'Unsaved changes' : 'Ready for scores'}
+        saveStatus={busy ? 'Working…' : notice.startsWith('Saved —') ? 'Saved' : notice.startsWith('No changes sent') ? 'No changes' : drafts.size > 0 ? 'Unsaved changes' : ''}
         onGroupChange={selectGroup}
         onHoleChange={(number) => { setHoleNumber(number); setNotice(''); }} onEdit={edit} onReview={review}
         onDiscard={(playerId) => { update(entryKey(playerId, hole.number), null); }}

@@ -81,7 +81,6 @@ function CompetitionTeams({ round, state }: { readonly round: RoundSnapshot; rea
   const game = state?.kind === 'ready' ? state.summary.selectedGame : undefined;
   return <section className="event-trip-groups" aria-label={`Competition teams for ${round.name}`}>
     <h4>Teams</h4>
-    <p>Competition teams belong to the selected game and are separate from playing groups.</p>
     {!game ? <p>{state?.kind === 'loading' ? 'Loading saved team information…' : 'Team information unavailable. Refresh event to retry.'}</p>
       : !isTeamGameDefinition(game) ? <p>Individual game — no competition teams.</p>
         : <>
@@ -198,7 +197,6 @@ export function EventTripView({ workspace, view, progress }: EventTripViewProps)
       {view === 'group' && (
         <section className="panel event-trip-section" aria-label="Event roster">
           <h2>Event roster</h2>
-          <p>These are the golfers saved to this event, not a list of sign-in accounts or access permissions.</p>
           {workspace.roster.length === 0 ? <p>No golfers saved to this event roster.</p> : (
             <ul className="event-trip-roster">
               {workspace.roster.map((player) => <li key={player.playerId}>{player.displayName}</li>)}

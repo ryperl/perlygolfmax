@@ -96,7 +96,11 @@ test('the full public app resumes the next hole across eighteen home-screen-styl
       if (visit === 1) await page.getByLabel('View group').selectOption('2');
       expect(await page.evaluate(() => window.innerWidth)).toBe(402);
       await expect(page.getByRole('button', { name: /^Sign (in|out)$/ })).toHaveCount(0);
-      await expect(page.getByRole('combobox', { name: /Saved round/, includeHidden: true })).toHaveValue(stored.roundId);
+      const roundPicker = page.getByRole('combobox', { name: 'Round', exact: true });
+      await expect(roundPicker).toHaveValue(stored.roundId);
+      await expect(roundPicker).toBeVisible();
+      await expect(roundPicker).toBeEnabled();
+      expect(await roundPicker.evaluate((element) => element.closest('details'))).toBeNull();
       await expect(page.locator('.score-round-tools')).not.toHaveAttribute('open');
       const field = page.getByLabel('Fictional golfer 3 score', { exact: true });
       await expect(field).toBeInViewport({ ratio: 1 });
@@ -105,10 +109,12 @@ test('the full public app resumes the next hole across eighteen home-screen-styl
       await expect(discard).toBeDisabled();
       await field.fill('4');
       await expect(discard).toBeEnabled();
+      await expect(roundPicker).toBeDisabled();
       expect(await field.evaluate((element) => element.getBoundingClientRect().top + scrollY)).toBeCloseTo(before, 0);
       if (visit === 1) await page.screenshot({ path: testInfo.outputPath('focused-group-entry.png') });
       await page.getByRole('button', { name: visit === 18 ? 'Save Hole' : 'Save & Next Hole', exact: true }).click();
       await expect(page.getByText(/^Saved —/)).toBeVisible();
+      await expect(roundPicker).toBeEnabled();
       expect(stored.cards[2]?.holes[hole - 1]?.score).toEqual({ kind: 'strokes', strokes: 4 });
       if (visit < 18) {
         const heading = page.getByRole('heading', { name: `Hole ${String(nextHole)}`, exact: true });

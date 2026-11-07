@@ -196,7 +196,7 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
         <div className="score-secondary-actions">
           <div className="score-secondary-summary">
             <p className="score-hint">{unsavedCount} unsaved {unsavedCount === 1 ? 'score' : 'scores'}</p>
-            <p className="score-save-status" aria-live="polite">{saveStatus ?? (busy ? 'Working…' : unsavedCount > 0 ? 'Unsaved changes' : 'Ready for scores')}</p>
+            <p className="score-save-status" aria-live="polite">{saveStatus ?? (busy ? 'Working…' : unsavedCount > 0 ? 'Unsaved changes' : '')}</p>
           </div>
           <button className="discard-score-action" type="button" aria-label="Discard unsaved scores" disabled={busy || unsavedCount === 0} onClick={onDiscardAll}>Discard changes</button>
         </div>

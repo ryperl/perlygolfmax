@@ -112,21 +112,24 @@ describe('hole-first owner scoring', () => {
     field.focus();
     field.setSelectionRange(0, 1);
     document.documentElement.scrollTop = 180;
-    const status = screen.getByRole('status').textContent;
+    const status = screen.getByRole('region', { name: 'Group hole entry' }).querySelector('.score-save-status');
+    if (!status) throw new Error('Missing score feedback region.');
+    expect(status).toBeEmptyDOMElement();
     const poll = deferred<RoundScores>();
     vi.mocked(store.client.load).mockReturnValueOnce(poll.promise);
     await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
     expect(field).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Save & Next Hole' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Refresh saved round' })).toBeEnabled();
-    expect(screen.getByRole('status')).toHaveTextContent(status);
+    expect(status).toBeEmptyDOMElement();
     await act(async () => { poll.resolve(structuredClone(store.read())); await poll.promise; });
     expect(input()).toBe(field);
     expect(field).toHaveFocus();
     expect(field.selectionStart).toBe(0);
     expect(field.selectionEnd).toBe(1);
     expect(document.documentElement.scrollTop).toBe(180);
-    expect(screen.getByRole('status')).toHaveTextContent(status);
+    expect(screen.getByRole('region', { name: 'Group hole entry' }).querySelector('.score-save-status')).toBe(status);
+    expect(status).toBeEmptyDOMElement();
     const changed = scoreResult({ ...fictionalChange, playerId: fictionalId(2), after: { kind: 'strokes', strokes: 6 } }, store.read()).round;
     vi.mocked(store.client.load).mockResolvedValueOnce(changed);
     await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
@@ -200,7 +203,7 @@ describe('hole-first owner scoring', () => {
     expect(store.client.load).toHaveBeenCalledTimes(2);
     expect(store.client.save).toHaveBeenCalledOnce();
   });
-  it('shows only one hole and at most four empty entry rows, with honest online and first-save warnings', async () => {
+  it('shows only one hole and at most four empty entry rows without repeated static warnings', async () => {
     const { client } = mount();
     await loaded();
     expect(screen.getAllByRole('textbox')).toHaveLength(4);
@@ -208,10 +211,9 @@ describe('hole-first owner scoring', () => {
     expect(screen.getByRole('heading', { name: 'Hole 1' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Previous hole' })).toBeEnabled();
     for (const field of screen.getAllByRole('textbox')) expect(field).toHaveValue('');
-    expect(screen.getByText(/Unsaved drafts live only in this page/)).not.toBeVisible();
+    expect(screen.queryByText(/Unsaved drafts live only in this page/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByText('Round details & tools'));
-    expect(screen.getByText(/Unsaved drafts live only in this page/)).toBeVisible();
-    expect(screen.getByText(/first accepted score locks course, tee, roster, groups and captured indices/)).toHaveTextContent('Clearing scores does not unlock setup.');
+    expect(screen.queryByText(/Unsaved drafts live only in this page|first accepted score locks course|Ready for scores/)).not.toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /Group 2/ })).not.toBeInTheDocument();
     expect(client.save).not.toHaveBeenCalled();
