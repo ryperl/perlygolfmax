@@ -46,6 +46,7 @@ describe('pure mobile group hole entry', () => {
     const view = render(<GroupHoleEntry {...input} />);
     const save = screen.getByRole('button', { name: 'Save & Next Hole' });
     const refresh = screen.getByRole('button', { name: 'Refresh saved round' });
+    expect(refresh.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
     expect(save.closest('.group-save-actions')).toContainElement(refresh);
     expect(save.compareDocumentPosition(refresh) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();

@@ -54,7 +54,38 @@ test('owner switches dated rounds in Games without leaving unsaved edits or over
     for (const width of [390, 320]) {
       await page.setViewportSize({ width, height: 844 });
       await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
+      for (const view of ['entry', 'games'] as const) {
+        if (view === 'games') await page.getByRole('button', { name: 'Games', exact: true }).click();
+        const actions = page.locator('.score-toolbar button');
+        await expect(actions).toHaveCount(view === 'entry' ? 4 : 5);
+        const bounds = await Promise.all((await actions.all()).map((action) => action.boundingBox()));
+        const first = bounds[0];
+        if (!first) throw new Error('Missing round action.');
+        for (const box of bounds) {
+          if (!box) throw new Error('Missing visible round action.');
+          expect(box.y).toBeCloseTo(first.y, 0);
+          expect(box.width).toBeGreaterThanOrEqual(44);
+          expect(box.height).toBeGreaterThanOrEqual(44);
+          expect(box.height).toBeLessThanOrEqual(60);
+        }
+        await expect(page.getByRole('button', { name: 'Scorecards', exact: true }).locator('.score-action-short-label')).toHaveText('Cards');
+        await expect(page.getByRole('button', { name: 'Leaderboard', exact: true }).locator('.score-action-short-label')).toHaveText('Board');
+        for (const action of await actions.all()) {
+          const caption = action.locator('.score-action-short-label');
+          if (await caption.count() === 0) continue;
+          const buttonBox = await action.boundingBox();
+          const captionBox = await caption.boundingBox();
+          if (!buttonBox || !captionBox) throw new Error('Missing compact action caption.');
+          expect(captionBox.x).toBeGreaterThanOrEqual(buttonBox.x);
+          expect(captionBox.x + captionBox.width).toBeLessThanOrEqual(buttonBox.x + buttonBox.width);
+        }
+        await page.getByRole('button', { name: 'Enter scores', exact: true }).click();
+      }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     }
+    await page.setViewportSize({ width: 1024, height: 900 });
+    const cards = page.getByRole('button', { name: 'Scorecards', exact: true });
+    await expect(cards.locator('.score-action-label')).toBeVisible();
+    await expect(cards.locator('svg')).toBeHidden();
   } finally { await server.close(); }
 });

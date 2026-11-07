@@ -13,6 +13,7 @@ import { scoreAccessKey, writablePlayerIds } from './score-access';
 import { scorecardHoles, scorecardTee } from '../../domain/tees';
 import { useOwnerScores } from './useOwnerScores';
 import { GroupHoleEntry } from './GroupHoleEntry';
+import { ScoreActionIcon } from './ScoreActionIcon';
 import { SavedScorecards } from './SavedScorecards';
 import { cardFor, conflictedDraft, editedDraft, entryKey, entryScore, savedHole } from './entry-state';
 import type { HoleDraft } from './entry-state';
@@ -229,16 +230,24 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
   if (round?.eventStatus === 'archived' && permissions?.role !== 'owner') return <p role="alert">Archived scorecards are available to the event owner only.</p>;
   const tools = <>
     <div className="score-toolbar">
-      <button disabled={busy} onClick={() => { setScreen('cards'); }} aria-pressed={screen === 'cards'}>Scorecards</button>
-      <button disabled={busy || writeIds.length === 0 && permissions?.role !== 'owner' || accessChanged} onClick={() => {
+      <button aria-label="Scorecards" disabled={busy} onClick={() => { setScreen('cards'); }} aria-pressed={screen === 'cards'}>
+        <ScoreActionIcon kind="cards" /><span className="score-action-label">Scorecards</span><span className="score-action-short-label" aria-hidden="true">Cards</span>
+      </button>
+      <button aria-label="Enter scores" disabled={busy || writeIds.length === 0 && permissions?.role !== 'owner' || accessChanged} onClick={() => {
         if (permissions?.role === 'player' && assignedGroup && assignedGroup.number !== group?.number) selectGroup(assignedGroup.number);
         setScreen('entry');
-      }} aria-pressed={screen === 'entry'}>Enter scores</button>
-      <button disabled={busy} onClick={() => { setScreen('games'); }} aria-pressed={screen === 'games'}>Games</button>
-      <button disabled={busy} onClick={() => { setScreen('leaderboard'); }} aria-pressed={screen === 'leaderboard'}>Leaderboard</button>
-      {(screen !== 'entry' || !group || !hole) && <button aria-label="Refresh saved round" disabled={busy} onClick={() => {
+      }} aria-pressed={screen === 'entry'}>
+        <ScoreActionIcon kind="entry" /><span className="score-action-label">Enter scores</span><span className="score-action-short-label" aria-hidden="true">Score</span>
+      </button>
+      <button aria-label="Games" disabled={busy} onClick={() => { setScreen('games'); }} aria-pressed={screen === 'games'}>
+        <ScoreActionIcon kind="games" /><span className="score-action-label">Games</span><span className="score-action-short-label" aria-hidden="true">Games</span>
+      </button>
+      <button aria-label="Leaderboard" disabled={busy} onClick={() => { setScreen('leaderboard'); }} aria-pressed={screen === 'leaderboard'}>
+        <ScoreActionIcon kind="leaderboard" /><span className="score-action-label">Leaderboard</span><span className="score-action-short-label" aria-hidden="true">Board</span>
+      </button>
+      {(screen !== 'entry' || !group || !hole) && <button aria-label="Refresh saved round" title="Refresh saved round" disabled={busy} onClick={() => {
         void refreshSavedRound().catch(() => undefined);
-      }}>Refresh</button>}
+      }}><ScoreActionIcon kind="refresh" /><span className="score-action-label">Refresh</span></button>}
     </div>
     {overviewHref !== null && <a href={overviewHref ?? `#overview?event=${encodeURIComponent(eventId)}`}>Back to event overview</a>}
     {roundTools}

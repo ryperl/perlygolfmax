@@ -106,10 +106,21 @@ test('the full public app resumes the next hole across eighteen home-screen-styl
       for (const name of ['Scorecards', 'Enter scores', 'Games', 'Leaderboard']) {
         await expect(toolbar.getByRole('button', { name, exact: true })).toBeVisible();
       }
+      const actionBounds = await Promise.all((await toolbar.getByRole('button').all()).map((button) => button.boundingBox()));
+      const firstAction = actionBounds[0];
+      if (!firstAction) throw new Error('Missing mobile round actions.');
+      for (const bounds of actionBounds) {
+        if (!bounds) throw new Error('Missing visible mobile action.');
+        expect(bounds.y).toBeCloseTo(firstAction.y, 0);
+        expect(bounds.width).toBeGreaterThanOrEqual(44);
+        expect(bounds.height).toBeGreaterThanOrEqual(44);
+      }
       await expect(toolbar.getByRole('button', { name: 'Refresh saved round', exact: true })).toHaveCount(0);
       await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toHaveCount(0);
       const save = page.getByRole('button', { name: visit === 18 ? 'Save Hole' : 'Save & Next Hole', exact: true });
       const refresh = page.getByRole('button', { name: 'Refresh saved round', exact: true });
+      await expect(refresh.locator('svg')).toBeVisible();
+      await expect(refresh.locator('.score-action-label')).toBeHidden();
       const saveBounds = await save.boundingBox();
       const refreshBounds = await refresh.boundingBox();
       if (!saveBounds || !refreshBounds) throw new Error('Missing scoring actions.');

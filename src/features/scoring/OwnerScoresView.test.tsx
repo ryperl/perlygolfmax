@@ -75,7 +75,9 @@ describe('hole-first owner scoring', () => {
     expect(screen.getByRole('region', { name: 'Round scores' })).toHaveFocus();
     expect(screen.queryByText('Round details & tools')).not.toBeInTheDocument();
     for (const name of ['Scorecards', 'Enter scores', 'Games', 'Leaderboard']) {
-      expect(screen.getByRole('button', { name })).toBeVisible();
+      const action = screen.getByRole('button', { name });
+      expect(action).toBeVisible();
+      expect(action.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
     }
     const discard = screen.getByRole('button', { name: 'Discard unsaved scores' });
     expect(discard).toBeDisabled();

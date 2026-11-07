@@ -138,7 +138,10 @@ saves do not advance or claim confirmation.
 Enter scores opens a focused scoring region without opening the phone keyboard.
 The **Round** picker and the Scorecards, Enter scores, Games and Leaderboard
 buttons stay visible. Foreground requests and unsaved score/game edits block
-round switching. **Save & Next Hole** is the only entry save action; **Refresh**
+round switching. Small screens use compact icons with Cards, Score, Games and
+Board captions; Refresh uses an icon. Full accessible action names and 44px
+touch targets remain, while wider screens retain full text labels.
+**Save & Next Hole** is the only entry save action; **Refresh**
 sits below it and never submits scores. Other views retain toolbar Refresh.
 Save/discard actions and the unsaved count keep a stable place
 below the inputs; changing a score does not insert controls above the fields.

@@ -7,6 +7,7 @@ import { maximumExactHoleStrokes } from '../../domain/scoring';
 import { adjacentHole, groupStartingHole } from '../../domain/round-navigation';
 import type { HoleDraft } from './entry-state';
 import { scoreLabel } from './entry-state';
+import { ScoreActionIcon } from './ScoreActionIcon';
 import './scoring.css';
 
 // Allow a pause between digits (including 10/12) before moving to another score.
@@ -194,7 +195,9 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
       <div className="group-save-actions">
         <button ref={primaryAction} className="primary-score-action" disabled={disabled}>{last ? 'Save Hole' : 'Save & Next Hole'}</button>
         <div className="score-secondary-actions">
-          <button className="refresh-score-action" type="button" aria-label="Refresh saved round" disabled={busy} onClick={onRefresh}>Refresh</button>
+          <button className="refresh-score-action" type="button" aria-label="Refresh saved round" title="Refresh saved round" disabled={busy} onClick={onRefresh}>
+            <ScoreActionIcon kind="refresh" /><span className="score-action-label">Refresh</span>
+          </button>
           <div className="score-secondary-summary">
             <p className="score-hint">{unsavedCount} unsaved {unsavedCount === 1 ? 'score' : 'scores'}</p>
             <p className="score-save-status" aria-live="polite">{saveStatus ?? (busy ? 'Working…' : unsavedCount > 0 ? 'Unsaved changes' : '')}</p>
