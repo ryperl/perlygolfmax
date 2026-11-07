@@ -37,7 +37,7 @@ function indexRow(name: string) {
 function savedInput(input: EventSetupInput): EventWorkspace {
   return {
     ...fictionalWorkspace, event: { ...fictionalEvent, name: input.name, etag: 'workspace-v2',
-      ...(input.startDate ? { startDate: input.startDate } : {}) },
+      ...(input.startDate ? { startDate: input.startDate } : {}), ...(input.endDate ? { endDate: input.endDate } : {}) },
     etag: 'workspace-v2', location: input.location,
     roster: fictionalWorkspace.roster.filter((player) => input.playerIds.includes(player.playerId)),
     allowPerGolferTees: input.allowPerGolferTees ?? false,
@@ -80,6 +80,23 @@ async function openSetupSections(user = userEvent.setup()) {
 }
 
 describe('saved event workspace', () => {
+  it('saves event start/end together and blocks a reversed date range', async () => {
+    const setup = fakeSetup();
+    vi.mocked(setup.load).mockResolvedValue(fictionalWorkspace);
+    vi.mocked(setup.save).mockImplementation((_id, _etag, input) => Promise.resolve(savedInput(input)));
+    render(<EventWorkspaceView eventId={fictionalEvent.id} canManageCatalog setup={setup} catalog={fakeCatalog()} />);
+    await openSetupSections();
+    fireEvent.change(screen.getByLabelText('Event start date (optional)'), { target: { value: '2026-11-06' } });
+    fireEvent.change(screen.getByLabelText('Event end date (optional)'), { target: { value: '2026-11-05' } });
+    expect(screen.getByText('Event end date cannot be before the start date.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Save event workspace' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Event end date (optional)'), { target: { value: '2026-11-10' } });
+    const save = screen.getByRole('button', { name: 'Save event workspace' });
+    await waitFor(() => { expect(save).toBeEnabled(); });
+    await userEvent.click(save);
+    await screen.findByText(/Event workspace saved/);
+    expect(vi.mocked(setup.save).mock.calls[0]?.[2]).toMatchObject({ startDate: '2026-11-06', endDate: '2026-11-10' });
+  });
   it('retains date-only whole-event drafts when a refreshed round becomes scored and acknowledges saved dates', async () => {
     const setup = fakeSetup();
     vi.mocked(setup.load).mockResolvedValueOnce(fictionalWorkspace).mockResolvedValue({

@@ -3,6 +3,13 @@ import { fictionalId, fictionalSetup, fictionalWorkspace } from '../../client/ca
 import { inputFrom, sameRoundInput, sameSetupInput, setupProblems } from './setup-draft';
 
 describe('setup draft presentation', () => {
+  it('retains end dates, detects clearing and explains invalid date ranges', () => {
+    const input = inputFrom({ ...fictionalWorkspace, event: { ...fictionalWorkspace.event,
+      startDate: '2026-11-06', endDate: '2026-11-10' } });
+    expect(input.endDate).toBe('2026-11-10');
+    expect(sameSetupInput(input, { ...input, endDate: '' })).toBe(false);
+    expect(setupProblems({ ...input, endDate: '2026-11-05' })).toContain('Event end date cannot be before the start date.');
+  });
   it('retains event/round dates in whole-event drafts and detects schedule-only edits and clearing', () => {
     const round = fictionalSetup.rounds[0];
     const saved = fictionalWorkspace.rounds[0];

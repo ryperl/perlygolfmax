@@ -2,6 +2,7 @@ import { odata } from '@azure/data-tables';
 import type { TableClient, TransactionAction } from '@azure/data-tables';
 import type { IndexObservation, ManualIndexInput, PlayerCatalogPage, PlayerIndexHistory, PlayerProfile } from '../../../src/domain/catalog.js';
 import type { AccountIdentity } from '../../../src/domain/events.js';
+import type { EventRosterPlayer } from '../../../src/domain/setup.js';
 import { isIndexObservation, isManualIndexInput, isPlayerProfile } from '../../../src/contracts/catalog.js';
 import { isUuid } from '../../../src/contracts/events.js';
 import { ApiError } from '../errors.js';
@@ -19,10 +20,25 @@ function player(row: StoredRow, id: string): PlayerProfile {
   if (result.id !== id || row.partitionKey !== partitionKey || row.rowKey !== playerKey(id)) {
     throw new ApiError(503, 'INVALID_STORED_CATALOG');
   }
+
   return {
     id: result.id, displayName: result.displayName, createdAt: result.createdAt,
     currentIndex: result.currentIndex, etag: revision(row),
   };
+}
+
+/** Resolve only already-authorized roster identities; this never exposes catalog profiles. */
+export async function currentRosterNames(table: TableClient, roster: readonly EventRosterPlayer[]): Promise<readonly EventRosterPlayer[]> {
+  const names: EventRosterPlayer[] = [];
+  for (let index = 0; index < roster.length; index += 16) {
+    names.push(...await Promise.all(roster.slice(index, index + 16).map(async (entry) => {
+      const row = await optionalRow(table, partitionKey, playerKey(entry.playerId));
+      if (!row) throw new ApiError(503, 'INVALID_STORED_PLAYER_NAME');
+      const current = player(row, entry.playerId);
+      return { playerId: entry.playerId, displayName: current.displayName };
+    })));
+  }
+  return names;
 }
 
 export interface IndexInput {

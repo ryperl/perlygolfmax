@@ -15,6 +15,15 @@ import { stagePrivateContent, privateContent } from '../private-values.js';
 import { publicFixture } from './test-support.js';
 
 describe('active event public scoring authority', () => {
+  it('projects saved start/end dates through the public directory and workspace', async () => {
+    const f = await publicFixture();
+    const before = await f.workspace.get(creator, event.id);
+    await f.workspace.save(creator, event.id, { ...f.input, startDate: '2026-11-06', endDate: '2026-11-10' }, before.etag);
+    const workspace = await f.workspace.get(f.actor, event.id);
+    expect(workspace.event).toMatchObject({ startDate: '2026-11-06', endDate: '2026-11-10' });
+    const directory = await f.publicEvents.list({ kind: 'public-browse' });
+    expect(directory.events[0]).toMatchObject({ startDate: '2026-11-06', endDate: '2026-11-10' });
+  });
   it('projects saved event/round dates for public readers without raw indices or owner identity', async () => {
     const f = await publicFixture();
     const before = await f.workspace.get(creator, event.id);

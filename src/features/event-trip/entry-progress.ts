@@ -1,6 +1,7 @@
 import { isRoundScores } from '../../contracts/scoring';
 import type { RoundScores } from '../../domain/scoring';
 import type { RoundSnapshot } from '../../domain/setup';
+import type { RoundGameDefinition } from '../../domain/games';
 
 export type EntryProgressStatus = 'No scores yet' | 'In progress' | 'Entries complete';
 
@@ -15,6 +16,7 @@ export interface EntryCoverage {
 export interface RoundEntryProgress extends EntryCoverage {
   readonly groups: readonly (EntryCoverage & { readonly number: number })[];
   readonly selectedGameName?: string;
+  readonly selectedGame?: RoundGameDefinition;
 }
 
 export type RoundEntryProgressState =
@@ -49,12 +51,12 @@ export function summarizeEntryProgress(eventId: string, round: RoundSnapshot, sc
       entered, total, completeHoles, totalHoles: scores.layout.length,
     };
   }
-  const selectedGameName = scores.games?.configuration.games.find((game) => game.id === selectedGameId)?.name;
+  const selectedGame = scores.games?.configuration.games.find((game) => game.id === selectedGameId);
   return {
     kind: 'ready',
     summary: {
       ...coverage(round.players.map((player) => player.playerId)),
-      ...(selectedGameName === undefined ? {} : { selectedGameName }),
+      ...(selectedGame === undefined ? {} : { selectedGameName: selectedGame.name, selectedGame }),
       groups: round.groups.map((group) => ({ number: group.number, ...coverage(group.playerIds) })),
     },
   };

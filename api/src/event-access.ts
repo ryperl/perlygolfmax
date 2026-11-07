@@ -57,6 +57,7 @@ async function admissionProof(table: TableClient, identity: AccountIdentity, eve
     || event.partitionKey !== eventId || event.rowKey !== 'event') return undefined;
   if (!isEventSummary({ id: eventId, name: event.name, createdAt: event.createdAt,
     ...(event.startDate === undefined || event.startDate === '' ? {} : { startDate: event.startDate }),
+    ...(event.endDate === undefined || event.endDate === '' ? {} : { endDate: event.endDate }),
     status: event.status === undefined ? 'active' : event.status, etag: event.etag, role: 'member' })) return undefined;
   const rows = [member, binding, admission, index, event];
   if (rows.some((row) => typeof row.partitionKey !== 'string' || typeof row.rowKey !== 'string')) return undefined;
@@ -110,6 +111,7 @@ export async function readEventAccess(table: TableClient, identity: ScoreActor, 
   if (!role) throw new ApiError(404, 'EVENT_NOT_FOUND');
   const summary: unknown = { id: eventId, name: event.name, createdAt: event.createdAt,
     ...(event.startDate === undefined || event.startDate === '' ? {} : { startDate: event.startDate }),
+    ...(event.endDate === undefined || event.endDate === '' ? {} : { endDate: event.endDate }),
     status: event.status === undefined ? 'active' : event.status, etag: revision(event), role };
   if (!isEventSummary(summary)) throw new ApiError(503, 'INVALID_STORED_EVENT');
   if (summary.status === 'archived' && role !== 'owner') throw new ApiError(404, 'EVENT_NOT_FOUND');

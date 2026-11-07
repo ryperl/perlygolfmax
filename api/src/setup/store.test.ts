@@ -27,6 +27,22 @@ async function fixture(teeProfile = tee) {
 }
 
 describe('saved owner workspace', () => {
+  it('preserves, clears and conditionally validates the event end date against existing start dates', async () => {
+    const f = await fixture();
+    const saved = await f.workspace.save(creator, event.id, { ...f.input, startDate: '2026-11-06', endDate: '2026-11-10' }, f.empty.etag);
+    expect(saved.event).toMatchObject({ startDate: '2026-11-06', endDate: '2026-11-10' });
+    const retained = await f.workspace.save(creator, event.id, f.input, saved.etag);
+    expect(retained.event.endDate).toBe('2026-11-10');
+    await expect(f.workspace.save(creator, event.id, { ...f.input, endDate: '2026-11-05' }, retained.etag))
+      .rejects.toMatchObject({ code: 'INVALID_EVENT_DATE_RANGE' });
+    await expect(f.workspace.save(creator, event.id, { ...f.input, startDate: '2026-11-11' }, retained.etag))
+      .rejects.toMatchObject({ code: 'INVALID_EVENT_DATE_RANGE' });
+    const cleared = await f.workspace.save(creator, event.id, { ...f.input, endDate: '' }, retained.etag);
+    expect(cleared.event).not.toHaveProperty('endDate');
+    expect(cleared.event.startDate).toBe('2026-11-06');
+    const sameDay = await f.workspace.save(creator, event.id, { ...f.input, endDate: '2026-11-06' }, cleared.etag);
+    expect(sameDay.event.endDate).toBe('2026-11-06');
+  });
   it('saves, projects, preserves omission and explicitly clears event and round dates under owner revision checks', async () => {
     const f = await fixture();
     const input = { ...f.input, startDate: '2024-02-29',
@@ -351,10 +367,13 @@ describe('saved owner workspace', () => {
     await f.players.rename(creator, playerId, 'Fictional later player name', player.etag);
     await f.publish(identifier(101), { ...manifest, course: { ...manifest.course, name: 'Fictional new global name' } }, [{ ...tee, category: 'Fictional updated category' }], root?.etag ?? '');
     const read = await f.workspace.get(creator, event.id);
-    expect(read.rounds).toEqual(saved.rounds);
+    expect(read.rounds).toEqual(saved.rounds.map((round) => ({ ...round, players: round.players.map((entry) =>
+      entry.playerId === playerId ? { ...entry, displayName: 'Fictional later player name' } : entry) })));
     const edited = await f.workspace.save(creator, event.id, { ...f.input, location: 'Fictional edited location' }, read.etag);
-    expect(edited.rounds).toEqual(saved.rounds);
-    expect(edited.roster).toEqual(saved.roster);
+    expect(edited.rounds).toEqual(read.rounds);
+    expect(edited.roster).toEqual(read.roster);
+    expect(edited.rounds[0]?.teeProfile).toEqual(saved.rounds[0]?.teeProfile);
+    expect(edited.rounds[0]?.players[0]?.handicapIndex).toEqual(saved.rounds[0]?.players[0]?.handicapIndex);
   });
 
   it('returns allowlisted event-local projections to members without any HI/audit/catalog profiles', async () => {

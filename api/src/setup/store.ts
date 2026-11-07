@@ -11,6 +11,7 @@ import { canonical, decode, isConflict, optionalRow, revision, transaction } fro
 import { requireManager } from '../catalog/courses.js';
 import type { CatalogPermission, TableCourseCatalog } from '../catalog/courses.js';
 import type { TablePlayerCatalog } from '../catalog/players.js';
+import { currentRosterNames } from '../catalog/players.js';
 import { metadata, profile } from '../catalog/projections.js';
 import { isIndexRefreshAudit } from './index-refresh.js';
 import type { IndexRefreshAudit } from './index-refresh.js';
@@ -103,7 +104,7 @@ export class TableWorkspaceStore {
   async get(identity: ScoreActor, id: string): Promise<EventWorkspace> {
     const before = await this.access(identity, id);
     if (before.event.purseConfigured !== undefined && before.event.purseConfigured !== true) throw new ApiError(503, 'INVALID_STORED_PURSE');
-    const workspace = await this.load(before.summary);
+    const workspace = await this.forDisplay(await this.load(before.summary));
     await assertEventAccessUnchanged(this.table, identity, id, before);
     // Explicit allowlists prevent catalog/index/audit fields from leaking to event members.
     return {
@@ -134,9 +135,23 @@ export class TableWorkspaceStore {
             playerId: player.playerId, displayName: player.displayName,
             handicapIndex: player.handicapIndex ?? null,
           }
+
           : { playerId: player.playerId, displayName: player.displayName }),
       })),
     };
+  }
+
+  /** Current names are presentation metadata; captured course/index/score inputs stay immutable. */
+  async forDisplay(workspace: EventWorkspace): Promise<EventWorkspace> {
+    const roster = await currentRosterNames(this.table, workspace.roster);
+    const names = new Map(roster.map((entry) => [entry.playerId, entry.displayName]));
+    return { ...workspace, roster, rounds: workspace.rounds.map((round) => ({
+      ...round, players: round.players.map((entry) => {
+        const displayName = names.get(entry.playerId);
+        if (displayName === undefined) throw new ApiError(503, 'INVALID_STORED_WORKSPACE');
+        return { ...entry, displayName };
+      }),
+    })) };
   }
 
   /** Server-only captured inputs; public readers receive get()'s explicit privacy projection. */
@@ -244,6 +259,9 @@ export class TableWorkspaceStore {
     }
     if (access.summary.etag !== etag) throw new ApiError(409, 'EVENT_CHANGED');
     if (!isEventSetupInput(input)) throw new ApiError(400, 'INVALID_EVENT_SETUP');
+    const effectiveStartDate = input.startDate ?? access.summary.startDate;
+    const effectiveEndDate = input.endDate ?? access.summary.endDate;
+    if (effectiveStartDate && effectiveEndDate && effectiveEndDate < effectiveStartDate) throw new ApiError(400, 'INVALID_EVENT_DATE_RANGE');
     if (Buffer.byteLength(JSON.stringify(input), 'utf8') > maximumPrivateWriteBytes) throw new ApiError(413, 'REQUEST_TOO_LARGE');
     const previous = await this.load(access.summary);
     const allowPerGolferTees = input.allowPerGolferTees ?? previous.allowPerGolferTees;
@@ -351,7 +369,8 @@ export class TableWorkspaceStore {
     for (const round of rounds) roundContent.set(round.id, await stagePrivateContent(this.table, id, `round:${round.id}`, identity, canonical(round)));
     const actions: TransactionAction[] = [
       ['update', { partitionKey: id, rowKey: 'event', name: input.name,
-        ...(input.startDate === undefined ? {} : { startDate: input.startDate }) }, 'Merge', { etag }],
+        ...(input.startDate === undefined ? {} : { startDate: input.startDate }),
+        ...(input.endDate === undefined ? {} : { endDate: input.endDate }) }, 'Merge', { etag }],
       ['update', {
         partitionKey: id, rowKey: `member:${identity.objectId}`, tenantId: identity.tenantId, objectId: identity.objectId, role: 'owner',
       }, 'Merge', { etag: revision(access.member) }],

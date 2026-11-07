@@ -55,9 +55,13 @@ const setup: SetupClient = {
     const etag = `fixture-v${String(revision)}`;
     const { overallCompetition: previousCompetition, ...previous } = workspace;
     const competition = input.overallCompetition === undefined ? previousCompetition : input.overallCompetition;
+    const { startDate: savedStartDate, endDate: savedEndDate, ...event } = workspace.event;
+    const startDate = input.startDate === undefined ? savedStartDate : input.startDate || undefined;
+    const endDate = input.endDate === undefined ? savedEndDate : input.endDate || undefined;
     workspace = {
       ...previous, ...(competition == null ? {} : { overallCompetition: competition }),
-      etag, event: { ...workspace.event, etag, name: input.name }, location: input.location,
+      etag, event: { ...event, etag, name: input.name,
+        ...(startDate === undefined ? {} : { startDate }), ...(endDate === undefined ? {} : { endDate }) }, location: input.location,
       roster: input.playerIds.map((playerId) => {
         const player = players.find((item) => item.id === playerId);
         if (!player) throw new Error('Unknown fictional player.');

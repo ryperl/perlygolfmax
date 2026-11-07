@@ -1,5 +1,7 @@
 import type { EventWorkspace, RoundSnapshot } from '../../domain/setup';
 import { groupStartingHole } from '../../domain/round-navigation';
+import { gameTeamsMatchRoster, isTeamGameDefinition } from '../../domain/games';
+import { gameScoringLabel } from '../games';
 import { eventStartDateLabel, sortRoundsByStartDate } from '../../domain/event-schedule';
 import type { EventEntryProgress, RoundEntryProgressState } from './entry-progress';
 import './event-trip.css';
@@ -38,14 +40,14 @@ function scoreLink(workspace: EventWorkspace, roundId: string) {
   return `#${page}?event=${encodeURIComponent(workspace.event.id)}&round=${encodeURIComponent(roundId)}`;
 }
 
-function ManualGroups({ round }: { readonly round: RoundSnapshot }) {
+function PlayingGroups({ round }: { readonly round: RoundSnapshot }) {
   const assigned = new Set(round.groups.flatMap((group) => group.playerIds));
   const unassigned = round.players.filter((player) => !assigned.has(player.playerId));
 
   return (
     <div className="event-trip-groups">
-      <h4>Manual groups</h4>
-      {round.groups.length === 0 ? <p>No manual groups saved for this round.</p> : (
+      <h4>Groups</h4>
+      {round.groups.length === 0 ? <p>No groups saved for this round.</p> : (
         <ul className="event-trip-group-list">
           {round.groups.map((group) => (
             <li key={group.number}>
@@ -75,6 +77,25 @@ function ManualGroups({ round }: { readonly round: RoundSnapshot }) {
   );
 }
 
+function CompetitionTeams({ round, state }: { readonly round: RoundSnapshot; readonly state: RoundEntryProgressState | undefined }) {
+  const game = state?.kind === 'ready' ? state.summary.selectedGame : undefined;
+  return <section className="event-trip-groups" aria-label={`Competition teams for ${round.name}`}>
+    <h4>Teams</h4>
+    <p>Competition teams belong to the selected game and are separate from playing groups.</p>
+    {!game ? <p>{state?.kind === 'loading' ? 'Loading saved team information…' : 'Team information unavailable. Refresh event to retry.'}</p>
+      : !isTeamGameDefinition(game) ? <p>Individual game — no competition teams.</p>
+        : <>
+          {!gameTeamsMatchRoster(game, round.players.map((player) => player.playerId))
+            && <p>Saved team assignments need organizer repair before team results are available.</p>}
+          <ul className="event-trip-group-list">{game.teams.map((team) => <li key={team.id}>
+            <h5>{team.name}</h5><ul>{team.playerIds.map((id) => <li key={id}>
+              {round.players.find((player) => player.playerId === id)?.displayName ?? 'Player unavailable'}
+            </li>)}</ul>
+          </li>)}</ul>
+        </>}
+  </section>;
+}
+
 function SavedRounds({ workspace, showGroups, progress }: {
   readonly workspace: EventWorkspace;
   readonly showGroups: boolean;
@@ -87,6 +108,11 @@ function SavedRounds({ workspace, showGroups, progress }: {
     if (state?.kind === 'loading') return 'Loading saved game…';
     return state?.kind === 'ready' && state.summary.selectedGameName
       ? state.summary.selectedGameName : 'Selected game unavailable — refresh event';
+  }
+  function gameDetails(roundId: string): string | undefined {
+    const state = progress?.[roundId];
+    return state?.kind === 'ready' && state.summary.selectedGame
+      ? gameScoringLabel(state.summary.selectedGame) : undefined;
   }
   return (
     <section className="event-trip-section" aria-label="Saved rounds">
@@ -104,6 +130,7 @@ function SavedRounds({ workspace, showGroups, progress }: {
                   <p>{round.course.name}</p>
                   <p><span>{round.teeProfile.name} tees</span> · {round.teeProfile.category}</p>
                   {workspace.overallCompetition?.kind === 'stableford' && <p>Overall game: {selectedGame(round.id)}</p>}
+                  {workspace.overallCompetition?.kind === 'stableford' && gameDetails(round.id) && <p>{gameDetails(round.id)}</p>}
                 </div>
                 <EntryProgress state={progress?.[round.id]} allowed={workspace.event.role === 'owner' || workspace.canViewScores === true} />
                 {(workspace.event.role === 'owner' || workspace.canViewScores) && (
@@ -123,7 +150,10 @@ function SavedRounds({ workspace, showGroups, progress }: {
                     <div><dt>Yards</dt><dd>{round.teeProfile.totalYardage.toLocaleString('en-US')}</dd></div>
                     <div><dt>Par</dt><dd>{round.teeProfile.totalPar}</dd></div>
                   </dl>
-                  <ManualGroups round={round} />
+                  <PlayingGroups round={round} />
+                  {workspace.overallCompetition?.kind === 'stableford'
+                    && workspace.overallCompetition.roundGames.some((binding) => binding.roundId === round.id)
+                    && <CompetitionTeams round={round} state={progress?.[round.id]} />}
                 </>
               )}
             </li>
@@ -145,7 +175,11 @@ export function EventTripView({ workspace, view, progress }: EventTripViewProps)
         <p className="eyebrow">{view === 'overview' ? 'Your saved event' : event.name}</p>
         <h1>{view === 'overview' ? event.name : view === 'rounds' ? 'Rounds' : 'The Group'}</h1>
         <p className="event-trip-location">{workspace.location || 'No location saved.'}</p>
-        {event.startDate && <p>Start date: <time dateTime={event.startDate}>{eventStartDateLabel(event.startDate)}</time></p>}
+        {view === 'overview' && <dl className="event-trip-stats">
+          <div><dt>Event Start</dt><dd>{event.startDate ? <time dateTime={event.startDate}>{eventStartDateLabel(event.startDate)}</time> : 'Not set'}</dd></div>
+          <div><dt>Event End</dt><dd>{event.endDate ? <time dateTime={event.endDate}>{eventStartDateLabel(event.endDate)}</time> : 'Not set'}</dd></div>
+        </dl>}
+        {view !== 'overview' && event.startDate && <p>Start date: <time dateTime={event.startDate}>{eventStartDateLabel(event.startDate)}</time></p>}
         {archived && <p className="event-trip-archive"><strong>Archived event · Read-only</strong></p>}
         <nav className="event-trip-links" aria-label={event.role === 'owner' ? 'Event setup' : 'Event links'}>
             {event.role === 'owner' && <a href={setupLink(event.id)}>{archived ? 'View event setup' : 'Configure event'}</a>}

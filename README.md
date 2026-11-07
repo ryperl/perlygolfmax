@@ -156,6 +156,18 @@ editable after scoring starts; course, tees, players and group starts stay locke
 No group stagger interval, date/time-zone conversion or reminder is inferred.
 Clearing the field removes the time; legacy requests omitting it retain saved times.
 
+Event setup has optional start and end calendar dates. Overview labels these
+**Event Start** and **Event End**; missing dates say Not set. End dates cannot
+precede start dates. Sorting still uses the event start date; end dates do not
+archive events or change round dates automatically.
+
+Player catalog renames appear on subsequent event/round/card/result reads,
+including already-scored rounds, without resaving each event. The server resolves
+only names for the authorized roster; public readers never receive catalog
+profiles or current Handicap Index observations. Captured inputs, saved scores,
+score revisions and historical audits remain unchanged. Refresh an open view
+to see a rename; unconfirmed local drafts still keep their existing protection.
+
 Events and rounds also have optional start dates in strict `YYYY-MM-DD` form.
 Create an event by name, then edit dates in whole-event organizer setup. Dates
 are event/course-local calendar metadata: no timezone conversion, inferred dates
@@ -184,6 +196,11 @@ loading and unavailable saved games remain explicit; no default game is invented
 Owner scorecards include a date-ordered saved-round switcher that keeps the
 current Scorecards/Games/Leaderboard view. Save or cancel game edits and save
 or discard score drafts before switching; active requests also block the switch.
+
+Event group views list the overall-selected game's format and competition teams
+below the playing groups. Teams are not inferred from foursomes. Individual games
+say they have no competition teams; unavailable and stale assignments remain
+visible for organizer review.
 
 Only allowlisted navigation fields are kept in localStorage: version, event ID,
 round ID, group number, hole number and view. No scores, drafts, credentials or

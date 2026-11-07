@@ -74,7 +74,8 @@ describe('saved round games and authoritative results', () => {
     f.get.mockClear();
     const loaded = await f.scores.get(creator, event.id, f.roundId);
     expect(loaded.games?.results[0]?.players[0]).toMatchObject({ playingHandicap: 18, totalPoints: 3 });
-    expect(f.get.mock.calls.every(([partition]) => partition === event.id)).toBe(true);
+    expect(f.get.mock.calls.every(([partition, row]) => partition === event.id
+      || partition === 'catalog:players' && row.startsWith('player:'))).toBe(true);
   });
 
   it('replays a lost committed response with the same request and rejects stale revisions or removal of configured games', async () => {

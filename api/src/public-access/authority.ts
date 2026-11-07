@@ -13,6 +13,7 @@ export async function readPublicAccess(table: TableClient, identity: PublicScore
     || event.status !== undefined && event.status !== 'active') throw new ApiError(404, 'PUBLIC_EVENT_NOT_AVAILABLE');
   const summary: unknown = { id: eventId, name: event.name, createdAt: event.createdAt,
     ...(event.startDate === undefined || event.startDate === '' ? {} : { startDate: event.startDate }),
+    ...(event.endDate === undefined || event.endDate === '' ? {} : { endDate: event.endDate }),
     status: 'active', etag: revision(event), role: 'viewer' };
   if (!isEventSummary(summary)) throw new ApiError(503, 'INVALID_STORED_EVENT');
   return { event, summary, admittedPlayer: false, publicAccess: true, authorityProofs: [event] };

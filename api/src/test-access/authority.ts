@@ -28,6 +28,7 @@ export async function readTesterAccess(table: TableClient, identity: EventTester
     || event.status !== undefined && event.status !== 'active') throw new ApiError(403, 'TESTER_ACCESS_ENDED');
   const summary: unknown = { id: eventId, name: event.name, createdAt: event.createdAt,
     ...(event.startDate === undefined || event.startDate === '' ? {} : { startDate: event.startDate }),
+    ...(event.endDate === undefined || event.endDate === '' ? {} : { endDate: event.endDate }),
     status: 'active', etag: revision(event), role: 'viewer' };
   if (!isEventSummary(summary)) throw new ApiError(503, 'INVALID_STORED_EVENT');
   revision(link);

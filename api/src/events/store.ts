@@ -16,6 +16,7 @@ function summary(id: string, event: Readonly<Record<string, unknown>>, membershi
   const result = {
     id, name: event.name, createdAt: event.createdAt, role: membership.role,
     ...(event.startDate === undefined || event.startDate === '' ? {} : { startDate: event.startDate }),
+    ...(event.endDate === undefined || event.endDate === '' ? {} : { endDate: event.endDate }),
     status: event.status === undefined ? 'active' : event.status, etag: event.etag,
   };
   if (!isEventSummary(result)) throw new ApiError(503, 'INVALID_STORED_EVENT');

@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { isEventCapabilities, isEventRevision, isEventStartDate, isEventStatus, isEventSummary, readEventName } from './events';
 
 describe('event contracts', () => {
+  it('validates an optional end date and rejects reversed or malformed event ranges', () => {
+    const event = { id: '00000000-0000-4000-8000-000000000001', name: 'Fictional Open', createdAt: '2026-01-01',
+      role: 'owner', status: 'active', etag: 'current', startDate: '2026-11-06' };
+    expect(isEventSummary({ ...event, endDate: '2026-11-06' })).toBe(true);
+    expect(isEventSummary({ ...event, endDate: '2026-11-10' })).toBe(true);
+    for (const endDate of ['2026-11-05', '2026-02-29', '', '2026-11-10T00:00:00Z', null]) {
+      expect(isEventSummary({ ...event, endDate })).toBe(false);
+    }
+  });
   it.each(['0001-01-01', '2024-02-29', '2000-02-29', '2026-11-06', '9999-12-31'])('accepts real date-only %s', (date) => {
     expect(isEventStartDate(date)).toBe(true);
   });

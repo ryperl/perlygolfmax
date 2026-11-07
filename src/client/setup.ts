@@ -27,6 +27,7 @@ export function createSetupClient(apiUrl: string, getToken: () => Promise<string
       const value = await writePrivateValue(setupRequest, `events/${encodeURIComponent(eventId)}/workspace`, signal, { method: 'PUT', body: input, etag }, maximumEventSetupBytes);
       if (!isEventWorkspace(value) || value.event.id !== eventId
         || input.startDate !== undefined && input.startDate !== (value.event.startDate ?? '')
+        || input.endDate !== undefined && input.endDate !== (value.event.endDate ?? '')
         || input.overallCompetition !== undefined && !sameOverallCompetition(input.overallCompetition, value.overallCompetition)
         || input.allowPerGolferTees !== undefined && input.allowPerGolferTees !== (value.allowPerGolferTees ?? false)
         || input.rounds.some((requested) => {

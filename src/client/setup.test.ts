@@ -6,6 +6,16 @@ import type { EventSetupInput } from '../domain/setup';
 import { maximumEventSetupBytes } from '../domain/setup';
 
 describe('event workspace client', () => {
+  it('requires the saved response to acknowledge end-date changes and clearing', async () => {
+    const saved = { ...fictionalWorkspace, event: { ...fictionalWorkspace.event, startDate: '2026-11-06', endDate: '2026-11-10' } };
+    const send = vi.fn<typeof fetch>().mockImplementation(() => Promise.resolve(new Response(JSON.stringify(saved))));
+    const client = createSetupClient('https://fictional.example.test/api', () => Promise.resolve('fictional'), send);
+    const input = { ...fictionalSetup, startDate: '2026-11-06', endDate: '2026-11-10' };
+    await expect(client.save(fictionalEvent.id, 'v1', input, new AbortController().signal)).resolves.toEqual(saved);
+    await expect(client.save(fictionalEvent.id, 'v1', { ...input, endDate: '' }, new AbortController().signal)).rejects.toThrow('Invalid saved workspace');
+    send.mockImplementation(() => Promise.resolve(new Response(JSON.stringify(fictionalWorkspace))));
+    await expect(client.save(fictionalEvent.id, 'v1', input, new AbortController().signal)).rejects.toThrow('Invalid saved workspace');
+  });
   it('requires event and round date changes/clears to be acknowledged, while allowing legacy omission', async () => {
     const scheduled = { ...fictionalWorkspace, event: { ...fictionalWorkspace.event, startDate: '2024-02-29' },
       rounds: fictionalWorkspace.rounds.map((round) => ({ ...round, startDate: '2026-11-06' })) };

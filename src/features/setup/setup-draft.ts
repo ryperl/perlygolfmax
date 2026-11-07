@@ -19,6 +19,7 @@ export function inputFrom(workspace: EventWorkspace): EventSetupInput {
   return {
     name: workspace.event.name, location: workspace.location,
     ...(workspace.event.startDate === undefined ? {} : { startDate: workspace.event.startDate }),
+    ...(workspace.event.endDate === undefined ? {} : { endDate: workspace.event.endDate }),
     playerIds: workspace.roster.map((player) => player.playerId),
     rounds: workspace.rounds.map(roundInput),
     overallCompetition: workspace.overallCompetition ?? null,
@@ -46,6 +47,7 @@ export function sameRoundInput(left: RoundSetupInput, right: RoundSetupInput): b
 export function sameSetupInput(left: EventSetupInput, right: EventSetupInput): boolean {
   return left.name === right.name && left.location === right.location && sameIds(left.playerIds, right.playerIds)
     && (left.startDate ?? '') === (right.startDate ?? '')
+    && (left.endDate ?? '') === (right.endDate ?? '')
     && (left.allowPerGolferTees ?? false) === (right.allowPerGolferTees ?? false)
     && sameOverallCompetition(left.overallCompetition, right.overallCompetition)
     && left.rounds.length === right.rounds.length
@@ -62,6 +64,8 @@ export function setupProblems(draft: EventSetupInput): readonly string[] {
   }
   if (!boundedText(draft.name)) problems.push('Enter an event name.');
   if (draft.startDate !== undefined && draft.startDate !== '' && !isEventStartDate(draft.startDate)) problems.push('Enter a valid event start date.');
+  if (draft.endDate !== undefined && draft.endDate !== '' && !isEventStartDate(draft.endDate)) problems.push('Enter a valid event end date.');
+  if (draft.startDate && draft.endDate && draft.endDate < draft.startDate) problems.push('Event end date cannot be before the start date.');
   if (draft.location !== '' && !boundedText(draft.location, 200)) problems.push('Review the general location.');
   if (draft.playerIds.length < 1) problems.push('Choose at least one player.');
   if (draft.rounds.length === 0) problems.push('Add at least one round.');

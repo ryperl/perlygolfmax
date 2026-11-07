@@ -49,6 +49,7 @@ export interface RoundSetupInput {
 export interface EventSetupInput {
   readonly name: string;
   readonly startDate?: string;
+  readonly endDate?: string;
   readonly location: string;
   readonly playerIds: readonly string[];
   readonly rounds: readonly RoundSetupInput[];

@@ -57,6 +57,9 @@ function groups(value: unknown, playerIds: readonly string[], layout?: readonly 
 export function isEventSetupInput(value: unknown): value is EventSetupInput {
   if (!isRecord(value) || !boundedText(value.name) || !location(value.location)
     || value.startDate !== undefined && value.startDate !== '' && !isEventStartDate(value.startDate)
+    || value.endDate !== undefined && value.endDate !== '' && !isEventStartDate(value.endDate)
+    || typeof value.startDate === 'string' && value.startDate !== '' && typeof value.endDate === 'string'
+      && value.endDate !== '' && value.endDate < value.startDate
     || value.allowPerGolferTees !== undefined && typeof value.allowPerGolferTees !== 'boolean'
     || value.overallCompetition !== undefined && value.overallCompetition !== null && !isOverallCompetition(value.overallCompetition)
     || !Array.isArray(value.playerIds) || value.playerIds.length < 1

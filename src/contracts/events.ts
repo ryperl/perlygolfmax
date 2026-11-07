@@ -36,6 +36,8 @@ export function isEventSummary(value: unknown): value is EventSummary {
   return isRecord(value) && isUuid(value.id)
     && typeof value.name === 'string' && readEventName(value) === value.name
     && (value.startDate === undefined || isEventStartDate(value.startDate))
+    && (value.endDate === undefined || isEventStartDate(value.endDate))
+    && (value.startDate === undefined || value.endDate === undefined || value.endDate >= value.startDate)
     && typeof value.createdAt === 'string' && Number.isFinite(Date.parse(value.createdAt))
     && (value.role === 'owner' || value.role === 'member' || value.role === 'viewer')
     && isEventStatus(value.status) && isEventRevision(value.etag);

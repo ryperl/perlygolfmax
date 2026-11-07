@@ -15,6 +15,13 @@ const input = {
 };
 
 describe('private setup and index contracts', () => {
+  it('accepts optional end dates and clearing but rejects an end before the supplied start', () => {
+    expect(isEventSetupInput({ ...input, startDate: '2026-11-06', endDate: '2026-11-06' })).toBe(true);
+    expect(isEventSetupInput({ ...input, endDate: '' })).toBe(true);
+    for (const endDate of ['2026-11-05', '2026-02-29', '2026-11-10T00:00:00Z', null]) {
+      expect(isEventSetupInput({ ...input, startDate: '2026-11-06', endDate })).toBe(false);
+    }
+  });
   it('accepts optional event/round dates and explicit input clearing, but never blank captured dates', () => {
     expect(isEventSetupInput(input)).toBe(true);
     for (const startDate of ['2024-02-29', '2026-11-06', '']) {

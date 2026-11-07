@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { emptyWorkspace, fictionalId, fictionalWorkspace } from '../../client/catalog.test-support';
 import type { EventWorkspace, RoundSnapshot } from '../../domain/setup';
 import { EventTripView, summarizeEntryProgress } from './index';
-import { fictionalRoundScores, scoreResult } from '../../client/scoring.test-support';
+import { fictionalRoundScores, scoreResult, withGameResults } from '../../client/scoring.test-support';
+import { stablefordPoints } from '../../domain/stableford';
 
 const openingRound = fictionalWorkspace.rounds[0];
 if (!openingRound) throw new Error('Missing fictional round fixture.');
@@ -31,6 +32,53 @@ function roundCard(name: string) {
 }
 
 describe('saved event overview', () => {
+  it('shows the selected game teams below Groups without treating playing groups as competition teams', () => {
+    const game = { id: fictionalId(550), name: 'Fictional selected Better Ball', basis: 'net' as const, preset: 'standard' as const,
+      format: 'two-net-better-ball' as const, handicapAllowancePercent: 100, points: stablefordPoints('standard'),
+      teams: [{ id: fictionalId(551), name: 'Fictional team one', playerIds: [fictionalId(1), fictionalId(3)] },
+        { id: fictionalId(552), name: 'Fictional team two', playerIds: [fictionalId(2), fictionalId(4)] }] };
+    const round = fictionalWorkspace.rounds[0];
+    if (!round) throw new Error('Missing fictional round.');
+    const current = { ...fictionalWorkspace, overallCompetition: { kind: 'stableford' as const, credit: 'team' as const,
+      roundGames: [{ roundId: round.id, gameId: game.id }] } };
+    const progress = { [round.id]: summarizeEntryProgress(current.event.id, round, withGameResults(fictionalRoundScores, [game], 'games'), game.id) };
+    const view = render(<EventTripView workspace={current} view="group" progress={progress} />);
+    expect(screen.getByRole('heading', { name: 'Groups', level: 4 })).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'Manual groups' })).not.toBeInTheDocument();
+    expect(screen.getByText('Overall game: Fictional selected Better Ball')).toBeVisible();
+    expect(screen.getByText(/2-man net Better Ball/)).toBeVisible();
+    const teams = screen.getByRole('region', { name: `Competition teams for ${round.name}` });
+    expect(within(teams).getByRole('heading', { name: 'Fictional team one' })).toBeVisible();
+    expect(within(teams).getByText('Fictional Player 1')).toBeVisible();
+    expect(within(teams).getByText('Fictional Player 3')).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Groups' }).compareDocumentPosition(teams) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    const individual = { id: game.id, name: 'Fictional individual', preset: 'standard' as const, basis: 'gross' as const,
+      handicapAllowancePercent: 95, points: stablefordPoints('standard') };
+    view.rerender(<EventTripView workspace={current} view="group" progress={{ [round.id]:
+      summarizeEntryProgress(current.event.id, round, withGameResults(fictionalRoundScores, [individual], 'next'), game.id) }} />);
+    expect(screen.getByText('Individual game — no competition teams.')).toBeVisible();
+    expect(screen.queryByText('Fictional team one')).not.toBeInTheDocument();
+    const original = progress[round.id];
+    if (original?.kind !== 'ready') throw new Error('Missing fictional selected game.');
+    view.rerender(<EventTripView workspace={current} view="group" progress={{ [round.id]: {
+      kind: 'ready', summary: { ...original.summary, selectedGame: { ...game,
+        teams: game.teams.map((team, index) => index === 0 ? { ...team, playerIds: [fictionalId(1), fictionalId(99)] } : team) } },
+    } }} />);
+    expect(screen.getByText('Saved team assignments need organizer repair before team results are available.')).toBeVisible();
+    expect(screen.getByText('Player unavailable')).toBeVisible();
+    view.rerender(<EventTripView workspace={current} view="group" progress={{ [round.id]: { kind: 'unavailable' } }} />);
+    expect(screen.getByText('Team information unavailable. Refresh event to retry.')).toBeVisible();
+    expect(screen.queryByText('Individual game — no competition teams.')).not.toBeInTheDocument();
+  });
+  it('labels both event range dates and shows missing dates honestly', () => {
+    const view = render(<EventTripView workspace={{ ...workspace, event: { ...workspace.event,
+      startDate: '2026-11-06', endDate: '2026-11-10' } }} view="overview" />);
+    expect(screen.getByText('Event Start').nextElementSibling?.querySelector('time')).toHaveAttribute('datetime', '2026-11-06');
+    expect(screen.getByText('Event End').nextElementSibling?.querySelector('time')).toHaveAttribute('datetime', '2026-11-10');
+    view.rerender(<EventTripView workspace={workspace} view="overview" />);
+    expect(screen.getByText('Event Start').nextElementSibling).toHaveTextContent('Not set');
+    expect(screen.getByText('Event End').nextElementSibling).toHaveTextContent('Not set');
+  });
   it('distinguishes unselected, loading and unavailable overall games without inventing a name', () => {
     const enabled = { ...workspace, overallCompetition: { kind: 'stableford' as const, credit: 'team' as const,
       roundGames: [{ roundId: firstRound.id, gameId: fictionalId(500) }] } };
@@ -165,7 +213,7 @@ describe('saved event rounds', () => {
     const view = render(<EventTripView
       workspace={{ ...workspace, rounds: [{ ...firstRound, groups: [], players: [] }] }} view="rounds"
     />);
-    expect(screen.getByText('No manual groups saved for this round.')).toBeVisible();
+    expect(screen.getByText('No groups saved for this round.')).toBeVisible();
     expect(screen.getByText('No players saved for this round.')).toBeVisible();
     view.rerender(<EventTripView workspace={emptyWorkspace} view="rounds" />);
     expect(screen.getByText('No rounds saved for this event.')).toBeVisible();

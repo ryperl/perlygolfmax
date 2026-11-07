@@ -24,7 +24,8 @@ describe('owner-only saved-round gross scorecards', () => {
     expect(round.teeRatings).toEqual(saved.teeProfile.ratings);
     expect(round.teeRatings).not.toEqual(newerTee.ratings);
     expect(isRoundScores(round)).toBe(true);
-    expect(f.get.mock.calls.every(([partition]) => partition === event.id)).toBe(true);
+    expect(f.get.mock.calls.every(([partition, row]) => partition === event.id
+      || partition === 'catalog:players' && row.startsWith('player:'))).toBe(true);
   });
 
   it('persists and exactly replays reported pickup strokes, preserving their distinct audited correction to completed strokes', async () => {

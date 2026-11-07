@@ -116,7 +116,16 @@ export class TableScoreStore {
     return card;
   }
 
-  private projection(workspace: EventWorkspace, round: RoundSnapshot, cards: readonly Scorecard[], access: EventAccess, games?: GameConfiguration): RoundScores {
+  private async projection(capturedWorkspace: EventWorkspace, capturedRound: RoundSnapshot, capturedCards: readonly Scorecard[], access: EventAccess, games?: GameConfiguration): Promise<RoundScores> {
+    const workspace = await this.workspace.forDisplay(capturedWorkspace);
+    const round = workspace.rounds.find((item) => item.id === capturedRound.id);
+    if (!round) throw new ApiError(503, 'INVALID_STORED_WORKSPACE');
+    const names = new Map(round.players.map((player) => [player.playerId, player.displayName]));
+    const cards = capturedCards.map((card) => {
+      const displayName = names.get(card.playerId);
+      if (displayName === undefined) throw new ApiError(503, 'INVALID_STORED_SCORECARD');
+      return { ...card, displayName };
+    });
     const timestamps = cards.flatMap((card) => card.updatedAt === null ? [] : [card.updatedAt]).sort();
     const owner = access.summary.role === 'owner';
     const viewerPlayerId = round.players.some((player) => player.playerId === access.viewerPlayerId) ? access.viewerPlayerId : undefined;
@@ -155,8 +164,9 @@ export class TableScoreStore {
   async get(identity: ScoreActor, eventId: string, roundId: string): Promise<RoundScores> {
     const state = await this.snapshot(identity, eventId, roundId);
     const cards = await this.cards(eventId, state.round, state.lock);
+    const projection = await this.projection(state.workspace, state.round, cards, state, state.games);
     await this.unchanged(identity, eventId, state);
-    return this.projection(state.workspace, state.round, cards, state, state.games);
+    return projection;
   }
 
   async leaderboard(identity: ScoreActor, eventId: string, chargeRead: () => Promise<void>): Promise<EventLeaderboardView> {

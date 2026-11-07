@@ -381,6 +381,7 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
           <label>Workspace name<input required maxLength={100} value={draft.name} onChange={(event) => { editDraft({ ...draft, name: event.target.value }); }} /></label>
           <label>General location<input maxLength={200} value={draft.location} onChange={(event) => { editDraft({ ...draft, location: event.target.value }); }} /></label>
           <label>Event start date (optional)<input type="date" min="0001-01-01" max="9999-12-31" value={draft.startDate ?? ''} onChange={(event) => { editDraft({ ...draft, startDate: event.target.value }); }} /></label>
+          <label>Event end date (optional)<input type="date" min={draft.startDate || '0001-01-01'} max="9999-12-31" value={draft.endDate ?? ''} onChange={(event) => { editDraft({ ...draft, endDate: event.target.value }); }} /></label>
           <p>The event-local calendar date is separate from round tee times. Clearing it removes the date; past events are not automatically archived.</p>
           <label className="setup-check"><input type="checkbox" checked={draft.allowPerGolferTees ?? false} disabled={personalTeesLocked}
             onChange={(event) => {

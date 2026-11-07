@@ -2,11 +2,12 @@ import { expect, test } from './test';
 import type { EventWorkspace } from '../../src/domain/setup';
 import type { EventEntryProgress } from '../../src/features/event-trip/entry-progress';
 import { renderComponentFixture } from './render-fixture';
+import { stablefordPoints } from '../../src/domain/stableford';
 
 const id = (number: number) => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
 const players = Array.from({ length: 8 }, (_, index) => ({ playerId: id(index + 1), displayName: `Fictional golfer ${String(index + 1)}` }));
 const workspace: EventWorkspace = {
-  event: { id: id(50), name: 'Fictional Coastal Event', startDate: '2024-02-29', role: 'owner', status: 'active', etag: 'fictional-v1', createdAt: '2026-01-01' },
+  event: { id: id(50), name: 'Fictional Coastal Event', startDate: '2024-02-29', endDate: '2024-03-04', role: 'owner', status: 'active', etag: 'fictional-v1', createdAt: '2026-01-01' },
   location: 'Fictional County', roster: players, etag: 'fictional-v1',
   overallCompetition: { kind: 'stableford', credit: 'team', roundGames: [
     { roundId: id(71), gameId: id(81) }, { roundId: id(72), gameId: id(82) },
@@ -34,6 +35,13 @@ const progress: EventEntryProgress = Object.fromEntries(workspace.rounds.map((ro
   kind: 'ready',
   summary: {
     selectedGameName: index === 0 ? 'Fictional Better Ball' : 'Fictional Individual',
+    selectedGame: index === 0 ? {
+      id: id(81), name: 'Fictional Better Ball', preset: 'standard', basis: 'net', handicapAllowancePercent: 100,
+      format: 'two-net-better-ball', points: stablefordPoints('standard'),
+      teams: [0, 1, 2, 3].map((team) => ({ id: id(90 + team), name: `Fictional team ${String(team + 1)}`,
+        playerIds: players.slice(team * 2, team * 2 + 2).map((player) => player.playerId) })),
+    } : { id: id(82), name: 'Fictional Individual', preset: 'standard', basis: 'gross',
+      handicapAllowancePercent: 95, points: stablefordPoints('standard') },
     status: index === 0 ? 'In progress' : 'No scores yet', entered: index === 0 ? 56 : 0,
     total: 72, completeHoles: index === 0 ? 5 : 0, totalHoles: 9,
     groups: [1, 2].map((number) => ({
@@ -60,6 +68,15 @@ for (const view of ['overview', 'rounds', 'group'] as const) {
     await expect(page.getByText('1:00 PM (course local time)', { exact: true })).toBeVisible();
     await expect(page.getByText('Overall game: Fictional Better Ball', { exact: true })).toBeVisible();
     await expect(page.getByText('Overall game: Fictional Individual', { exact: true })).toBeVisible();
+    if (view === 'overview') {
+      await expect(page.locator('dt').filter({ hasText: /^Event Start$/ }).locator('..').locator('time')).toHaveAttribute('datetime', '2024-02-29');
+      await expect(page.locator('dt').filter({ hasText: /^Event End$/ }).locator('..').locator('time')).toHaveAttribute('datetime', '2024-03-04');
+    }
+    if (view !== 'overview') {
+      await expect(page.getByRole('heading', { name: 'Groups', exact: true })).toHaveCount(2);
+      await expect(page.getByRole('heading', { name: 'Fictional team 1', exact: true })).toBeVisible();
+      await expect(page.getByText('Individual game — no competition teams.', { exact: true })).toBeVisible();
+    }
     await expect(page.getByText('February 29, 2024', { exact: true })).toHaveAttribute('datetime', '2024-02-29');
     await expect(page.getByText('November 7, 2026', { exact: true })).toHaveAttribute('datetime', '2026-11-07');
     await expect(page.locator('.event-trip-round h3')).toHaveText(['Fictional round 2', 'Fictional round 1']);
