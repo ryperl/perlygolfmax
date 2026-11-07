@@ -5,6 +5,8 @@ import { eventTabHref, isOrganizerRoute, navigation, readEventRoute, readPage, r
 import type { PublicServices } from '../client/public-events';
 import { isUuid } from '../contracts/events';
 import { loadScoreLocation, scoreLocationHref } from './score-resume';
+// Shared scoring styles must load before either lazy public or organizer route.
+import '../features/scoring/scoring.css';
 const EventsPage = lazy(async () => {
   const module = await import('./EventsPage');
   return { default: module.ConfiguredEventsPage };

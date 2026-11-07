@@ -13,7 +13,7 @@ export default defineConfig({
   projects: [
     { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'mobile-chromium', use: { ...devices['Pixel 7'] } },
-    { name: 'iphone-16-pro-webkit', testMatch: ['**/score-resume.spec.ts', '**/public-app-visit.spec.ts'],
+    { name: 'iphone-16-pro-webkit', testMatch: ['**/score-resume.spec.ts', '**/public-app-visit.spec.ts', '**/public-scoring-styles.spec.ts'],
       use: { browserName: 'webkit', viewport: { width: 402, height: 874 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true } },
   ],
   webServer: {
