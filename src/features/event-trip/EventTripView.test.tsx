@@ -32,6 +32,15 @@ function roundCard(name: string) {
 }
 
 describe('saved event overview', () => {
+  it.each(['overview', 'rounds', 'group'] as const)('uses concise headings without repeated disclaimers in %s', (view) => {
+    render(<EventTripView workspace={workspace} view={view} />);
+    expect(screen.getByRole('region', { name: 'Rounds' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Rounds', level: 2 })).toBeVisible();
+    expect(screen.queryByText(/your saved event/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Saved rounds')).not.toBeInTheDocument();
+    expect(screen.queryByText('Saved entries, not finalization. Includes pickups and DNF.')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /Open scorecard for/ })).toHaveLength(workspace.rounds.length);
+  });
   it('shows the selected game teams below Groups without treating playing groups as competition teams', () => {
     const game = { id: fictionalId(550), name: 'Fictional selected Better Ball', basis: 'net' as const, preset: 'standard' as const,
       format: 'two-net-better-ball' as const, handicapAllowancePercent: 100, points: stablefordPoints('standard'),
@@ -166,7 +175,7 @@ describe('saved event overview', () => {
     expect(screen.getByText(workspace.location)).toBeVisible();
     const stats = screen.getByRole('region', { name: 'Event at a glance' });
     expect(within(stats).getByText('Golfers on roster').nextElementSibling).toHaveTextContent('4');
-    expect(within(stats).getByText('Saved rounds').nextElementSibling).toHaveTextContent('2');
+    expect(within(stats).getByText('Rounds').nextElementSibling).toHaveTextContent('2');
     expect(screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent))
       .toEqual([firstRound.name, secondRound.name]);
     expect(roundCard(secondRound.name).getByText('Fictional Pines')).toBeVisible();
@@ -262,7 +271,7 @@ describe.each(['overview', 'rounds', 'group'] as const)('saved %s navigation and
     expect(progress).toHaveTextContent('Saved entry progress: In progress');
     expect(progress).toHaveTextContent('Group 1 · In progress · 0/9 holes');
     expect(progress).toHaveAccessibleDescription('A hole counts when every golfer in that group has a saved entry.');
-    expect(screen.getAllByText('Saved entries, not finalization. Includes pickups and DNF.')).toHaveLength(1);
+    expect(screen.queryByText('Saved entries, not finalization. Includes pickups and DNF.')).not.toBeInTheDocument();
   });
 
   it('does not infer progress from setup locks and hides supplied private progress from members', () => {

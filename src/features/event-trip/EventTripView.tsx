@@ -115,9 +115,8 @@ function SavedRounds({ workspace, showGroups, progress }: {
       ? gameScoringLabel(state.summary.selectedGame) : undefined;
   }
   return (
-    <section className="event-trip-section" aria-label="Saved rounds">
-      <h2>Saved rounds</h2>
-      {(workspace.event.role === 'owner' || workspace.canViewScores) && workspace.rounds.length > 0 && <p>Saved entries, not finalization. Includes pickups and DNF.</p>}
+    <section className="event-trip-section" aria-label="Rounds">
+      <h2>Rounds</h2>
       {workspace.rounds.length === 0 ? <p>No rounds saved for this event.</p> : (
         <ol className="event-trip-rounds">
           {sortRoundsByStartDate(workspace.rounds).map((round) => (
@@ -172,7 +171,7 @@ export function EventTripView({ workspace, view, progress }: EventTripViewProps)
   return (
     <div className="event-trip">
       <header className="panel event-trip-header">
-        <p className="eyebrow">{view === 'overview' ? 'Your saved event' : event.name}</p>
+        {view !== 'overview' && <p className="eyebrow">{event.name}</p>}
         <h1>{view === 'overview' ? event.name : view === 'rounds' ? 'Rounds' : 'The Group'}</h1>
         <p className="event-trip-location">{workspace.location || 'No location saved.'}</p>
         {view === 'overview' && <dl className="event-trip-stats">
@@ -191,7 +190,7 @@ export function EventTripView({ workspace, view, progress }: EventTripViewProps)
         <section className="event-trip-section" aria-label="Event at a glance">
           <dl className="event-trip-stats">
             <div><dt>Golfers on roster</dt><dd>{workspace.roster.length}</dd></div>
-            <div><dt>Saved rounds</dt><dd>{workspace.rounds.length}</dd></div>
+            <div><dt>Rounds</dt><dd>{workspace.rounds.length}</dd></div>
           </dl>
           {workspace.roster.length === 0 && <p>No golfers saved to this event roster.</p>}
         </section>
