@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { EventChangedError } from '../../client/events';
 import type { RoundGameDefinition } from '../../domain/games';
-import { maximumGamesPerRound, sameGameDefinitions } from '../../domain/games';
+import { maximumGamesPerRound, sameGameDefinitions, visibleGames } from '../../domain/games';
 import type { GameWriteResult, RoundScores } from '../../domain/scoring';
 import { scorePermissions } from '../../domain/scoring';
 import type { GameDraft } from './game-draft';
@@ -57,6 +57,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
 
   function open(game?: RoundGameDefinition) {
     if (disabled || editor) return;
+    if (game?.kind === 'churchy' && round.churchyEnabled !== true) return;
     const draft = game ? draftFromGame(game) : newGameDraft();
     onDirtyChange(true);
     setMessage('');
@@ -74,10 +75,16 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
 
   async function save() {
     if (!editor || disabled || editor.conflict || inFlight.current) return;
+    if (editor.draft.kind === 'churchy' && round.churchyEnabled !== true) {
+      setMessage('Experimental game disabled. Cancel editing and refresh; ordinary scores and other games remain available.');
+      return;
+    }
     const game = buildGame(editor.draft, editor.roster.map((card) => card.playerId));
     const intended = game && replaceGame(editor.base, game);
     if (!intended) {
-      setMessage(editor.draft.kind === 'ball-drop' || editor.draft.kind === 'skins'
+      setMessage(editor.draft.kind === 'churchy'
+        ? 'Choose a complete saved foursome, order all four golfers, and enter exact whole USD cents per dot (zero or more). Only one Churchy game is allowed.'
+        : editor.draft.kind === 'ball-drop' || editor.draft.kind === 'skins'
         ? 'Check the game name (1–100 characters), supported format, and complete four-person Ball Drop teams. Skins are individual; net always uses 100% Course Handicap.'
         : 'Check the game name (1–100 characters), whole-number points, net allowance (1–100), and complete team assignments. Values must be safe integers within the supported points range.');
       return;
@@ -169,7 +176,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
       {archived && <p>This trip is archived. Game settings are read-only.</p>}
       {!canManage && <p>Saved game results · Settings are read-only.</p>}
       {games.length === 0 && <p>No games configured for this round.</p>}
-      {games.map((game) => <div className="round-game" key={game.id}>
+      {visibleGames(games, round.churchyEnabled).map((game) => <div className="round-game" key={game.id}>
         <GameResults game={game} result={round.games?.results.find((result) => result.gameId === game.id)}
           holeNumbers={round.layout.map((hole) => hole.number)} />
         {canManage && <button type="button" disabled={disabled || editor !== null} onClick={() => { open(game); }}>Edit {game.name}</button>}
@@ -178,7 +185,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
         onClick={() => { open(); }}>Add game</button>}
       {games.length >= maximumGamesPerRound && <p>This round has reached the 16-game limit.</p>}
       {message && <p role="status" className="game-notice">{message}</p>}
-      {editor && canManage && <>
+      {editor && canManage && (editor.draft.kind !== 'churchy' || round.churchyEnabled === true) && <>
         {editor.conflict && <div className="game-review">
           {editedGameChanged && <p>This game changed in the latest settings. Reviewing keeps your draft for this game and preserves other games.</p>}
           {editor.latest?.eventStatus === 'archived' && <p>The refreshed trip is archived. Your draft is retained, read-only.</p>}
@@ -190,6 +197,9 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
         </div>}
         <GameSettings draft={editor.draft} disabled={disabled || editor.latest?.eventStatus === 'archived'}
           roster={editor.roster}
+          churchyEnabled={round.churchyEnabled === true} groups={round.groups}
+          setupLocked={round.setupLocked && editor.base.some((game) => game.kind === 'churchy' && game.id === editor.draft.id)}
+          allowChurchyCreation={!editor.base.some((game) => game.kind === 'churchy' || game.id === editor.draft.id)}
           saveDisabled={editor.conflict} cancelDisabled={working} retry={editor.attempt !== null}
           onChange={change} onSave={() => { void save(); }} onCancel={() => {
             setEditor(null);
@@ -197,6 +207,8 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
             onDirtyChange(false);
           }} />
       </>}
+      {editor?.draft.kind === 'churchy' && round.churchyEnabled !== true && <button type="button" disabled={working}
+        onClick={() => { setEditor(null); onDirtyChange(false); }}>Cancel unavailable experimental edit</button>}
     </section>
   );
 }

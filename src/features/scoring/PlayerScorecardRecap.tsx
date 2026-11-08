@@ -15,14 +15,14 @@ export function PlayerScorecardRecap({ round, card, gameId }: {
   const front = layout.filter((hole) => hole.number <= 9);
   const back = layout.filter((hole) => hole.number > 9);
   const summary = summarizeCard(card, layout);
-  const game = scorecardGame(round, gameId);
+  const game = scorecardGame(round, gameId, [card.playerId]);
   const totalRating = (tee?.ratings ?? round.teeRatings)?.find((rating) => rating.type === 'Total');
   return <section className="player-scorecard-recap" aria-label={`${card.displayName} full scorecard`}>
     <header className="recap-heading">
       <div><h3>{card.displayName}</h3><p>{round.roundName} — {round.courseName}</p>
         <p>{tee?.name ?? round.teeName} / {tee?.category ?? round.teeCategory}{totalRating ? ` · Course rating ${String(totalRating.course)} · Slope ${String(totalRating.slope)}` : ''}
           {(round.playerTees?.length ?? 0) > 0 ? tee ? ' · personal tee' : ' · default tee' : ''}</p>
-        {game && <p className="scorecard-game-context">{game.definition.name} · {game.definition.kind === 'ball-drop' || game.definition.kind === 'skins'
+        {game && <p className="scorecard-game-context">{game.definition.name} · {game.definition.kind === 'ball-drop' || game.definition.kind === 'skins' || game.definition.kind === 'churchy'
           ? gameScoringLabel(game.definition) : `${game.definition.basis === 'net' ? 'Net' : 'Gross'} points`}</p>}
       </div>
       <p className="recap-total">{summary.complete ? 'Gross total' : 'Recorded total'}:

@@ -1,8 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { fictionalChange, fictionalRoundScores, scoreResult } from '../../client/scoring.test-support';
 import { cardFor, conflictedDraft, editedDraft, entryKey, entryScore, savedHole, scoreLabel } from './entry-state';
+import { churchyFixture } from '../../domain/churchy.test-support';
 
 describe('hole entry state', () => {
+  it('retains Churchy selections and press intent when raw strokes change, fail, or need conflict review', () => {
+    const f = churchyFixture();
+    const card = f.cards[0];
+    if (!card) throw new Error('Missing fictional golfer');
+    const original = { ...editedDraft('4', card), churchy: { ...f.extras, murphy: true, murphyPresses: 2 as const } };
+    const edited = editedDraft('X7', card, original);
+    expect(edited.churchy).toEqual(original.churchy);
+    const score = entryScore(edited.text, edited.churchy);
+    if (!score) throw new Error('Missing fictional disposition');
+    expect(score).toMatchObject({ kind: 'picked-up', reportedStrokes: 7, churchy: original.churchy });
+    expect(conflictedDraft(score, card, 1, edited).churchy).toEqual(original.churchy);
+  });
   it('captures a null baseline once and never silently adopts a later projection during further edits', () => {
     const original = cardFor(fictionalRoundScores, fictionalChange.playerId);
     const draft = editedDraft('4', original);

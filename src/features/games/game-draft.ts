@@ -4,7 +4,10 @@ import { defaultHandicapAllowancePercent, defaultTeamHandicapAllowancePercent, g
 import { stablefordPoints } from '../../domain/stableford';
 
 export interface GameDraft {
-  readonly kind?: 'stableford' | 'ball-drop' | 'skins';
+  readonly kind?: 'stableford' | 'ball-drop' | 'skins' | 'churchy';
+  readonly churchyGroup?: number;
+  readonly churchyPlayers?: readonly string[];
+  readonly amountPerDotMinor?: string;
   readonly carryovers?: boolean;
   readonly id: string;
   readonly name: string;
@@ -21,6 +24,8 @@ export interface GameDraft {
 }
 
 export function draftFromGame(game: RoundGameDefinition): GameDraft {
+  if (game.kind === 'churchy') return { ...newGameDraft(), id: game.id, name: game.name, kind: 'churchy', basis: 'net',
+    churchyGroup: game.groupNumber, churchyPlayers: game.playerIds, amountPerDotMinor: String(game.amountPerDotMinor) };
   if (!isStablefordGame(game)) return {
     ...newGameDraft(), id: game.id, name: game.name, kind: game.kind, basis: game.basis,
     allowance: '100', allowanceConfigured: true,
@@ -72,9 +77,11 @@ export function setFormat(draft: GameDraft, format: CompetitionTeamFormat | unde
   };
 }
 
-export function setGameKind(draft: GameDraft, kind: 'stableford' | 'ball-drop' | 'skins', rosterCount: number): GameDraft {
+export function setGameKind(draft: GameDraft, kind: 'stableford' | 'ball-drop' | 'skins' | 'churchy', rosterCount: number): GameDraft {
   if ((draft.kind ?? 'stableford') === kind) return draft;
   const reset = setFormat(draft, undefined, rosterCount);
+  if (kind === 'churchy') return { ...reset, kind, name: 'Churchy Game', basis: 'net', amountPerDotMinor: '',
+    churchyPlayers: [] };
   return kind === 'ball-drop'
     ? { ...setFormat(reset, 'ball-drop-net-gross', rosterCount), kind, name: 'Ball Drop', allowance: '100' }
     : { ...reset, kind, name: kind === 'skins' ? 'Skins' : 'Standard Stableford',
@@ -114,6 +121,13 @@ function integer(text: string): number | undefined {
 }
 
 export function buildGame(draft: GameDraft, playerIds: readonly string[] = []): RoundGameDefinition | null {
+  if (draft.kind === 'churchy') {
+    const game = { id: draft.id, name: 'Churchy Game', kind: 'churchy', version: 1, basis: 'net',
+      groupNumber: draft.churchyGroup, playerIds: draft.churchyPlayers, currency: 'USD',
+      amountPerDotMinor: integer(draft.amountPerDotMinor ?? '') };
+    return isRoundGameDefinition(game)
+      && game.playerIds.every((id) => playerIds.includes(id)) ? game : null;
+  }
   if (draft.kind === 'ball-drop' || draft.kind === 'skins') {
     const game = draft.kind === 'skins'
       ? { id: draft.id, name: draft.name.trim(), kind: draft.kind, version: 1, basis: draft.basis, carryovers: draft.carryovers ?? false }

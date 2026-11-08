@@ -15,6 +15,8 @@ import { isPublicScoreIdentity } from './public-access.js';
 import { isStablefordGame } from '../domain/games.js';
 import { calculateStrokeGameResults } from '../domain/stroke-games.js';
 import { sameJsonValue } from './round-context.js';
+import { isChurchySpecials } from './churchy.js';
+import { calculateChurchyResults } from '../domain/churchy.js';
 
 export function isScoreActor(value: unknown): value is ScoreActor {
   return isPublicScoreIdentity(value) || isEventTesterIdentity(value) || isRecord(value) && !Object.hasOwn(value, 'kind')
@@ -36,14 +38,16 @@ function isCourseHandicap(value: unknown): value is PlayerCourseHandicap {
 
 export function isHoleScore(value: unknown): value is HoleScore {
   if (!isRecord(value)) return false;
+  if (value.churchy !== undefined && !isChurchySpecials(value.churchy)) return false;
+  const count = Object.keys(value).filter((key) => key !== 'churchy').length;
   if (value.kind === 'strokes') {
-    return Object.keys(value).length === 2 && positiveInteger(value.strokes, maximumExactHoleStrokes);
+    return count === 2 && positiveInteger(value.strokes, maximumExactHoleStrokes);
   }
   if (value.kind === 'picked-up') {
-    return Object.keys(value).length === 1
-      || Object.keys(value).length === 2 && positiveInteger(value.reportedStrokes, maximumExactHoleStrokes);
+    return count === 1
+      || count === 2 && positiveInteger(value.reportedStrokes, maximumExactHoleStrokes);
   }
-  return Object.keys(value).length === 1 && (value.kind === 'unplayed' || value.kind === 'did-not-finish');
+  return count === 1 && (value.kind === 'unplayed' || value.kind === 'did-not-finish');
 }
 
 export function parseScoreEntry(text: string): HoleScore | null {
@@ -82,6 +86,8 @@ export function isScorecard(value: unknown): value is Scorecard {
 }
 
 export function isRoundScores(value: unknown): value is RoundScores {
+  if (isRecord(value) && value.churchyEnabled !== undefined && typeof value.churchyEnabled !== 'boolean') return false;
+  if (isRecord(value) && value.teeStrokeAllocation !== undefined && typeof value.teeStrokeAllocation !== 'boolean') return false;
   if (!isRecord(value) || !isUuid(value.eventId) || !isUuid(value.roundId) || !isEventStatus(value.eventStatus)
     || !boundedText(value.eventName) || !boundedText(value.roundName) || !boundedText(value.courseName, 200)
     || !boundedText(value.teeName) || !boundedText(value.teeCategory, 40)
@@ -174,17 +180,31 @@ export function isRoundScores(value: unknown): value is RoundScores {
   }
   if (value.playerTees !== undefined && !isPlayerTeeProfiles(value.playerTees, { holeCount: count, holes: layout }, ids)) return false;
   const playerLayouts = new Map(value.playerTees?.map((entry) => [entry.playerId, entry.profile.holes]));
+  const playerAllocations = new Map(value.playerTees?.map((entry) => [entry.playerId, entry.profile.strokeAllocation]));
   if (value.games !== undefined) {
     if (!isRoundGamesView(value.games) || value.games.configuration.eventId !== value.eventId
       || value.games.configuration.roundId !== value.roundId
-      || value.games.results.some((result) => result.players.length !== cards.length || result.players.some((player) => {
+      || value.games.results.some((result) => (result.kind !== 'churchy' && result.players.length !== cards.length) || result.players.some((player) => {
         const card = cardsById.get(player.playerId);
+        if (!card && result.kind === 'churchy') return false;
         return !card || card.displayName !== player.displayName || player.totalHoles !== count
           || !player.holes.every((hole) => card.holes.some((entry) => entry.number === hole.number));
       }))) return false;
     for (const result of value.games.results) {
       const game = value.games.configuration.games.find((entry) => entry.id === result.gameId);
       if (!game) return false;
+      if (game.kind === 'churchy') {
+        const group: unknown = value.groups.find((entry: unknown) => isRecord(entry) && entry.number === game.groupNumber);
+        const expected = calculateChurchyResults(game, cards.map((card) => {
+          const published = courseHandicaps?.find((entry) => entry.playerId === card.playerId);
+          return { playerId: card.playerId, displayName: card.displayName, layout: playerLayouts.get(card.playerId) ?? layout,
+            handicap: !(playerAllocations.get(card.playerId) ?? value.teeStrokeAllocation)
+              ? 'missing-stroke-index' : published?.courseHandicap ?? 'missing-handicap-index' };
+        }), cards, isRecord(group) && Array.isArray(group.playerIds) && group.playerIds.length === 4
+          && group.playerIds.every((id: unknown) => typeof id === 'string' && game.playerIds.includes(id)));
+        if (!sameJsonValue(result, expected)) return false;
+        continue;
+      }
       if (!isStablefordGame(game)) {
         const expected = calculateStrokeGameResults(game, result.players.map((player) => {
           const published = courseHandicaps?.find((entry) => entry.playerId === player.playerId);

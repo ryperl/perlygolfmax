@@ -9,6 +9,7 @@ import { aggregateTeamGameResults } from '../domain/team-games.js';
 import { boundedText, isDateOnly } from './catalog.js';
 import { isEventRevision, isRecord, isUuid } from './events.js';
 import { isStrokeGameResult } from './stroke-games.js';
+import { isChurchyDefinition, isChurchyResult } from './churchy.js';
 
 function keys(value: Record<string, unknown>, required: readonly string[], optional: readonly string[] = []): boolean {
   return required.every((key) => Object.hasOwn(value, key))
@@ -37,6 +38,7 @@ function pointsTable(value: unknown, maximum: number): boolean {
 }
 
 export function isRoundGameDefinition(value: unknown): value is RoundGameDefinition {
+  if (isRecord(value) && value.kind === 'churchy') return isChurchyDefinition(value);
   if (isRecord(value) && (value.kind === 'ball-drop' || value.kind === 'skins')) {
     if (!isUuid(value.id) || !boundedText(value.name) || value.version !== 1
       || value.basis !== 'gross' && value.basis !== 'net') return false;
@@ -87,6 +89,7 @@ export function isRoundGameDefinition(value: unknown): value is RoundGameDefinit
 
 export function isRoundGameDefinitions(value: unknown): value is readonly RoundGameDefinition[] {
   return Array.isArray(value) && value.length <= maximumGamesPerRound && value.every(isRoundGameDefinition)
+    && value.filter((game: RoundGameDefinition) => game.kind === 'churchy').length <= 1
     && new Set(value.map((game: RoundGameDefinition) => game.id)).size === value.length;
 }
 
@@ -189,6 +192,11 @@ export function isRoundGamesView(value: unknown): value is RoundGamesView {
   for (const result of value.results) {
     if (!isRecord(result) || !isUuid(result.gameId) || seen.has(result.gameId)) return false;
     const game = value.configuration.games.find((candidate) => candidate.id === result.gameId);
+    if (game?.kind === 'churchy') {
+      if (!isChurchyResult(result, game)) return false;
+      seen.add(result.gameId);
+      continue;
+    }
     if (game && !isStablefordGame(game)) {
       if (!isStrokeGameResult(result, game)) return false;
       const ids = result.players.map((player) => player.playerId).sort().join(',');

@@ -3,6 +3,7 @@ import type { RoundScores, Scorecard } from '../../domain/scoring';
 import type { GamePlayerResult, GameTeamResult, RoundGameDefinition, RoundGameResult } from '../../domain/games';
 import { gameUnavailableMessage } from '../games';
 import { summarizeGross } from '../../domain/scoring';
+import { visibleGames } from '../../domain/games';
 
 export function summarizeCard(card: Scorecard, layout: readonly CourseHole[]) {
   const saved = new Map(card.holes.map((hole) => [hole.number, hole]));
@@ -29,9 +30,10 @@ export interface ScorecardGame {
   readonly result: RoundGameResult | undefined;
 }
 
-export function scorecardGame(round: RoundScores, gameId?: string | null): ScorecardGame | undefined {
+export function scorecardGame(round: RoundScores, gameId?: string | null, playerIds?: readonly string[]): ScorecardGame | undefined {
   if (gameId === null) return undefined;
-  const games = round.games?.configuration.games ?? [];
+  const games = visibleGames(round.games?.configuration.games ?? [], round.churchyEnabled).filter((game) =>
+    game.kind !== 'churchy' || playerIds === undefined || playerIds.length > 0 && playerIds.every((id) => game.playerIds.includes(id)));
   const definition = games.find((game) => game.id === gameId) ?? games[0];
   return definition ? { definition, result: round.games?.results.find((result) => result.gameId === definition.id) } : undefined;
 }

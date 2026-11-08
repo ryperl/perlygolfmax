@@ -241,7 +241,7 @@ export function validatePursePlanContext(
       if (roundScores !== undefined) {
         const saved = roundScores.filter((round) => round.roundId === source.roundId);
         const games = saved[0]?.games?.configuration.games.filter((game) => game.id === source.gameId) ?? [];
-        if (saved.length !== 1 || games.length !== 1) issues.push(issue('missing-game', pool.id));
+        if (saved.length !== 1 || games.length !== 1 || games[0]?.kind === 'churchy') issues.push(issue('missing-game', pool.id));
         const game = games[0];
         const savedRound = saved[0];
         if (savedRound && (savedRound.eventId !== workspace.event.id
@@ -302,7 +302,7 @@ function sourceFor(pool: PurseRankedPool, workspace: EventWorkspace, rounds: rea
   const results = saved.games?.results.filter((result) => result.gameId === source.gameId) ?? [];
   const game = definitions[0];
   const result = results[0];
-  if (!game || !result || definitions.length !== 1 || results.length !== 1) return blocked('missing-game');
+  if (!game || game.kind === 'churchy' || !result || definitions.length !== 1 || results.length !== 1) return blocked('missing-game');
   const roster = snapshot.players.map((player) => player.playerId);
   if (!sameSet(roster, workspace.roster.map((player) => player.playerId))
     || !sameSet(result.players.map((player) => player.playerId), roster)) return blocked('roster-context-mismatch');

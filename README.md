@@ -479,6 +479,65 @@ binding before converting that game to Ball Drop or Skins. Legacy Stableford
 definitions/results remain readable without migration and retain their existing
 points tables and allowances.
 
+### Churchy Game (experimental)
+
+Churchy is a separate version-1 game, enabled by the new API by default.
+The organizer chooses one saved four-person playing group and explicitly
+orders P1–P4. Saved Churchy group/order changes are locked once round scoring
+has started; adding the separate game never unlocks captured round setup.
+Other groups and games are unchanged.
+Partners are P1/P2 versus P3/P4 on holes 1–3, P1/P3 versus P2/P4 on 4–6,
+and P1/P4 versus P2/P3 on 7–9; these repeat on 10–18. Stakes 1, 2, 3 repeat.
+The group's starting hole changes navigation, never the scoring sequence.
+
+High compares each pair's maximum **net numeric strokes** (lower wins);
+Low compares its minimum (lower wins). Churchy subtracts the lowest captured
+Course Handicap of the four from each handicap and allocates relative strokes
+using each golfer's captured personal tee. Absolute CH labels and other games
+are unchanged; NH or unavailable allocations never become scratch defaults.
+High/Low carry independently across partner changes and the turn. A sweep
+awards only the current stake; final tied carries remain unawarded.
+Earlier pending scores block subsequent carry awards.
+
+The current-hole **+ Dots** button opens a keyboard-accessible bottom dialog
+without opening the score keyboard. Paree (fairway bunker) and Murphy
+(chipping) require explicit calls: gross par or better wins for the calling
+pair, otherwise the opponents win. Murphy stages are initial 1, opposing-team
+press 2, calling-team press-back 3, with no further presses or verified
+individual attribution. Sandy requires confirmed greenside up-and-down at
+exact gross par; Pully requires a confirmed par putt longer than the flagstick.
+These other specials are one dot each and stack. Exact gross birdie is derived
+automatically; eagle dots and Paree presses are not defined.
+
+Both winning partners always earn the full dots, **never netted or negative**.
+Pickup/DNF loses High to an all-numeric pair, while its numeric partner still
+competes for Low. Called Paree/Murphy is missed on pickup/DNF. Both pairs
+incomplete for High, or either pair without a numeric Low, remain explicitly
+unavailable: no invented tie/penalty, final total or settlement. X7 is a pickup
+with reported seven, not completed numeric seven. Missing scores are pending.
+Score and special metadata share the same conditional, idempotent audited
+write. Specials-only changes, retries, discard and navigation guards use the
+existing score-draft workflow; nothing persists offline.
+
+Saved Churchy receipts and four-golfer tied standings show earned dots separately
+from a **planned shared-pot settlement**. The organizer explicitly enters whole
+USD cents per dot (100 means $1; 0 means no planned money). For earned totals
+`d_i`, settlement units are `2*d_i - sum(d)/2`, calculated with exact integer
+money. A fictional `[21,21,0,0]` at $1/dot means each winner collects $21
+**total**, each loser pays $21 total, not $42. Pending amounts are projected;
+unavailable inputs/overflow do not become zero. Nothing is collected or paid.
+Churchy is not an overall Stableford selection or a place-based purse source.
+
+Set API `CHURCHY_GAME_ENABLED=false` to hide all Churchy setup, entry, cards,
+results, standings and settlement and reject Churchy-specific edits. Saved
+definitions, special metadata and audits survive; ordinary strokes and other
+game edits still work without erasing hidden data. Absent configuration enables
+the **new API**; only exact `true` explicitly enables, while other configured
+values fail closed. The UI requires an explicit server `churchyEnabled: true`;
+missing capabilities from an older API never authorize new Churchy writes.
+Deploy the compatible API before exposing the new UI. No live setting or
+deployment is performed by this implementation.
+
 ### Round leaderboard
 
 Open **Leaderboard** beside Scorecards, Enter scores and Games. Select a saved

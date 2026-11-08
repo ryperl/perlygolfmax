@@ -63,6 +63,50 @@ intentionally trades deployment parallelism for compatibility: newly exposed
 initial-index and setup-refresh controls must not reach older handlers that
 ignore or lack their request contract.
 
+## Experimental Churchy capability rollout and kill switch
+
+The scoring API (organizer and public runtime) evaluates
+`CHURCHY_GAME_ENABLED` and publishes `churchyEnabled` on each round projection.
+Absent configuration defaults **on** in the new implementation; exact `true`
+enables explicitly, exact `false` disables, and any other configured value
+fails closed. There is no frontend environment override or new infrastructure.
+Clients require the explicit server capability; an older API without it is
+treated as unsupported even though the new server defaults on.
+
+Deploy the compatible API before the frontend through the existing approved
+test deployment. No new application setting is required for default-on rollout;
+read back an actual round response to confirm the deployed capability. An
+existing explicit `false` must be deliberately changed to `true` to enable.
+Do not modify production or create resources as part of this rollout.
+
+To turn Churchy off, set `CHURCHY_GAME_ENABLED=false` on the existing Functions
+app through the separately approved settings process. The platform may recycle
+the worker on settings changes. Fresh reads hide Churchy creation, Dots dialogs,
+scorecard selections, results, leaderboards and planned money settlement.
+Already-open clients may be stale until refresh, but the authoritative store
+rejects changed Churchy definitions or specials. Ordinary stroke saves still
+work, preserving any hidden specials; other game edits retain Churchy
+definitions. Reads continue to carry known definitions and receipts for
+lossless transport. Audits are retained and idempotent replay never publishes
+a second change. No migration, deletion, payment, authentication or access
+decision is part of disabling/re-enabling.
+
+Churchy uses the existing same-partition conditional score/card/audit/grant
+transaction, including public-event authority and legacy grant checks. A special
+edit carries the saved game revision; group/order changes and stale proofs are
+rejected. The per-player Save & Next workflow retains partial acknowledgements
+and pending drafts for retry. Calls and presses are recorded, not proof of
+advance declaration or verified team identity.
+
+Saved earned-dot results derive from captured handicaps, personal layouts and
+raw dispositions, never client awards or current catalog observations. Pending
+carry chains and unresolved incomplete-pair comparisons cannot produce final
+settlement. Planned settlement uses exact USD cents and the separate shared-pot
+formula, not existing place-based purse mechanics. Overflow yields unavailable
+amounts, never a float approximation or silent zero. See the Churchy section
+in the README for the approved golf rules and explicitly unresolved pickup
+boundaries.
+
 ## Identity and application authority
 
 Organizer tools use MSAL authorization code with PKCE against a dedicated customer

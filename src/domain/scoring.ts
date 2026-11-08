@@ -4,12 +4,14 @@ import type { ScoreActor } from './test-access.js';
 import type { RoundGroup } from './setup.js';
 import type { GameChange, GameUnavailableReason, RoundGamesView } from './games.js';
 import type { PlayerTeeProfile } from './tees.js';
+import type { ChurchySpecials } from './churchy.js';
+import { sameChurchySpecials } from './churchy.js';
 
-export type HoleScore =
+export type HoleScore = (
   | { readonly kind: 'unplayed' }
   | { readonly kind: 'strokes'; readonly strokes: number }
   | { readonly kind: 'picked-up'; readonly reportedStrokes?: number }
-  | { readonly kind: 'did-not-finish' };
+  | { readonly kind: 'did-not-finish' }) & { readonly churchy?: ChurchySpecials };
 
 export interface ScoredHole {
   readonly number: number;
@@ -47,6 +49,8 @@ export interface PlayerCourseHandicap {
 }
 
 export interface RoundScores {
+  readonly churchyEnabled?: boolean;
+  readonly teeStrokeAllocation?: boolean;
   readonly eventId: string;
   readonly eventName: string;
   readonly eventStatus: EventStatus;
@@ -116,6 +120,7 @@ export const maximumExactHoleStrokes = Math.floor(Number.MAX_SAFE_INTEGER / 18);
 
 export function sameHoleScore(left: HoleScore, right: HoleScore): boolean {
   return left.kind === right.kind
+    && sameChurchySpecials(left.churchy, right.churchy)
     && (left.kind !== 'strokes' || right.kind === 'strokes' && left.strokes === right.strokes)
     && (left.kind !== 'picked-up' || right.kind === 'picked-up' && left.reportedStrokes === right.reportedStrokes);
 }

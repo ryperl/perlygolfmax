@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { GamePlayerResult, GameTeamResult } from '../../domain/games';
-import { gameResultDirection, gameResultTotal, gameResultUnit, isTeamGameDefinition } from '../../domain/games';
+import { gameResultDirection, gameResultTotal, gameResultUnit, isTeamGameDefinition, visibleGames } from '../../domain/games';
+import { ChurchyResults } from '../churchy';
 import type { RoundScores } from '../../domain/scoring';
 import { scorePermissions } from '../../domain/scoring';
 import { scorecardTee } from '../../domain/tees';
@@ -41,7 +42,7 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
   const [gameId, setGameId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [pageIndex, setPageIndex] = useState(0);
-  const games = round.games?.configuration.games ?? [];
+  const games = visibleGames(round.games?.configuration.games ?? [], round.churchyEnabled);
   const canManage = round.eventStatus === 'active' && scorePermissions(round).role === 'owner' && scorePermissions(round).canManageGames;
   const game = games.find((entry) => entry.id === gameId) ?? games[0];
   const result = game && round.games?.results.find((entry) => entry.gameId === game.id);
@@ -83,7 +84,7 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
         {games.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} · {gameScoringLabel(entry)}</option>)}
       </select></label>
       <p className="leaderboard-format">{gameScoringLabel(game)}</p>
-      {teamGame && result?.teamSetupRequired ? <>
+      {game.kind === 'churchy' ? <ChurchyResults game={game} result={result} /> : teamGame && result?.teamSetupRequired ? <>
         <p>Update team assignments. Team standings are unavailable until the teams match this round&apos;s golfers.</p>
         {canManage && <button type="button" disabled={busy} onClick={onManageGames}>Update team assignments</button>}
       </> : !result || !standings || rows.length === 0 ? <p>Leaderboard results are unavailable. Refresh the saved round to retry.</p> : <>

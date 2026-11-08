@@ -1,4 +1,5 @@
 import type { AccountIdentity } from './events.js';
+import type { ChurchyGameDefinition, ChurchyResults } from './churchy.js';
 
 export type StablefordPreset = 'standard' | 'modified';
 export type GameScoreBasis = 'gross' | 'net';
@@ -73,7 +74,7 @@ export interface SkinsGameDefinition extends StrokeGameDefinition {
 
 export type StablefordGameDefinition = IndividualGameDefinition | TeamGameDefinition;
 export type NewRoundGameDefinition = BallDropGameDefinition | SkinsGameDefinition;
-export type RoundGameDefinition = StablefordGameDefinition | NewRoundGameDefinition;
+export type RoundGameDefinition = StablefordGameDefinition | NewRoundGameDefinition | ChurchyGameDefinition;
 
 export function isStablefordGame(game: RoundGameDefinition): game is StablefordGameDefinition {
   return game.kind === undefined || game.kind === 'stableford';
@@ -164,7 +165,8 @@ export interface GamePlayerResult {
 }
 
 export interface RoundGameResult {
-  readonly kind?: 'ball-drop' | 'skins';
+  readonly kind?: 'ball-drop' | 'skins' | 'churchy';
+  readonly churchy?: ChurchyResults;
   readonly version?: 1;
   readonly unawardedSkins?: number;
   readonly pendingSkins?: number;
@@ -225,6 +227,12 @@ export function sameGameDefinitions(left: readonly RoundGameDefinition[], right:
   return left.length === right.length && left.every((game, index) => {
     const other = right[index];
     if (!other) return false;
+    if (game.kind === 'churchy' || other.kind === 'churchy') {
+      return game.kind === 'churchy' && other.kind === 'churchy' && game.id === other.id
+        && game.name === other.name && game.groupNumber === other.groupNumber
+        && game.amountPerDotMinor === other.amountPerDotMinor
+        && game.playerIds.length === other.playerIds.length && game.playerIds.every((id, i) => id === other.playerIds[i]);
+    }
     if (!isStablefordGame(game) || !isStablefordGame(other)) {
       return !isStablefordGame(game) && !isStablefordGame(other)
         && game.id === other.id && game.name === other.name && game.kind === other.kind
@@ -268,5 +276,9 @@ export function gameResultDirection(game: RoundGameDefinition): 1 | -1 {
 }
 
 export function gameResultUnit(game: RoundGameDefinition): string {
-  return game.kind === 'ball-drop' ? 'to par' : game.kind === 'skins' ? 'skins' : 'points';
+  return game.kind === 'churchy' ? 'dots' : game.kind === 'ball-drop' ? 'to par' : game.kind === 'skins' ? 'skins' : 'points';
+}
+
+export function visibleGames(games: readonly RoundGameDefinition[], churchyEnabled: boolean | undefined): readonly RoundGameDefinition[] {
+  return games.filter((game) => game.kind !== 'churchy' || churchyEnabled === true);
 }

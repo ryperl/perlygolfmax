@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import type { GamePlayerResult, GameTeamResult, RoundGameDefinition, RoundGameResult } from '../../domain/games';
 import { gameResultTotal, gameResultUnit, isTeamGameDefinition } from '../../domain/games';
 import { gameScoringLabel, gameUnavailableMessage } from './game-presentation';
+import { ChurchyResults } from '../churchy';
 
 function progress(player: GamePlayerResult | GameTeamResult): string {
   return player.status === 'unavailable'
@@ -48,6 +49,7 @@ export function GameResults({ game, result, holeNumbers }: {
     if (scroll.current) scroll.current.scrollLeft = 0;
   }
 
+  if (game.kind === 'churchy') return <ChurchyResults game={game} result={result} />;
   return (
     <section className="game-results" aria-label={`${game.name} results`}>
       <h3>{game.name}</h3>

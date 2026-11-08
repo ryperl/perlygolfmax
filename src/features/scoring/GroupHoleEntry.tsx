@@ -11,11 +11,16 @@ import { ScoreActionIcon } from './ScoreActionIcon';
 import { ScoreSaveIndicator } from './ScoreSaveIndicator';
 import type { ScoreFeedbackState } from './ScoreSaveIndicator';
 import './scoring.css';
+import type { RoundGameDefinition } from '../../domain/games';
+import type { ChurchySpecials } from '../../domain/churchy';
+import { ChurchyDots } from '../churchy';
 
 // Allow a pause between digits (including 10/12) before moving to another score.
 const scoreTypingPauseMs = 850;
 
 export interface GroupHoleEntryRow {
+  readonly churchyRelativeHandicap?: number | null;
+  readonly churchyStrokesReceived?: number | null;
   readonly playerId: string;
   readonly displayName: string;
   readonly saved: HoleScore;
@@ -26,6 +31,9 @@ export interface GroupHoleEntryRow {
   readonly teeLabel?: string;
 }
 export interface GroupHoleEntryProps {
+  readonly churchy?: RoundGameDefinition | undefined;
+  readonly gameEtag?: string | null;
+  readonly onDotsEdit?: (playerId: string, value: ChurchySpecials) => void;
   readonly groups: readonly RoundGroup[];
   readonly groupNumber: number;
   readonly layout: readonly CourseHole[];
@@ -47,7 +55,7 @@ export interface GroupHoleEntryProps {
 }
 
 export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, readOnly, unsavedCount, focusHole, feedbackState,
-  onGroupChange, onHoleChange, onEdit, onReview, onDiscard, onDiscardAll, onSave, onRefresh }: GroupHoleEntryProps) {
+  onGroupChange, onHoleChange, onEdit, onReview, onDiscard, onDiscardAll, onSave, onRefresh, churchy, gameEtag, onDotsEdit }: GroupHoleEntryProps) {
   const previous = adjacentHole(layout, hole.number, -1);
   const next = adjacentHole(layout, hole.number, 1);
   const last = next?.number === groupStartingHole(groups.find((group) => group.number === groupNumber), layout);
@@ -188,6 +196,15 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
               onEdit(row.playerId, pickedUp ? numeric === undefined ? '' : String(numeric) : numeric === undefined ? 'X' : `X${String(numeric)}`);
             }}>X</button>
           </div>
+          {churchy?.kind === 'churchy' && churchy.playerIds.includes(row.playerId) && gameEtag && onDotsEdit && <>
+            <p className="entry-tee">Churchy relative handicap: {row.churchyRelativeHandicap ?? 'unavailable'} · Relative strokes this hole: {
+              row.churchyStrokesReceived ?? 'unavailable'}</p>
+            <ChurchyDots name={row.displayName} number={hole.number} disabled={disabled} value={
+              row.draft?.churchy ?? row.saved.churchy ?? {
+                gameId: churchy.id, gameEtag, paree: false, murphy: false, murphyPresses: 0, sandy: false, pully: false,
+              }
+            } onChange={(value) => { cancelMovement(); onDotsEdit(row.playerId, { ...value, gameId: churchy.id, gameEtag }); }} />
+          </>}
           {rows.length === 1 && <div className="quick-scores" aria-label={`Quick scores for ${row.displayName}`}>{quickScores.map((value) => <button type="button" key={value}
             aria-label={`${pickedUp ? 'X' : ''}${String(value)} ${pickedUp ? 'pickup' : 'strokes'} for ${row.displayName}`}
             disabled={disabled} onClick={() => { cancelMovement(); onEdit(row.playerId, `${pickedUp ? 'X' : ''}${String(value)}`); }}>

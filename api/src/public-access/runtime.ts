@@ -9,6 +9,7 @@ import { TableRequestLimiter } from '../limits.js';
 import { ApiError } from '../errors.js';
 import type { PublicApi } from './handlers.js';
 import { TablePublicEventStore } from './store.js';
+import { churchyEnabled } from '../churchy/config.js';
 
 export function createPublicApi(env: NodeJS.ProcessEnv): PublicApi {
   const endpoint = env.EVENTS_TABLE_ENDPOINT;
@@ -22,7 +23,7 @@ export function createPublicApi(env: NodeJS.ProcessEnv): PublicApi {
   const denyCatalog = () => false;
   const workspace = new TableWorkspaceStore(table, new TableCourseCatalog(table, denyCatalog),
     new TablePlayerCatalog(table, denyCatalog), denyCatalog);
-  const scores = new TableScoreStore(table, workspace);
+  const scores = new TableScoreStore(table, workspace, () => churchyEnabled(env));
   return { publicEvents: new TablePublicEventStore(table), limiter: new TableRequestLimiter(table),
     workspace, scores, purse: new TablePurseStore(table, workspace, scores) };
 }

@@ -126,6 +126,27 @@
 - Skins leaderboards omit known zero awards from standings/search/pages only.
   Preserve awarded ranks/ties, pending/unavailable displays and underlying
   game/purse results; hidden search controls must not hide refreshed winners.
+- Churchy Game is a separate version-1 experimental game for one saved foursome.
+  Explicit P1–P4 order rotates partners in three-hole blocks; stakes 1/2/3 repeat.
+  Net compares max/min numeric strokes using captured CH minus the foursome's
+  lowest CH on each personal tee. High/Low carry independently across the turn;
+  sweep is current stake only. Earned dots credit both partners in full, never
+  netted. Calls Paree/Murphy are gross par-or-better; Murphy presses are explicit
+  initial/opposing/calling stages 1/2/3. Sandy/Pully require confirmed exact par;
+  automatic birdie is exactly one under, never invented eagle dots. Pickup/DNF
+  loses High to an all-numeric pair; remaining numeric Low still competes.
+  Unapproved both-pair/no-numeric comparisons are unavailable, never penalties
+  or automatic ties. Preserve carry uncertainty and pending versus unavailable.
+  Stage specials in the same conditional/audited score write, with game revision
+  and selected-group checks. No offline dots, second write or optimistic results.
+  Exact USD minor-unit shared-pot settlement is separate from earned standings:
+  units `2*d_i - sum(d)/2`, planned pays/collects only, not place-based purse or
+  overall Stableford. Setup/order lock after scoring; owner-only stake edits.
+  The authoritative API defaults on; `CHURCHY_GAME_ENABLED=false` kills all
+  Churchy surfaces and specific mutations without erasing saved definitions,
+  specials or audits, or blocking ordinary score/other game edits. UI missing
+  capability is disabled for old APIs; never infer backend support from a
+  frontend default. Unknown configured flag values fail closed.
 - Scoring names show server-derived Course Handicap from captured HI and each
   golfer's captured tee, without game allowance or a stroke-allocation requirement.
   Keep scratch/plus values distinct from NH and other unavailable inputs.

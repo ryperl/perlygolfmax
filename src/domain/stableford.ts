@@ -9,6 +9,7 @@ import { gameTeamsMatchRoster, isStablefordGame, isTeamGameDefinition } from './
 import { calculateStrokeGameResults } from './stroke-games.js';
 import { aggregateTeamGameResults } from './team-games.js';
 import { playerTee } from './tees.js';
+import { calculateChurchyResults } from './churchy.js';
 
 export function stablefordPoints(preset: StablefordPreset): StablefordPointsTable {
   const points = preset === 'standard' ? [6, 5, 4, 3, 2, 1, 0] : [8, 5, 2, 0, -1, -2];
@@ -158,6 +159,15 @@ export function calculateGameResults(
 ): readonly RoundGameResult[] {
   const layout = [...round.teeProfile.holes].sort((left, right) => left.number - right.number);
   return games.map((game) => {
+    if (game.kind === 'churchy') {
+      const group = round.groups.find((entry) => entry.number === game.groupNumber);
+      return calculateChurchyResults(game, round.players.map((player) => {
+        const tee = playerTee(round, player.playerId);
+        return { playerId: player.playerId, displayName: player.displayName, layout: tee.holes,
+          handicap: !tee.strokeAllocation ? 'missing-stroke-index' : player.handicapIndex == null ? 'missing-handicap-index'
+            : calculateCourseHandicap(player.handicapIndex.value, tee) };
+      }), cards, group?.playerIds.length === 4 && group.playerIds.every((id) => game.playerIds.includes(id)));
+    }
     if (!isStablefordGame(game)) return calculateStrokeGameResults(game, round.players.map((player) => {
       const tee = playerTee(round, player.playerId);
       return { playerId: player.playerId, displayName: player.displayName, layout: tee.holes,

@@ -41,7 +41,8 @@ export function createScoresClient(apiUrl: string, getToken: () => Promise<strin
       if (!isScoreWriteResult(value) || value.round.permissions === undefined || value.round.eventId !== eventId || value.round.roundId !== roundId
         || value.change.eventId !== eventId || value.change.roundId !== roundId || value.change.playerId !== playerId
         || value.change.holeNumber !== holeNumber || value.change.id !== requestId
-        || value.change.expectedEtag !== etag || !sameHoleScore(value.change.after, score)
+        || value.change.expectedEtag !== etag || !sameHoleScore(value.change.after, score.churchy === undefined && value.change.after.churchy
+          ? { ...score, churchy: value.change.after.churchy } : score)
         || !value.round.setupLocked || value.round.lastUpdatedAt === null
         || !value.round.cards.some((card) => card.playerId === playerId && card.etag !== null)) {
         throw new Error('Invalid save acknowledgement. The outcome is uncertain; retain this draft and request ID and refresh to review.');

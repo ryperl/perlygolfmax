@@ -20,6 +20,8 @@ import { cardFor, conflictedDraft, editedDraft, entryKey, entryScore, savedHole 
 import type { HoleDraft } from './entry-state';
 import { planGroup, saveGroupEntries } from './save-group';
 import './scoring.css';
+import type { ChurchySpecials } from '../../domain/churchy';
+import { scoreEntryText } from '../../contracts/scoring';
 
 export interface OwnerScoresViewProps {
   readonly client: ScoresClient;
@@ -118,7 +120,21 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     if (currentDrafts.current.size === 0) draftAccess.current = scoreAccessKey(round);
     pauseForEdit();
     const key = entryKey(playerId, hole.number);
-    update(key, editedDraft(text, cardFor(round, playerId), currentDrafts.current.get(key)));
+    const card = cardFor(round, playerId);
+    const previous = currentDrafts.current.get(key);
+    const saved = savedHole(card, hole.number);
+    update(key, editedDraft(text, card, previous ?? (saved.churchy
+      ? { text: scoreEntryText(saved), baseEtag: card.etag, status: 'draft', churchy: saved.churchy } : undefined)));
+    setNotice(null);
+  }
+  function editDots(playerId: string, churchy: ChurchySpecials) {
+    if (!round || !hole || round.churchyEnabled !== true || busy || saving.current || !canEditGroup) return;
+    const card = cardFor(round, playerId);
+    const key = entryKey(playerId, hole.number);
+    const previous = currentDrafts.current.get(key);
+    if (currentDrafts.current.size === 0) draftAccess.current = scoreAccessKey(round);
+    pauseForEdit();
+    update(key, { ...editedDraft(previous?.text ?? scoreEntryText(savedHole(card, hole.number)), card, previous), churchy });
     setNotice(null);
   }
   function review(playerId: string) {
@@ -126,7 +142,8 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     const key = entryKey(playerId, hole.number);
     const local = currentDrafts.current.get(key);
     if (!local || local.status !== 'conflict' || local.conflictAt === undefined || refreshVersion <= local.conflictAt) return;
-    update(key, { text: local.text, baseEtag: cardFor(round, playerId).etag, status: 'draft', mustWrite: true });
+    update(key, { text: local.text, baseEtag: cardFor(round, playerId).etag, status: 'draft', mustWrite: true,
+      ...(local.churchy ? { churchy: local.churchy } : {}) });
     setNotice(null);
   }
   async function refreshSavedRound(): Promise<RoundScores | null> {
@@ -134,7 +151,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     if (!value) return null;
     for (const [key, local] of currentDrafts.current) {
       const playerId = key.slice(0, key.lastIndexOf(':'));
-      const score = entryScore(local.text);
+      const score = entryScore(local.text, local.churchy);
       const card = cardFor(value, playerId);
       if (score && local.status !== 'conflict' && !local.attempt?.sent && card.etag !== local.baseEtag) {
         update(key, conflictedDraft(score, card, refreshVersion, local));
@@ -167,7 +184,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
       for (const playerId of plan.conflicts) {
         const key = entryKey(playerId, hole.number);
         const local = currentDrafts.current.get(key);
-        const score = local && entryScore(local.text);
+        const score = local && entryScore(local.text, local.churchy);
         if (local && score && local.status !== 'conflict') update(key, conflictedDraft(score, cardFor(round, playerId), refreshVersion, local));
       }
       setNotice({ kind: 'attention', message: 'Nothing sent. Refresh saved round and review each conflict before saving this group.' });
@@ -221,6 +238,10 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     setNotice(null);
   }
   function selectGroup(number: number) {
+    if (busy || [...currentDrafts.current.values()].some((draft) => draft.churchy !== undefined)) {
+      setNotice({ kind: 'attention', message: 'Save or discard all unsaved scores and dots before changing groups.' });
+      return;
+    }
     setGroupNumber(number);
     setHoleNumber(groupHoles.current.get(number)
       ?? groupStartingHole(round?.groups.find((item) => item.number === number), round?.layout ?? []) ?? null);
@@ -294,14 +315,23 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
       {screen === 'entry' && !canEditGroup && writeIds.length > 0 && !accessChanged && <p>This playing group is read-only. Select your assigned playing group to enter scores.</p>}
       {round.eventStatus === 'archived' && <p role="status">Archived event: owner read-only. Drafts cannot be saved.</p>}
       {screen === 'entry' && group && hole && <GroupHoleEntry groups={round.groups} groupNumber={group.number} layout={round.layout} hole={hole}
+        churchy={round.churchyEnabled === true ? round.games?.configuration.games.find((game) =>
+          game.kind === 'churchy' && game.groupNumber === group.number && group.playerIds.length === 4
+          && game.playerIds.every((id) => group.playerIds.includes(id))) : undefined}
+        gameEtag={round.games?.configuration.etag ?? null}
+        onDotsEdit={editDots}
         rows={group.playerIds.map((playerId) => {
           const card = cardFor(round, playerId);
           const local = drafts.get(entryKey(playerId, hole.number));
           const personal = scorecardTee(round, playerId);
           const playerHole = scorecardHoles(round, playerId).find((item) => item.number === hole.number);
           const courseHandicap = round.courseHandicaps?.find((entry) => entry.playerId === playerId);
+          const churchyPlayer = round.churchyEnabled === true ? round.games?.results.find((result) =>
+            result.kind === 'churchy')?.players.find((player) => player.playerId === playerId) : undefined;
           return {
             playerId, displayName: card.displayName, saved: savedHole(card, hole.number),
+            ...(churchyPlayer ? { churchyRelativeHandicap: churchyPlayer.playingHandicap,
+              churchyStrokesReceived: churchyPlayer.holes.find((entry) => entry.number === hole.number)?.strokesReceived ?? null } : {}),
             ...(courseHandicap ? { courseHandicap } : {}),
             ...(playerHole ? { hole: playerHole } : {}),
             ...((round.playerTees?.length ?? 0) > 0 ? {
@@ -313,7 +343,10 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
         })} busy={busy} readOnly={!canEditGroup} unsavedCount={drafts.size} focusHole={focusHole}
         feedbackState={feedbackState}
         onGroupChange={selectGroup}
-        onHoleChange={(number) => { setHoleNumber(number); setNotice(null); }} onEdit={edit} onReview={review}
+        onHoleChange={(number) => {
+          if ([...currentDrafts.current.values()].some((draft) => draft.churchy !== undefined)) setNotice({ kind: 'attention', message: 'Save or discard all unsaved scores and dots before changing holes.' });
+          else { setHoleNumber(number); setNotice(null); }
+        }} onEdit={edit} onReview={review}
         onDiscard={(playerId) => { update(entryKey(playerId, hole.number), null); }}
         onDiscardAll={discardAll}
         onRefresh={() => { void refreshSavedRound().catch(() => undefined); }}

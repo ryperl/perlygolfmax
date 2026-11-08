@@ -6,6 +6,7 @@ import { cardFor, editedDraft, entryKey } from './entry-state';
 import type { HoleDraft } from './entry-state';
 import { planGroup, saveGroupEntries } from './save-group';
 import { deferred, memoryScores } from './scoring.test-support';
+import { churchyFixture } from '../../domain/churchy.test-support';
 
 const playerIds = fictionalRoundScores.cards.map((card) => card.playerId);
 function entries() {
@@ -24,6 +25,39 @@ function harness(initial = fictionalRoundScores) {
       plan: planGroup(latest, playerIds, 1, drafts), signal: new AbortController().signal, refreshVersion: 0, ...callbacks }) };
 }
 describe('serialized group save protocol', () => {
+  it('retries only unacknowledged specials-only writes with the same metadata, request IDs and original card proofs', async () => {
+    const f = churchyFixture();
+    const initial = f.round();
+    const store = memoryScores(initial);
+    const ids = f.game.playerIds;
+    const drafts = new Map(ids.map((id) => [entryKey(id, 1), {
+      ...editedDraft('4', cardFor(initial, id)), churchy: { ...f.extras, murphy: true, murphyPresses: 2 as const },
+    }]));
+    const mutable: Map<string, HoleDraft> = drafts;
+    let round = initial;
+    const normal = vi.mocked(store.client.save).getMockImplementation();
+    if (!normal) throw new Error('Missing fictional saver');
+    let failed = false;
+    vi.mocked(store.client.save).mockImplementation((...args) => {
+      if (args[2] === ids[1] && !failed) { failed = true; return Promise.reject(new Error('Fictional uncertain specials')); }
+      return normal(...args);
+    });
+    function save() {
+      return saveGroupEntries({ client: store.client, round, holeNumber: 1, plan: planGroup(round, ids, 1, mutable),
+        signal: new AbortController().signal, refreshVersion: 0,
+        onDraft: (key, value) => { if (value) mutable.set(key, value); else mutable.delete(key); },
+        onProjection: (value) => { round = value; } });
+    }
+    await expect(save()).rejects.toThrow('Fictional uncertain specials');
+    const retryId = ids[1] ? mutable.get(entryKey(ids[1], 1))?.attempt?.id : undefined;
+    expect(mutable.size).toBe(3);
+    await save();
+    const calls = vi.mocked(store.client.save).mock.calls;
+    expect(calls[1]?.[6]).toBe(retryId);
+    expect(calls[2]?.[6]).toBe(retryId);
+    expect(calls.every((call) => call[4].churchy?.murphyPresses === 2)).toBe(true);
+    expect(mutable.size).toBe(0);
+  });
   it('plans blank as unplayed, skips unchanged blanks, and prevalidates every intended row before sending anything', async () => {
     const blank = new Map([[entryKey(fictionalId(1), 1), editedDraft('', cardFor(fictionalRoundScores, fictionalId(1)))]]);
     const plan = planGroup(fictionalRoundScores, playerIds, 1, blank);

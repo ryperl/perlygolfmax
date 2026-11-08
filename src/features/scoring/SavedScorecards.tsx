@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { RoundScores } from '../../domain/scoring';
 import { writablePlayerIds } from './score-access';
-import { isTeamGameDefinition } from '../../domain/games';
+import { isTeamGameDefinition, visibleGames } from '../../domain/games';
+import { ChurchyResults } from '../churchy';
 import { gameScoringLabel } from '../games';
 import { PlayerScorecardRecap } from './PlayerScorecardRecap';
 import { ScorecardNine } from './ScorecardNine';
@@ -18,10 +19,11 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [nine, setNine] = useState<'front' | 'back' | 'full'>('full');
   const [gameId, setGameId] = useState<string | null | undefined>(undefined);
-  const game = scorecardGame(round, gameId);
-  const games = round.games?.configuration.games ?? [];
   const group = round.groups.find((item) => item.number === groupNumber) ?? round.groups[0];
   if (!group) throw new Error('Saved round has no groups.');
+  const game = scorecardGame(round, gameId, group.playerIds);
+  const games = visibleGames(round.games?.configuration.games ?? [], round.churchyEnabled).filter((game) =>
+    game.kind !== 'churchy' || group.playerIds.every((id) => game.playerIds.includes(id)));
   const cards = group.playerIds.map((id) => cardFor(round, id));
   const player = cards.find((card) => card.playerId === playerId);
   const layout = [...round.layout].sort((left, right) => left.number - right.number);
@@ -85,5 +87,6 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
         game?.result?.players.some((player) => group.playerIds.includes(player.playerId) && player.status === 'in-progress' && player.totalPoints !== null)) &&
         <p className="scorecard-incomplete">{game ? '* Incomplete total.' : '* Incomplete recorded total.'}</p>}
     </>}
+    {game?.definition.kind === 'churchy' && <ChurchyResults game={game.definition} result={game.result} />}
   </section>;
 }

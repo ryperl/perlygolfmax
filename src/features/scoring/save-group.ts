@@ -29,7 +29,7 @@ export function planGroup(round: RoundScores, playerIds: readonly string[], hole
     const card = cardFor(round, playerId);
     const saved = savedHole(card, holeNumber);
     const draft = drafts.get(entryKey(playerId, holeNumber));
-    const score = draft ? entryScore(draft.text) : saved;
+    const score = draft ? entryScore(draft.text, draft.churchy ?? saved.churchy) : saved;
     if (!score) { invalid.push(playerId); continue; }
     targets.set(playerId, score);
     if (!draft) continue;

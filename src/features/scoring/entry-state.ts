@@ -1,7 +1,9 @@
 import { parseScoreEntry, scoreEntryText } from '../../contracts/scoring';
 import type { HoleScore, RoundScores, ScoreChange, Scorecard } from '../../domain/scoring';
+import type { ChurchySpecials } from '../../domain/churchy';
 
 export interface HoleDraft {
+  readonly churchy?: ChurchySpecials;
   readonly text: string;
   readonly baseEtag: string | null;
   readonly status: 'draft' | 'saving' | 'failed' | 'conflict';
@@ -28,6 +30,7 @@ export function cardFor(round: RoundScores, playerId: string): Scorecard {
 export function editedDraft(text: string, card: Scorecard, previous?: HoleDraft): HoleDraft {
   return {
     text, baseEtag: previous ? previous.baseEtag : card.etag,
+    ...(previous?.churchy ? { churchy: previous.churchy } : {}),
     status: previous?.status === 'conflict' ? 'conflict' : 'draft',
     ...(previous?.conflictAt !== undefined ? { conflictAt: previous.conflictAt } : {}),
     ...(previous?.mustWrite || previous?.attempt?.sent ? { mustWrite: true } : {}),
@@ -38,6 +41,7 @@ export function editedDraft(text: string, card: Scorecard, previous?: HoleDraft)
 export function conflictedDraft(score: HoleScore, card: Scorecard, refreshVersion: number, previous?: HoleDraft, acknowledged?: ScoreChange): HoleDraft {
   return {
     text: previous?.text ?? scoreEntryText(score), baseEtag: previous ? previous.baseEtag : card.etag,
+    ...(previous?.churchy ?? score.churchy ? { churchy: previous?.churchy ?? score.churchy } : {}),
     status: 'conflict', conflictAt: refreshVersion,
     ...(previous?.attempt ? { attempt: previous.attempt } : {}),
     ...(acknowledged ? { acknowledged } : previous?.acknowledged ? { acknowledged: previous.acknowledged } : {}),
@@ -53,6 +57,7 @@ export function scoreLabel(score: HoleScore): string {
   }
 }
 
-export function entryScore(text: string): HoleScore | null {
-  return parseScoreEntry(text);
+export function entryScore(text: string, churchy?: ChurchySpecials): HoleScore | null {
+  const score = parseScoreEntry(text);
+  return score && churchy ? { ...score, churchy } : score;
 }

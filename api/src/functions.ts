@@ -2,6 +2,7 @@ import { app } from '@azure/functions';
 import { TableClient } from '@azure/data-tables';
 import { DefaultAzureCredential } from '@azure/identity';
 import { readSettings } from './config.js';
+import { churchyEnabled } from './churchy/config.js';
 import { createHandler } from './events/handlers.js';
 import type { EventApi } from './events/handlers.js';
 import { TableEventStore } from './events/store.js';
@@ -43,7 +44,7 @@ function resolveApi(): RuntimeApi {
   const courses = new TableCourseCatalog(table, manager);
   const players = new TablePlayerCatalog(table, manager);
   const workspace = new TableWorkspaceStore(table, courses, players, manager);
-  const scores = new TableScoreStore(table, workspace);
+  const scores = new TableScoreStore(table, workspace, () => churchyEnabled(process.env));
   api = {
     verify: createIdentityVerifier(settings),
     store: new TableEventStore(table),

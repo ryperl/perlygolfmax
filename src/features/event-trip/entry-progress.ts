@@ -2,6 +2,7 @@ import { isRoundScores } from '../../contracts/scoring';
 import type { RoundScores } from '../../domain/scoring';
 import type { RoundSnapshot } from '../../domain/setup';
 import type { RoundGameDefinition } from '../../domain/games';
+import { visibleGames } from '../../domain/games';
 
 export type EntryProgressStatus = 'No scores yet' | 'In progress' | 'Entries complete';
 
@@ -51,7 +52,7 @@ export function summarizeEntryProgress(eventId: string, round: RoundSnapshot, sc
       entered, total, completeHoles, totalHoles: scores.layout.length,
     };
   }
-  const selectedGame = scores.games?.configuration.games.find((game) => game.id === selectedGameId);
+  const selectedGame = visibleGames(scores.games?.configuration.games ?? [], scores.churchyEnabled).find((game) => game.id === selectedGameId);
   return {
     kind: 'ready',
     summary: {

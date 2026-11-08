@@ -25,6 +25,7 @@ import { assertEventAccessUnchanged, readEventAccess } from '../event-access.js'
 import type { EventAccess } from '../event-access.js';
 import { publishedCourseHandicaps, publishedPlayingHandicaps } from '../../../src/domain/playing-handicaps.js';
 import { activeTesterLink, testerLinkKey } from '../test-access/authority.js';
+import { sameChurchySpecials } from '../../../src/domain/churchy.js';
 
 function cardKey(roundId: string, playerId: string): string {
   return `score-card:${roundId}:${playerId}`;
@@ -46,7 +47,8 @@ function projectChange(change: ScoreChange): ScoreChange {
 }
 
 export class TableScoreStore {
-  constructor(private readonly table: TableClient, private readonly workspace: TableWorkspaceStore) {}
+  constructor(private readonly table: TableClient, private readonly workspace: TableWorkspaceStore,
+    private readonly churchyEnabled: () => boolean = () => true) {}
 
   private async access(identity: ScoreActor, eventId: string, ownerOnly = false) {
     if (!isUuid(eventId)) throw new ApiError(400, 'INVALID_REQUEST_ID');
@@ -133,6 +135,8 @@ export class TableScoreStore {
     const active = workspace.event.status === 'active';
     const competition = workspace.overallCompetition;
     return {
+      churchyEnabled: this.churchyEnabled(),
+      teeStrokeAllocation: round.teeProfile.strokeAllocation,
       eventId: workspace.event.id, eventName: workspace.event.name, eventStatus: workspace.event.status,
       roundId: round.id, roundName: round.name, courseName: round.course.name,
       teeName: round.teeProfile.name, teeCategory: round.teeProfile.category, layout: round.teeProfile.holes,
@@ -233,6 +237,28 @@ export class TableScoreStore {
     const state = await this.snapshot(identity, eventId, roundId, true);
     const grant = this.writer(state);
     if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
+    const savedChurchy = state.games?.games.filter((game) => game.kind === 'churchy') ?? [];
+    const nextChurchy = games.filter((game) => game.kind === 'churchy');
+    if (!this.churchyEnabled() && !sameGameDefinitions(savedChurchy, nextChurchy)) {
+      throw new ApiError(403, 'CHURCHY_DISABLED');
+    }
+    for (const game of nextChurchy) {
+      const previous = savedChurchy.find((entry) => entry.id === game.id);
+      if (!previous && state.games?.games.some((saved) => saved.id === game.id)) {
+        throw new ApiError(400, 'CHURCHY_REQUIRES_NEW_GAME');
+      }
+      const group = state.round.groups.find((entry) => entry.number === game.groupNumber);
+      if (!group || group.playerIds.length !== 4 || !group.playerIds.every((id) => game.playerIds.includes(id))) {
+        if (!previous || !sameGameDefinitions([game], [previous])) throw new ApiError(400, 'INVALID_CHURCHY_GROUP');
+      }
+      if (state.round.scoringStarted && previous
+        && (previous.groupNumber !== game.groupNumber || previous.playerIds.some((id, index) => id !== game.playerIds[index]))) {
+        throw new ApiError(409, 'CHURCHY_SETUP_LOCKED');
+      }
+    }
+    if (savedChurchy.some((previous) => !games.some((game) => game.id === previous.id && game.kind === 'churchy'))) {
+      throw new ApiError(409, 'CHURCHY_REMOVAL_NOT_SUPPORTED');
+    }
     const replay = await this.replayGames(identity, eventId, roundId, games, expectedEtag, requestId);
     if (replay) return replay;
     const competition = state.workspace.overallCompetition;
@@ -326,7 +352,9 @@ export class TableScoreStore {
     const change = await this.receipt(eventId, requestId);
     if (!change) return undefined;
     if (change.roundId !== roundId || change.playerId !== playerId || change.holeNumber !== holeNumber
-      || change.expectedEtag !== expectedEtag || !sameScoreActor(change.recordedBy, identity) || !sameHoleScore(change.after, score)) {
+      || change.expectedEtag !== expectedEtag || !sameScoreActor(change.recordedBy, identity)
+      || !sameHoleScore(change.after, score.churchy === undefined && change.after.churchy
+        ? { ...score, churchy: change.after.churchy } : score)) {
       throw new ApiError(409, 'SCORE_REQUEST_CONFLICT');
     }
     const result = await this.acknowledgement(identity, change);
@@ -351,15 +379,29 @@ export class TableScoreStore {
     if (card.etag !== expectedEtag) throw new ApiError(409, 'SCORECARD_CHANGED');
     const before = card.holes.find((hole) => hole.number === holeNumber);
     if (!before) throw new ApiError(503, 'INVALID_STORED_SCORECARD');
+    // Legacy/raw-only clients never erase hidden specials.
+    const savedScore: HoleScore = score.churchy === undefined && before.score.churchy
+      ? { ...score, churchy: before.score.churchy } : score;
+    if (!sameChurchySpecials(savedScore.churchy, before.score.churchy)) {
+      if (!this.churchyEnabled()) throw new ApiError(403, 'CHURCHY_DISABLED');
+      const extras = savedScore.churchy;
+      const game = state.games?.games.find((entry) => entry.kind === 'churchy' && entry.id === extras?.gameId);
+      if (!extras || game?.kind !== 'churchy' || state.games?.etag !== extras.gameEtag
+        || !game.playerIds.includes(playerId)) throw new ApiError(409, 'CHURCHY_SETUP_CHANGED');
+      const group = state.round.groups.find((entry) => entry.number === game.groupNumber);
+      if (!group || group.playerIds.length !== 4 || !group.playerIds.every((id) => game.playerIds.includes(id))) {
+        throw new ApiError(409, 'CHURCHY_SETUP_CHANGED');
+      }
+    }
     const recordedAt = new Date().toISOString();
     const actor = scoreActor(identity);
     const change: ScoreChange = {
-      id: requestId, eventId, roundId, playerId, holeNumber, before: before.score, after: score,
+      id: requestId, eventId, roundId, playerId, holeNumber, before: before.score, after: savedScore,
       expectedEtag, recordedAt, recordedBy: actor,
     };
     const updated: StoredCard = {
       playerId: card.playerId, displayName: card.displayName, updatedAt: recordedAt,
-      holes: card.holes.map((hole) => hole.number === holeNumber ? { number: holeNumber, score } : hole),
+      holes: card.holes.map((hole) => hole.number === holeNumber ? { number: holeNumber, score: savedScore } : hole),
     };
     const entity = { partitionKey: eventId, rowKey: cardKey(roundId, playerId), content: canonical(updated) };
     const actions: TransactionAction[] = [
