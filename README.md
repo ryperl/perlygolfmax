@@ -471,6 +471,9 @@ Competition teams split across playing groups remain separately identified,
 including how many members are shown. Existing round-game purse place prizes
 rank these same saved metrics and split team awards among members, with existing
 tie/remainder/projection rules. This is not a per-skin money transfer.
+Skins leaderboards omit golfers with zero awarded skins from standings and
+search/pages; pending and unavailable results remain explicit. This is display
+filtering only, not a change to awards or purse calculations.
 Overall Stableford selection accepts only Stableford games; remove a selected
 binding before converting that game to Ball Drop or Skins. Legacy Stableford
 definitions/results remain readable without migration and retain their existing

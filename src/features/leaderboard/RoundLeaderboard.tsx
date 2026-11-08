@@ -48,6 +48,7 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
   const teamGame = game !== undefined && isTeamGameDefinition(game);
   const rows: readonly (GamePlayerResult | GameTeamResult)[] = (teamGame ? result?.teams : result?.players) ?? [];
   const standings = result && !result.teamSetupRequired && gameStandings(rows, gameResultDirection(game));
+  const ranked = standings ? standings.ranked.filter((entry) => game.kind !== 'skins' || gameResultTotal(entry.player) !== 0) : [];
   const unit = game ? gameResultUnit(game) : 'points';
   function members(player: GamePlayerResult | GameTeamResult): string | undefined {
     function teeLabel(id: string) {
@@ -58,9 +59,10 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
       `${result?.players.find((member) => member.playerId === id)?.displayName ?? 'Golfer unavailable'}${(round.playerTees?.length ?? 0) > 0 ? ` (${teeLabel(id)})` : ''}`).join(' · ')
       : (round.playerTees?.length ?? 0) > 0 ? teeLabel(player.playerId) : undefined;
   }
-  const ordered = standings ? [...standings.ranked.map((entry) => entry.player), ...standings.awaiting, ...standings.unavailable] : [];
-  const matching = ordered.filter((player) => `${player.displayName} ${members(player) ?? ''}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const ordered = standings ? [...ranked.map((entry) => entry.player), ...standings.awaiting, ...standings.unavailable] : [];
   const pageSize = 12;
+  const matching = ordered.length <= pageSize ? ordered
+    : ordered.filter((player) => `${player.displayName} ${members(player) ?? ''}`.toLowerCase().includes(query.trim().toLowerCase()));
   const page = Math.min(pageIndex, Math.max(0, Math.ceil(matching.length / pageSize) - 1));
   const visible = new Set(matching.slice(page * pageSize, (page + 1) * pageSize).map(standingId));
   if (round.eventStatus === 'archived' && scorePermissions(round).role !== 'owner') return <p role="alert">Archived results are available to the event owner only.</p>;
@@ -100,9 +102,9 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
           </nav>
           {matching.length === 0 && <p>No leaderboard entries match your search.</p>}
         </div>}
-        {standings.ranked.length === 0 ? <p>No ranked scores yet.</p> :
+        {ranked.length === 0 ? <p>{game.kind === 'skins' && standings.ranked.length > 0 ? 'No skins awarded yet.' : 'No ranked scores yet.'}</p> :
           <section><h3>{teamGame ? 'Team standings' : 'Standings'}</h3><ol className="leaderboard-list" role="list" aria-label="Standings">
-            {standings.ranked.filter((entry) => visible.has(standingId(entry.player))).map((entry) => <PlayerStanding key={standingId(entry.player)} player={entry.player} unit={unit} members={members(entry.player)} position={entry.position} tied={entry.tied} />)}
+            {ranked.filter((entry) => visible.has(standingId(entry.player))).map((entry) => <PlayerStanding key={standingId(entry.player)} player={entry.player} unit={unit} members={members(entry.player)} position={entry.position} tied={entry.tied} />)}
           </ol></section>}
         {standings.awaiting.length > 0 && <section aria-label="Awaiting scores">
           <h3>Awaiting scores</h3><ul className="leaderboard-list" role="list">
@@ -114,7 +116,8 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
             {standings.unavailable.filter((player) => visible.has(standingId(player))).map((player) => <PlayerStanding key={standingId(player)} player={player} unit={unit} members={members(player)} />)}
           </ul>
         </section>}
-        <p className="leaderboard-hint">All {teamGame ? 'teams' : 'golfers'} in this round. Ties share a position; no tie-break is applied. Saved scores only.</p>
+        <p className="leaderboard-hint">{game.kind === 'skins' ? 'Golfers with awarded skins. Pending or unavailable results shown separately.'
+          : `All ${teamGame ? 'teams' : 'golfers'} in this round.`} Ties share a position; no tie-break is applied. Saved scores only.</p>
       </>}
     </>}
   </section>;

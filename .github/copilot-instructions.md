@@ -123,6 +123,9 @@
   repeat the team score under every player. N/G cell markers use saved ordered
   counting IDs, not a new client calculation; retain gross score marks, pending/
   unavailable states and actual team identity when playing groups differ.
+- Skins leaderboards omit known zero awards from standings/search/pages only.
+  Preserve awarded ranks/ties, pending/unavailable displays and underlying
+  game/purse results; hidden search controls must not hide refreshed winners.
 - Scoring names show server-derived Course Handicap from captured HI and each
   golfer's captured tee, without game allowance or a stroke-allocation requirement.
   Keep scratch/plus values distinct from NH and other unavailable inputs.

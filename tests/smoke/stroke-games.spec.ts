@@ -32,6 +32,8 @@ test('Ball Drop and Skins saved results, carry resolution and dedicated editing 
     await board.getByLabel('Leaderboard game').selectOption(strokeGameId(701));
     expect(await board.getByLabel('Leaderboard game').evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
     await expect(board.getByLabel('3 skins', { exact: true })).toBeVisible();
+    await expect(board.getByLabel('0 skins', { exact: true })).toHaveCount(0);
+    await expect(board.getByRole('list', { name: 'Standings', exact: true }).getByRole('listitem')).toHaveCount(1);
     await page.getByRole('button', { name: 'Earlier saved hole pending', exact: true }).click();
     await expect(skins).toContainText('0 unawarded · 18 pending');
     await expect(board.getByText('No ranked scores yet.', { exact: true })).toBeVisible();

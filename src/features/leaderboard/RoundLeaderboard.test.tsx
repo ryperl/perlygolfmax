@@ -5,8 +5,96 @@ import { RoundLeaderboard } from './RoundLeaderboard';
 import { fictionalStanding, leaderboardGames, leaderboardRound, teamLeaderboardGame, teamLeaderboardRound } from '../../client/leaderboard.test-support';
 import { fictionalRoundScores } from '../../client/scoring.test-support';
 import { fictionalId, fictionalProfile } from '../../client/catalog.test-support';
+import { calculateGameResults } from '../../domain/stableford';
+import { strokeGameCards, strokeGameFixture, strokeGamesRound } from '../../domain/stroke-games.test-support';
 
 describe('round leaderboard', () => {
+  it.each(['gross', 'net'] as const)('shows only awarded %s Skins golfers and restores winners after refresh', (basis) => {
+    const f = strokeGameFixture(9, 16);
+    const skins = { ...f.skins, basis: 'gross' as const, carryovers: false };
+    const makeRound = (strokes: readonly number[], basis: 'gross' | 'net') => {
+      const cards = strokeGameCards(f.cards, 1, strokes.map((value) => ({ kind: 'strokes' as const, strokes: value })));
+      const game = { ...skins, basis };
+      const original = strokeGamesRound({ ...f, cards, skins: game });
+      return { ...original, games: { ...original.games, configuration: { ...original.games?.configuration,
+        eventId: original.eventId, roundId: original.roundId, etag: 'fictional-games', games: [game] },
+        results: calculateGameResults([game], f.snapshot, cards) } };
+    };
+    const initial = makeRound([3, ...Array<number>(15).fill(4)], basis);
+    const view = render(<RoundLeaderboard round={initial} busy={false} onManageGames={vi.fn()} />);
+    const list = screen.getByRole('list', { name: 'Standings' });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(1);
+    expect(list).toHaveTextContent('Fictional golfer 1');
+    expect(screen.queryByLabelText('0 skins')).not.toBeInTheDocument();
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Next standings' })).not.toBeInTheDocument();
+    view.rerender(<RoundLeaderboard round={makeRound([4, 3, ...Array<number>(14).fill(4)], basis)} busy={false} onManageGames={vi.fn()} />);
+    expect(screen.getByRole('list', { name: 'Standings' })).toHaveTextContent('Fictional golfer 2');
+    expect(screen.queryByRole('heading', { name: 'Fictional golfer 1', level: 4 })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Position 1')).toBeVisible();
+  });
+  it('retains pending and unavailable Skins results instead of treating them as zero wins', () => {
+    const f = strokeGameFixture();
+    const cards = strokeGameCards(f.cards, 1, [{ kind: 'unplayed' }]);
+    const game = { ...f.skins, basis: 'net' as const };
+    const original = strokeGamesRound({ ...f, cards, skins: game });
+    if (!original.games) throw new Error('Missing fictional games.');
+    const round = { ...original, games: { ...original.games,
+      configuration: { ...original.games.configuration, games: [game] },
+      results: original.games.results.filter((result) => result.gameId === game.id),
+    } };
+    const view = render(<RoundLeaderboard round={round} busy={false} onManageGames={vi.fn()} />);
+    expect(screen.getByRole('region', { name: 'Awaiting scores' })).toHaveTextContent('Fictional golfer 1');
+    expect(screen.getByText('No ranked scores yet.')).toBeVisible();
+    const snapshot = { ...f.snapshot, players: f.snapshot.players.map((player, index) => index === 0 ? { ...player, handicapIndex: null } : player) };
+    view.rerender(<RoundLeaderboard round={{ ...round, games: {
+      ...round.games, results: calculateGameResults([game], snapshot, cards),
+    } }} busy={false} onManageGames={vi.fn()} />);
+    expect(screen.getByRole('region', { name: 'Unavailable results' })).toHaveTextContent('Fictional golfer 1');
+    expect(screen.queryByLabelText('0 skins')).not.toBeInTheDocument();
+  });
+  it('pages only skin winners, preserves ties and does not retain a hidden search filter after a smaller refresh', async () => {
+    const f = strokeGameFixture(18, 20);
+    const game = { ...f.skins, carryovers: false };
+    function makeRound(winners: number) {
+      let cards = f.cards;
+      for (let hole = 1; hole <= winners; hole++) {
+        cards = strokeGameCards(cards, hole, f.cards.map((_, index) => ({
+          kind: 'strokes', strokes: index === hole - 1 ? 3 : 4,
+        })));
+      }
+      const original = strokeGamesRound({ ...f, cards, skins: game });
+      if (!original.games) throw new Error('Missing fictional game.');
+      return { ...original, games: { ...original.games,
+        configuration: { ...original.games.configuration, games: [game] },
+        results: original.games.results.filter((result) => result.gameId === game.id),
+      } };
+    }
+    const view = render(<RoundLeaderboard round={makeRound(14)} busy={false} onManageGames={vi.fn()} />);
+    const user = userEvent.setup();
+    expect(screen.getAllByLabelText('Tied position 1')).toHaveLength(12);
+    await user.click(screen.getByRole('button', { name: 'Next standings' }));
+    expect(screen.getAllByLabelText('Tied position 1')).toHaveLength(2);
+    await user.type(screen.getByRole('searchbox'), '14');
+    expect(screen.getByRole('list', { name: 'Standings' })).toHaveTextContent('Fictional golfer 14');
+    expect(screen.queryByLabelText('0 skins')).not.toBeInTheDocument();
+    view.rerender(<RoundLeaderboard round={makeRound(1)} busy={false} onManageGames={vi.fn()} />);
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Standings' })).toHaveTextContent('Fictional golfer 1');
+    expect(screen.getByLabelText('Position 1')).toBeVisible();
+  });
+  it('shows an honest empty Skins state for known zero awards while leaving Ball Drop zero scores visible', async () => {
+    const f = strokeGameFixture();
+    const original = strokeGamesRound(f);
+    const view = render(<RoundLeaderboard round={original} busy={false} onManageGames={vi.fn()} />);
+    await userEvent.setup().selectOptions(screen.getByLabelText('Leaderboard game'), f.skins.id);
+    expect(screen.getByText('No skins awarded yet.')).toBeVisible();
+    expect(screen.queryByRole('list', { name: 'Standings' })).not.toBeInTheDocument();
+    await userEvent.setup().selectOptions(screen.getByLabelText('Leaderboard game'), f.ballDrop.id);
+    expect(screen.getByRole('list', { name: 'Standings' })).toHaveTextContent('Fictional team 1');
+    expect(screen.getByLabelText('0 to par')).toBeVisible();
+    view.rerender(<RoundLeaderboard round={original} busy={false} onManageGames={vi.fn()} />);
+  });
   it('renders the same server standings for an admitted viewer and never offers setup repair controls', () => {
     const round = { ...leaderboardRound, permissions: { role: 'viewer' as const, writePlayerIds: [], canManageGames: false } };
     const manage = vi.fn();
