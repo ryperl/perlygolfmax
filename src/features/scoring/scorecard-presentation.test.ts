@@ -1,11 +1,38 @@
 import { describe, expect, it } from 'vitest';
 import { fictionalRoundScores } from '../../client/scoring.test-support';
-import { cardTotalText, pointsTotalText, scorecardGame, scorecardGameWarnings, summarizeCard } from './scorecard-presentation';
+import { ballDropContribution, ballDropScoreText, cardTotalText, pointsTotalText, scorecardBallDropTeams, scorecardGame, scorecardGameWarnings, summarizeCard } from './scorecard-presentation';
 import { scorecardGamesFixture } from './scorecard-games.test-support';
+import { ballDropFormat, strokeGameFixture, strokeGamesRound } from '../../domain/stroke-games.test-support';
 
 const card = fictionalRoundScores.cards[0];
 if (!card) throw new Error('Missing fictional card.');
 describe('scorecard displayed totals', () => {
+  it.each([
+    ['ball-drop-net-gross', 'net', 'gross'],
+    ['ball-drop-two-net', 'net', 'net'],
+    ['ball-drop-two-gross', 'gross', 'gross'],
+  ] as const)('uses saved counting IDs and roles for %s rather than selecting scores again', (format, first, second) => {
+    const f = strokeGameFixture();
+    const ballDrop = { ...ballDropFormat(f.ballDrop, format), teams: f.ballDrop.teams.map((team) => ({
+      ...team, playerIds: [...team.playerIds].reverse(),
+    })) };
+    const round = strokeGamesRound({ ...f, ballDrop });
+    const game = scorecardGame(round);
+    const ids = f.cards.map((entry) => entry.playerId);
+    expect(ballDropContribution(game, ids[3] ?? '', 1)).toEqual({ teamName: 'Fictional team 1', basis: first });
+    expect(ballDropContribution(game, ids[2] ?? '', 1)).toEqual({ teamName: 'Fictional team 1', basis: second });
+    expect(ballDropContribution(game, ids[0] ?? '', 1)).toBeUndefined();
+    expect(scorecardBallDropTeams(game, round.cards)).toHaveLength(1);
+    expect(scorecardBallDropTeams(scorecardGame(round, f.skins.id), round.cards)).toEqual([]);
+  });
+  it('formats positive, par, negative, pending and incomplete Ball Drop scores honestly', () => {
+    expect(ballDropScoreText(1)).toBe('+1');
+    expect(ballDropScoreText(0)).toBe('0');
+    expect(ballDropScoreText(-1)).toBe('-1');
+    expect(ballDropScoreText(1, false)).toBe('+1*');
+    expect(ballDropScoreText(null)).toBe('—');
+    expect(ballDropScoreText(undefined)).toBe('—');
+  });
   it('resolves a saved game by view selection without calculating or changing game configuration', () => {
     const { round, games } = scorecardGamesFixture();
     expect(scorecardGame(round)?.definition).toBe(games[0]);

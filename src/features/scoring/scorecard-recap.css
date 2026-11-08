@@ -22,6 +22,9 @@
 .recap-table .recap-game-row th, .recap-table .recap-game-row td { padding-block: 4px; font-size: .9rem; color: var(--cp-accent); }
 .recap-table .recap-has-game th, .recap-table .recap-has-game td { padding-bottom: 4px; border-bottom: 0; }
 .recap-game-row th small { display: block; font-size: .7rem; color: var(--cp-text-muted); }
+.recap-table .recap-team-row th, .recap-table .recap-team-row td { padding-block: 10px; border-top: 2px solid var(--cp-border-strong); background: var(--cp-surface-soft); font-weight: 700; }
+.recap-table .recap-counting-score { background: var(--cp-accent-soft); }
+.recap-counting-marker { display: inline-block; margin-left: 3px; color: var(--cp-accent); font-size: .65rem; font-weight: 750; vertical-align: super; }
 .scorecard-game-context { color: var(--cp-accent); font-size: .9rem; }
 .scorecard-game-unavailable { color: var(--cp-text-muted); font-size: .85rem; }
 .recap-subtotal { background: var(--cp-accent-soft); color: var(--cp-accent); font-weight: 700; }

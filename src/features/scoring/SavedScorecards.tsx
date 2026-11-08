@@ -59,8 +59,9 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
         {games.map((entry) => <option value={entry.id} key={entry.id}>{entry.name} · {gameScoringLabel(entry)}</option>)}
       </select></label>}
     </div>
-    {game?.definition.kind === 'ball-drop' ? <p className="scorecard-game-unavailable">
-      Ball Drop · Each member’s card shows the same saved team score to par, not an individual award. See Games for the two counting golfers.
+    {game?.definition.kind === 'ball-drop' ? <p className="scorecard-game-context">
+      Counting balls: {game.definition.format === 'ball-drop-two-net' ? 'N net'
+        : game.definition.format === 'ball-drop-two-gross' ? 'G gross' : 'N net · G gross'}
     </p> : game && isTeamGameDefinition(game.definition) && <p className="scorecard-game-unavailable">
       Team game · These golfer scorecards show individual component points, not full team credits. See Games or Leaderboard for team totals.
     </p>}

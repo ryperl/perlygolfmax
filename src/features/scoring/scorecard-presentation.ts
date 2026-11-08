@@ -46,6 +46,32 @@ export function scorecardGamePlayer(game: ScorecardGame | undefined, playerId: s
     : game?.result?.players.find((entry) => entry.playerId === playerId);
 }
 
+export function scorecardBallDropTeams(game: ScorecardGame | undefined, cards: readonly Scorecard[]): readonly GameTeamResult[] {
+  if (game?.definition.kind !== 'ball-drop' || game.result?.teamSetupRequired) return [];
+  const shown = new Set(cards.map((card) => card.playerId));
+  return game.result?.teams?.filter((team) => team.playerIds.some((id) => shown.has(id))) ?? [];
+}
+
+export function ballDropContribution(game: ScorecardGame | undefined, playerId: string, holeNumber: number): {
+  readonly teamName: string;
+  readonly basis: 'net' | 'gross';
+} | undefined {
+  if (game?.definition.kind !== 'ball-drop' || game.result?.teamSetupRequired) return undefined;
+  const team = game.result?.teams?.find((entry) => entry.playerIds.includes(playerId));
+  const hole = team?.strokeGame?.holes.find((entry) => entry.number === holeNumber);
+  if (!team || team.status === 'unavailable' || hole?.status !== 'complete' || hole.value === null
+    || hole.countingPlayerIds.length !== 2 || new Set(hole.countingPlayerIds).size !== 2
+    || hole.countingPlayerIds.some((id) => !team.playerIds.includes(id))) return undefined;
+  const position = hole.countingPlayerIds.indexOf(playerId);
+  if (position < 0) return undefined;
+  return { teamName: team.displayName, basis: game.definition.format === 'ball-drop-two-gross' ? 'gross'
+    : game.definition.format === 'ball-drop-two-net' || position === 0 ? 'net' : 'gross' };
+}
+
+export function ballDropScoreText(value: number | null | undefined, complete = true): string {
+  return value == null ? '—' : `${value > 0 ? '+' : ''}${String(value)}${complete ? '' : '*'}`;
+}
+
 export function scorecardGameWarnings(game: ScorecardGame | undefined, cards: readonly Scorecard[]): readonly string[] {
   const unavailable = new Map<string, string[]>();
   if (game) for (const card of cards) {

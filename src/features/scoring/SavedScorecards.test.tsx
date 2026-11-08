@@ -20,16 +20,34 @@ describe('golfer-facing round scorecards', () => {
       { kind: 'strokes', strokes: 5 }, { kind: 'strokes', strokes: 6 }]);
     const round = strokeGamesRound({ ...f, cards });
     render(<SavedScorecards {...props()} round={round} />);
-    const row = screen.getByRole('row', { name: 'Fictional golfer 1 · Fictional Ball Drop to par' });
-    expect(row).toHaveTextContent('Team to par');
+    const row = screen.getByRole('row', { name: 'Fictional team 1 · Fictional Ball Drop team to par' });
+    expect(row).toHaveTextContent('Ball Drop');
     expect(row).toHaveTextContent('-1');
-    expect(screen.getByText(/same saved team score to par/)).toBeVisible();
+    expect(screen.getAllByRole('row', { name: /Fictional Ball Drop team to par/ })).toHaveLength(1);
+    expect(screen.queryByText(/same saved team score to par/)).not.toBeInTheDocument();
+    expect(screen.getByText('Counting balls: N net · G gross')).toBeVisible();
     await userEvent.setup().click(screen.getByRole('button', { name: 'Open scorecard for Fictional golfer 1' }));
-    expect(screen.getByRole('row', { name: 'Fictional golfer 1 · Fictional Ball Drop to par' })).toHaveTextContent('-1');
+    expect(screen.getByRole('row', { name: 'Fictional team 1 · Fictional Ball Drop team to par' })).toHaveTextContent('-1');
+    expect(screen.getByText('1/4 golfers shown')).toBeVisible();
     await userEvent.setup().selectOptions(screen.getByLabelText('Game'), f.skins.id);
     expect(screen.getByRole('row', { name: 'Fictional golfer 1 · Fictional Skins skins' })).toHaveTextContent('1');
+    expect(screen.queryByRole('row', { name: /team to par$/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Fictional team 1: counting net ball')).not.toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole('button', { name: 'Back to group scorecard' }));
     expect(screen.getByRole('row', { name: 'Fictional golfer 2 · Fictional Skins skins' })).toHaveTextContent('0');
+  });
+  it('keeps split competition teams distinct from the selected playing group', () => {
+    const f = strokeGameFixture(9, 8);
+    const original = strokeGamesRound(f);
+    const ids = f.cards.map((card) => card.playerId);
+    const first = [ids[0], ids[1], ids[4], ids[5]].filter((id): id is string => id !== undefined);
+    const second = ids.filter((id) => !first.includes(id));
+    render(<SavedScorecards {...props()} round={{ ...original, groups: [
+      { number: 1, playerIds: first }, { number: 2, playerIds: second },
+    ] }} />);
+    expect(screen.getAllByRole('row', { name: /Fictional Ball Drop team to par/ })).toHaveLength(2);
+    expect(screen.getAllByText('2/4 golfers shown')).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: /Open scorecard for Fictional golfer/ })).toHaveLength(4);
   });
   it('shows personal and default source rows per golfer and marks identical strokes relative to their own pars', () => {
     const round = mixedTeeRound();

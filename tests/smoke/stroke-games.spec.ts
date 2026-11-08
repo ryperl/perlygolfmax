@@ -62,7 +62,11 @@ test('Ball Drop and Skins saved results, carry resolution and dedicated editing 
     await editor.getByRole('button', { name: 'Save game', exact: true }).click();
     await expect(page.getByText('Game settings saved.', { exact: true })).toBeVisible();
     const scorecards = page.getByRole('region', { name: 'Round scorecards', exact: true });
-    await expect(scorecards.getByRole('row', { name: 'Fictional golfer 1 · Fictional Ball Drop to par', exact: true }).first()).toContainText('-1');
+    const frontCard = scorecards.getByRole('table', { name: 'Front nine scorecard', exact: true });
+    await expect(frontCard.getByRole('row', { name: 'Fictional team 1 · Fictional Ball Drop team to par', exact: true })).toContainText('-1');
+    await expect(frontCard.getByRole('row', { name: /Fictional Ball Drop team to par/ })).toHaveCount(1);
+    await expect(frontCard.getByLabel('Fictional team 1: counting net ball', { exact: true })).toHaveCount(9);
+    await expect(frontCard.getByLabel('Fictional team 1: counting gross ball', { exact: true })).toHaveCount(9);
     await scorecards.getByRole('combobox', { name: 'Game', exact: true }).selectOption(strokeGameId(701));
     expect(await scorecards.getByRole('combobox', { name: 'Game', exact: true }).evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
     await expect(scorecards.getByRole('row', { name: 'Fictional golfer 2 · Fictional Skins skins', exact: true }).first()).toContainText('0');

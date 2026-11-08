@@ -2,7 +2,7 @@ import { scoreEntryText } from '../../contracts/scoring';
 import type { CourseHole } from '../../domain/catalog';
 import type { HoleScore, Scorecard } from '../../domain/scoring';
 import type { PlayerTeeProfile } from '../../domain/tees';
-import { cardTotalText, pointsTotalText, scorecardGamePlayer } from './scorecard-presentation';
+import { ballDropContribution, ballDropScoreText, cardTotalText, pointsTotalText, scorecardBallDropTeams, scorecardGamePlayer } from './scorecard-presentation';
 import type { ScorecardGame } from './scorecard-presentation';
 import { gameUnavailableMessage } from '../games';
 import { gameResultTotal, gameResultUnit } from '../../domain/games';
@@ -48,6 +48,8 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
   const showTotal = subtotal === 'In' || fullLayout.length === layout.length;
   const mixed = (playerTees?.length ?? 0) > 0;
   const unit = game ? gameResultUnit(game.definition) : 'points';
+  const ballDrop = game?.definition.kind === 'ball-drop';
+  const teams = scorecardBallDropTeams(game, cards);
   return <section className="recap-nine">
     <h4>{label}</h4>
     <div className="recap-scroll" role="region" aria-label={`${label} scorecard`} tabIndex={0}>
@@ -62,7 +64,7 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
             const playerFullLayout = tee?.holes ?? fullLayout;
             const playerLayout = layout.map((hole) => playerFullLayout.find((item) => item.number === hole.number) ?? hole);
             const saved = new Map(card.holes.map((hole) => [hole.number, hole.score]));
-            const player = scorecardGamePlayer(game, card.playerId);
+            const player = ballDrop ? undefined : scorecardGamePlayer(game, card.playerId);
             const holePoints = new Map(player?.strokeGame ? player.strokeGame.holes.map((hole) => [hole.number, hole.value])
               : player?.holes.map((hole) => [hole.number, hole.points]));
             const available = player !== undefined && player.status !== 'unavailable';
@@ -72,20 +74,26 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
                 {card.displayName} · {tee ? `${tee.name} / ${tee.category} · personal tee` : `${defaultTeeLabel ?? 'Common tee'} · default tee`}
               </th></tr>}
               {mixed && <CourseRows layout={playerLayout} fullLayout={playerFullLayout} showTotal={showTotal} prefix={`${card.displayName} · `} />}
-              <tr className={`recap-score-row${game ? ' recap-has-game' : ''}`}>
+              <tr className={`recap-score-row${game && !ballDrop ? ' recap-has-game' : ''}`}>
               <th scope="row">{onPlayerSelect ? <button type="button" className="scorecard-player-link"
                 aria-label={`Open scorecard for ${card.displayName}`} onClick={() => { onPlayerSelect(card.playerId); }}>{card.displayName}</button> : card.displayName}</th>
               {playerLayout.map((hole) => {
                 const score = saved.get(hole.number);
                 const mark = scoreMark(score, hole.par);
                 const text = score ? scoreEntryText(score) || '—' : '?';
-                return <td key={hole.number}><span className={`score-mark ${mark.className}${text.length > 2 ? ' score-token' : ''}`}
+                const contribution = score?.kind === 'strokes' ? ballDropContribution(game, card.playerId, hole.number) : undefined;
+                const description = contribution ? `${contribution.teamName}: counting ${contribution.basis} ball` : undefined;
+                return <td key={hole.number} className={contribution ? 'recap-counting-score' : undefined}><span className={`score-mark ${mark.className}${text.length > 2 ? ' score-token' : ''}`}
                   title={mark.description || undefined}
-                  aria-label={score ? `Hole ${String(hole.number)}: ${score.kind === 'unplayed' ? 'unplayed' : text}${mark.description ? `, ${mark.description}` : ''}` : `Hole ${String(hole.number)}: score unavailable`}>{text}</span></td>;
+                  aria-label={score ? `Hole ${String(hole.number)}: ${score.kind === 'unplayed' ? 'unplayed' : text}${mark.description ? `, ${mark.description}` : ''}` : `Hole ${String(hole.number)}: score unavailable`}>{text}</span>
+                  {contribution && <span className="recap-counting-marker" aria-label={description} title={description}>
+                    {contribution.basis === 'net' ? 'N' : 'G'}
+                  </span>}
+                </td>;
               })}
               <td className="recap-subtotal">{cardTotalText(card, layout)}</td>{showTotal && <td className="recap-subtotal">{cardTotalText(card, fullLayout)}</td>}
             </tr>
-            {game && <tr className="recap-game-row" aria-label={`${card.displayName} · ${game.definition.name} ${unit}`}>
+            {game && !ballDrop && <tr className="recap-game-row" aria-label={`${card.displayName} · ${game.definition.name} ${unit}`}>
               <th scope="row" aria-label={`${card.displayName} game ${unit}`}
                 title={!available ? gameUnavailableMessage(player?.strokeGame?.unavailableReason ?? player?.unavailableReason) : undefined}>
                 {unit === 'points' ? 'Points' : unit === 'skins' ? 'Skins' : 'Team to par'}
@@ -103,6 +111,30 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
               {showTotal && <td className="recap-subtotal">{pointsTotalText(available ? gameResultTotal(player) : null, player?.status === 'complete')}</td>}
             </tr>}
             </Fragment>;
+          })}
+          {teams.map((team) => {
+            const holes = new Map(team.strokeGame?.holes.map((hole) => [hole.number, hole.value]));
+            const available = team.status !== 'unavailable';
+            const completeNine = layout.every((hole) => typeof holes.get(hole.number) === 'number');
+            const shown = cards.filter((card) => team.playerIds.includes(card.playerId)).length;
+            return <tr className="recap-game-row recap-team-row" key={team.teamId}
+              aria-label={`${team.displayName} · ${game?.definition.name ?? 'Ball Drop'} team to par`}>
+              <th scope="row" title={!available ? gameUnavailableMessage(team.strokeGame?.unavailableReason ?? team.unavailableReason) : undefined}>
+                Ball Drop<small>{team.displayName}</small>
+                {shown < team.playerIds.length && <small>{shown}/{team.playerIds.length} golfers shown</small>}
+                {!available && <small>Unavailable</small>}
+              </th>
+              {layout.map((hole) => {
+                const value = holes.get(hole.number);
+                const description = !available ? 'unavailable' : typeof value === 'number' ? ballDropScoreText(value) : 'pending';
+                return <td key={hole.number} aria-label={`${team.displayName}, hole ${String(hole.number)} team to par: ${description}`}>
+                  {available ? ballDropScoreText(value) : '—'}
+                </td>;
+              })}
+              <td className="recap-subtotal">{ballDropScoreText(available
+                ? subtotal === 'Out' ? team.strokeGame?.frontTotal : team.strokeGame?.backTotal : null, completeNine)}</td>
+              {showTotal && <td className="recap-subtotal">{ballDropScoreText(available ? team.strokeGame?.total : null, team.status === 'complete')}</td>}
+            </tr>;
           })}
         </tbody>
       </table>

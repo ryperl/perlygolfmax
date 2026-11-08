@@ -6,10 +6,84 @@ import { scorecardGame } from './scorecard-presentation';
 import { scorecardGamesFixture } from './scorecard-games.test-support';
 import { withGameResults } from '../../client/scoring.test-support';
 import { mixedTeeRound } from './tees.test-support';
+import { ballDropFormat, strokeGameCards, strokeGameFixture, strokeGamesRound } from '../../domain/stroke-games.test-support';
 
 const card = fictionalRoundScores.cards[0];
 if (!card) throw new Error('Missing fictional card.');
 describe('traditional scorecard nine', () => {
+  it('places one Ball Drop line after the foursome and marks the saved combination per hole', () => {
+    const f = strokeGameFixture();
+    let cards = strokeGameCards(f.cards, 1, [{ kind: 'strokes', strokes: 3 }, { kind: 'strokes', strokes: 4 },
+      { kind: 'strokes', strokes: 6 }, { kind: 'strokes', strokes: 7 }]);
+    cards = strokeGameCards(cards, 2, [{ kind: 'strokes', strokes: 6 }, { kind: 'strokes', strokes: 7 },
+      { kind: 'strokes', strokes: 4 }, { kind: 'strokes', strokes: 5 }]);
+    const round = strokeGamesRound({ ...f, cards });
+    const before = structuredClone(round);
+    render(<ScorecardNine label="Front nine" subtotal="Out" layout={round.layout} fullLayout={round.layout}
+      cards={round.cards} game={scorecardGame(round)} />);
+    const team = screen.getByRole('row', { name: 'Fictional team 1 · Fictional Ball Drop team to par' });
+    expect(within(team).getAllByRole('cell').slice(0, 3).map((cell) => cell.textContent)).toEqual(['-1', '+1', '0']);
+    expect(team).toBe(team.parentElement?.lastElementChild);
+    expect(screen.getAllByRole('row', { name: /team to par$/ })).toHaveLength(1);
+    const first = screen.getByRole('rowheader', { name: 'Fictional golfer 1' }).closest('tr');
+    const second = screen.getByRole('rowheader', { name: 'Fictional golfer 2' }).closest('tr');
+    const third = screen.getByRole('rowheader', { name: 'Fictional golfer 3' }).closest('tr');
+    if (!first || !second || !third) throw new Error('Missing fictional score rows.');
+    expect(within(within(first).getAllByRole('cell')[0] ?? first).getByLabelText('Fictional team 1: counting net ball')).toHaveTextContent('N');
+    expect(within(within(second).getAllByRole('cell')[0] ?? second).getByLabelText('Fictional team 1: counting gross ball')).toHaveTextContent('G');
+    expect(within(first).getAllByRole('cell')[0]).toHaveClass('recap-counting-score');
+    expect(within(first).getByLabelText('Hole 1: 3, birdie')).toHaveClass('score-birdie');
+    expect(within(third).getAllByRole('cell')[0]).not.toHaveClass('recap-counting-score');
+    expect(within(third).getAllByRole('cell')[1]).toHaveClass('recap-counting-score');
+    expect(round).toEqual(before);
+  });
+  it.each(['ball-drop-two-net', 'ball-drop-two-gross'] as const)('marks both counting balls correctly for %s', (format) => {
+    const f = strokeGameFixture();
+    const round = strokeGamesRound({ ...f, ballDrop: ballDropFormat(f.ballDrop, format) });
+    render(<ScorecardNine label="Front nine" subtotal="Out" layout={round.layout} fullLayout={round.layout}
+      cards={round.cards} game={scorecardGame(round)} />);
+    const basis = format === 'ball-drop-two-net' ? 'net' : 'gross';
+    expect(screen.getAllByLabelText(`Fictional team 1: counting ${basis} ball`)).toHaveLength(18);
+    expect(screen.queryByLabelText(`Fictional team 1: counting ${basis === 'net' ? 'gross' : 'net'} ball`)).not.toBeInTheDocument();
+  });
+  it('updates back-nine scores, totals and highlighted golfers from a fresh saved projection', () => {
+    const f = strokeGameFixture(18);
+    let cards = strokeGameCards(f.cards, 10, [{ kind: 'strokes', strokes: 6 }, { kind: 'strokes', strokes: 7 },
+      { kind: 'strokes', strokes: 4 }, { kind: 'strokes', strokes: 5 }]);
+    let round = strokeGamesRound({ ...f, cards });
+    const input = { label: 'Back nine', subtotal: 'In' as const, layout: round.layout.slice(9), fullLayout: round.layout };
+    const view = render(<ScorecardNine {...input} cards={cards} game={scorecardGame(round)} />);
+    const team = screen.getByRole('row', { name: 'Fictional team 1 · Fictional Ball Drop team to par' });
+    expect(within(team).getAllByRole('cell').slice(-2).map((cell) => cell.textContent)).toEqual(['+1', '+1']);
+    const third = screen.getByRole('rowheader', { name: 'Fictional golfer 3' }).closest('tr');
+    if (!third) throw new Error('Missing fictional score row.');
+    expect(within(third).getAllByRole('cell')[0]).toHaveClass('recap-counting-score');
+    cards = strokeGameCards(cards, 10, [{ kind: 'strokes', strokes: 3 }, { kind: 'strokes', strokes: 4 },
+      { kind: 'strokes', strokes: 6 }, { kind: 'strokes', strokes: 7 }]);
+    round = strokeGamesRound({ ...f, cards });
+    view.rerender(<ScorecardNine {...input} cards={cards} game={scorecardGame(round)} />);
+    expect(within(team).getAllByRole('cell').slice(-2).map((cell) => cell.textContent)).toEqual(['-1', '-1']);
+    expect(within(third).getAllByRole('cell')[0]).not.toHaveClass('recap-counting-score');
+    expect(screen.getAllByRole('row', { name: /team to par$/ })).toHaveLength(1);
+  });
+  it('does not highlight unresolved or unavailable combinations or fabricate their team scores', () => {
+    const f = strokeGameFixture();
+    const cards = strokeGameCards(f.cards, 2, [{ kind: 'unplayed' }]);
+    const round = strokeGamesRound({ ...f, cards });
+    const input = { label: 'Front nine', subtotal: 'Out' as const, layout: round.layout, fullLayout: round.layout, cards };
+    const view = render(<ScorecardNine {...input} game={scorecardGame(round)} />);
+    const team = screen.getByRole('row', { name: 'Fictional team 1 · Fictional Ball Drop team to par' });
+    expect(within(team).getAllByRole('cell')[1]).toHaveTextContent('—');
+    expect(within(team).getAllByRole('cell').at(-1)).toHaveTextContent('0*');
+    expect(screen.getAllByLabelText('Fictional team 1: counting net ball')).toHaveLength(8);
+    const unavailable = strokeGamesRound({ ...f, snapshot: { ...f.snapshot,
+      players: f.snapshot.players.map((player, index) => index === 0 ? { ...player, handicapIndex: null } : player),
+    } });
+    view.rerender(<ScorecardNine {...input} game={scorecardGame(unavailable)} />);
+    expect(team).toHaveTextContent('Unavailable');
+    expect(within(team).getAllByRole('cell').every((cell) => cell.textContent === '—')).toBe(true);
+    expect(screen.queryByLabelText('Fictional team 1: counting net ball')).not.toBeInTheDocument();
+  });
   it('keeps mixed-tee source rows and raw gross marks golfer-specific without recalculating saved points', () => {
     const mixed = mixedTeeRound();
     const { round } = scorecardGamesFixture(9);

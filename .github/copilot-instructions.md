@@ -119,6 +119,10 @@
   New metrics may fund existing place-based purse prizes with team-member
   attribution, never per-skin transfers. Overall Stableford accepts Stableford
   only; reject converting a bound game until its selection is removed.
+- Ball Drop scorecards show one authoritative team row after golfer rows, never
+  repeat the team score under every player. N/G cell markers use saved ordered
+  counting IDs, not a new client calculation; retain gross score marks, pending/
+  unavailable states and actual team identity when playing groups differ.
 - Scoring names show server-derived Course Handicap from captured HI and each
   golfer's captured tee, without game allowance or a stroke-allocation requirement.
   Keep scratch/plus values distinct from NH and other unavailable inputs.

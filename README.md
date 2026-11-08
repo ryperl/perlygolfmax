@@ -464,8 +464,11 @@ drafts never enter results. Partial standings are explicitly provisional and
 never declare a winner or finalize a round.
 
 Games, Leaderboard and golfer scorecards display the appropriate to-par or
-skins units. Ball Drop member scorecards repeat their saved team projection;
-Games identifies the counting golfers. Existing round-game purse place prizes
+skins units. Ball Drop scorecards show one saved team-to-par row below the golfer
+rows, with shaded N/G markers on the two counting scores per hole. Positive
+team scores use a plus sign; pending/unavailable scores are never zero.
+Competition teams split across playing groups remain separately identified,
+including how many members are shown. Existing round-game purse place prizes
 rank these same saved metrics and split team awards among members, with existing
 tie/remainder/projection rules. This is not a per-skin money transfer.
 Overall Stableford selection accepts only Stableford games; remove a selected
