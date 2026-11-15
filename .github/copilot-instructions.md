@@ -48,8 +48,11 @@
   object permissions and owner-versus-global-creator grants on every operation.
 - Only the bootstrapped organizer manages global course/player catalogs.
   Event ownership is not catalog authority. Use allowlisted member projections,
-  immutable course versions and captured round inputs; never silently refresh
-  rounds from catalog or Handicap Index changes.
+  immutable course versions and captured round inputs. Active unstarted rounds
+  use current catalog HI; atomically freeze all indexes with the first saved
+  score, immutable capture receipt and setup lock. Started/archived rounds never
+  adopt later catalog changes. Scored-index corrections need explicit scope and
+  an audited conditional write; never unlock a round or rewrite raw cards.
 - Keep archived events owner-only. Archive/restore must conditionally check
   both event and owner-grant revisions. Deletion or retention rules require
   a separate scope decision.

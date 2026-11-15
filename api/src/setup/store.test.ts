@@ -178,9 +178,10 @@ describe('saved owner workspace', () => {
     }
 
     describe('explicit setup-only captured-index refresh', () => {
-      it('updates only the selected round captures, retaining unknowns, other rounds, course/groups and global profiles', async () => {
+      it('persists only the selected round refresh while all unstarted projections use current catalog inputs', async () => {
         const f = await refreshFixture();
         const globalBefore = [...f.rows.entries()].filter(([key]) => key.startsWith('catalog:'));
+        const peerBefore = f.rows.get(`${event.id}|round:${identifier(501)}`);
         const refreshed = await f.workspace.refreshIndices(creator, event.id, identifier(500), identifier(600), f.saved.etag);
         const previousRound = f.saved.rounds[0];
         expect(refreshed.rounds[0]).toEqual({
@@ -191,7 +192,8 @@ describe('saved owner workspace', () => {
           })),
         });
         expect(refreshed.rounds[0]?.players[1]?.handicapIndex).toBeNull();
-        expect(refreshed.rounds[1]).toEqual(f.saved.rounds[1]);
+        expect(refreshed.rounds[1]?.players[0]?.handicapIndex).toEqual(f.latest.currentIndex);
+        expect(f.rows.get(`${event.id}|round:${identifier(501)}`)).toEqual(peerBefore);
         expect(refreshed.roster.map(({ playerId, displayName }) => ({ playerId, displayName })))
           .toEqual(f.saved.roster.map(({ playerId, displayName }) => ({ playerId, displayName })));
         expect(refreshed.roster[0]?.handicapIndexValue).toBe('7.5');
@@ -222,17 +224,17 @@ describe('saved owner workspace', () => {
         expect(JSON.stringify(memberRead)).not.toContain('recordedBy');
       });
 
-      it('captures unknown as null explicitly and refreshes newly known observations only on the explicit action', async () => {
+      it('shows newly known observations on all unstarted rounds without a refresh write', async () => {
         const f = await refreshFixture();
         const unknownPlayer = await f.players.get(creator, identifier(201));
         const observed = await f.players.observe(creator, unknownPlayer.id, identifier(311), {
           value: '+0.5', effectiveDate: '2026-03-01', source: 'Fictional initially unknown observation',
         }, unknownPlayer.etag);
-        expect((await f.workspace.get(creator, event.id)).rounds[0]?.players[1]?.handicapIndex).toBeNull();
+        expect((await f.workspace.get(creator, event.id)).rounds[0]?.players[1]?.handicapIndex).toEqual(observed.currentIndex);
         const result = await f.workspace.refreshIndices(creator, event.id, identifier(500), identifier(600), f.saved.etag);
         expect(result.rounds[0]?.players[1]?.handicapIndex).toEqual(observed.currentIndex);
         expect(result.rounds[0]?.players[2]?.handicapIndex).toBeNull();
-        expect(result.rounds[1]?.players[1]?.handicapIndex).toBeNull();
+        expect(result.rounds[1]?.players[1]?.handicapIndex).toEqual(observed.currentIndex);
       });
 
       it('replays a lost committed response with the original revision, returns fresh workspace and preserves one audit', async () => {
@@ -255,7 +257,7 @@ describe('saved owner workspace', () => {
           rounds: [original, { ...original, id: identifier(501), name: 'Fictional Round Two' }],
         }, committed.etag);
         expect(await f.workspace.refreshIndices(creator, event.id, identifier(500), identifier(600), f.saved.etag)).toEqual(fresh);
-        expect(fresh.rounds[0]?.players[0]?.handicapIndex?.value).toBe('7.5');
+        expect(fresh.rounds[0]?.players[0]?.handicapIndex?.value).toBe('9');
         expect(f.rows.get(`${event.id}|index-refresh:${identifier(600)}`)).toEqual(receipt);
         expect([...f.rows.values()].filter((row) => row.rowKey?.startsWith('index-refresh:'))).toHaveLength(1);
         await expect(f.workspace.refreshIndices(creator, event.id, identifier(501), identifier(600), f.saved.etag)).rejects.toMatchObject({ code: 'INDEX_REFRESH_REQUEST_CONFLICT' });
@@ -338,7 +340,7 @@ describe('saved owner workspace', () => {
         await expect(f.workspace.refreshIndices(creator, event.id, identifier(500), identifier(600), f.saved.etag)).rejects.toMatchObject({ status: 503 });
       });
     });
-  it('does not refresh old-round HI snapshots; new rounds and newly added round players capture current observations', async () => {
+  it('uses current observations for existing unstarted rounds, new rounds and newly added round players', async () => {
     const f = await fixture();
     let saved = await f.workspace.save(creator, event.id, f.input, f.empty.etag);
     const playerId = f.input.playerIds[0] ?? '';
@@ -355,7 +357,7 @@ describe('saved owner workspace', () => {
       rounds: [{ ...first, groups }, { ...first, id: identifier(501), name: 'Fictional Round Two', groups }],
     };
     saved = await f.workspace.save(creator, event.id, input, saved.etag);
-    expect(saved.rounds[0]?.players[0]?.handicapIndex?.value).toBe('+1.2');
+    expect(saved.rounds[0]?.players[0]?.handicapIndex?.value).toBe('8.1');
     expect(saved.rounds[1]?.players[0]?.handicapIndex?.value).toBe('8.1');
     expect(saved.rounds[0]?.players[4]?.handicapIndex).toEqual(extraObserved.currentIndex);
     await expect(f.workspace.save(creator, event.id, { ...f.input, rounds: [first] }, saved.etag)).rejects.toMatchObject({ code: 'ROUND_REMOVAL_NOT_SUPPORTED' });

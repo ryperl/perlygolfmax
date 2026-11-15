@@ -24,7 +24,7 @@ function teamGame(playerIds: readonly string[], format: TeamGameFormat = 'two-ne
   };
 }
 
-function capturedZeroIndices(f: Fixture): readonly string[] {
+async function capturedZeroIndices(f: Fixture): Promise<readonly string[]> {
   const round = f.saved.rounds[0];
   if (!round) throw new Error('Missing fictional round.');
   f.seed({
@@ -37,6 +37,13 @@ function capturedZeroIndices(f: Fixture): readonly string[] {
       })),
     }),
   });
+  for (const [index, player] of round.players.entries()) {
+    const profile = await f.players.get(creator, player.playerId);
+    await f.players.observe(creator, player.playerId, identifier(1900 + index), {
+      value: '0.0', effectiveDate: '2026-01-01', source: 'Fictional current index',
+    }, profile.etag);
+  }
+  f.submit.mockClear();
   return round.players.map((player) => player.playerId);
 }
 
@@ -48,7 +55,7 @@ describe('authoritative team games persistence', () => {
     ['four-two-net', 'modified', [2]],
   ] as const)('calculates saved %s/%s team points without rewriting any stroke card', async (format, preset, expected) => {
     const f = await scoringFixture();
-    const ids = capturedZeroIndices(f);
+    const ids = await capturedZeroIndices(f);
     const definition = teamGame(ids, format, preset);
     const configured = await f.scores.saveGames(creator, event.id, f.roundId, [definition], null, identifier(1000));
     expect(isGameWriteResult(configured)).toBe(true);
@@ -82,7 +89,7 @@ describe('authoritative team games persistence', () => {
 
   it('rejects new incomplete, duplicate and foreign assignments without creating settings or audit rows', async () => {
     const f = await scoringFixture();
-    const ids = capturedZeroIndices(f);
+    const ids = await capturedZeroIndices(f);
     const definition = teamGame(ids);
     const first = definition.teams[0];
     if (!first) throw new Error('Missing fictional team.');
@@ -102,7 +109,7 @@ describe('authoritative team games persistence', () => {
 
   it('includes exact assignments in definitive retries and rejects request-ID reuse for different partners', async () => {
     const f = await scoringFixture();
-    const definition = teamGame(capturedZeroIndices(f));
+    const definition = teamGame(await capturedZeroIndices(f));
     const saved = await f.scores.saveGames(creator, event.id, f.roundId, [definition], null, identifier(1000));
     expect(await f.scores.saveGames(creator, event.id, f.roundId, [definition], null, identifier(1000))).toEqual(saved);
     const first = definition.teams[0];
@@ -118,7 +125,7 @@ describe('authoritative team games persistence', () => {
 
   it('keeps stale teams visible but unscored and permits sequential repair without altering another stale game', async () => {
     const f = await scoringFixture();
-    const originalIds = capturedZeroIndices(f);
+    const originalIds = await capturedZeroIndices(f);
     const games = [teamGame(originalIds), teamGame(originalIds, 'two-net-aggregate', 'standard', 710)];
     const original = await f.scores.saveGames(creator, event.id, f.roundId, games, null, identifier(1000));
     const additions = await Promise.all([204, 205].map((id) =>
@@ -159,7 +166,7 @@ describe('authoritative team games persistence', () => {
 
   it('saves configurations above the ordinary request budget and reloads them exactly', async () => {
     const f = await scoringFixture();
-    const base = teamGame(capturedZeroIndices(f));
+    const base = teamGame(await capturedZeroIndices(f));
     const large: readonly RoundGameDefinition[] = Array.from({ length: 16 }, (_, index) => ({
       ...base, id: identifier(700 + index), points: {
         ...base.points, rows: Array.from({ length: 32 }, (_, row) => ({ scoreToPar: row, points: 1_000_000_000_000 })),

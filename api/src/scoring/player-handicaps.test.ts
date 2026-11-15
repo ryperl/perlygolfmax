@@ -11,6 +11,7 @@ import { canonical } from '../catalog/entities.js';
 describe('allowlisted index displays and captured course handicaps', () => {
   it('keeps legacy uncaptured indices unavailable rather than claiming NH or zero', async () => {
     const f = await publicFixture();
+    await f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1, { kind: 'strokes', strokes: 4 }, null, identifier(8999));
     const captured = (await f.workspace.get(creator, event.id)).rounds[0];
     if (!captured) throw new Error('Missing fictional round.');
     f.seed({ partitionKey: event.id, rowKey: `round:${f.roundId}`, content: canonical({

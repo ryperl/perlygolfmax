@@ -124,8 +124,9 @@ describe('scoring real installed Table SDK loopback transport', () => {
       expect(first.round.cards[0]?.etag).toBe('W/"batch-1"');
       expect(isScoreWriteResult(first)).toBe(true);
       expect(first.round.cards[0]?.etag).toBe('W/"batch-1"');
-      expect(batches[0]?.match(/if-match: W\/"initial"/gi)).toHaveLength(2);
-      expect(batches[0]?.match(/POST http/g)).toHaveLength(3);
+      expect(batches[0]?.match(/if-match: W\/"initial"/gi)).toHaveLength(3);
+      expect(batches[0]?.match(/POST http/g)).toHaveLength(4);
+      expect(batches[0]).toContain(`"RowKey":"index-capture:${f.roundId}"`);
       expect(batches[0]).toContain(`"RowKey":"score-card:${f.roundId}:${f.playerId}"`);
       expect(batches[0]).toContain(`"RowKey":"score-change:${identifier(600)}"`);
       expect(batches[0]).toContain(`"RowKey":"score-lock:${f.roundId}"`);

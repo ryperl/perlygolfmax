@@ -76,7 +76,10 @@ describe('saved setup client/handler contract', () => {
     const currentPlayer = (await catalog.players(signal)).players.find((player) => player.id === first.id);
     if (!currentPlayer) throw new Error('Missing saved fictional player.');
     await catalog.recordIndex(currentPlayer, { value: '12.3', effectiveDate: '2026-01-02', source: 'Fictional later observation' }, identifier(302), signal);
-    expect((await setup.load(event.id, signal)).rounds).toEqual(saved.rounds);
+    const currentRound = (await setup.load(event.id, signal)).rounds[0];
+    expect(currentRound?.players[0]?.handicapIndex?.value).toBe('12.3');
+    expect(currentRound?.teeProfile).toEqual(saved.rounds[0]?.teeProfile);
+    expect(currentRound?.groups).toEqual(saved.rounds[0]?.groups);
     const refreshed = await setup.refreshIndices(event.id, identifier(500), saved.etag, identifier(600), signal);
     expect(refreshed.rounds[0]?.players[0]?.handicapIndex?.value).toBe('12.3');
     expect(refreshed.rounds[0]?.teeProfile).toEqual(saved.rounds[0]?.teeProfile);

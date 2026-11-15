@@ -102,10 +102,10 @@ describe('owner-only saved-round gross scorecards', () => {
     expect(result.round.cards[0]?.etag).toBe(f.rows.get(`${event.id}|score-card:${f.roundId}:${f.playerId}`)?.etag);
     expect(result.round.cards[0]?.holes[0]?.score).toEqual({ kind: 'strokes', strokes: 4 });
     const actions = f.submit.mock.calls[0]?.[0];
-    expect(actions).toHaveLength(5);
+    expect(actions).toHaveLength(7);
     expect(actions?.[0]?.[3]).toEqual({ etag: f.saved.etag });
     expect(actions?.[1]?.[3]?.etag).toEqual(expect.any(String));
-    expect(actions?.map((action) => action[0])).toEqual(['update', 'update', 'create', 'create', 'create']);
+    expect(actions?.map((action) => action[0])).toEqual(['update', 'update', 'create', 'create', 'update', 'create', 'create']);
     expect(actions?.every((action) => action[1].partitionKey === event.id)).toBe(true);
     expect(result.round.setupLocked).toBe(true);
     expect(result.round).not.toHaveProperty('handicapIndex');

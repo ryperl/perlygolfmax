@@ -627,16 +627,19 @@ An optional starting index can be entered when creating a player; the player
 and first audited observation are saved together. Editing opens beside the
 selected player rather than below the whole directory.
 Backdated observations remain in history rather than replacing a newer current
-observation. Round-captured inputs do not automatically change on catalog edits.
-Official index verification/posting and scored-round index correction remain
-outside this increment.
+observation. Active rounds that have not started use the latest current catalog
+observation, including NH when no observation exists. The first saved score
+atomically captures all round indexes with the score, audit and setup lock.
+Later catalog changes do not alter started or archived rounds. Official index
+verification/posting remains outside this increment.
 
-The manager's owner workspace distinguishes current catalog indices from saved
-round captures. An explicit, confirmed setup refresh can replace one round's
-captured indices with current catalog observations, preserving the previous
-inputs in an audit record. This does not change course/tee/group selections,
-update the global players, calculate handicaps or select a future scored-round
-correction policy.
+The manager's owner workspace distinguishes current unstarted-round inputs from
+frozen started-round captures. An optional confirmed setup refresh can also
+persist current observations for one unstarted round, preserving the previous
+stored inputs in an audit record. No refresh is required to use current indexes
+before scoring. Course/tee/group selections and global profiles are unchanged.
+Correcting a started round requires a separately authorized, audited correction;
+ordinary catalog updates never unlock or recalculate it.
 
 Owner setup selects saved players and an explicit course version/tee for one
 or more rounds, with positive numbered manual groups and at most four players per

@@ -297,17 +297,18 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
             const current = players?.find((item) => item.id === player.playerId);
             return <li key={player.playerId}>
               <h4>{player.displayName}</h4>
-              <dl className="setup-index-comparison"><div><dt>Captured setup HI</dt><dd>{indexLabel(player.handicapIndex)}</dd></div>
+              <dl className="setup-index-comparison"><div><dt>{round.scoringStarted ? 'Captured setup HI' : 'Current round HI'}</dt><dd>{indexLabel(player.handicapIndex)}</dd></div>
                 {editing && <div><dt>Current catalog HI</dt><dd>{catalogPending ? 'Loading current catalog HI...'
                   : catalogError ? 'Unavailable — catalog loading failed.' : current ? indexLabel(current.currentIndex) : 'Unavailable — player not found in current catalog.'}</dd></div>}
               </dl>
               {editing && !catalogPending && !catalogError && current && <p>{current.currentIndex?.id !== player.handicapIndex?.id
-                ? 'Changed since capture. The saved input has not been changed automatically.'
+                ? round.scoringStarted ? 'Changed since capture. This started round keeps its frozen input.'
+                  : 'Catalog changed since this view loaded. Reload to review the current round HI.'
                 : 'Captured and current observations match.'}</p>}
             </li>;
           })}</ul>
           {editing && <fieldset className="setup-index-refresh" disabled={round.scoringStarted === true}>
-            <p>Review captured and current values above. Refresh replaces this unstarted saved round's captured setup inputs using catalog observations at refresh time and audits the previous values. It preserves saved course, tee and groups. Scored rounds are locked; this is not score recalculation.</p>
+            <p>Unstarted rounds use current catalog HI automatically and freeze it with the first saved score. This optional refresh also records current observations in the saved setup and audits the previous values. Course, tee and groups are preserved. Started rounds remain locked.</p>
             <label className="setup-index-confirm"><input type="checkbox" checked={refreshConfirmed.has(round.id)}
               disabled={busy || catalogPending || catalogError !== '' || versionPending.size > 0 || conflict
                 || !round.players.every((player) => players?.some((item) => item.id === player.playerId))}

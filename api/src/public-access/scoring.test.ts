@@ -111,7 +111,7 @@ describe('active event public scoring authority', () => {
       expect(JSON.stringify(saved)).not.toContain('handicapIndex');
     }
     const created = [...f.rows.keys()].filter((key) => !keys.has(key));
-    expect(created.every((key) => /score-(card|change|lock):/.test(key))).toBe(true);
+    expect(created.every((key) => /score-(card|change|lock):|index-capture:/.test(key))).toBe(true);
     const accountEvents = await new TableEventStore(f.table).list(member);
     expect(accountEvents.events).toEqual([]);
     await expect(f.workspace.get(member, event.id)).rejects.toMatchObject({ status: 404 });

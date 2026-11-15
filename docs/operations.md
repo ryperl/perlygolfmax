@@ -109,6 +109,23 @@ boundaries.
 
 ## Identity and application authority
 
+### Current and frozen Handicap Index inputs
+
+Active unstarted rounds resolve the catalog's current index observations during
+workspace and scoring reads without writing data. Only already-authorized roster
+IDs are resolved; public responses retain scalar HI/NH and derived handicaps,
+never full catalog observations. Saved course versions, tees and groups do not
+change. Setup saves also use current observations for unstarted rounds.
+
+The first score transaction persists that round's exact index inputs and an
+immutable `index-capture:<round-id>` receipt together with the card, score audit,
+event/grant checks and scoring lock. An event revision conflict aborts all of
+them. Later catalog updates affect other unstarted rounds only; started and
+archived rounds retain their saved inputs, even if all scores are later cleared.
+The existing optional organizer index-refresh action remains setup-only and
+audited. Correcting a started round is a separately approved data repair, not
+ordinary catalog propagation, and must preserve raw cards, score audits and locks.
+
 Organizer tools use MSAL authorization code with PKCE against a dedicated customer
 tenant's hosted email one-time-passcode flow. Golfers require no account or
 sign-in. Configure organizer OTP from the start; changing a password flow later does

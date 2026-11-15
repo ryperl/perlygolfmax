@@ -679,7 +679,9 @@ describe('saved event workspace', () => {
     const first = indexRow('Fictional Player 1');
     expect(first.getByText('10.2 — effective 2026-01-01; Fictional manual report')).toBeVisible();
     expect(first.getByText('+1.2 — effective 2026-02-01; Fictional manual report')).toBeVisible();
-    expect(first.getByText(/Changed since capture/)).toBeVisible();
+    expect(first.getByText(/Catalog changed since this view loaded/)).toBeVisible();
+    expect(first.getByText('Current round HI')).toBeVisible();
+    expect(screen.getByText(/Unstarted rounds use current catalog HI automatically/)).toBeVisible();
     expect(indexRow('Fictional Player 2').getAllByText('Unknown — no handicap observation')).toHaveLength(2);
     expect(indexRow('Fictional Player 4').getByText(/Unavailable — player not found/)).toBeVisible();
     expect(screen.getByRole('checkbox', { name: /I confirm replacing captured setup HI/ })).toBeDisabled();

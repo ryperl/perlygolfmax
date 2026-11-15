@@ -11,7 +11,7 @@ import { canonical, decode, isConflict, optionalRow, revision, transaction } fro
 import { requireManager } from '../catalog/courses.js';
 import type { CatalogPermission, TableCourseCatalog } from '../catalog/courses.js';
 import type { TablePlayerCatalog } from '../catalog/players.js';
-import { currentRosterDisplay } from '../catalog/players.js';
+import { currentRosterDisplay, currentRosterProfiles } from '../catalog/players.js';
 import { metadata, profile } from '../catalog/projections.js';
 import { isIndexRefreshAudit } from './index-refresh.js';
 import type { IndexRefreshAudit } from './index-refresh.js';
@@ -69,7 +69,7 @@ export class TableWorkspaceStore {
     return { ...access, member: access.member };
   }
 
-  private async load(summary: EventSummary): Promise<EventWorkspace> {
+  private async load(summary: EventSummary, currentUnstartedIndices = true): Promise<EventWorkspace> {
     const header = await optionalRow(this.table, summary.id, 'workspace');
     if (!header) return { event: summary, location: '', roster: [], rounds: [], etag: summary.etag };
     const saved = decode(await privateContent(this.table, summary.id, 'workspace', header.content), isHeader);
@@ -98,7 +98,18 @@ export class TableWorkspaceStore {
         throw new ApiError(503, 'INVALID_STORED_SCORE_LOCK');
       }
     }
-    return { ...workspace, event: summary };
+    const active: EventWorkspace = { ...workspace, event: summary };
+    if (summary.status !== 'active' || !currentUnstartedIndices) return active;
+    const ids = [...new Set(active.rounds.filter((round) => !round.scoringStarted)
+      .flatMap((round) => round.players.map((entry) => entry.playerId)))];
+    const profiles = new Map((await currentRosterProfiles(this.table, ids)).map((entry) => [entry.id, entry]));
+    return { ...active, rounds: active.rounds.map((round) => round.scoringStarted ? round : {
+      ...round, players: round.players.map((entry) => {
+        const current = profiles.get(entry.playerId);
+        if (!current) throw new ApiError(503, 'INVALID_STORED_CATALOG');
+        return { ...entry, handicapIndex: current.currentIndex };
+      }),
+    }) };
   }
 
   async get(identity: ScoreActor, id: string): Promise<EventWorkspace> {
@@ -191,7 +202,7 @@ export class TableWorkspaceStore {
       return current;
     }
     if (access.summary.etag !== etag) throw new ApiError(409, 'EVENT_CHANGED');
-    const workspace = await this.load(access.summary);
+    const workspace = await this.load(access.summary, false);
     const round = workspace.rounds.find((entry) => entry.id === roundId);
     if (!round) throw new ApiError(404, 'ROUND_NOT_FOUND');
     if (round.scoringStarted) throw new ApiError(409, 'ROUND_SCORING_STARTED');
@@ -365,7 +376,7 @@ export class TableWorkspaceStore {
           const saved = oldPlayers.get(player.id);
           return {
             playerId: player.id, displayName: saved?.displayName ?? player.displayName,
-            handicapIndex: saved ? saved.handicapIndex ?? null : player.currentIndex,
+            handicapIndex: player.currentIndex,
           };
         }),
       });

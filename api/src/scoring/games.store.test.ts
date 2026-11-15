@@ -68,9 +68,19 @@ describe('saved round games and authoritative results', () => {
       } })),
     };
     f.seed({ partitionKey: event.id, rowKey: `round:${f.roundId}`, content: canonical(captured) });
+    for (const [index, player] of saved.players.entries()) {
+      const profile = await f.players.get(creator, player.playerId);
+      await f.players.observe(creator, player.playerId, identifier(1900 + index), {
+        value: '18.0', effectiveDate: '2026-01-01', source: 'Fictional current index',
+      }, profile.etag);
+    }
     await f.scores.saveGames(creator, event.id, f.roundId, [game(700, 'net')], null, identifier(800));
     const result = await f.write();
     expect(result.round.games?.results[0]?.players[0]).toMatchObject({ playingHandicap: 18, totalPoints: 3 });
+    const current = await f.players.get(creator, f.playerId);
+    await f.players.observe(creator, f.playerId, identifier(1950), {
+      value: '30.0', effectiveDate: '2026-02-01', source: 'Fictional later current index',
+    }, current.etag);
     f.get.mockClear();
     const loaded = await f.scores.get(creator, event.id, f.roundId);
     expect(loaded.games?.results[0]?.players[0]).toMatchObject({ playingHandicap: 18, totalPoints: 3 });

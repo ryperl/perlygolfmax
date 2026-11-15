@@ -7,7 +7,7 @@ import { identifier } from '../../test/catalog-fixtures.js';
 import { creator, event, member } from '../../test/fixtures.js';
 
 describe('organizer per-golfer captured tees', () => {
-  it.each([4, 12])('captures and projects individual tee inputs for %i golfers, with no global catalog refresh', async (count) => {
+  it.each([4, 12])('preserves individual tee inputs for %i golfers while unstarted indexes follow the catalog', async (count) => {
     const f = await teeFixture(count);
     expect(isEventWorkspace(f.saved)).toBe(true);
     expect(f.saved.allowPerGolferTees).toBe(true);
@@ -23,7 +23,7 @@ describe('organizer per-golfer captured tees', () => {
     await f.players.observe(creator, player.id, identifier(700), {
       value: '18.0', effectiveDate: '2026-02-01', source: 'Fictional later observation',
     }, player.etag);
-    expect((await f.workspace.get(creator, event.id)).rounds[0]?.players[0]?.handicapIndex?.value).toBe('0.0');
+    expect((await f.workspace.get(creator, event.id)).rounds[0]?.players[0]?.handicapIndex?.value).toBe('18.0');
     expect((await f.workspace.get(creator, event.id)).rounds[0]?.playerTees).toEqual(read.playerTees);
   });
   it('uses the captured player rating/par/index in authoritative game results and rejects a common-tee point substitution', async () => {

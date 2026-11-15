@@ -420,6 +420,19 @@ export class TableScoreStore {
       'Merge', { etag: grant.etag }]);
     }
     if (!state.lock) {
+      const savedRound = await optionalRow(this.table, eventId, `round:${roundId}`);
+      if (!savedRound) throw new ApiError(409, 'SCORECARD_CHANGED');
+      const captureKey = `index-capture:${roundId}`;
+      const capture = {
+        kind: 'index-capture', version: 1, eventId, roundId, requestId, recordedAt, recordedBy: actor,
+        players: state.round.players.map((entry) => ({ playerId: entry.playerId, handicapIndex: entry.handicapIndex ?? null })),
+      };
+      const roundContent = await stagePrivateContent(this.table, eventId, `round:${roundId}`, identity, canonical(state.round));
+      const captureContent = await stagePrivateContent(this.table, eventId, captureKey, identity, canonical(capture));
+      actions.push(
+        ['update', { partitionKey: eventId, rowKey: `round:${roundId}`, content: roundContent }, 'Merge', { etag: revision(savedRound) }],
+        ['create', { partitionKey: eventId, rowKey: captureKey, content: captureContent }],
+      );
       const lock: ScoringLock = {
         kind: 'score-lock', eventId, roundId, requestId, startedAt: recordedAt, startedBy: actor, writtenPlayerIds: [playerId],
       };

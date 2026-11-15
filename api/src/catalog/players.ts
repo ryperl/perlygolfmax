@@ -29,16 +29,23 @@ function player(row: StoredRow, id: string): PlayerProfile {
 
 /** Resolve only already-authorized roster identities; this never exposes catalog profiles. */
 export async function currentRosterDisplay(table: TableClient, roster: readonly EventRosterPlayer[]): Promise<readonly EventRosterPlayer[]> {
-  const names: EventRosterPlayer[] = [];
-  for (let index = 0; index < roster.length; index += 16) {
-    names.push(...await Promise.all(roster.slice(index, index + 16).map(async (entry) => {
-      const row = await optionalRow(table, partitionKey, playerKey(entry.playerId));
+  const profiles = await currentRosterProfiles(table, roster.map((entry) => entry.playerId));
+  return profiles.map((current) => ({
+    playerId: current.id, displayName: current.displayName, handicapIndexValue: current.currentIndex?.value ?? null,
+  }));
+}
+
+/** Server-only resolution after event access checks; never return these profiles to public readers. */
+export async function currentRosterProfiles(table: TableClient, playerIds: readonly string[]): Promise<readonly PlayerProfile[]> {
+  const profiles: PlayerProfile[] = [];
+  for (let index = 0; index < playerIds.length; index += 16) {
+    profiles.push(...await Promise.all(playerIds.slice(index, index + 16).map(async (id) => {
+      const row = await optionalRow(table, partitionKey, playerKey(id));
       if (!row) throw new ApiError(503, 'INVALID_STORED_PLAYER_NAME');
-      const current = player(row, entry.playerId);
-      return { playerId: entry.playerId, displayName: current.displayName, handicapIndexValue: current.currentIndex?.value ?? null };
+      return player(row, id);
     })));
   }
-  return names;
+  return profiles;
 }
 
 export interface IndexInput {
