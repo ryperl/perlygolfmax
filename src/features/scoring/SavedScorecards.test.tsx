@@ -14,6 +14,46 @@ function props() {
   return { round: fictionalRoundScores, groupNumber: 1, busy: false, onGroupChange: vi.fn(), onEnterScores: vi.fn() };
 }
 describe('golfer-facing round scorecards', () => {
+  it('keeps server Course Handicap beside names across Front/Back/Full Card, game changes and refreshed projections', async () => {
+    const { round, games } = scorecardGamesFixture();
+    const values = [9, -2, null, null];
+    const saved = { ...round, courseHandicaps: round.cards.map((card, index) => ({
+      playerId: card.playerId, courseHandicap: values[index] ?? null,
+      ...(index === 2 ? { unavailableReason: 'missing-handicap-index' as const }
+        : index === 3 ? { unavailableReason: 'uncaptured-handicap-index' as const } : {}),
+    })) };
+    const view = render(<SavedScorecards {...props()} round={saved} />);
+    function checkNine(label: string) {
+      const table = within(screen.getByRole('table', { name: `${label} scorecard` }));
+      const name = table.getByRole('button', { name: 'Open scorecard for Fictional Player 1' }).parentElement;
+      if (!name) throw new Error('Missing fictional name cell.');
+      expect(within(name).getByLabelText('Course handicap: 9')).toHaveTextContent('CH 9');
+      expect(table.getByLabelText('Course handicap: +2')).toHaveTextContent('CH +2');
+      expect(table.getByLabelText('No captured Handicap Index')).toHaveTextContent('NH');
+      expect(table.getByLabelText('Course handicap unavailable')).toHaveTextContent('CH —');
+    }
+    checkNine('Front nine');
+    checkNine('Back nine');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Front 9' }));
+    checkNine('Front nine');
+    expect(screen.queryByRole('table', { name: 'Back nine scorecard' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Back 9' }));
+    checkNine('Back nine');
+    expect(screen.queryByRole('table', { name: 'Front nine scorecard' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Full card' }));
+    await user.selectOptions(screen.getByLabelText('Game'), games[1]?.id ?? '');
+    checkNine('Front nine');
+    checkNine('Back nine');
+    await user.selectOptions(screen.getByLabelText('Game'), '');
+    checkNine('Front nine');
+    checkNine('Back nine');
+    view.rerender(<SavedScorecards {...props()} round={{ ...saved, courseHandicaps: saved.courseHandicaps.map((entry, index) =>
+      index === 0 ? { ...entry, courseHandicap: 7 } : entry) }} />);
+    expect(screen.getAllByLabelText('Course handicap: 7')).toHaveLength(2);
+    expect(screen.queryByLabelText('Course handicap: 9')).not.toBeInTheDocument();
+  });
+
   it('shows saved Ball Drop team projections and Skins awards on group and individual cards, never fictitious points', async () => {
     const f = strokeGameFixture();
     const cards = strokeGameCards(f.cards, 1, [{ kind: 'strokes', strokes: 3 }, { kind: 'strokes', strokes: 4 },

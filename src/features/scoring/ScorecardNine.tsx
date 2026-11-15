@@ -1,11 +1,12 @@
 import { scoreEntryText } from '../../contracts/scoring';
 import type { CourseHole } from '../../domain/catalog';
-import type { HoleScore, Scorecard } from '../../domain/scoring';
+import type { HoleScore, PlayerCourseHandicap, Scorecard } from '../../domain/scoring';
 import type { PlayerTeeProfile } from '../../domain/tees';
 import { ballDropContribution, ballDropScoreText, cardTotalText, pointsTotalText, scorecardBallDropTeams, scorecardGamePlayer } from './scorecard-presentation';
 import type { ScorecardGame } from './scorecard-presentation';
 import { gameUnavailableMessage } from '../games';
 import { gameResultTotal, gameResultUnit } from '../../domain/games';
+import { CourseHandicap } from './CourseHandicap';
 import './scorecard-recap.css';
 
 function scoreMark(score: HoleScore | undefined, par: number) {
@@ -34,7 +35,7 @@ function CourseRows({ layout, fullLayout, showTotal, prefix = '' }: {
   </>;
 }
 
-export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game, onPlayerSelect, playerTees, defaultTeeLabel }: {
+export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game, onPlayerSelect, playerTees, defaultTeeLabel, courseHandicaps }: {
   readonly label: string;
   readonly subtotal: 'Out' | 'In';
   readonly layout: readonly CourseHole[];
@@ -44,6 +45,7 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
   readonly onPlayerSelect?: (playerId: string) => void;
   readonly playerTees?: readonly PlayerTeeProfile[] | undefined;
   readonly defaultTeeLabel?: string;
+  readonly courseHandicaps?: readonly PlayerCourseHandicap[];
 }) {
   const showTotal = subtotal === 'In' || fullLayout.length === layout.length;
   const mixed = (playerTees?.length ?? 0) > 0;
@@ -76,7 +78,9 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
               {mixed && <CourseRows layout={playerLayout} fullLayout={playerFullLayout} showTotal={showTotal} prefix={`${card.displayName} · `} />}
               <tr className={`recap-score-row${game && !ballDrop ? ' recap-has-game' : ''}`}>
               <th scope="row">{onPlayerSelect ? <button type="button" className="scorecard-player-link"
-                aria-label={`Open scorecard for ${card.displayName}`} onClick={() => { onPlayerSelect(card.playerId); }}>{card.displayName}</button> : card.displayName}</th>
+                aria-label={`Open scorecard for ${card.displayName}`} onClick={() => { onPlayerSelect(card.playerId); }}>{card.displayName}</button> : card.displayName}
+                {courseHandicaps && <> <CourseHandicap className="scorecard-handicap"
+                  value={courseHandicaps.find((entry) => entry.playerId === card.playerId)} /></>}</th>
               {playerLayout.map((hole) => {
                 const score = saved.get(hole.number);
                 const mark = scoreMark(score, hole.par);

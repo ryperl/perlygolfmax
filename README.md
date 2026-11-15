@@ -186,7 +186,8 @@ Public event rosters show current linked **HI**, while round groups and competit
 teams show the **HI captured for that round**. **NH** means no index is connected;
 legacy projections without this display field show unavailable rather than NH.
 Observation sources, dates, histories and audit identities remain private.
-Scoring names show server-derived **CH** using captured HI and the golfer's
+Score-entry names and Front/Back/Full scorecard names show server-derived **CH**
+using the round's HI and the golfer's
 captured tee, before any game allowance. Scratch is CH 0, plus handicaps use
 CH +N, and missing ratings show CH unavailable rather than zero. These displays
 never rewrite saved course/index inputs, scores or revisions.

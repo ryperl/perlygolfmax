@@ -14,6 +14,7 @@ import './scoring.css';
 import type { RoundGameDefinition } from '../../domain/games';
 import type { ChurchySpecials } from '../../domain/churchy';
 import { ChurchyDots } from '../churchy';
+import { CourseHandicap } from './CourseHandicap';
 
 // Allow a pause between digits (including 10/12) before moving to another score.
 const scoreTypingPauseMs = 850;
@@ -137,14 +138,8 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
           ? row.draft.acknowledged ? 'Saved, then changed — review' : 'Conflict — review'
           : row.draft.status === 'saving' ? 'Saving…' : row.draft.status === 'failed' ? 'Failed — retry' : 'Unsaved'
           : row.saved.kind === 'unplayed' ? 'Unplayed' : 'Saved';
-        const handicap = row.courseHandicap?.courseHandicap;
-        const handicapText = typeof handicap === 'number'
-          ? `CH ${handicap < 0 ? `+${String(Math.abs(handicap))}` : String(handicap)}`
-          : row.courseHandicap?.unavailableReason === 'missing-handicap-index' ? 'NH' : 'CH —';
         return <article className="player-entry" key={row.playerId} aria-label={`${row.displayName} scorecard`}>
-          <div className="entry-heading"><h3>{row.displayName} <span className="entry-handicap"
-            title={typeof handicap === 'number' ? 'Course handicap from captured round inputs' : 'Course handicap unavailable'}
-            aria-label={typeof handicap === 'number' ? `Course handicap: ${handicapText.slice(3)}` : handicapText === 'NH' ? 'No captured Handicap Index' : 'Course handicap unavailable'}>{handicapText}</span></h3>
+          <div className="entry-heading"><h3>{row.displayName} <CourseHandicap value={row.courseHandicap} className="entry-handicap" /></h3>
             <span className={`score-badge score-badge-${row.draft?.status ?? 'saved'}`}>{status}</span></div>
           {row.teeLabel && <p className="entry-tee">{row.teeLabel} · Par {playerHole.par} · {playerHole.length} yards · Stroke index {playerHole.allocation}</p>}
           <div className="entry-value">

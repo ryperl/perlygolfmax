@@ -79,8 +79,10 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
       </div>}
       <div className="recap-sections">
         {(nine !== 'back' || back.length === 0) && <ScorecardNine label="Front nine" subtotal="Out" layout={front} fullLayout={layout} cards={cards} game={game}
+          courseHandicaps={round.courseHandicaps ?? []}
           playerTees={round.playerTees} defaultTeeLabel={`${round.teeName} / ${round.teeCategory}`} onPlayerSelect={setPlayerId} />}
         {nine !== 'front' && back.length > 0 && <ScorecardNine label="Back nine" subtotal="In" layout={back} fullLayout={layout} cards={cards} game={game}
+          courseHandicaps={round.courseHandicaps ?? []}
           playerTees={round.playerTees} defaultTeeLabel={`${round.teeName} / ${round.teeCategory}`} onPlayerSelect={setPlayerId} />}
       </div>
       {(cards.some((card) => !summarizeCard(card, layout).complete) ||

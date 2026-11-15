@@ -19,6 +19,11 @@ const round: RoundScores = {
   eventId: id(100), eventName: 'Fictional Open', eventStatus: 'active', roundId: id(200), roundName: 'Fictional Round',
   courseName: 'Fictional Course', teeName: 'Fictional Teal', teeCategory: 'Fictional rating', layout,
   groups: [{ number: 1, playerIds: [1, 2, 3, 4].map(id) }],
+  courseHandicaps: [
+    { playerId: id(1), courseHandicap: 9 }, { playerId: id(2), courseHandicap: -2 },
+    { playerId: id(3), courseHandicap: 0 },
+    { playerId: id(4), courseHandicap: null, unavailableReason: 'missing-handicap-index' },
+  ],
   cards: [card, ...[2, 3, 4].map((number): Scorecard => ({
     playerId: id(number), displayName: `Fictional golfer ${String(number)}`, etag: `fictional-card-${String(number)}`, updatedAt: '2026-01-01T00:00:00Z',
     holes: layout.map((hole) => ({ number: hole.number, score: { kind: 'strokes', strokes: 3 + (hole.number + number) % 4 } })),
@@ -102,11 +107,17 @@ test('traditional round and individual scorecards fit narrow and wide layouts', 
   await expect(individual.locator('.recap-total strong')).toHaveText('11');
   await expect(roundCard.getByLabel('Hole 2: X7', { exact: true })).toBeVisible();
   const front = roundCard.getByRole('region', { name: 'Front nine scorecard', exact: true });
+  await expect(front.getByLabel('Course handicap: 9', { exact: true })).toHaveText('CH 9');
+  await expect(front.getByLabel('Course handicap: +2', { exact: true })).toHaveText('CH +2');
+  await expect(front.getByLabel('Course handicap: 0', { exact: true })).toHaveText('CH 0');
+  await expect(front.getByLabel('No captured Handicap Index', { exact: true })).toHaveText('NH');
   await front.focus();
   await expect(front).toBeFocused();
   await expect(front.getByRole('columnheader', { name: 'Out' })).toBeVisible();
   const back = roundCard.getByRole('region', { name: 'Back nine scorecard', exact: true });
   await expect(back).toBeVisible();
+  await expect(back.getByLabel('Course handicap: 9', { exact: true })).toHaveText('CH 9');
+  await expect(individual.getByLabel('Course handicap: 9', { exact: true })).toHaveCount(2);
   await expect(back.getByRole('columnheader', { name: 'Total' })).toBeVisible();
   await expect(front.getByRole('table').getByRole('row')).toHaveCount(8);
   expect(await front.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);

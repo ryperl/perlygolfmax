@@ -32,8 +32,10 @@ export function PlayerScorecardRecap({ round, card, gameId }: {
     </header>
     {scorecardGameWarnings(game, [card]).map((warning) => <p className="scorecard-game-unavailable" key={warning}>{warning}</p>)}
     <div className="recap-sections">
-      <ScorecardNine label="Front nine" subtotal="Out" layout={front} fullLayout={layout} cards={[card]} game={game} />
-      {back.length > 0 && <ScorecardNine label="Back nine" subtotal="In" layout={back} fullLayout={layout} cards={[card]} game={game} />}
+      <ScorecardNine label="Front nine" subtotal="Out" layout={front} fullLayout={layout} cards={[card]} game={game}
+        courseHandicaps={round.courseHandicaps ?? []} />
+      {back.length > 0 && <ScorecardNine label="Back nine" subtotal="In" layout={back} fullLayout={layout} cards={[card]} game={game}
+        courseHandicaps={round.courseHandicaps ?? []} />}
     </div>
     {(!summary.complete || game?.result?.players.some((player) => player.playerId === card.playerId && player.status === 'in-progress' && player.totalPoints !== null)) &&
       <p className="scorecard-incomplete">{game ? '* Incomplete total.' : '* Incomplete recorded total.'}</p>}

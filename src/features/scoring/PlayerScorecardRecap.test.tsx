@@ -28,6 +28,17 @@ function fixture() {
 }
 
 describe('individual traditional scorecard recap', () => {
+  it('shows the server-provided Course Handicap on both nines, including strokes-only cards', () => {
+    const { round, card } = fixture();
+    render(<PlayerScorecardRecap round={{ ...round, courseHandicaps: [{
+      playerId: card.playerId, courseHandicap: -2,
+    }] }} card={card} gameId={null} />);
+    for (const label of ['Front nine scorecard', 'Back nine scorecard']) {
+      const table = within(screen.getByRole('table', { name: label }));
+      const name = table.getByRole('rowheader', { name: `${card.displayName} Course handicap: +2` });
+      expect(within(name).getByLabelText('Course handicap: +2')).toHaveTextContent('CH +2');
+    }
+  });
   it('uses the captured personal tee for name, category, rating, par, yards, stroke index and raw score marks', () => {
     const round = mixedTeeRound();
     const card = round.cards[0];
@@ -69,7 +80,7 @@ describe('individual traditional scorecard recap', () => {
     const back = screen.getByRole('table', { name: 'Back nine scorecard' });
     expect(within(front).getByRole('columnheader', { name: 'Out' })).toBeVisible();
     expect(within(back).getByRole('columnheader', { name: 'In' })).toBeVisible();
-    const score = within(front).getByRole('rowheader', { name: card.displayName }).closest('tr');
+    const score = within(front).getByRole('rowheader', { name: `${card.displayName} Course handicap unavailable` }).closest('tr');
     if (!score) throw new Error('Missing score row.');
     expect(within(score).getAllByRole('cell').at(-1)).toHaveTextContent('36');
     expect(screen.getByText('72', { selector: 'strong' })).toBeVisible();
