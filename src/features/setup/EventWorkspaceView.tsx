@@ -255,6 +255,8 @@ export function EventWorkspaceView({ eventId, canManageCatalog, setup, catalog, 
         {workspace.event.status === 'archived' ? 'View purse and winnings' : 'Configure purse and winnings'}
       </a>}
       <a href={`#overview?event=${encodeURIComponent(eventId)}`}>Open public scoreboard</a>
+      {workspace.eventSkinsSupported === true && <p><a href={`#organizer?event=${encodeURIComponent(workspace.event.id)}&view=event-skins`}>
+        Configure or view event-wide skins</a></p>}
       {editing && draft && <OverallCompetitionEditor workspace={workspace} draft={draft} scores={scores}
         disabled={busy || conflict} onDenied={denyAccess}
         onChange={(overallCompetition) => { editDraft({ ...draft, overallCompetition }); }} />}

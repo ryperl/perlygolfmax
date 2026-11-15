@@ -212,6 +212,21 @@
   Ambiguous required inputs block allocation; all-empty stays unawarded without
   rollover. Unresolved/stale ties never claim fully allocated money. Preserve
   existing public/legacy permissions, ordinary captures, Churchy and other purses.
+- Event-wide skins is an independently enabled version-1 event competition,
+  never a replacement for primary overall or round Skins games. Compete each
+  round/hole separately, sum actual wins across all configured rounds, no carry.
+  Lowest net numeric strokes uses 100% captured CH/personal tees. Only net ties
+  prefer actual gross birdie-or-better on personal par, then lower qualifying
+  gross; equal qualifying gross stays tied, gross par never breaks a tie.
+  Wait for all field dispositions; pickup/X7/DNF are ineligible and missing net
+  inputs unavailable, not scratch. Later independent holes may resolve.
+  Owner configuration is conditional/idempotent/audited; public active readers
+  may view, testers may not, archives owner-only readonly. Reuse bounded
+  quota-charged coherent aggregate reads and digest paging. One explicit event
+  skins purse pot divides floor(minor units / awarded skins) per skin, multiplying
+  actual wins, leaving cents unallocated. No winners reserves the whole pot;
+  pending holes mean projected shares and unknown final denominator. No default
+  stake, budget increase, auto-reallocation, transfers or automatic finalization.
 - Present golfer scores as hole-ordered scorecards, not audit records. Keep
   operation IDs, actor GUIDs, revisions and raw timestamps out of player
   entry/view screens; preserve backend audit and conditional-save safeguards.

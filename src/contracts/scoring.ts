@@ -134,7 +134,8 @@ export function isRoundScores(value: unknown): value is RoundScores {
   if (new Set(ids).size !== ids.length || cards.some((card) => card.holes.length !== count)) return false;
   if (value.permissions !== undefined) {
     const permission = value.permissions;
-    if (!isRecord(permission) || !['owner', 'player', 'viewer', 'tester', 'public'].includes(String(permission.role))
+    if (!isRecord(permission) || typeof permission.role !== 'string'
+      || !['owner', 'player', 'viewer', 'tester', 'public'].includes(permission.role)
       || !Object.keys(permission).every((key) => ['role', 'viewerPlayerId', 'writePlayerIds', 'canManageGames'].includes(key))
       || !Array.isArray(permission.writePlayerIds) || !permission.writePlayerIds.every((id: unknown) => isUuid(id) && roster.has(id))
       || new Set(permission.writePlayerIds).size !== permission.writePlayerIds.length
@@ -167,7 +168,8 @@ export function isRoundScores(value: unknown): value is RoundScores {
       if (!isRecord(player) || !isUuid(player.playerId) || !roster.has(player.playerId) || seen.has(player.playerId)
         || !Object.keys(player).every((key) => ['playerId', 'playingHandicap', 'unavailableReason'].includes(key))) return false;
       if (player.playingHandicap === null) {
-        if (!['missing-handicap-index', 'invalid-handicap-index', 'missing-tee-ratings', 'missing-stroke-index'].includes(String(player.unavailableReason))) return false;
+        if (typeof player.unavailableReason !== 'string'
+          || !['missing-handicap-index', 'invalid-handicap-index', 'missing-tee-ratings', 'missing-stroke-index'].includes(player.unavailableReason)) return false;
       } else if (typeof player.playingHandicap !== 'number' || !Number.isSafeInteger(player.playingHandicap)
         || player.unavailableReason !== undefined) return false;
       seen.add(player.playerId);

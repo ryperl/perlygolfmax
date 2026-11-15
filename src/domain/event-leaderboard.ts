@@ -4,6 +4,7 @@ import type { RoundScores } from './scoring.js';
 import type { EventWorkspace, OverallCompetition, RoundSnapshot } from './setup.js';
 import { calculatePlayingHandicap, handicapStrokesForHole } from './stableford.js';
 import { playerTee } from './tees.js';
+import type { EventSkinsResults } from './event-skins.js';
 
 export type EventStandingStatus = 'complete' | 'in-progress' | 'awaiting-scores' | 'not-configured' | 'unavailable';
 export type EventStandingReason = GameUnavailableReason | 'not-configured' | 'missing-game' | 'missing-round'
@@ -48,6 +49,7 @@ export interface EventStandings {
 }
 
 export interface EventLeaderboardView {
+  readonly eventSkins?: EventSkinsResults;
   readonly workspace: EventWorkspace;
   readonly roundScores: readonly RoundScores[];
   readonly standings: EventStandings;

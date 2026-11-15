@@ -4,6 +4,7 @@ import type { RoundGameDefinition } from './games.js';
 import type { RoundScores } from './scoring.js';
 import type { EventWorkspace } from './setup.js';
 import { calculateKp, calculateKpPayout } from './kp.js';
+import { calculateEventSkins, calculateEventSkinsPayout } from './event-skins.js';
 
 export const purseCurrencies = ['USD', 'CAD', 'EUR', 'GBP', 'AUD'] as const;
 export type PurseCurrency = typeof purseCurrencies[number];
@@ -40,7 +41,12 @@ export interface PurseKpPool extends CommonPool {
   readonly awardUnit: 'pot';
   readonly amountMinor: number;
 }
-export type PursePool = PurseRankedPool | PurseManualPool | PurseKpPool;
+export interface PurseEventSkinsPool extends CommonPool {
+  readonly source: { readonly kind: 'event-skins'; readonly version: 1 };
+  readonly awardUnit: 'pot';
+  readonly amountMinor: number;
+}
+export type PursePool = PurseRankedPool | PurseManualPool | PurseKpPool | PurseEventSkinsPool;
 export interface PursePlan {
   readonly eventId: string;
   readonly currency: PurseCurrency;
@@ -69,11 +75,18 @@ export interface PurseShare {
   readonly amountMinor: number;
 }
 export interface PursePoolResult {
+  readonly eventSkins?: {
+    readonly awardedSkins: number;
+    readonly pendingHoles: number;
+    readonly unavailableHoles: number;
+    readonly totalHoles: number;
+    readonly perSkinMinor: number | null;
+  };
   readonly poolId: string;
   readonly status: 'calculated' | 'projected' | 'unavailable';
   readonly issues: readonly PurseIssue[];
   readonly reasons: readonly ('awaiting-scores' | 'in-progress' | 'unresolved-tie' | 'recipients-unassigned' | 'unoccupied-places'
-    | 'kp-entries-open' | 'kp-no-qualifiers')[];
+    | 'kp-entries-open' | 'kp-no-qualifiers' | 'event-skins-no-winners')[];
   readonly shares: readonly PurseShare[];
   readonly scheduledMinor: number | null;
   readonly allocatedMinor: number | null;
@@ -137,9 +150,12 @@ const issue = (code: PurseIssueCode, poolId?: string, detail?: string): PurseIss
 });
 const manual = (pool: PursePool): pool is PurseManualPool => pool.source.kind === 'manual';
 export const isKpPool = (pool: PursePool): pool is PurseKpPool => pool.source.kind === 'kp';
+export const isEventSkinsPool = (pool: PursePool): pool is PurseEventSkinsPool => pool.source.kind === 'event-skins';
 
 function samePool(left: PursePool, right: PursePool): boolean {
   if (left.id !== right.id || left.name !== right.name || left.awardUnit !== right.awardUnit) return false;
+  if (isEventSkinsPool(left)) return isEventSkinsPool(right) && left.amountMinor === right.amountMinor;
+  if (isEventSkinsPool(right)) return false;
   if (isKpPool(left)) return isKpPool(right) && left.source.roundId === right.source.roundId && left.amountMinor === right.amountMinor;
   if (isKpPool(right)) return false;
   if (manual(left)) return manual(right) && left.amountMinor === right.amountMinor
@@ -209,6 +225,15 @@ export function validatePursePlanContext(
   for (const pool of plan.pools) {
     if (!uuid(pool.id) || !pool.name.trim() || pool.name !== pool.name.trim() || pool.name.length > 100) {
       issues.push(issue('invalid-plan', pool.id));
+    }
+    if (isEventSkinsPool(pool)) {
+      if (!money(pool.amountMinor)
+        || plan.pools.filter(isEventSkinsPool).length !== 1) issues.push(issue('invalid-plan', pool.id));
+      if (!workspace.eventSkins) issues.push(issue('source-unavailable', pool.id));
+      if (roundScores && calculateEventSkins(workspace, roundScores).status === 'unavailable') {
+        issues.push(issue('source-unavailable', pool.id));
+      }
+      continue;
     }
     if (manual(pool)) {
       if (!money(pool.amountMinor) || !unique(pool.recipientIds)
@@ -374,7 +399,7 @@ function sourceFor(pool: PurseRankedPool, workspace: EventWorkspace, rounds: rea
 }
 
 function scheduled(pool: PursePool, workspace: EventWorkspace, rounds: readonly RoundScores[]): number | null {
-  if (manual(pool) || isKpPool(pool)) return money(pool.amountMinor) ? pool.amountMinor : null;
+  if (manual(pool) || isKpPool(pool) || isEventSkinsPool(pool)) return money(pool.amountMinor) ? pool.amountMinor : null;
   let multiplier = 1n;
   if (pool.source.kind === 'round-game' && pool.awardUnit === 'per-golfer') {
     const target = pool.source;
@@ -464,7 +489,7 @@ export function calculatePurse(
   resolutions: readonly PurseTieResolution[] = [],
 ): PurseCalculation {
   const issues = [...validatePursePlanContext(plan, workspace)];
-  const sources = plan.pools.map((pool): Source => manual(pool) || isKpPool(pool)
+  const sources = plan.pools.map((pool): Source => manual(pool) || isKpPool(pool) || isEventSkinsPool(pool)
     ? { entrants: [], complete: true, issues: [] } : sourceFor(pool, workspace, roundScores));
   const seen = new Set<string>();
   for (const resolution of resolutions) {
@@ -473,7 +498,7 @@ export function calculatePurse(
     const source = sources[index];
     const key = `${resolution.poolId}:${String(resolution.rank)}`;
     const tied = source?.entrants.filter((entrant) => entrant.rank === resolution.rank) ?? [];
-    if (!pool || manual(pool) || isKpPool(pool) || pool.tiePolicy !== 'organizer' || seen.has(key)
+    if (!pool || manual(pool) || isKpPool(pool) || isEventSkinsPool(pool) || pool.tiePolicy !== 'organizer' || seen.has(key)
       || !Number.isSafeInteger(resolution.rank) || resolution.rank < 1 || tied.length < 2
       || !sameSet(resolution.orderedEntrantIds, tied.map((entrant) => entrant.id))) {
       issues.push(issue('invalid-resolution', resolution.poolId));
@@ -485,6 +510,30 @@ export function calculatePurse(
     const source = sources[index] ?? { entrants: [], complete: false, issues: [issue('missing-score-data', pool.id)] };
     const errors = [...issues.filter((entry) => entry.poolId === undefined || entry.poolId === pool.id), ...source.issues];
     if (invalidResolutions && !errors.some((entry) => entry.code === 'invalid-resolution')) errors.push(issue('invalid-resolution', pool.id));
+    if (isEventSkinsPool(pool)) {
+      const results = calculateEventSkins(workspace, roundScores);
+      const payout = calculateEventSkinsPayout(results, pool.amountMinor);
+      const unavailable = errors.length > 0 || payout.status === 'unavailable';
+      const complete = !unavailable && payout.status === 'calculated';
+      const shares = unavailable ? [] : payout.shares.map((share) => ({
+        ...share, entrantId: share.playerId, rank: null,
+      }));
+      const assigned = Number(shares.reduce((sum, share) => sum + BigInt(share.amountMinor), 0n));
+      return {
+        poolId: pool.id, status: unavailable ? 'unavailable' as const : complete ? 'calculated' as const : 'projected' as const,
+        ...(results.status === 'disabled' ? {} : { eventSkins: { awardedSkins: results.awardedSkins, pendingHoles: results.pendingHoles,
+          unavailableHoles: results.unavailableHoles, totalHoles: results.totalHoles,
+          perSkinMinor: unavailable ? null : payout.perSkinMinor } }),
+        issues: unavailable ? [...errors, issue('source-unavailable', pool.id)] : [],
+        reasons: unavailable ? [] : !complete ? ['in-progress' as const]
+          : results.awardedSkins === 0 ? ['event-skins-no-winners' as const] : [],
+        shares, scheduledMinor: money(pool.amountMinor) ? pool.amountMinor : null,
+        allocatedMinor: complete ? assigned : 0, projectedMinor: !complete && !unavailable ? assigned : 0,
+        reservedMinor: unavailable ? null : results.awardedSkins === 0 ? pool.amountMinor : 0,
+        tieRemainderMinor: unavailable ? null : results.awardedSkins > 0 ? payout.unallocatedMinor : 0,
+        memberRemainderMinor: 0, unallocatedMinor: unavailable ? null : payout.unallocatedMinor,
+      };
+    }
     if (isKpPool(pool)) {
       const round = roundScores.find((entry) => entry.roundId === pool.source.roundId && entry.eventId === workspace.event.id);
       const snapshot = workspace.rounds.find((entry) => entry.id === pool.source.roundId);

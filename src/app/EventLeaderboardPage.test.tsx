@@ -7,6 +7,9 @@ import { EventChangedError, SessionExpiredError } from '../client/events';
 import { PrivateRequestError } from '../client/private-request';
 import type { EventLeaderboardView } from '../domain/event-leaderboard';
 import { EventLeaderboardPage } from './EventLeaderboardPage';
+import { eventSkinsFixture, withoutEventSkins } from '../domain/event-skins.test-support';
+import { calculateEventSkins } from '../domain/event-skins';
+import { calculateEventStandings } from '../domain/event-leaderboard';
 
 const value: EventLeaderboardView = { workspace: fictionalWorkspace, roundScores: [],
   standings: { status: 'disabled', players: [], rounds: [], staleRoundIds: [] } };
@@ -21,6 +24,25 @@ function mount(client: EventLeaderboardClient = { load: vi.fn().mockResolvedValu
   return { props, ...render(<EventLeaderboardPage {...props} />) };
 }
 describe('overall result request lifecycle', () => {
+  it('composes separate event skins setup for owners, with public/old API reads remaining readonly and no primary competition required', async () => {
+    const f = eventSkinsFixture();
+    const result = { workspace: f.workspace, roundScores: f.rounds,
+      standings: calculateEventStandings(f.workspace, f.rounds), eventSkins: calculateEventSkins(f.workspace, f.rounds) };
+    const client = { load: vi.fn().mockResolvedValue(result), configureEventSkins: vi.fn() };
+    const props = { eventSkins: true, client, eventId: f.workspace.event.id, onSessionExpired: vi.fn() };
+    const view = render(<EventLeaderboardPage {...props} />);
+    expect(await screen.findByRole('heading', { name: /Event-wide skins/ })).toBeVisible();
+    expect(screen.getByRole('checkbox', { name: 'Enable event-wide net skins' })).toBeChecked();
+    expect(screen.getByRole('button', { name: 'Refresh event skins' })).toBeVisible();
+    const readonly = { ...result, workspace: { ...result.workspace, canViewScores: true,
+      event: { ...result.workspace.event, role: 'viewer' as const } } };
+    view.rerender(<EventLeaderboardPage {...props} client={{ load: async () => Promise.resolve(readonly) }} />);
+    await screen.findByRole('heading', { name: /Event-wide skins/ });
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    const unsupported = { ...result, workspace: withoutEventSkins(result.workspace), roundScores: [] };
+    view.rerender(<EventLeaderboardPage {...props} client={{ load: async () => Promise.resolve(unsupported) }} />);
+    expect(await screen.findByText(/not supported by this API/)).toBeVisible();
+  });
   it('makes one aggregate request, handles disabled routes, and refreshes manually without stale success', async () => {
     const client = { load: vi.fn().mockResolvedValue(value) };
     const pending = deferred<EventLeaderboardView>();

@@ -2,6 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { eventTabHref, isOrganizerRoute, readEventRoute, readPage, readPreviewTab, readSelectedEvent } from './navigation';
 
 describe('readPage', () => {
+  it('keeps event skins on an explicit event route, separate from round cursors and organizer authority', () => {
+    const event = '00000000-0000-4000-8000-000000000050';
+    const publicRoute = `#event-skins?event=${event}`;
+    expect(readPage(publicRoute)).toBe('event-skins');
+    expect(readSelectedEvent(publicRoute)).toBe(event);
+    expect(readEventRoute(publicRoute)).toBe(`event-skins:${event}`);
+    expect(isOrganizerRoute(publicRoute)).toBe(false);
+    expect(readEventRoute(`#organizer?event=${event}&view=event-skins`)).toBe(`event-skins:${event}`);
+    expect(isOrganizerRoute(`#organizer?event=${event}&view=event-skins`)).toBe(true);
+    for (const route of ['#event-skins', '#event-skins?event=invalid', `${publicRoute}&event=${event}`]) {
+      expect(readEventRoute(route)).toBe('invalid-event');
+    }
+    expect(readEventRoute(`${publicRoute}&round=${event}`)).toBe('invalid-score');
+  });
   it('keeps ordinary scoring and old player links public and requires explicit organizer management context', () => {
     const event = '00000000-0000-4000-8000-000000000050';
     for (const hash of ['', '#events', `#events?event=${event}`, `#events?event=${event}&round=${event}`,

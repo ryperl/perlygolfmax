@@ -15,6 +15,8 @@ import { canonical, decode, isConflict, optionalRow, page, revision } from '../c
 import { ApiError } from '../errors.js';
 import type { TableWorkspaceStore } from '../setup/store.js';
 import { scoringLock } from './lock.js';
+import { calculateEventSkins } from '../../../src/domain/event-skins.js';
+import type { EventSkinsConfiguration } from '../../../src/domain/event-skins.js';
 import type { ScoringLock, StoredScoringLock } from './lock.js';
 import { configuredGameRounds, gameChangeKey, gameConfigurationContent, gameConfigurationKey, readGameConfiguration } from './games.js';
 import type { EventLeaderboardView } from '../../../src/domain/event-leaderboard.js';
@@ -271,10 +273,11 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
 
   async leaderboard(identity: ScoreActor, eventId: string, chargeRead: () => Promise<void>): Promise<EventLeaderboardView> {
     const access = await this.access(identity, eventId);
+    if (access.testerLink) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
     const workspace = await this.workspace.get(identity, eventId);
     if (workspace.etag !== access.summary.etag) throw new ApiError(409, 'EVENT_CHANGED');
     const roundScores: RoundScores[] = [];
-    if (workspace.overallCompetition) {
+    if (workspace.overallCompetition || workspace.eventSkins) {
       for (let index = 0; index < workspace.rounds.length; index += 3) {
         const batch = await Promise.all(workspace.rounds.slice(index, index + 3).map(async (round) => {
           await chargeRead();
@@ -284,7 +287,13 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       }
     }
     await this.unchanged(identity, eventId, access);
-    return { workspace, roundScores, standings: calculateEventStandings(workspace, roundScores) };
+    return { workspace, roundScores, standings: calculateEventStandings(workspace, roundScores),
+      ...(workspace.eventSkins ? { eventSkins: calculateEventSkins(workspace, roundScores) } : {}) };
+  }
+
+  async saveEventSkins(identity: AccountIdentity, eventId: string,
+    selection: EventSkinsConfiguration | null, etag: string, requestId: string) {
+    return this.workspace.saveEventSkins(identity, eventId, selection, etag, requestId);
   }
 
   private async gameReceipt(eventId: string, roundId: string, requestId: string): Promise<GameChange | undefined> {

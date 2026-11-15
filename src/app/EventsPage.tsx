@@ -299,8 +299,8 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
             <PursePage key={eventId} eventId={eventId} client={services.purse} onSessionExpired={expire} />
           </Suspense>
           : <p role="alert">Prize plans are unavailable in this connection. No prize data was loaded.</p>
-        : kind === 'leaderboard' && eventId ? services.leaderboard
-          ? <EventLeaderboardPage key={eventId} eventId={eventId} client={services.leaderboard} onSessionExpired={expire} />
+        : (kind === 'leaderboard' || kind === 'event-skins') && eventId ? services.leaderboard
+          ? <EventLeaderboardPage eventSkins={kind === 'event-skins'} key={eventId} eventId={eventId} client={services.leaderboard} onSessionExpired={expire} />
           : <p role="alert">Overall results are unavailable in this connection. No scores were loaded.</p>
         : isEventTab(kind) && eventId ? <SavedEventPage key={eventId} eventId={eventId} view={kind}
           client={services.setup} scores={services.scores} onSessionExpired={expire} />

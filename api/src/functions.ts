@@ -102,6 +102,10 @@ app.http('eventLeaderboard', {
   route: 'events/{id}/leaderboard', methods: ['GET'], authLevel: 'anonymous',
   handler: createScoringHandler(resolveApi, 'event-leaderboard'),
 });
+app.http('eventSkinsConfiguration', {
+  route: 'events/{id}/event-skins', methods: ['PUT'], authLevel: 'anonymous',
+  handler: createScoringHandler(resolveApi, 'event-skins-config'),
+});
 app.http('eventPurse', {
   route: 'events/{id}/purse', methods: ['GET', 'PUT'], authLevel: 'anonymous',
   handler: createPurseHandler(resolveApi),

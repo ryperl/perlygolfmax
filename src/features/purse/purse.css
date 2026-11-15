@@ -4,6 +4,7 @@
 .purse-panel label { display: grid; gap: .375rem; min-width: 0; }
 .purse-panel :is(input, select, button) { box-sizing: border-box; min-width: 0; min-height: 44px; max-width: 100%; padding: .5rem .75rem; font: inherit; color: var(--cp-text); background: var(--cp-surface); border: 1px solid var(--cp-border-strong); border-radius: .625rem; }
 .purse-panel :is(input, select) { width: 100%; }
+.purse-panel select { contain: layout; height: max(44px, 2.75rem); }
 .purse-panel button { cursor: pointer; white-space: normal; overflow-wrap: anywhere; }
 .purse-panel :is(button:disabled, input:disabled, select:disabled) { color: var(--cp-text-muted); cursor: not-allowed; }
 .purse-panel :is(button, input, select, summary, .purse-scroll):focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }

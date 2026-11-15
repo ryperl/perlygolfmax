@@ -4,6 +4,7 @@ import {
 } from './catalog.js';
 import { isEventRevision, isEventStartDate, isEventSummary, isRecord, isUuid } from './events.js';
 import { isPlayerTeeProfiles, isPlayerTeeSelections } from './tees.js';
+import { isEventSkinsConfiguration } from './event-skins.js';
 
 export function isOverallCompetition(value: unknown): value is OverallCompetition {
   if (!isRecord(value)) return false;
@@ -56,6 +57,7 @@ function groups(value: unknown, playerIds: readonly string[], layout?: readonly 
 
 export function isEventSetupInput(value: unknown): value is EventSetupInput {
   if (!isRecord(value) || !boundedText(value.name) || !location(value.location)
+    || value.eventSkins !== undefined
     || value.startDate !== undefined && value.startDate !== '' && !isEventStartDate(value.startDate)
     || value.endDate !== undefined && value.endDate !== '' && !isEventStartDate(value.endDate)
     || typeof value.startDate === 'string' && value.startDate !== '' && typeof value.endDate === 'string'
@@ -100,6 +102,9 @@ function isRoundSnapshot(value: unknown, playerIds: readonly string[]): value is
 
 export function isEventWorkspace(value: unknown): value is EventWorkspace {
   if (!isRecord(value) || !isEventSummary(value.event) || !isEventRevision(value.etag)
+    || value.eventSkinsSupported !== undefined && value.eventSkinsSupported !== true
+    || value.eventSkins !== undefined && !isEventSkinsConfiguration(value.eventSkins)
+    || value.testerAccess === true && (value.eventSkins !== undefined || value.eventSkinsSupported !== undefined)
     || value.purseConfigured !== undefined && typeof value.purseConfigured !== 'boolean'
     || value.event.status === 'archived' && value.event.role !== 'owner'
     || value.canViewScores !== undefined && typeof value.canViewScores !== 'boolean'

@@ -68,7 +68,7 @@ export function App({ publicServices }: { readonly publicServices?: PublicServic
     window.dispatchEvent(new HashChangeEvent('hashchange'));
   }, [hash]);
   useEffect(() => {
-    const label = page === 'organizer' ? 'Organizer tools' : activePage === 'preview' ? 'Preview' : activePage === 'leaderboard' ? 'Overall leaderboard'
+    const label = page === 'organizer' ? 'Organizer tools' : activePage === 'event-skins' ? 'Event-wide skins' : activePage === 'preview' ? 'Preview' : activePage === 'leaderboard' ? 'Overall leaderboard'
       : activePage === 'purse' ? 'Purse and winnings' : activePage === 'access' ? 'Player access'
         : activePage === 'join' ? 'Join event' : activePage === 'tester' ? 'Tester score entry'
           : navigation.find((item) => item.id === activePage)?.label ?? 'Events';

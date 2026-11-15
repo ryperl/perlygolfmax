@@ -1,6 +1,7 @@
 import type { CourseMetadata, IndexObservation, TeeProfile } from './catalog.js';
 import type { EventSummary } from './events.js';
 import type { PlayerTeeProfile, PlayerTeeSelection } from './tees.js';
+import type { EventSkinsConfiguration } from './event-skins.js';
 
 export type OverallCompetition =
   | {
@@ -83,6 +84,8 @@ export interface RoundSnapshot {
 }
 
 export interface EventWorkspace {
+  readonly eventSkinsSupported?: true;
+  readonly eventSkins?: EventSkinsConfiguration;
   readonly event: EventSummary;
   readonly location: string;
   readonly roster: readonly EventRosterPlayer[];

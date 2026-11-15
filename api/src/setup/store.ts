@@ -24,8 +24,12 @@ import type { StagedPublication } from '../private-transport.js';
 import type { PlayerTeeProfile } from '../../../src/domain/tees.js';
 import { compatibleTeeLayouts, sameTeeSelections } from '../../../src/domain/tees.js';
 import { assertEventAccessUnchanged, readEventAccess } from '../event-access.js';
+import { isEventSkinsChange, isEventSkinsConfiguration } from '../../../src/contracts/event-skins.js';
+import type { EventSkinsChange, EventSkinsConfiguration } from '../../../src/domain/event-skins.js';
+import { isEventRevision } from '../../../src/contracts/events.js';
 
 interface WorkspaceHeader {
+  readonly eventSkins?: EventSkinsConfiguration;
   readonly location: string;
   readonly roster: readonly EventRosterPlayer[];
   readonly roundIds: readonly string[];
@@ -35,6 +39,7 @@ interface WorkspaceHeader {
 
 function isHeader(value: unknown): value is WorkspaceHeader {
   return isRecord(value) && typeof value.location === 'string'
+    && (value.eventSkins === undefined || isEventSkinsConfiguration(value.eventSkins))
     && (value.allowPerGolferTees === undefined || typeof value.allowPerGolferTees === 'boolean')
     && (value.overallCompetition === undefined || isOverallCompetition(value.overallCompetition))
     && Array.isArray(value.roster) && value.roster.length >= 1
@@ -69,6 +74,63 @@ export class TableWorkspaceStore {
     return { ...access, member: access.member };
   }
 
+  async saveEventSkins(identity: AccountIdentity, id: string, selection: EventSkinsConfiguration | null,
+    etag: string, requestId: string): Promise<EventSkinsChange> {
+    if (!isUuid(id) || !isUuid(requestId) || !isEventRevision(etag)
+      || selection !== null && !isEventSkinsConfiguration(selection)) throw new ApiError(400, 'INVALID_EVENT_SKINS_SETUP');
+    const access = await this.ownerAccess(identity, id);
+    if (access.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
+    const key = `event-skins-change:${requestId}`;
+    const replay = async (): Promise<EventSkinsChange | undefined> => {
+      const row = await optionalRow(this.table, id, key);
+      if (!row) return undefined;
+      const change = decode(await privateContent(this.table, id, key, row.content), isEventSkinsChange);
+      if (row.kind !== 'event-skins-change' || change.eventId !== id || change.id !== requestId) {
+        throw new ApiError(503, 'INVALID_STORED_EVENT_SKINS');
+      }
+      if (change.expectedEtag !== etag || change.recordedBy.tenantId !== identity.tenantId
+        || change.recordedBy.objectId !== identity.objectId || canonical(change.after) !== canonical(selection)) {
+        throw new ApiError(409, 'EVENT_SKINS_REQUEST_CONFLICT');
+      }
+      await assertEventAccessUnchanged(this.table, identity, id, access);
+      return change;
+    };
+    const previous = await replay();
+    if (previous) return previous;
+    if (access.summary.etag !== etag) throw new ApiError(409, 'EVENT_CHANGED');
+    const row = await optionalRow(this.table, id, 'workspace');
+    if (!row) throw new ApiError(400, 'EVENT_SETUP_REQUIRED');
+    const header = decode(await privateContent(this.table, id, 'workspace', row.content), isHeader);
+    const { eventSkins: before, ...rest } = header;
+    const change: EventSkinsChange = { id: requestId, eventId: id, expectedEtag: etag, before: before ?? null,
+      after: selection, recordedAt: new Date().toISOString(),
+      recordedBy: { tenantId: identity.tenantId, objectId: identity.objectId } };
+    const content = await stagePrivateContent(this.table, id, 'workspace', identity,
+      canonical({ ...rest, ...(selection ? { eventSkins: selection } : {}) }));
+    const audit = await stagePrivateContent(this.table, id, key, identity, canonical(change));
+    try {
+      await this.table.submitTransaction([
+        ['update', { partitionKey: id, rowKey: 'event', eventSkinsUpdatedAt: change.recordedAt }, 'Merge', { etag }],
+        ['update', { partitionKey: id, rowKey: `member:${identity.objectId}`, ...change.recordedBy, role: 'owner' },
+          'Merge', { etag: revision(access.member) }],
+        ['update', { partitionKey: id, rowKey: 'workspace', content }, 'Merge', { etag: revision(row) }],
+        ['create', { partitionKey: id, rowKey: key, kind: 'event-skins-change', content: audit }],
+      ]);
+    } catch (error) {
+      // Re-read authority as well as the receipt after an uncertain transaction outcome.
+      const current = await this.ownerAccess(identity, id);
+      if (current.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
+      const committed = await optionalRow(this.table, id, key);
+      if (committed) {
+        const saved = decode(await privateContent(this.table, id, key, committed.content), isEventSkinsChange);
+        if (canonical(saved) === canonical(change)) return saved;
+      }
+      if (isConflict(error)) throw new ApiError(409, 'EVENT_CHANGED');
+      throw error;
+    }
+    return change;
+  }
+
   private async load(summary: EventSummary, currentUnstartedIndices = true): Promise<EventWorkspace> {
     const header = await optionalRow(this.table, summary.id, 'workspace');
     if (!header) return { event: summary, location: '', roster: [], rounds: [], etag: summary.etag };
@@ -90,7 +152,8 @@ export class TableWorkspaceStore {
     }
     const workspace = { event: { ...summary, role: 'owner' }, location: saved.location, roster: saved.roster, rounds, etag: summary.etag,
       ...(saved.allowPerGolferTees === undefined ? {} : { allowPerGolferTees: saved.allowPerGolferTees }),
-      ...(saved.overallCompetition ? { overallCompetition: saved.overallCompetition } : {}) };
+      ...(saved.overallCompetition ? { overallCompetition: saved.overallCompetition } : {}),
+      ...(saved.eventSkins ? { eventSkins: saved.eventSkins } : {}) };
     if (!isEventWorkspace(workspace)) throw new ApiError(503, 'INVALID_STORED_WORKSPACE');
     for (const round of workspace.rounds) {
       const players = new Set(round.players.map((player) => player.playerId));
@@ -120,6 +183,8 @@ export class TableWorkspaceStore {
     // Explicit allowlists keep private profiles, observations and audits out of viewer projections.
     return {
       event: before.summary, location: workspace.location, etag: before.summary.etag,
+      ...(!before.testerLink ? { eventSkinsSupported: true as const,
+        ...(workspace.eventSkins ? { eventSkins: workspace.eventSkins } : {}) } : {}),
       ...(before.summary.role === 'owner' || before.admittedPlayer || before.publicAccess
         ? { purseConfigured: before.event.purseConfigured === true } : {}),
       canViewScores: before.summary.role === 'owner' || before.admittedPlayer || before.testerLink !== undefined || before.publicAccess === true,
@@ -283,6 +348,7 @@ export class TableWorkspaceStore {
     if (Buffer.byteLength(JSON.stringify(input), 'utf8') > maximumPrivateWriteBytes) throw new ApiError(413, 'REQUEST_TOO_LARGE');
     const previous = await this.load(access.summary);
     const allowPerGolferTees = input.allowPerGolferTees ?? previous.allowPerGolferTees;
+    const eventSkins = previous.eventSkins;
     const overallCompetition = input.overallCompetition === undefined
       ? previous.overallCompetition : input.overallCompetition ?? undefined;
     if (overallCompetition?.kind === 'stableford') {
@@ -383,7 +449,8 @@ export class TableWorkspaceStore {
     }
     const header: WorkspaceHeader = { location: input.location, roster, roundIds: rounds.map((round) => round.id),
       ...(allowPerGolferTees === undefined ? {} : { allowPerGolferTees }),
-      ...(overallCompetition ? { overallCompetition } : {}) };
+      ...(overallCompetition ? { overallCompetition } : {}),
+      ...(eventSkins ? { eventSkins } : {}) };
     const headerContent = await stagePrivateContent(this.table, id, 'workspace', identity, canonical(header));
     const roundContent = new Map<string, string>();
     for (const round of rounds) roundContent.set(round.id, await stagePrivateContent(this.table, id, `round:${round.id}`, identity, canonical(round)));

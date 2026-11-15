@@ -121,7 +121,14 @@ export function PurseSettings({ value, draft, plan, resolutions, disabled, onCha
             {!value.workspace.overallCompetition && pool.source.kind !== 'overall' && <option value="overall" disabled>Overall competition (not configured)</option>}
           </select></label>
         </div>
-        {pool.source.kind === 'kp' ? <>
+        {pool.source.kind === 'event-skins' ? <>
+          <label>Event skins pot amount<input inputMode="decimal" value={pool.amount}
+            onChange={(event) => { changePool({ ...pool, amount: event.target.value }); }} /></label>
+          <p>One separate pot in the event currency. Existing budget accounting still applies; overcommitment is shown, never scaled.
+            No funds move from other pools.
+            Each awarded skin earns one share. Fractional cents and an all-no-winners pot remain unallocated.
+            While holes remain pending, winnings are projected using an unknown final denominator.</p>
+        </> : pool.source.kind === 'kp' ? <>
           <label>Pool {index + 1} total pot amount<input inputMode="decimal" value={pool.amount}
             onChange={(event) => { changePool({ ...pool, amount: event.target.value }); }} /></label>
           <p>One round pot shared equally per winning hole after organizer closure. Longest winning default-tee hole,

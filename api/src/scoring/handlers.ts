@@ -11,6 +11,7 @@ import type { RequestLimiter } from '../limits.js';
 import type { TableScoreStore } from './store.js';
 import { privateReadResponse } from '../private-transport.js';
 import { isKpSelection } from '../../../src/contracts/kp.js';
+import { isEventSkinsConfiguration } from '../../../src/contracts/event-skins.js';
 
 export interface ScoringApi {
   readonly verify: VerifyIdentity;
@@ -18,7 +19,7 @@ export interface ScoringApi {
   readonly scores: TableScoreStore;
 }
 
-export type ScoringAction = 'scores' | 'score-hole' | 'score-history' | 'round-games' | 'round-kp' | 'event-leaderboard';
+export type ScoringAction = 'scores' | 'score-hole' | 'score-history' | 'round-games' | 'round-kp' | 'event-leaderboard' | 'event-skins-config';
 
 function uuid(value: unknown): string {
   if (!isUuid(value)) throw new ApiError(400, 'INVALID_REQUEST_ID');
@@ -38,10 +39,21 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
     try {
       const api = resolveApi();
       const identity = await api.verify(request.headers.get('authorization'));
-      const write = action === 'score-hole' || action === 'round-games' || action === 'round-kp';
+      const write = action === 'score-hole' || action === 'round-games' || action === 'round-kp' || action === 'event-skins-config';
       await api.limiter.check(identity, write ? 'scores-write' : 'scores-read');
       if (request.method !== (write ? 'PUT' : 'GET')) return response(405, { code: 'METHOD_NOT_ALLOWED' });
       const eventId = uuid(request.params.id);
+      if (action === 'event-skins-config') {
+        const requestId = uuid(request.headers.get('Idempotency-Key'));
+        const etag = precondition(request, 'EVENT_REVISION_REQUIRED');
+        if (etag === null) throw new ApiError(400, 'EVENT_REVISION_REQUIRED');
+        const body = await readJson(request);
+        if (!isRecord(body) || Object.keys(body).length !== 1
+          || body.configuration !== null && !isEventSkinsConfiguration(body.configuration)) {
+          throw new ApiError(400, 'INVALID_EVENT_SKINS_SETUP');
+        }
+        return response(200, await api.scores.saveEventSkins(identity, eventId, body.configuration, etag, requestId));
+      }
       if (action === 'event-leaderboard') {
         return response(200, privateReadResponse(request, await api.scores.leaderboard(identity, eventId, () => api.limiter.check(identity, 'scores-read'))));
       }

@@ -6,6 +6,7 @@ import { isRecord } from './events.js';
 import { isRoundScores } from './scoring.js';
 import { isEventWorkspace } from './setup.js';
 import { roundScoresMatchWorkspace, sameJsonValue } from './round-context.js';
+import { isEventSkinsResults } from './event-skins.js';
 
 export function isEventStandings(
   value: unknown, workspace: EventWorkspace, roundScores: readonly RoundScores[],
@@ -14,16 +15,19 @@ export function isEventStandings(
 }
 
 export function isEventLeaderboardView(value: unknown): value is EventLeaderboardView {
-  if (!isRecord(value) || Object.keys(value).length !== 3
-    || !Object.keys(value).every((key) => ['workspace', 'roundScores', 'standings'].includes(key))
+  if (!isRecord(value) || Object.keys(value).length !== (value.eventSkins === undefined ? 3 : 4)
+    || !Object.keys(value).every((key) => ['workspace', 'roundScores', 'standings', 'eventSkins'].includes(key))
     || !isEventWorkspace(value.workspace) || !Array.isArray(value.roundScores)) return false;
   const workspace = value.workspace;
   if (workspace.event.role !== 'owner' && workspace.canViewScores !== true) return false;
-  if (workspace.overallCompetition === undefined) {
-    return value.roundScores.length === 0 && isEventStandings(value.standings, workspace, []);
+  if (workspace.testerAccess) return false;
+  if (workspace.overallCompetition === undefined && workspace.eventSkins === undefined) {
+    return value.eventSkins === undefined && value.roundScores.length === 0 && isEventStandings(value.standings, workspace, []);
   }
   if (value.roundScores.length !== workspace.rounds.length || !value.roundScores.every(isRoundScores)) return false;
   const rounds: readonly RoundScores[] = value.roundScores;
   if (!roundScoresMatchWorkspace(workspace, rounds)) return false;
-  return isEventStandings(value.standings, workspace, rounds);
+  return isEventStandings(value.standings, workspace, rounds)
+    && (workspace.eventSkins === undefined ? value.eventSkins === undefined
+      : isEventSkinsResults(value.eventSkins, workspace, rounds));
 }

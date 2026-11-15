@@ -50,7 +50,7 @@ export function PublicEventsPage({ services: override }: { readonly services?: P
   const [kind, eventId, roundId] = current.split(':');
   if (kind === 'score' && eventId && roundId) return <PublicRoundPage key={`${eventId}:${roundId}`}
     services={services} eventId={eventId} roundId={roundId} onUnavailable={ended} />;
-  if (kind === 'leaderboard' && eventId) return <EventLeaderboardPage client={services.leaderboard} eventId={eventId} onSessionExpired={ended} />;
+  if ((kind === 'leaderboard' || kind === 'event-skins') && eventId) return <EventLeaderboardPage eventSkins={kind === 'event-skins'} client={services.leaderboard} eventId={eventId} onSessionExpired={ended} />;
   if (kind === 'purse' && eventId) return <Suspense fallback={<p role="status">Loading winnings…</p>}>
     <PursePage client={services.purse} eventId={eventId} onSessionExpired={ended} />
   </Suspense>;

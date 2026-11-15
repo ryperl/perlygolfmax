@@ -22,7 +22,8 @@ export function PurseResults({ value, plan, calculation, draft = false }: PurseR
     ['Planned budget', calculation.plannedBudgetMinor], ['Scheduled awards', calculation.scheduledMinor],
     ['Calculated allocation', calculation.allocatedMinor], ['Projected allocation', calculation.projectedMinor],
     ['Reserved', calculation.reservedMinor], ['Unallocated', calculation.unallocatedMinor],
-    ['Tie remainder', calculation.tieRemainderMinor], ['Member remainder', calculation.memberRemainderMinor],
+    [plan.pools.some((pool) => pool.source.kind === 'event-skins') ? 'Tie / per-skin remainder' : 'Tie remainder',
+      calculation.tieRemainderMinor], ['Member remainder', calculation.memberRemainderMinor],
     ['Remaining unscheduled budget', calculation.remainingMinor], ['Over budget', calculation.overBudgetMinor],
   ] as const;
   return <section className="purse-results" aria-label={draft ? 'Unsaved purse projection' : 'Saved purse results'}>
@@ -42,7 +43,8 @@ export function PurseResults({ value, plan, calculation, draft = false }: PurseR
       const result = calculation.pools.find((entry) => entry.poolId === pool.id);
       return <details key={pool.id}><summary>{pool.name} · {result?.status ?? 'unavailable'}</summary>
         <p>Source: {sourceChoices(value).find((choice) => choice.key === sourceKey(pool.source))?.label ?? 'Unavailable saved source'}.</p>
-        <p>{pool.source.kind === 'kp' ? 'KP pot, shared per winning hole after organizer closure; distance ties require review'
+        <p>{pool.source.kind === 'event-skins' ? 'Event skins pot: one share per skin won, fractional cents unallocated. Pending holes can change the final per-skin amount; all-no-winners funds stay reserved.'
+          : pool.source.kind === 'kp' ? 'KP pot, shared per winning hole after organizer closure; distance ties require review'
           : pool.source.kind === 'manual' ? 'Manual pot, equally split among selected golfers'
           : pool.awardUnit === 'per-team' ? 'Each place is a team pot, split equally among its members'
             : 'Each place amount is per golfer, including each member when the entrant is a team'}.</p>
@@ -52,6 +54,11 @@ export function PurseResults({ value, plan, calculation, draft = false }: PurseR
         </> : <p>Total pot: {money(pool.amountMinor)}. {'recipientIds' in pool && <>Recipients: {pool.recipientIds.map((id) =>
           value.workspace.roster.find((player) => player.playerId === id)?.displayName ?? 'Unavailable golfer').join(', ') || 'None selected'}.</>}</p>}
         {result && <>
+          {result.eventSkins && <p>Awarded skins: {result.eventSkins.awardedSkins} · Current per-skin share: {
+            result.eventSkins.perSkinMinor === null ? 'Not established' : money(result.eventSkins.perSkinMinor)
+          } · Remaining potential awards: {result.eventSkins.pendingHoles} pending holes
+            {` + ${String(result.eventSkins.unavailableHoles)} unavailable holes of ${String(result.eventSkins.totalHoles)} total`}.
+            {result.status !== 'calculated' && ' Final denominator is unknown; current shares are not guaranteed.'}</p>}
           <p>Scheduled: {money(result.scheduledMinor)} · Calculated: {money(result.allocatedMinor)} · Projected: {money(result.projectedMinor)}
             {' · '}Reserved: {money(result.reservedMinor)} · Unallocated: {money(result.unallocatedMinor)}</p>
           {result.reasons.map((reason) => <p key={reason}>{reason.replaceAll('-', ' ')}</p>)}

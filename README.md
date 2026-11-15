@@ -481,6 +481,41 @@ binding before converting that game to Ball Drop or Skins. Legacy Stableford
 definitions/results remain readable without migration and retain their existing
 points tables and allowances.
 
+### Event-wide skins
+
+The organizer opens **Event-wide skins** from the saved event or event setup
+and explicitly enables this independent version-1 competition. It does not
+enable or replace the primary overall competition, create round games, or change
+existing round Skins, KP or Churchy rules. Older APIs without the advertised
+capability remain unsupported, not implicitly enabled.
+
+Each hole competes only within its own round; awarded skins add across every
+configured round (including nine-hole rounds). Lowest numeric **net strokes**
+wins, using 100% captured Course Handicap and each golfer's captured tee and
+stroke allocation. Only when net strokes tie, an actual **gross birdie or
+better** on the golfer's personal par takes priority; among those qualifying
+scores, lower gross wins. Equal qualifying gross scores remain tied. Gross par
+versus net par remains a tie. There are **no carryovers**, even within a round.
+Unplayed field entries keep the hole pending; pickup, X7 and DNF are ineligible,
+not penalty scores. Missing net inputs are unavailable, never scratch.
+
+The saved-results board shows per-round counts, total skins and hole outcomes.
+Mixed progress is provisional. Known zero winners are hidden only from complete
+ranked displays, not underlying results or winnings. Refresh reads fresh,
+coherent saved server data; drafts never count. Public visitors can read active
+event results, while archives remain owner-only and legacy testers receive no
+event-wide access.
+
+In the purse editor choose **Event-wide skins · pot per skin won** and enter
+an explicit amount in the event currency. There is one canonical event skins
+pot, with no default stake, budget increase or reallocation from other pools.
+Divide its minor units by actual awarded skins, floor once per skin, then
+multiply by each golfer's wins. A 100.01 pot over three skins awards 33.33 per
+skin and leaves 0.02 unallocated. With no winners, the whole pot stays reserved
+for a later organizer decision. Pending holes mean an unknown final denominator:
+shown shares are projected, never guaranteed or paid. Disabling the competition
+retains its pot as an unavailable source for repair, not zero winnings.
+
 ### KP Competition
 
 Open a saved round's **KP** tab. Its organizer can configure one KP competition,

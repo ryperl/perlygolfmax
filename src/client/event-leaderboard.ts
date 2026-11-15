@@ -1,15 +1,33 @@
-import { isUuid } from '../contracts/events';
+import { isEventRevision, isUuid } from '../contracts/events';
+import { isEventSkinsChange, isEventSkinsConfiguration } from '../contracts/event-skins';
+import { sameJsonValue } from '../contracts/round-context';
+import type { EventSkinsChange, EventSkinsConfiguration } from '../domain/event-skins';
 import { isEventLeaderboardView } from '../contracts/event-leaderboard';
 import type { EventLeaderboardView } from '../domain/event-leaderboard';
 import { createPrivateRequest, readPrivateValue } from './private-request';
 
 export interface EventLeaderboardClient {
+  readonly configureEventSkins?: (eventId: string, configuration: EventSkinsConfiguration | null,
+    etag: string, requestId: string, signal: AbortSignal) => Promise<EventSkinsChange>;
   readonly load: (eventId: string, signal: AbortSignal) => Promise<EventLeaderboardView>;
 }
 
 export function createEventLeaderboardClient(apiUrl: string, getToken: () => Promise<string>, send: typeof fetch = fetch): EventLeaderboardClient {
   const request = createPrivateRequest(apiUrl, getToken, send);
   return {
+    async configureEventSkins(eventId, configuration, etag, requestId, signal) {
+      if (!isUuid(eventId) || !isUuid(requestId) || !isEventRevision(etag)
+        || configuration !== null && !isEventSkinsConfiguration(configuration)) {
+        throw new Error('Invalid event skins settings. Nothing was sent.');
+      }
+      const value = await request(`events/${encodeURIComponent(eventId)}/event-skins`, signal,
+        { method: 'PUT', body: { configuration }, etag, requestId });
+      if (!isEventSkinsChange(value) || value.eventId !== eventId || value.id !== requestId
+        || value.expectedEtag !== etag || !sameJsonValue(value.after, configuration)) {
+        throw new Error('Event skins save is not confirmed. Retain the same request and refresh before retrying.');
+      }
+      return value;
+    },
     async load(eventId, signal) {
       if (!isUuid(eventId)) throw new Error('Invalid event identifier.');
       const value = await readPrivateValue(request, `events/${encodeURIComponent(eventId)}/leaderboard`, signal);

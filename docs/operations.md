@@ -423,6 +423,58 @@ There is no payment provider, transfer, banking data or ordinary round
 finalization. KP round pots use the separate explicit policy below.
 Real financial/trip data stays out of source.
 
+### Event-wide skins configuration and aggregate reads
+
+The existing workspace projection advertises optional
+`eventSkinsSupported: true`; optional `eventSkins: { version: 1 }` means enabled.
+Absence is unconfigured, and missing capability on older APIs is unsupported.
+The organizer route is `#organizer?event=<id>&view=event-skins`; public active
+readers use `#event-skins?event=<id>`. This does not use or persist a round score
+cursor, scores or identities.
+
+`PUT /api/events/<id>/event-skins` accepts exactly
+`{ "configuration": { "version": 1 } }` or `{ "configuration": null }`, a current
+event `If-Match` and UUID `Idempotency-Key`. It verifies JWT/event ownership,
+including owners without global catalog rights. There is no public management
+route. The existing 4 KiB handler ceiling applies. One existing-table transaction
+conditionally checks event, owner grant and workspace header revisions and
+creates an immutable `event-skins-change:<request-id>` receipt containing before,
+after, base revision, actor and server time. Replays require the exact same
+owner/base/selection; conflicting reuse and concurrent writes fail closed.
+Ordinary setup writes preserve the setting and cannot enable it implicitly.
+No new resources, settings, IAM or deployment changes are required.
+
+Existing private/public `/events/<id>/leaderboard` aggregate routes return the
+optional `eventSkins` result independently of primary overall standings. They
+read every configured round, charge the existing shared scores-read/site/event
+budgets per round, bound concurrency to three and recheck event/access revision
+after aggregation. All score/configuration writes change that event revision.
+Responses retain no-store and digest-bound private paging; adapters validate
+whole workspace/round identities and recompute results from saved raw scores and
+captured inputs. Quota waits retain transfer progress; source changes abort.
+Legacy tester links cannot read this aggregate or discover the configuration.
+Archived events remain owner-only and configuration is read-only.
+
+The fixed rule is lowest net numeric strokes at 100% captured Course Handicap,
+using personal tees/allocation. Only equal net results prefer an actual gross
+birdie or better on personal par, then lower qualifying gross strokes; gross par
+ties remain tied. Holes compare within their own round, with one skin or none
+and no carryovers anywhere. Pending field dispositions do not award a skin;
+pickup/X7/DNF are ineligible. Missing net inputs are unavailable. Existing
+unstarted-current/first-save-captured index behavior is unchanged.
+
+The separately explicit purse source is
+`{ kind: "event-skins", version: 1 }` with `awardUnit: "pot"` and `amountMinor`.
+Only one such pool may exist. Its amount is canonical in the saved event
+currency; there is no assumed stake or automatic movement from existing budgets
+or pools. Existing overcommitment accounting remains explicit and never scales
+awards. Each skin earns `floor(potMinor / awardedSkins)` minor units. Leftover
+cents remain unallocated; no skins reserves the entire pot for later decision.
+Pending holes make the denominator unknown and all current shares projected.
+Unavailable inputs or disabled configuration retain the saved pot for repair
+and never fabricate zero winnings. Amounts are planned, not collected/paid.
+No round finalization, real-time polling or offline score storage is added.
+
 ### KP competition lifecycle and planned awards
 
 `PUT /api/events/<event-id>/rounds/<round-id>/kp` is JWT/event-owner-only,

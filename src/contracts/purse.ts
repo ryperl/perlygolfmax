@@ -28,6 +28,9 @@ function pool(value: unknown): value is PursePool {
   if (!isRecord(value) || !isUuid(value.id) || typeof value.name !== 'string'
     || !value.name.trim() || value.name !== value.name.trim() || value.name.length > 100 || !isRecord(value.source)) return false;
   const source = value.source;
+  if (source.kind === 'event-skins') return keys(source, ['kind', 'version']) && source.version === 1
+    && keys(value, ['id', 'name', 'source', 'awardUnit', 'amountMinor'])
+    && value.awardUnit === 'pot' && money(value.amountMinor);
   if (source.kind === 'kp') return keys(source, ['kind', 'roundId']) && isUuid(source.roundId)
     && keys(value, ['id', 'name', 'source', 'awardUnit', 'amountMinor'])
     && value.awardUnit === 'pot' && money(value.amountMinor);
@@ -40,7 +43,7 @@ function pool(value: unknown): value is PursePool {
       && isUuid(source.roundId) && isUuid(source.gameId))) return false;
   if (!keys(value, ['id', 'name', 'source', 'awardUnit', 'prizes', 'tiePolicy'])
     || !(value.awardUnit === 'per-golfer' || value.awardUnit === 'per-team' && source.kind === 'round-game')
-    || !['pooled', 'organizer'].includes(String(value.tiePolicy))
+    || value.tiePolicy !== 'pooled' && value.tiePolicy !== 'organizer'
     || !Array.isArray(value.prizes) || !value.prizes.every(prize)) return false;
   return new Set(value.prizes.map((entry: PursePlacePrize) => entry.place)).size === value.prizes.length;
 }

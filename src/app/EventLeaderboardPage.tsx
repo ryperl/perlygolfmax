@@ -4,8 +4,10 @@ import { EventChangedError, SessionExpiredError } from '../client/events';
 import { PrivateRequestError } from '../client/private-request';
 import type { EventLeaderboardView } from '../domain/event-leaderboard';
 import { EventLeaderboard } from '../features/leaderboard';
+import { EventSkinsBoard, EventSkinsSettings } from '../features/event-skins';
 
-export function EventLeaderboardPage({ client, eventId, onSessionExpired }: {
+export function EventLeaderboardPage({ client, eventId, onSessionExpired, eventSkins = false }: {
+  readonly eventSkins?: boolean;
   readonly client: EventLeaderboardClient;
   readonly eventId: string;
   readonly onSessionExpired: (message: string) => void;
@@ -40,9 +42,14 @@ export function EventLeaderboardPage({ client, eventId, onSessionExpired }: {
     return () => { controller.abort(); };
   }, [client, eventId, attempt, generation]);
   return <section>
-    <button disabled={!current} onClick={() => { setAttempt((value) => value + 1); }}>Refresh overall results</button>
-    {!current && <p role="status">Loading overall results…</p>}
+    <button disabled={!current} onClick={() => { setAttempt((value) => value + 1); }}>Refresh {eventSkins ? 'event skins' : 'overall results'}</button>
+    {!current && <p role="status">Loading {eventSkins ? 'event skins' : 'overall results'}…</p>}
     {current?.error && <div><p role="alert">{current.error}</p><a href="#events">Choose another event</a></div>}
-    {current?.value && <EventLeaderboard value={current.value} />}
+    {eventSkins && current?.value && current.value.workspace.eventSkinsSupported === true
+      && current.value.workspace.event.role === 'owner' && current.value.workspace.event.status === 'active'
+      && client.configureEventSkins && <EventSkinsSettings key={`${eventId}:${current.value.workspace.etag}`}
+        workspace={current.value.workspace} configure={client.configureEventSkins}
+        onSaved={() => { setAttempt((value) => value + 1); }} />}
+    {current?.value && (eventSkins ? <EventSkinsBoard value={current.value} /> : <EventLeaderboard value={current.value} />)}
   </section>;
 }

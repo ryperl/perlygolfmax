@@ -45,7 +45,8 @@ export function isRoundGameDefinition(value: unknown): value is RoundGameDefinit
     if (value.kind === 'skins') return keys(value, ['id', 'name', 'kind', 'version', 'basis', 'carryovers'])
       && typeof value.carryovers === 'boolean';
     if (!keys(value, ['id', 'name', 'kind', 'version', 'basis', 'format', 'teams'])
-      || !['ball-drop-net-gross', 'ball-drop-two-net', 'ball-drop-two-gross'].includes(String(value.format))
+      || typeof value.format !== 'string'
+      || !['ball-drop-net-gross', 'ball-drop-two-net', 'ball-drop-two-gross'].includes(value.format)
       || value.basis !== (value.format === 'ball-drop-two-gross' ? 'gross' : 'net')
       || !Array.isArray(value.teams) || value.teams.length === 0) return false;
     const ids = new Set<string>();

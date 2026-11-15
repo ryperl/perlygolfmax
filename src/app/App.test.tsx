@@ -13,6 +13,9 @@ import { loadScoreLocation, saveScoreLocation, scoreLocationHref } from './score
 import type { SavedScoreLocation } from '../domain/score-location';
 import { isRecord } from '../contracts/events';
 import { fictionalEventPurse } from '../client/purse.test-support';
+import { eventSkinsFixture, publicEventSkinsFixture } from '../domain/event-skins.test-support';
+import { calculateEventSkins } from '../domain/event-skins';
+import { calculateEventStandings } from '../domain/event-leaderboard';
 
 let testServices: EventServices | undefined;
 vi.mock('./EventsPage', async (importOriginal) => {
@@ -56,6 +59,39 @@ beforeEach(() => {
 });
 
 describe('public app and organizer boundary', () => {
+  it('navigates a configured selected event to public event skins without identity/catalog or a speculative aggregate request for the link', async () => {
+    const f = publicEventSkinsFixture();
+    const services = fakePublicServices();
+    vi.mocked(services.setup.load).mockResolvedValue(f.workspace);
+    vi.mocked(services.leaderboard.load).mockResolvedValue({ workspace: f.workspace, roundScores: f.rounds,
+      standings: calculateEventStandings(f.workspace, f.rounds), eventSkins: calculateEventSkins(f.workspace, f.rounds) });
+    navigate(`#overview?event=${f.workspace.event.id}`);
+    render(<App publicServices={services} />);
+    const link = await screen.findByRole('link', { name: 'Event-wide skins' });
+    expect(link).toHaveAttribute('href', `#event-skins?event=${f.workspace.event.id}`);
+    expect(services.leaderboard.load).not.toHaveBeenCalled();
+    await userEvent.click(link);
+    expect(await screen.findByRole('heading', { name: 'Fictional Open · Event-wide skins' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Refresh event skins' })).toBeVisible();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(testServices?.session.initialize).not.toHaveBeenCalled();
+    expect(testServices?.catalog.players).not.toHaveBeenCalled();
+    expect(document.title).toBe('Event-wide skins | Perly Golf Max');
+  });
+  it('opens independent owner skins management only in the explicit organizer route, even without catalog authority', async () => {
+    const f = eventSkinsFixture();
+    const configured = service();
+    testServices = { ...configured, leaderboard: { load: vi.fn().mockResolvedValue({
+      workspace: f.workspace, roundScores: f.rounds, standings: calculateEventStandings(f.workspace, f.rounds),
+      eventSkins: calculateEventSkins(f.workspace, f.rounds),
+    }), configureEventSkins: vi.fn() } };
+    navigate(`#organizer?event=${f.workspace.event.id}&view=event-skins`);
+    render(<App publicServices={fakePublicServices()} />);
+    expect(await screen.findByRole('checkbox', { name: 'Enable event-wide net skins' })).toBeChecked();
+    expect(configured.session.initialize).toHaveBeenCalledOnce();
+    expect(configured.catalog.players).not.toHaveBeenCalled();
+    expect(configured.catalog.courses).not.toHaveBeenCalled();
+  });
   it('starts on public Events with no account initialization or management controls', async () => {
     const services = fakePublicServices();
     render(<App publicServices={services} />);

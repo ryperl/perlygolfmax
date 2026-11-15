@@ -200,6 +200,10 @@ export function EventTripView({ workspace, view, progress }: EventTripViewProps)
         {archived && <p className="event-trip-archive"><strong>Archived event · Read-only</strong></p>}
         <nav className="event-trip-links" aria-label={event.role === 'owner' ? 'Event setup' : 'Event links'}>
             {event.role === 'owner' && <a href={setupLink(event.id)}>{archived ? 'View event setup' : 'Configure event'}</a>}
+            {!workspace.testerAccess && workspace.eventSkinsSupported === true && (workspace.eventSkins || event.role === 'owner')
+              && view !== 'group' && <a href={event.role === 'owner'
+                ? `#organizer?event=${encodeURIComponent(event.id)}&view=event-skins`
+                : `#event-skins?event=${encodeURIComponent(event.id)}`}>Event-wide skins</a>}
             {(event.role === 'owner' || workspace.canViewScores) && workspace.overallCompetition && view !== 'group' && <a href={`#leaderboard?event=${encodeURIComponent(event.id)}`}>Overall leaderboard</a>}
             {workspace.purseConfigured === true && (event.role === 'owner' || workspace.canViewScores) && view !== 'group' && <a href={`#purse?event=${encodeURIComponent(event.id)}`}>{archived || event.role !== 'owner' ? 'View purse and winnings' : 'Purse and winnings'}</a>}
         </nav>
