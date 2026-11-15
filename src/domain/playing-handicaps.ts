@@ -5,9 +5,10 @@ import { calculateCourseHandicap, calculatePlayingHandicap } from './stableford.
 export function publishedCourseHandicaps(round: RoundSnapshot): readonly PlayerCourseHandicap[] {
   const tees = new Map(round.playerTees?.map((entry) => [entry.playerId, entry.profile]));
   return round.players.map((player) => {
-    const result = player.handicapIndex === undefined ? 'uncaptured-handicap-index'
-      : player.handicapIndex === null ? 'missing-handicap-index'
-      : calculateCourseHandicap(player.handicapIndex.value, tees.get(player.playerId) ?? round.teeProfile);
+    const index = player.handicapIndex === undefined ? player.handicapIndexValue : player.handicapIndex?.value ?? null;
+    const result = index === undefined ? 'uncaptured-handicap-index'
+      : index === null ? 'missing-handicap-index'
+      : calculateCourseHandicap(index, tees.get(player.playerId) ?? round.teeProfile);
     return typeof result === 'number' ? { playerId: player.playerId, courseHandicap: result }
       : { playerId: player.playerId, courseHandicap: null, unavailableReason: result };
   });

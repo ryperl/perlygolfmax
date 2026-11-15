@@ -1,4 +1,6 @@
-import type { EventWorkspace, RoundPlayerSnapshot, RoundSnapshot } from '../../domain/setup';
+import type { EventWorkspace, RoundSnapshot } from '../../domain/setup';
+import type { PlayerCourseHandicap } from '../../domain/scoring';
+import { publishedCourseHandicaps } from '../../domain/playing-handicaps';
 import { groupStartingHole } from '../../domain/round-navigation';
 import { gameTeamsMatchRoster, isTeamGameDefinition } from '../../domain/games';
 import { gameScoringLabel } from '../games';
@@ -6,10 +8,7 @@ import { eventStartDateLabel, numericEventDateLabel, sortRoundsByStartDate } fro
 import type { EventEntryProgress, RoundEntryProgressState } from './entry-progress';
 import './event-trip.css';
 import { HandicapIndexBadge } from './HandicapIndexBadge';
-
-function capturedIndexValue(player: RoundPlayerSnapshot): string | null | undefined {
-  return player.handicapIndex === undefined ? player.handicapIndexValue : player.handicapIndex?.value ?? null;
-}
+import { CourseHandicap } from '../scoring';
 
 interface EventTripViewProps {
   readonly workspace: EventWorkspace;
@@ -45,7 +44,10 @@ function scoreLink(workspace: EventWorkspace, roundId: string) {
   return `#${page}?event=${encodeURIComponent(workspace.event.id)}&round=${encodeURIComponent(roundId)}`;
 }
 
-function PlayingGroups({ round }: { readonly round: RoundSnapshot }) {
+function PlayingGroups({ round, handicaps }: {
+  readonly round: RoundSnapshot;
+  readonly handicaps: ReadonlyMap<string, PlayerCourseHandicap>;
+}) {
   const assigned = new Set(round.groups.flatMap((group) => group.playerIds));
   const unassigned = round.players.filter((player) => !assigned.has(player.playerId));
 
@@ -63,7 +65,7 @@ function PlayingGroups({ round }: { readonly round: RoundSnapshot }) {
                   {group.playerIds.map((playerId) => {
                     const player = round.players.find((entry) => entry.playerId === playerId);
                     return <li key={playerId}><span className="event-trip-player-name">{player?.displayName ?? 'Player unavailable'}</span>
-                      {player && <> <HandicapIndexBadge value={capturedIndexValue(player)} context="captured" /></>}
+                      {player && <> <CourseHandicap value={handicaps.get(playerId)} className="event-trip-index" /></>}
                     </li>;
                   })}
                 </ul>
@@ -77,14 +79,18 @@ function PlayingGroups({ round }: { readonly round: RoundSnapshot }) {
         <div>
           <h5>Not assigned to a group</h5>
           <ul>{unassigned.map((player) => <li key={player.playerId}><span className="event-trip-player-name">{player.displayName}</span>
-            {' '}<HandicapIndexBadge value={capturedIndexValue(player)} context="captured" /></li>)}</ul>
+            {' '}<CourseHandicap value={handicaps.get(player.playerId)} className="event-trip-index" /></li>)}</ul>
         </div>
       )}
     </div>
   );
 }
 
-function CompetitionTeams({ round, state }: { readonly round: RoundSnapshot; readonly state: RoundEntryProgressState | undefined }) {
+function CompetitionTeams({ round, state, handicaps }: {
+  readonly round: RoundSnapshot;
+  readonly state: RoundEntryProgressState | undefined;
+  readonly handicaps: ReadonlyMap<string, PlayerCourseHandicap>;
+}) {
   const game = state?.kind === 'ready' ? state.summary.selectedGame : undefined;
   return <section className="event-trip-groups" aria-label={`Competition teams for ${round.name}`}>
     <h4>Teams</h4>
@@ -97,7 +103,7 @@ function CompetitionTeams({ round, state }: { readonly round: RoundSnapshot; rea
             <h5>{team.name}</h5><ul>{team.playerIds.map((id) => {
               const player = round.players.find((entry) => entry.playerId === id);
               return <li key={id}><span className="event-trip-player-name">{player?.displayName ?? 'Player unavailable'}</span>
-                {player && <> <HandicapIndexBadge value={capturedIndexValue(player)} context="captured" /></>}
+                {player && <> <CourseHandicap value={handicaps.get(id)} className="event-trip-index" /></>}
               </li>;
             })}</ul>
           </li>)}</ul>
@@ -128,7 +134,9 @@ function SavedRounds({ workspace, showGroups, progress }: {
       <h2>Rounds</h2>
       {workspace.rounds.length === 0 ? <p>No rounds saved for this event.</p> : (
         <ol className="event-trip-rounds">
-          {sortRoundsByStartDate(workspace.rounds).map((round) => (
+          {sortRoundsByStartDate(workspace.rounds).map((round) => {
+            const handicaps = new Map(publishedCourseHandicaps(round).map((entry) => [entry.playerId, entry]));
+            return (
             <li className="panel event-trip-round" key={round.id}>
               <div className="event-trip-round-heading">
                 <div>
@@ -158,14 +166,15 @@ function SavedRounds({ workspace, showGroups, progress }: {
                     <div><dt>Yards</dt><dd>{round.teeProfile.totalYardage.toLocaleString('en-US')}</dd></div>
                     <div><dt>Par</dt><dd>{round.teeProfile.totalPar}</dd></div>
                   </dl>
-                  <PlayingGroups round={round} />
+                  <PlayingGroups round={round} handicaps={handicaps} />
                   {workspace.overallCompetition?.kind === 'stableford'
                     && workspace.overallCompetition.roundGames.some((binding) => binding.roundId === round.id)
-                    && <CompetitionTeams round={round} state={progress?.[round.id]} />}
+                    && <CompetitionTeams round={round} state={progress?.[round.id]} handicaps={handicaps} />}
                 </>
               )}
             </li>
-          ))}
+            );
+          })}
         </ol>
       )}
     </section>

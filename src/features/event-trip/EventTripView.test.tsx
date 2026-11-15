@@ -233,7 +233,7 @@ describe('saved event rounds', () => {
 });
 
 describe('saved event group', () => {
-  it('shows current public roster indices separately from captured group indices and explicit NH', () => {
+  it('keeps current public roster HI while round groups show their own Course Handicap and explicit NH', () => {
     const current = { ...fictionalWorkspace, event: { ...fictionalWorkspace.event, role: 'viewer' as const },
       publicAccess: true as const, canViewScores: true,
       roster: fictionalWorkspace.roster.map((player, index) => ({ ...player, handicapIndexValue: index === 0 ? '29.2' : null })),
@@ -246,9 +246,48 @@ describe('saved event group', () => {
     expect(within(roster).getByLabelText('Current Handicap Index: 29.2')).toHaveTextContent('HI 29.2');
     expect(within(roster).getAllByLabelText('No Handicap Index')).toHaveLength(3);
     const captured = roundCard(openingRound.name);
-    expect(captured.getByLabelText('Captured Handicap Index: 18.9')).toHaveTextContent('HI 18.9');
+    expect(captured.getByLabelText('Course handicap: 8')).toHaveTextContent('CH 8');
     expect(captured.queryByLabelText('Current Handicap Index: 29.2')).not.toBeInTheDocument();
-    expect(captured.getAllByLabelText('No Handicap Index')).toHaveLength(3);
+    expect(captured.getAllByLabelText('No captured Handicap Index')).toHaveLength(3);
+  });
+  it('uses each round and personal tee without game allowances or stroke-allocation requirements', () => {
+    const players = openingRound.players.map((player, index) => ({
+      playerId: player.playerId, displayName: player.displayName,
+      handicapIndexValue: ['10', '+2', '0', null][index] ?? null,
+    }));
+    const first = players[0];
+    if (!first) throw new Error('Missing fictional player.');
+    const tee = { ...openingRound.teeProfile, strokeAllocation: false,
+      ratings: [{ type: 'Total' as const, course: 36, slope: 113, bogey: 45 }] };
+    const personal = { ...tee, id: 990, ratings: [{ type: 'Total' as const, course: 37, slope: 113, bogey: 46 }] };
+    const current = { ...fictionalWorkspace, rounds: [
+      { ...openingRound, players, teeProfile: tee, playerTees: [{ playerId: first.playerId, profile: personal }],
+        groups: [{ number: 1, playerIds: players.slice(0, 2).map((player) => player.playerId) }] },
+      { ...openingRound, id: fictionalId(71), name: 'Fictional later course', players,
+        teeProfile: { ...tee, ratings: [{ type: 'Total' as const, course: 38, slope: 113, bogey: 47 }] } },
+    ] };
+    render(<EventTripView workspace={current} view="group" />);
+    const opening = roundCard(openingRound.name);
+    expect(opening.getByLabelText('Course handicap: 6')).toHaveTextContent('CH 6');
+    expect(opening.getByLabelText('Course handicap: +1')).toHaveTextContent('CH +1');
+    expect(opening.getByLabelText('Course handicap: 0')).toHaveTextContent('CH 0');
+    expect(opening.getByRole('heading', { name: 'Not assigned to a group' })).toBeVisible();
+    expect(opening.getByLabelText('No captured Handicap Index')).toHaveTextContent('NH');
+    expect(roundCard('Fictional later course').getByLabelText('Course handicap: 7')).toHaveTextContent('CH 7');
+  });
+  it('shows unavailable CH for missing ratings or legacy index projections rather than inferring scratch or NH', () => {
+    const current = { ...fictionalWorkspace, rounds: [{ ...openingRound,
+      teeProfile: { ...openingRound.teeProfile, ratings: [] },
+      players: openingRound.players.map((player, index) => ({
+        playerId: player.playerId, displayName: player.displayName,
+        ...(index === 0 ? { handicapIndexValue: '10' } : {}),
+      })),
+    }] };
+    render(<EventTripView workspace={current} view="group" />);
+    const round = roundCard(openingRound.name);
+    expect(round.getAllByLabelText('Course handicap unavailable')).toHaveLength(4);
+    expect(round.queryByText('NH')).not.toBeInTheDocument();
+    expect(round.queryByText('CH 0')).not.toBeInTheDocument();
   });
   it('preserves roster order and distinguishes per-round groups and account access', () => {
     render(<EventTripView workspace={workspace} view="group" />);

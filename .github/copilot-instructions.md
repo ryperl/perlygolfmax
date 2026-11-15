@@ -153,6 +153,11 @@
 - Scoring names show server-derived Course Handicap from captured HI and each
   golfer's captured tee, without game allowance or a stroke-allocation requirement.
   Keep scratch/plus values distinct from NH and other unavailable inputs.
+- Event Roster retains current HI. Round playing groups, unassigned golfers and
+  competition teams show CH using that round's index and each personal/default
+  tee through shared domain handicap math, never roster HI or game allowance.
+  Public scalar-only projections and private captured observations must agree;
+  legacy missing inputs remain unavailable, not scratch or NH.
 - Leaderboards order saved server game points, not local drafts or projected
   totals. Mixed progress is provisional with holes shown. Equal points share
   positions without a tie-break; unplayed/unavailable golfers are not ranked

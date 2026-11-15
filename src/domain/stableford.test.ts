@@ -63,6 +63,19 @@ function scores(cards: readonly Scorecard[], values: readonly HoleScore[]): read
 }
 
 describe('course handicaps from captured inputs', () => {
+  it.each([[18, '10.5', 11], [9, '10.5', 5], [18, '+5.5', -5], [9, '+5.5', -3]] as const)(
+    'matches full and public scalar round projections for %s holes and HI %s', (count, index, expected) => {
+      const { round } = fixture(count, index);
+      const projected = { ...round, players: round.players.map(({ playerId, displayName }) => ({
+        playerId, displayName, handicapIndexValue: index,
+      })) };
+      expect(publishedCourseHandicaps(projected).map((entry) => entry.courseHandicap)).toEqual(Array<number>(4).fill(expected));
+      expect(publishedCourseHandicaps(projected)).toEqual(publishedCourseHandicaps(round));
+      expect(publishedCourseHandicaps({ ...round, players: round.players.map((player) => ({
+        ...player, handicapIndexValue: '99',
+      })) })).toEqual(publishedCourseHandicaps(round));
+    },
+  );
   it.each([
     [18, '0', 0], [18, '10.5', 11], [18, '+2.5', -2],
     [9, '5.5', 3], [9, '+5.5', -3],

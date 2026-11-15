@@ -5,7 +5,10 @@ import { renderComponentFixture } from './render-fixture';
 import { stablefordPoints } from '../../src/domain/stableford';
 
 const id = (number: number) => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
-const players = Array.from({ length: 8 }, (_, index) => ({ playerId: id(index + 1), displayName: `Fictional golfer ${String(index + 1)}` }));
+const players = Array.from({ length: 8 }, (_, index) => ({
+  playerId: id(index + 1), displayName: `Fictional golfer ${String(index + 1)}`,
+  handicapIndexValue: index === 0 ? '10.5' : index === 1 ? '+2' : null,
+}));
 const workspace: EventWorkspace = {
   event: { id: id(50), name: 'Fictional Coastal Event', startDate: '2024-02-29', endDate: '2024-03-04', role: 'owner', status: 'active', etag: 'fictional-v1', createdAt: '2026-01-01' },
   location: 'Fictional County', roster: players, etag: 'fictional-v1',
@@ -24,7 +27,7 @@ const workspace: EventWorkspace = {
     teeProfile: {
       id: 901, name: 'Fictional Gold', category: 'Fictional category', holeCount: 9, totalYardage: 900, totalMeters: 823,
       totalPar: 36, strokeAllocation: true, shorter: false, eligibleSides: 'All',
-      ratings: [{ type: 'Total', course: 36, slope: 100, bogey: 45 }, { type: 'Front', course: 36, slope: 100, bogey: 45 }, { type: 'Back', course: 36, slope: 100, bogey: 45 }],
+      ratings: [{ type: 'Total', course: number === 1 ? 36 : 37, slope: 100, bogey: 45 }, { type: 'Front', course: 36, slope: 100, bogey: 45 }, { type: 'Back', course: 36, slope: 100, bogey: 45 }],
       holes: Array.from({ length: 9 }, (_, index) => ({ number: index + 1, sourceId: 400 + index, length: 100, par: 4, allocation: index + 1 })),
     },
     groups: [{ number: 1, playerIds: players.slice(0, 4).map((player) => player.playerId) }, { number: 2, playerIds: players.slice(4).map((player) => player.playerId) }],
@@ -78,6 +81,17 @@ for (const view of ['overview', 'rounds', 'group'] as const) {
       await expect(page.getByRole('heading', { name: 'Groups', exact: true })).toHaveCount(2);
       await expect(page.getByRole('heading', { name: 'Fictional team 1', exact: true })).toBeVisible();
       await expect(page.getByText('Individual game — no competition teams.', { exact: true })).toBeVisible();
+      const first = page.locator('.event-trip-round').filter({ has: page.getByRole('heading', { name: 'Fictional round 1', exact: true }) });
+      const second = page.locator('.event-trip-round').filter({ has: page.getByRole('heading', { name: 'Fictional round 2', exact: true }) });
+      await expect(first.getByLabel('Course handicap: 5', { exact: true })).toHaveCount(2);
+      await expect(first.getByLabel('Course handicap: +1', { exact: true })).toHaveCount(2);
+      await expect(second.getByLabel('Course handicap: 6', { exact: true })).toHaveText('CH 6');
+      await expect(first.getByText('HI 10.5', { exact: true })).toHaveCount(0);
+    }
+    if (view === 'group') {
+      const roster = page.getByRole('region', { name: 'Event roster', exact: true });
+      await expect(roster.getByLabel('Current Handicap Index: 10.5', { exact: true })).toHaveText('HI 10.5');
+      await expect(roster.getByLabel('Current Handicap Index: +2', { exact: true })).toHaveText('HI +2');
     }
     await expect(page.getByText(view === 'overview' ? '02/29/2024' : 'February 29, 2024', { exact: true })).toHaveAttribute('datetime', '2024-02-29');
     await expect(page.getByText('November 7, 2026', { exact: true })).toHaveAttribute('datetime', '2026-11-07');

@@ -183,7 +183,8 @@ score revisions and historical audits remain unchanged. Refresh an open view
 to see a rename; unconfirmed local drafts still keep their existing protection.
 
 Public event rosters show current linked **HI**, while round groups and competition
-teams show the **HI captured for that round**. **NH** means no index is connected;
+teams show **CH for that round and each golfer's tee**. **NH** means no index is
+connected;
 legacy projections without this display field show unavailable rather than NH.
 Observation sources, dates, histories and audit identities remain private.
 Score-entry names and Front/Back/Full scorecard names show server-derived **CH**
