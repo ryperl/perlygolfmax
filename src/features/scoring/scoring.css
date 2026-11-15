@@ -67,3 +67,7 @@
   .score-action-label { display: none; }
   .score-action-short-label { display: block; font-size: .75rem; line-height: 1.1; white-space: nowrap; }
 }
+@media (max-width: 360px) {
+  .score-toolbar { gap: 2px; }
+  .score-toolbar .score-action-short-label { font-size: .6875rem; }
+}

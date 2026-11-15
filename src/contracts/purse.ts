@@ -28,6 +28,9 @@ function pool(value: unknown): value is PursePool {
   if (!isRecord(value) || !isUuid(value.id) || typeof value.name !== 'string'
     || !value.name.trim() || value.name !== value.name.trim() || value.name.length > 100 || !isRecord(value.source)) return false;
   const source = value.source;
+  if (source.kind === 'kp') return keys(source, ['kind', 'roundId']) && isUuid(source.roundId)
+    && keys(value, ['id', 'name', 'source', 'awardUnit', 'amountMinor'])
+    && value.awardUnit === 'pot' && money(value.amountMinor);
   if (source.kind === 'manual') {
     return keys(source, ['kind']) && keys(value, ['id', 'name', 'source', 'awardUnit', 'amountMinor', 'recipientIds'])
       && value.awardUnit === 'pot' && money(value.amountMinor) && ids(value.recipientIds);

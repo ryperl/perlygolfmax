@@ -6,7 +6,7 @@ import { isRecord } from '../../../src/contracts/events.js';
 import { isGameWriteResult, isScoreChange, isScoreWriteResult } from '../../../src/contracts/scoring.js';
 import { stablefordPoints } from '../../../src/domain/stableford.js';
 import type { RoundGameDefinition, TeamGameDefinition } from '../../../src/domain/games.js';
-import { scoringFixture } from '../../test/scoring-fixtures.js';
+import { kpStoreFixture } from '../../test/kp-fixtures.js';
 import { identifier } from '../../test/catalog-fixtures.js';
 import { creator, event } from '../../test/fixtures.js';
 import { TableCourseCatalog } from '../catalog/courses.js';
@@ -32,7 +32,7 @@ function batchResponse(statuses: readonly { readonly status: number; readonly et
 
 describe('scoring real installed Table SDK loopback transport', () => {
   it('preserves reported pickups/replays/audits through conditional SDK batches and decodes missing rows and conditional failures', async () => {
-    const f = await scoringFixture();
+    const f = await kpStoreFixture();
     const rows = new Map<string, Record<string, unknown>>();
     for (const [key, row] of f.rows) {
       const { partitionKey, rowKey, etag: _etag, ...fields } = row;
@@ -215,6 +215,31 @@ describe('scoring real installed Table SDK loopback transport', () => {
       const gameReplay = await scores.saveGames(creator, event.id, f.roundId, [game, team], null, identifier(800));
       expect(gameReplay.change).toEqual(games.change);
       expect(gameReplay.round.games?.configuration.games).toEqual([editedGame, team]);
+      const kpEntry = { kind: 'measured', inches: 0, onGreen: true, measurementId: identifier(970) } as const;
+      const measured = await scores.write(creator, event.id, f.roundId, f.playerId, 1, {
+        kind: 'picked-up', kp: kpEntry,
+      }, finished.round.cards[0]?.etag ?? null, identifier(971));
+      expect(measured.change.after.kp).toEqual(kpEntry);
+      expect(batches.at(-1)).toContain(`"RowKey":"kp-measurement:${kpEntry.measurementId}"`);
+      const kpBase = measured.round.kp?.etag ?? null;
+      const closed = await scores.saveKp(creator, event.id, f.roundId, { ...f.selection, status: 'closed' }, kpBase, identifier(972));
+      expect(closed.round.kp?.status).toBe('closed');
+      expect(batches.at(-1)?.match(/if-match:/gi)).toHaveLength(3);
+      expect(batches.at(-1)).toContain(`"RowKey":"kp-change:${identifier(972)}"`);
+      expect(batches.at(-1)).toContain(`"RowKey":"round-kp:${f.roundId}"`);
+      const count = batches.length;
+      expect((await scores.saveKp(creator, event.id, f.roundId, { ...f.selection, status: 'closed' }, kpBase, identifier(972))).requestId).toBe(identifier(972));
+      expect(batches).toHaveLength(count);
+      await expect(scores.write(creator, event.id, f.roundId, f.playerId, 1, {
+        kind: 'picked-up', kp: null,
+      }, measured.round.cards[0]?.etag ?? null, identifier(973))).rejects.toMatchObject({ code: 'KP_ENTRIES_CLOSED' });
+      for (const kind of ['event', 'grant'] as const) {
+        race = kind;
+        await expect(scores.saveKp(creator, event.id, f.roundId, f.selection, closed.round.kp?.etag ?? null, identifier(kind === 'event' ? 974 : 975)))
+          .rejects.toMatchObject({ code: 'KP_CHANGED' });
+      }
+      expect(rows.has(`${event.id}|kp-change:${identifier(974)}`)).toBe(false);
+      expect(rows.has(`${event.id}|kp-change:${identifier(975)}`)).toBe(false);
       const current = await workspace.get(creator, event.id);
       const lockKey = `${event.id}|score-lock:${f.roundId}`;
       const storedLock = rows.get(lockKey);

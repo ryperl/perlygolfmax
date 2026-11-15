@@ -78,6 +78,10 @@ const catalogRoutes: readonly { readonly action: CatalogAction; readonly route: 
 for (const item of catalogRoutes) {
   app.http(`setup-${item.action}`, { route: item.route, methods: item.methods, authLevel: 'anonymous', handler: createCatalogHandler(resolveApi, item.action) });
 }
+app.http('roundKp', {
+  methods: ['PUT'], authLevel: 'anonymous', route: 'events/{id}/rounds/{roundId}/kp',
+  handler: createScoringHandler(resolveApi, 'round-kp'),
+});
 app.http('roundScores', {
   route: 'events/{id}/rounds/{roundId}/scores', methods: ['GET'], authLevel: 'anonymous',
   handler: createScoringHandler(resolveApi, 'scores'),

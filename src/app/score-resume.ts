@@ -16,7 +16,7 @@ export function isSavedScoreLocation(value: unknown): value is SavedScoreLocatio
     && 'roundId' in value && typeof value.roundId === 'string' && uuid.test(value.roundId)
     && 'groupNumber' in value && typeof value.groupNumber === 'number' && Number.isSafeInteger(value.groupNumber) && value.groupNumber > 0
     && 'holeNumber' in value && typeof value.holeNumber === 'number' && Number.isSafeInteger(value.holeNumber) && value.holeNumber >= 1 && value.holeNumber <= 18
-    && 'view' in value && (value.view === 'entry' || value.view === 'cards' || value.view === 'games' || value.view === 'leaderboard');
+    && 'view' in value && (value.view === 'entry' || value.view === 'cards' || value.view === 'games' || value.view === 'leaderboard' || value.view === 'kp');
 }
 
 export function loadScoreLocation(storage?: Storage): { readonly location: SavedScoreLocation | null; readonly error?: string } {

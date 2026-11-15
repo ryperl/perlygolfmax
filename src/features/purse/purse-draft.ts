@@ -29,12 +29,16 @@ export interface SourceChoice {
 }
 
 export function sourceKey(source: PursePool['source']): string {
-  return source.kind === 'round-game' ? `${source.roundId}:${source.gameId}` : source.kind;
+  return source.kind === 'round-game' ? `${source.roundId}:${source.gameId}` : source.kind === 'kp' ? `kp:${source.roundId}` : source.kind;
 }
 
 export function sourceChoices(value: EventPurseView): readonly SourceChoice[] {
   return [
     { key: 'manual', label: 'Manual side pot', source: { kind: 'manual' }, team: false },
+    ...value.roundScores.filter((round) => round.kpEnabled === true && round.kp).map((round) => ({
+      key: `kp:${round.roundId}`, label: `${round.roundName} · KP Competition`,
+      source: { kind: 'kp' as const, roundId: round.roundId }, team: false,
+    })),
     ...(value.workspace.overallCompetition
       ? [{ key: 'overall', label: 'Overall competition · individual awards', source: { kind: 'overall' as const }, team: false }] : []),
     ...value.workspace.rounds.flatMap((snapshot) =>
@@ -68,7 +72,8 @@ export function newPool(id: string): PoolDraft {
 
 export function selectSource(pool: PoolDraft, choice: SourceChoice): PoolDraft {
   return { ...pool, source: choice.source,
-    awardUnit: choice.source.kind === 'manual' ? 'pot' : choice.team ? 'per-team' : 'per-golfer' };
+    ...(choice.source.kind === 'kp' && pool.source.kind !== 'kp' ? { amount: '100.00' } : {}),
+    awardUnit: choice.source.kind === 'manual' || choice.source.kind === 'kp' ? 'pot' : choice.team ? 'per-team' : 'per-golfer' };
 }
 
 function placeNumber(text: string): number | null {
@@ -84,7 +89,9 @@ export function buildPurseDraft(draft: PurseDraft, eventId: string): PursePlan |
     eventId, currency: draft.currency,
     funding: draft.funding === 'fixed' ? { kind: 'fixed', budgetMinor: amount }
       : { kind: draft.funding, buyInMinor: amount },
-    pools: draft.pools.map((pool) => pool.source.kind === 'manual'
+    pools: draft.pools.map((pool) => pool.source.kind === 'kp'
+      ? { id: pool.id, name: pool.name.trim(), source: pool.source, awardUnit: pool.awardUnit, amountMinor: parseMoney(pool.amount) }
+      : pool.source.kind === 'manual'
       ? { id: pool.id, name: pool.name.trim(), source: pool.source, awardUnit: pool.awardUnit,
         amountMinor: parseMoney(pool.amount), recipientIds: pool.recipientIds }
       : { id: pool.id, name: pool.name.trim(), source: pool.source, awardUnit: pool.awardUnit, tiePolicy: pool.tiePolicy,

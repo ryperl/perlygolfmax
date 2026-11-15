@@ -362,7 +362,8 @@ four and competition teams exactly two/four; minimum saved event roster is one.
 Individual rounds support one, two or three golfers without placeholder players.
 Team game setup still requires complete teams covering every round golfer.
 Requests, storage properties, transactions and finite runtime resources still
-have safeguards. Large setup/game/purse writes use immutable owner-bound parts
+have safeguards. Large setup/game/purse/KP configuration writes use immutable
+owner-bound parts
 followed by conditional publication. Ordinary bodies remain 4 KiB; the part
 parser is 12 KiB, logical staged writes 4 MiB and private values 32 MiB.
 Oversized work fails explicitly, never as a partial active event.
@@ -418,8 +419,67 @@ decisions remain readable as unavailable for repair, not fabricated valid awards
 Projection, reserves, rounding remainders and overcommitment are explicit.
 
 All totals are individual winnings calculations, not collected/paid balances.
-There is no payment provider, transfer, banking data, finalization or hidden
-closest-to-pin measurement engine. Real financial/trip data stays out of source.
+There is no payment provider, transfer, banking data or ordinary round
+finalization. KP round pots use the separate explicit policy below.
+Real financial/trip data stays out of source.
+
+### KP competition lifecycle and planned awards
+
+`PUT /api/events/<event-id>/rounds/<round-id>/kp` is JWT/event-owner-only,
+independent of global catalog authority. There is deliberately no public or
+tester manager route. It uses `scores-write` budgets, UUID idempotency,
+`If-Match`/`If-None-Match`, and conditional event/owner/configuration publication
+with immutable `kp-change:` receipts. The 12 KiB game transport and existing
+owner-bound staged protocol handle larger configurations; ordinary score writes
+remain 4 KiB and the Functions host ceiling remains 12288 bytes. No infrastructure
+or environment flag is required. `kpEnabled: true` is the authoritative API
+capability; older API omission means unsupported.
+
+One version-1 configuration captures the saved round/default-tee identity,
+complete layout and entrant set. `kpRoundIds` on the event detects a missing
+configuration head. Changed context is visible but unavailable, never rebound
+to another course version, tee, hole or golfer. Configuration can be added after
+ordinary scoring starts without removing its setup/index-capture locks.
+The public round projection includes KP configuration, distances and legitimate
+planned winnings, never audit actors or protected index observations. Legacy
+tester score projections do not include KP purse amounts.
+
+Optional `HoleScore.kp` is either explicitly on-green integer inches with a
+single-use measurement UUID, No measurement, or explicit null to clear.
+Omission preserves saved KP for raw-only/legacy clients, just as Churchy extras
+are preserved. Whole feet/inches are converted exactly; inches must be 0–11,
+and arithmetic must remain within safe integer precision. Explicit zero means
+hole-in-one, not a blank default. Sparse group contenders are sufficient:
+absent/No measurement is unknown, not zero or missed green.
+
+All KP score edits, including afterward/distance-only edits, use existing
+conditional card/event/grant writes and immutable score audits. Measurement
+identities are atomically single-use (`kp-measurement:`), preventing restoration
+of an old tie proof after clearing. Existing public-any-group, approved-player
+bound-group and tester-event scopes remain unchanged. First persistence still
+locks/captures ordinary setup inputs. Entry/closure races conflict on the shared
+event revision. Closure rejects changed KP authoritatively while allowing
+unchanged/preserved KP with ordinary score or Churchy edits.
+
+Only the organizer closes/reopens KP. Closure does not finalize ordinary golf.
+Only closed KP can fully allocate its purse source. Its single canonical amount
+is the KP pool in the existing event purse plan; no amount is copied into KP
+configuration. The editor offers an unsaved 100.00 default in the plan currency,
+without adding pools or changing a budget automatically. Divide the pot equally
+per winning hole after excluding empty holes. All-empty remains reserved for
+review, never rolled over. Remainder cents prioritize longest winning saved
+default-tee par 3, then lower/harder stroke index. Unavailable or ambiguous
+required priorities block allocation. Personal tees and handicaps never decide KP.
+
+Closest-distance ties remain unresolved until the organizer selects a tied
+winner or splits among all tied closest golfers, explicitly selecting exactly
+the required number of extra-cent recipients. Decisions bind to the exact
+measured entrant set/measurement identities and hole amount. Distance or purse
+edits invalidate stale decisions; reads retain them for review without claiming
+final/fully awarded money. Reopen preserves measurements/raw scores/history;
+the UI clears award decisions for explicit review on the next closure.
+Archives remain owner-only/read-only. No payment, retention, deletion, rollover,
+score synchronization or live settings mutation is introduced.
 
 ### Scoring authority and persistence
 

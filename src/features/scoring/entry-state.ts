@@ -1,8 +1,11 @@
 import { parseScoreEntry, scoreEntryText } from '../../contracts/scoring';
 import type { HoleScore, RoundScores, ScoreChange, Scorecard } from '../../domain/scoring';
 import type { ChurchySpecials } from '../../domain/churchy';
+import type { KpEntry } from '../../domain/kp';
 
 export interface HoleDraft {
+  readonly kp?: KpEntry | null;
+  readonly rawEdited?: true;
   readonly churchy?: ChurchySpecials;
   readonly text: string;
   readonly baseEtag: string | null;
@@ -27,10 +30,12 @@ export function cardFor(round: RoundScores, playerId: string): Scorecard {
   return card;
 }
 
-export function editedDraft(text: string, card: Scorecard, previous?: HoleDraft): HoleDraft {
+export function editedDraft(text: string, card: Scorecard, previous?: HoleDraft, rawEdited = true): HoleDraft {
   return {
     text, baseEtag: previous ? previous.baseEtag : card.etag,
     ...(previous?.churchy ? { churchy: previous.churchy } : {}),
+    ...(previous?.kp !== undefined ? { kp: previous.kp } : {}),
+    ...(rawEdited || previous?.rawEdited ? { rawEdited: true } : {}),
     status: previous?.status === 'conflict' ? 'conflict' : 'draft',
     ...(previous?.conflictAt !== undefined ? { conflictAt: previous.conflictAt } : {}),
     ...(previous?.mustWrite || previous?.attempt?.sent ? { mustWrite: true } : {}),
@@ -42,6 +47,8 @@ export function conflictedDraft(score: HoleScore, card: Scorecard, refreshVersio
   return {
     text: previous?.text ?? scoreEntryText(score), baseEtag: previous ? previous.baseEtag : card.etag,
     ...(previous?.churchy ?? score.churchy ? { churchy: previous?.churchy ?? score.churchy } : {}),
+    ...(previous?.kp !== undefined ? { kp: previous.kp } : score.kp !== undefined ? { kp: score.kp } : {}),
+    ...(previous?.rawEdited ? { rawEdited: true } : {}),
     status: 'conflict', conflictAt: refreshVersion,
     ...(previous?.attempt ? { attempt: previous.attempt } : {}),
     ...(acknowledged ? { acknowledged } : previous?.acknowledged ? { acknowledged: previous.acknowledged } : {}),
@@ -57,7 +64,7 @@ export function scoreLabel(score: HoleScore): string {
   }
 }
 
-export function entryScore(text: string, churchy?: ChurchySpecials): HoleScore | null {
+export function entryScore(text: string, churchy?: ChurchySpecials, kp?: KpEntry | null): HoleScore | null {
   const score = parseScoreEntry(text);
-  return score && churchy ? { ...score, churchy } : score;
+  return score ? { ...score, ...(churchy ? { churchy } : {}), ...(kp !== undefined ? { kp } : {}) } : null;
 }

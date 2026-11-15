@@ -1,4 +1,4 @@
-export type ScoreView = 'entry' | 'cards' | 'games' | 'leaderboard';
+export type ScoreView = 'entry' | 'cards' | 'games' | 'leaderboard' | 'kp';
 
 export interface ScoreLocation {
   readonly groupNumber: number;

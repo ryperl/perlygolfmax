@@ -195,6 +195,23 @@
   individual members; pool occupied-place ties or explicit organizer resolution.
   Keep remainders unallocated, partial results projected, unavailable totals
   distinct from zero, and stale decisions readable for repair. No money transfers.
+- KP is one separate competition per saved round, using saved default-tee par 3
+  holes/lengths/stroke indexes, never personal tees or current catalogs. Whole
+  feet/inches require on-green confirmation; explicit zero is a hole-in-one.
+  Sparse contenders suffice; absent/No measurement is unknown, not zero or
+  missed green. Stage measured/clear/No measurement with existing conditional
+  score writes, preserve KP on raw-only clients, and acknowledge before advancing.
+  No browser persistence of KP drafts. Owner-only close/reopen does not finalize
+  ordinary golf; closed KP refuses changed entries while preserving raw scoring.
+  Tie choices bind to exact measured contenders/single-use identities and hole
+  amounts. Choose one tied winner or split all, explicitly selecting extra-cent
+  recipients. One canonical round pot is a genuine existing-budget purse source;
+  100.00 is an unsaved editor default, never automatically configured money.
+  Only after closure exclude empty holes and divide equally per winning hole,
+  with cents to longest winning default-tee hole then harder/lower stroke index.
+  Ambiguous required inputs block allocation; all-empty stays unawarded without
+  rollover. Unresolved/stale ties never claim fully allocated money. Preserve
+  existing public/legacy permissions, ordinary captures, Churchy and other purses.
 - Present golfer scores as hole-ordered scorecards, not audit records. Keep
   operation IDs, actor GUIDs, revisions and raw timestamps out of player
   entry/view screens; preserve backend audit and conditional-save safeguards.

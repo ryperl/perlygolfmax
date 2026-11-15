@@ -42,14 +42,15 @@ export function PurseResults({ value, plan, calculation, draft = false }: PurseR
       const result = calculation.pools.find((entry) => entry.poolId === pool.id);
       return <details key={pool.id}><summary>{pool.name} · {result?.status ?? 'unavailable'}</summary>
         <p>Source: {sourceChoices(value).find((choice) => choice.key === sourceKey(pool.source))?.label ?? 'Unavailable saved source'}.</p>
-        <p>{pool.source.kind === 'manual' ? 'Manual pot, equally split among selected golfers'
+        <p>{pool.source.kind === 'kp' ? 'KP pot, shared per winning hole after organizer closure; distance ties require review'
+          : pool.source.kind === 'manual' ? 'Manual pot, equally split among selected golfers'
           : pool.awardUnit === 'per-team' ? 'Each place is a team pot, split equally among its members'
             : 'Each place amount is per golfer, including each member when the entrant is a team'}.</p>
         {'prizes' in pool ? <>
           <ul>{pool.prizes.map((prize) => <li key={prize.place}>Place {prize.place}: {money(prize.amountMinor)}</li>)}</ul>
           <p>{pool.tiePolicy === 'pooled' ? 'Pooled occupied-place ties' : 'Organizer-resolved award ties; not a leaderboard tie-break'}.</p>
-        </> : <p>Total pot: {money(pool.amountMinor)}. Recipients: {pool.recipientIds.map((id) =>
-          value.workspace.roster.find((player) => player.playerId === id)?.displayName ?? 'Unavailable golfer').join(', ') || 'None selected'}.</p>}
+        </> : <p>Total pot: {money(pool.amountMinor)}. {'recipientIds' in pool && <>Recipients: {pool.recipientIds.map((id) =>
+          value.workspace.roster.find((player) => player.playerId === id)?.displayName ?? 'Unavailable golfer').join(', ') || 'None selected'}.</>}</p>}
         {result && <>
           <p>Scheduled: {money(result.scheduledMinor)} · Calculated: {money(result.allocatedMinor)} · Projected: {money(result.projectedMinor)}
             {' · '}Reserved: {money(result.reservedMinor)} · Unallocated: {money(result.unallocatedMinor)}</p>

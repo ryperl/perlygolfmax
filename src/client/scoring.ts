@@ -4,10 +4,16 @@ import { isRoundGameDefinitions } from '../contracts/games';
 import type { RoundGameDefinition } from '../domain/games';
 import { maximumGameConfigurationBytes, sameGameDefinitions } from '../domain/games';
 import type { GameWriteResult, HoleScore, RoundScores, ScoreHistoryPage, ScoreWriteResult } from '../domain/scoring';
-import { sameHoleScore } from '../domain/scoring';
+import { preserveScoreExtras, sameHoleScore } from '../domain/scoring';
+import type { KpSelection } from '../domain/kp';
+import { isKpSelection } from '../contracts/kp';
+import { isRecord } from '../contracts/events';
+import { sameJsonValue } from '../contracts/round-context';
 import { createPrivateRequest, readPrivateValue, writePrivateValue } from './private-request';
 
 export interface ScoresClient {
+  readonly saveKp?: (eventId: string, roundId: string, selection: KpSelection, etag: string | null,
+    requestId: string, signal: AbortSignal) => Promise<RoundScores>;
   readonly load: (eventId: string, roundId: string, signal: AbortSignal) => Promise<RoundScores>;
   readonly save: (eventId: string, roundId: string, playerId: string, holeNumber: number, score: HoleScore,
     etag: string | null, requestId: string, signal: AbortSignal) => Promise<ScoreWriteResult>;
@@ -25,6 +31,19 @@ export function createScoresClient(apiUrl: string, getToken: () => Promise<strin
     return `events/${encodeURIComponent(eventId)}/rounds/${encodeURIComponent(roundId)}`;
   }
   return {
+    async saveKp(eventId, roundId, selection, etag, requestId, signal) {
+      if (!isKpSelection(selection) || !isUuid(requestId)
+        || etag !== null && !isEventRevision(etag)) throw new Error('Invalid KP settings. Nothing was sent.');
+      const value = await writePrivateValue(gameRequest, `${path(eventId, roundId)}/kp`, signal, {
+        method: 'PUT', body: selection, requestId, ...(etag === null ? { createOnly: true } : { etag }),
+      }, maximumGameConfigurationBytes);
+      if (!isRecord(value) || !isRoundScores(value.round) || value.round.eventId !== eventId || value.round.roundId !== roundId
+        || value.requestId !== requestId || value.expectedEtag !== etag || !sameJsonValue(value.selection, selection)
+        || value.round.kpEnabled !== true || !value.round.kp || value.round.permissions?.role !== 'owner') {
+        throw new Error('KP outcome uncertain. Keep this request and refresh before retrying.');
+      }
+      return value.round;
+    },
     async load(eventId, roundId, signal) {
       const value = await readPrivateValue(request, `${path(eventId, roundId)}/scores`, signal);
       if (!isRoundScores(value) || value.permissions === undefined || value.eventId !== eventId || value.roundId !== roundId
@@ -41,8 +60,7 @@ export function createScoresClient(apiUrl: string, getToken: () => Promise<strin
       if (!isScoreWriteResult(value) || value.round.permissions === undefined || value.round.eventId !== eventId || value.round.roundId !== roundId
         || value.change.eventId !== eventId || value.change.roundId !== roundId || value.change.playerId !== playerId
         || value.change.holeNumber !== holeNumber || value.change.id !== requestId
-        || value.change.expectedEtag !== etag || !sameHoleScore(value.change.after, score.churchy === undefined && value.change.after.churchy
-          ? { ...score, churchy: value.change.after.churchy } : score)
+        || value.change.expectedEtag !== etag || !sameHoleScore(value.change.after, preserveScoreExtras(score, value.change.after))
         || !value.round.setupLocked || value.round.lastUpdatedAt === null
         || !value.round.cards.some((card) => card.playerId === playerId && card.etag !== null)) {
         throw new Error('Invalid save acknowledgement. The outcome is uncertain; retain this draft and request ID and refresh to review.');

@@ -34,9 +34,11 @@ test('owner switches dated rounds in Games without leaving unsaved edits or over
     await expect(page.getByRole('heading', { name: 'Games · Fictional opening round', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Enter scores', exact: true }).click();
     await expect(page.locator('.score-round-tools')).toHaveCount(0);
-    for (const name of ['Scorecards', 'Enter scores', 'Games', 'Leaderboard']) {
+    const primaryActions = ['Scorecards', 'Enter scores', 'KP Competition', 'Games', 'Leaderboard'];
+    for (const name of primaryActions) {
       await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
     }
+    await expect(page.getByRole('button', { name: 'KP Competition', exact: true })).toBeEnabled();
     await expect(picker).toBeVisible();
     await expect(picker).toBeEnabled();
     expect(await picker.evaluate((element) => element.closest('details'))).toBeNull();
@@ -54,10 +56,22 @@ test('owner switches dated rounds in Games without leaving unsaved edits or over
     for (const width of [390, 320]) {
       await page.setViewportSize({ width, height: 844 });
       await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
-      for (const view of ['entry', 'games'] as const) {
+      for (const view of ['entry', 'kp', 'games'] as const) {
+        if (view === 'kp') {
+          await page.getByRole('button', { name: 'KP Competition', exact: true }).click();
+          await expect(page.getByRole('region', { name: 'KP Competition', exact: true })).toBeVisible();
+        }
         if (view === 'games') await page.getByRole('button', { name: 'Games', exact: true }).click();
-        const actions = page.locator('.score-toolbar button');
-        await expect(actions).toHaveCount(view === 'entry' ? 4 : 5);
+        const toolbar = page.locator('.score-toolbar');
+        const actions = toolbar.getByRole('button');
+        const expectedActions = [...primaryActions, ...(view === 'entry' ? [] : ['Refresh saved round'])];
+        await expect(actions).toHaveCount(view === 'entry' ? 5 : 6);
+        for (const [index, name] of expectedActions.entries()) {
+          await expect(actions.nth(index)).toHaveAccessibleName(name);
+          await expect(actions.nth(index)).toBeVisible();
+        }
+        const toolbarBox = await toolbar.boundingBox();
+        if (!toolbarBox) throw new Error('Missing round toolbar.');
         const bounds = await Promise.all((await actions.all()).map((action) => action.boundingBox()));
         const first = bounds[0];
         if (!first) throw new Error('Missing round action.');
@@ -67,6 +81,8 @@ test('owner switches dated rounds in Games without leaving unsaved edits or over
           expect(box.width).toBeGreaterThanOrEqual(44);
           expect(box.height).toBeGreaterThanOrEqual(44);
           expect(box.height).toBeLessThanOrEqual(60);
+          expect(box.x).toBeGreaterThanOrEqual(toolbarBox.x);
+          expect(box.x + box.width).toBeLessThanOrEqual(toolbarBox.x + toolbarBox.width);
         }
         await expect(page.getByRole('button', { name: 'Scorecards', exact: true }).locator('.score-action-short-label')).toHaveText('Cards');
         await expect(page.getByRole('button', { name: 'Leaderboard', exact: true }).locator('.score-action-short-label')).toHaveText('Board');

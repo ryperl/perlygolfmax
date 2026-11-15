@@ -7,6 +7,7 @@ import type { HoleDraft } from './entry-state';
 import { planGroup, saveGroupEntries } from './save-group';
 import { deferred, memoryScores } from './scoring.test-support';
 import { churchyFixture } from '../../domain/churchy.test-support';
+import { fictionalKpRound } from '../kp/kp.test-support';
 
 const playerIds = fictionalRoundScores.cards.map((card) => card.playerId);
 function entries() {
@@ -25,6 +26,36 @@ function harness(initial = fictionalRoundScores) {
       plan: planGroup(latest, playerIds, 1, drafts), signal: new AbortController().signal, refreshVersion: 0, ...callbacks }) };
 }
 describe('serialized group save protocol', () => {
+  it('keeps only unacknowledged KP drafts after a partial group failure, preserving exact retry IDs and blank raw scores', async () => {
+    let round = fictionalKpRound();
+    const store = memoryScores(round);
+    const ids = round.cards.slice(0, 2).map((card) => card.playerId);
+    const drafts = new Map<string, HoleDraft>(ids.map((id, index) => [entryKey(id, 1), {
+      ...editedDraft('', cardFor(round, id), undefined, false),
+      kp: index === 0 ? { kind: 'measured', inches: 0, onGreen: true, measurementId: fictionalId(988) } : { kind: 'no-measurement' },
+    }]));
+    const normal = vi.mocked(store.client.save).getMockImplementation();
+    if (!normal) throw new Error('Missing fixture');
+    let failed = false;
+    vi.mocked(store.client.save).mockImplementation((...args) => {
+      if (args[2] === ids[1] && !failed) { failed = true; return Promise.reject(new Error('Fictional KP network failure')); }
+      return normal(...args);
+    });
+    const save = () => saveGroupEntries({ client: store.client, round, holeNumber: 1, plan: planGroup(round, ids, 1, drafts),
+      signal: new AbortController().signal, refreshVersion: 0,
+      onDraft: (key, value) => { if (value) drafts.set(key, value); else drafts.delete(key); },
+      onProjection: (value) => { round = value; } });
+    await expect(save()).rejects.toThrow('Fictional KP network failure');
+    expect(drafts.size).toBe(1);
+    await save();
+    const calls = vi.mocked(store.client.save).mock.calls;
+    expect(calls.map((call) => call[2])).toEqual([ids[0], ids[1], ids[1]]);
+    expect(calls[1]?.[6]).toBe(calls[2]?.[6]);
+    expect(calls.every((call) => call[4].kind === 'unplayed')).toBe(true);
+    expect(calls[0]?.[4].kp).toMatchObject({ kind: 'measured', inches: 0 });
+    expect(calls[2]?.[4].kp).toEqual({ kind: 'no-measurement' });
+    expect(drafts.size).toBe(0);
+  });
   it('retries only unacknowledged specials-only writes with the same metadata, request IDs and original card proofs', async () => {
     const f = churchyFixture();
     const initial = f.round();

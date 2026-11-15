@@ -10,7 +10,7 @@ import { calculateGameResults } from '../../../src/domain/stableford.js';
 import { isGameChange, isRoundGameDefinitions } from '../../../src/contracts/games.js';
 import { isEventRevision, isRecord, isUuid } from '../../../src/contracts/events.js';
 import { isHoleScore, isScorecard, isScoreChange } from '../../../src/contracts/scoring.js';
-import { sameHoleScore, sameScoreActor, scoreActor } from '../../../src/domain/scoring.js';
+import { preserveScoreExtras, sameHoleScore, sameScoreActor, scoreActor } from '../../../src/domain/scoring.js';
 import { canonical, decode, isConflict, optionalRow, page, revision } from '../catalog/entities.js';
 import { ApiError } from '../errors.js';
 import type { TableWorkspaceStore } from '../setup/store.js';
@@ -26,10 +26,19 @@ import type { EventAccess } from '../event-access.js';
 import { publishedCourseHandicaps, publishedPlayingHandicaps } from '../../../src/domain/playing-handicaps.js';
 import { activeTesterLink, testerLinkKey } from '../test-access/authority.js';
 import { sameChurchySpecials } from '../../../src/domain/churchy.js';
+import type { KpSelection, KpWriteResult } from '../../../src/domain/kp.js';
+import { calculateKp, calculateKpPayout, kpContext, sameKpEntry } from '../../../src/domain/kp.js';
+import { isKpSelection } from '../../../src/contracts/kp.js';
+import { configuredKpRounds, readKpPot } from './kp.js';
 
 function cardKey(roundId: string, playerId: string): string {
   return `score-card:${roundId}:${playerId}`;
 }
+function roundKpContext(round: RoundSnapshot): string {
+  return kpContext(round.teeProfile.holes, round.players.map((player) => player.playerId),
+    kpCaptureIdentity(round));
+}
+const kpCaptureIdentity = (round: RoundSnapshot) => `${round.id}:${round.courseId}:${round.courseVersionId}:${String(round.teeProfile.id)}`;
 
 type StoredCard = Omit<Scorecard, 'etag'>;
 
@@ -50,6 +59,85 @@ export class TableScoreStore {
   constructor(private readonly table: TableClient, private readonly workspace: TableWorkspaceStore,
     private readonly churchyEnabled: () => boolean = () => true) {}
 
+private async kpProjection(eventId: string, roundId: string, configured: unknown) {
+  const row = await optionalRow(this.table, eventId, `round-kp:${roundId}`);
+  if (Boolean(row) !== configuredKpRounds(configured).includes(roundId)) throw new ApiError(503, 'INVALID_STORED_KP');
+  return row ? { kp: { ...decode(await privateContent(this.table, eventId, `round-kp:${roundId}`, row.content), isKpSelection), etag: revision(row) } } : {};
+}
+
+async receiveKp(identity: AccountIdentity, eventId: string, roundId: string, body: unknown, expected: string | null, requestId: string) {
+  const state = await this.snapshot(identity, eventId, roundId, true);
+  if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
+  return receivePrivateWrite(this.table, identity, eventId, `round-kp:${roundId}`, expected, requestId, body);
+}
+
+async saveKp(identity: AccountIdentity, eventId: string, roundId: string, selection: KpSelection,
+  expectedEtag: string | null, requestId: string): Promise<KpWriteResult> {
+  if (!isUuid(requestId) || !isKpSelection(selection)
+    || expectedEtag !== null && !isEventRevision(expectedEtag)) throw new ApiError(400, 'INVALID_KP_SETUP');
+  const state = await this.snapshot(identity, eventId, roundId, true);
+  const grant = this.writer(state);
+  if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
+  const receiptKey = `kp-change:${requestId}`;
+  const actor = { tenantId: identity.tenantId, objectId: identity.objectId };
+  const request = canonical({ roundId, selection, expectedEtag, actor });
+  const replay = async () => {
+    const receipt = await optionalRow(this.table, eventId, receiptKey);
+    if (!receipt) return undefined;
+    const stored = decode(await privateContent(this.table, eventId, receiptKey, receipt.content), isRecord);
+    if (stored.request !== request) throw new ApiError(409, 'KP_REQUEST_CONFLICT');
+    return { round: await this.get(identity, eventId, roundId), requestId, expectedEtag, selection };
+  };
+  const previous = await replay();
+  if (previous) return previous;
+  const row = await optionalRow(this.table, eventId, `round-kp:${roundId}`);
+  const configuredRounds = configuredKpRounds(state.event.kpRoundIds);
+  if (Boolean(row) !== configuredRounds.includes(roundId)) throw new ApiError(503, 'INVALID_STORED_KP');
+  const before = row ? decode(await privateContent(this.table, eventId, `round-kp:${roundId}`, row.content), isKpSelection) : null;
+  if ((row ? revision(row) : null) !== expectedEtag) throw new ApiError(409, 'KP_CHANGED');
+  if (!state.round.teeProfile.holes.some((hole) => hole.par === 3)
+    || selection.context !== roundKpContext(state.round)) {
+    throw new ApiError(409, 'KP_CONTEXT_CHANGED');
+  }
+  // Never rebind measurements to a changed saved layout/roster.
+  if (before && before.context !== selection.context) throw new ApiError(409, 'KP_CONTEXT_CHANGED');
+  const cards = await this.cards(eventId, state.round, state.lock);
+  const result = calculateKp({ layout: state.round.teeProfile.holes, cards, kpCaptureIdentity: kpCaptureIdentity(state.round), kp: { ...selection, etag: 'validation' } });
+  const pot = await readKpPot(this.table, eventId, roundId, state.event.purseConfigured);
+  const payout = pot ? calculateKpPayout({ layout: state.round.teeProfile.holes, cards, kpCaptureIdentity: kpCaptureIdentity(state.round),
+    kp: { ...selection, status: 'closed', etag: 'validation' } }, pot.amountMinor) : null;
+  if (selection.decisions.some((decision) => {
+    const hole = result.holes.find((entry) => entry.number === decision.holeNumber);
+    return !hole || hole.closestPlayerIds.length < 2 || hole.proof !== decision.proof
+      || decision.holeAmountMinor !== payout?.holes.find((entry) => entry.number === hole.number)?.amountMinor
+      || decision.playerIds.some((id) => !hole.closestPlayerIds.includes(id))
+      || decision.kind === 'split' && decision.playerIds.length !== hole.closestPlayerIds.length
+      || decision.kind === 'winner' && decision.extraCentPlayerIds.length > 0
+      || decision.extraCentPlayerIds.some((id) => !decision.playerIds.includes(id))
+      || decision.extraCentPlayerIds.length !== decision.holeAmountMinor % decision.playerIds.length;
+  })) throw new ApiError(409, 'KP_DECISION_CHANGED');
+  const entity = { partitionKey: eventId, rowKey: `round-kp:${roundId}`,
+    content: await stagePrivateContent(this.table, eventId, `round-kp:${roundId}`, identity, canonical(selection)) };
+  const recordedAt = new Date().toISOString();
+  const receiptContent = await stagePrivateContent(this.table, eventId, receiptKey, identity,
+    canonical({ request, before, after: selection, recordedAt, recordedBy: actor, requestId }));
+  try {
+    await this.table.submitTransaction([
+      ['update', { partitionKey: eventId, rowKey: 'event', kpUpdatedAt: recordedAt,
+        kpRoundIds: canonical(configuredRounds.includes(roundId) ? configuredRounds : [...configuredRounds, roundId]) }, 'Merge', { etag: state.summary.etag }],
+      ['update', { partitionKey: eventId, rowKey: `member:${identity.objectId}`, ...actor, role: 'owner' }, 'Merge', { etag: grant.etag }],
+      row ? ['update', entity, 'Replace', { etag: revision(row) }] : ['create', entity],
+      ['create', { partitionKey: eventId, rowKey: receiptKey, content: receiptContent }],
+    ]);
+  } catch (error) {
+    const committed = await replay();
+    if (committed) return committed;
+    if (isConflict(error)) throw new ApiError(409, 'KP_CHANGED');
+    throw error;
+  }
+  return { round: await this.get(identity, eventId, roundId), requestId, expectedEtag, selection };
+}
+
   private async access(identity: ScoreActor, eventId: string, ownerOnly = false) {
     if (!isUuid(eventId)) throw new ApiError(400, 'INVALID_REQUEST_ID');
     const access = await readEventAccess(this.table, identity, eventId);
@@ -65,6 +153,7 @@ export class TableScoreStore {
     const round = workspace.rounds.find((entry) => entry.id === roundId);
     if (!round) throw new ApiError(404, 'ROUND_NOT_FOUND');
     if (access.gameRoundIds.some((id) => !workspace.rounds.some((entry) => entry.id === id))) throw new ApiError(503, 'INVALID_STORED_GAMES');
+    if (configuredKpRounds(access.event.kpRoundIds).some((id) => !workspace.rounds.some((entry) => entry.id === id))) throw new ApiError(503, 'INVALID_STORED_KP');
     const lock = await scoringLock(this.table, eventId, roundId);
     if ((round.scoringStarted === true) !== (lock !== undefined)) throw new ApiError(409, 'EVENT_CHANGED');
     const games = await readGameConfiguration(this.table, eventId, roundId, access.gameRoundIds);
@@ -134,7 +223,13 @@ export class TableScoreStore {
     const ownGroup = round.groups.find((group) => viewerPlayerId && group.playerIds.includes(viewerPlayerId));
     const active = workspace.event.status === 'active';
     const competition = workspace.overallCompetition;
+    const kpProjection = await this.kpProjection(workspace.event.id, round.id, access.event.kpRoundIds);
+    const kpPot = access.testerLink || !kpProjection.kp ? undefined : await readKpPot(this.table, workspace.event.id, round.id, access.event.purseConfigured);
     return {
+      kpEnabled: true,
+      kpCaptureIdentity: kpCaptureIdentity(capturedRound),
+      ...(access.testerLink && kpProjection.kp ? { kp: { ...kpProjection.kp, decisions: [] } } : kpProjection),
+      ...(kpPot ? { kpPot } : {}),
       churchyEnabled: this.churchyEnabled(),
       teeStrokeAllocation: round.teeProfile.strokeAllocation,
       eventId: workspace.event.id, eventName: workspace.event.name, eventStatus: workspace.event.status,
@@ -353,8 +448,7 @@ export class TableScoreStore {
     if (!change) return undefined;
     if (change.roundId !== roundId || change.playerId !== playerId || change.holeNumber !== holeNumber
       || change.expectedEtag !== expectedEtag || !sameScoreActor(change.recordedBy, identity)
-      || !sameHoleScore(change.after, score.churchy === undefined && change.after.churchy
-        ? { ...score, churchy: change.after.churchy } : score)) {
+      || !sameHoleScore(change.after, preserveScoreExtras(score, change.after))) {
       throw new ApiError(409, 'SCORE_REQUEST_CONFLICT');
     }
     const result = await this.acknowledgement(identity, change);
@@ -380,8 +474,15 @@ export class TableScoreStore {
     const before = card.holes.find((hole) => hole.number === holeNumber);
     if (!before) throw new ApiError(503, 'INVALID_STORED_SCORECARD');
     // Legacy/raw-only clients never erase hidden specials.
-    const savedScore: HoleScore = score.churchy === undefined && before.score.churchy
-      ? { ...score, churchy: before.score.churchy } : score;
+    const savedScore = preserveScoreExtras(score, before.score);
+    if (!sameKpEntry(savedScore.kp, before.score.kp)) {
+      const { kp } = await this.kpProjection(eventId, roundId, state.event.kpRoundIds);
+      if (!kp || kp.status !== 'open') throw new ApiError(409, 'KP_ENTRIES_CLOSED');
+      if (kp.context !== roundKpContext(state.round)
+        || !state.round.teeProfile.holes.some((hole) => hole.number === holeNumber && hole.par === 3)) {
+        throw new ApiError(409, 'KP_CONTEXT_CHANGED');
+      }
+    }
     if (!sameChurchySpecials(savedScore.churchy, before.score.churchy)) {
       if (!this.churchyEnabled()) throw new ApiError(403, 'CHURCHY_DISABLED');
       const extras = savedScore.churchy;
@@ -411,6 +512,12 @@ export class TableScoreStore {
         partitionKey: eventId, rowKey: `score-change:${requestId}`, kind: 'score-change', roundId, playerId, content: canonical(change),
       }],
     ];
+    if (!sameKpEntry(savedScore.kp, before.score.kp) && savedScore.kp?.kind === 'measured') {
+      // A measurement identity is single-use, even after clearing/restoring its old value.
+      // This prevents a caller from resurrecting an earlier tie proof.
+      actions.push(['create', { partitionKey: eventId, rowKey: `kp-measurement:${savedScore.kp.measurementId}`,
+        roundId, playerId, holeNumber, requestId }]);
+    }
     // Public authority is the active event itself, already conditionally updated above.
     // Account and tester writes still check their actual independent grant in this transaction.
     if (!('kind' in identity) || identity.kind === 'tester-link') {

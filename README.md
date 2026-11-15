@@ -481,6 +481,47 @@ binding before converting that game to Ball Drop or Skins. Legacy Stableford
 definitions/results remain readable without migration and retain their existing
 points tables and allowances.
 
+### KP Competition
+
+Open a saved round's **KP** tab. Its organizer can configure one KP competition,
+including on an already-scored round, without unlocking ordinary setup inputs.
+Eligible holes and monetary cent priorities come only from the saved **default**
+tee's par 3 layout, even when golfers have personal tees. No par 3 means unavailable.
+KP is separate from game points, handicaps and overall standings.
+
+On eligible holes, **KP** beside a golfer stages whole feet/inches (inches 0–11)
+and requires explicit confirmation that the ball finished on the green. Explicit
+0 ft 0 in is a hole-in-one; blanks never imply zero. Only the group's closest
+contender needs a measurement. Other golfers may remain blank or use
+**No measurement**, which does not mean missed green. Multiple contenders are
+retained and compared round-wide. Entries can also be edited afterward in KP
+review. Clear, measured and No measurement edits use the same conditional,
+audited score write as strokes/Churchy, including distance-only edits. Save must
+be acknowledged before advancing; drafts are online-only and never persisted
+in browser storage. Discard clears all local round drafts, not saved entries.
+
+The organizer explicitly **closes KP entries** to establish final contenders,
+and can reopen for corrections. This does not finalize, lock or unlock ordinary
+golf scoring. Public/legacy score writers cannot configure, close or resolve ties.
+Closed KP rejects changed distances, including stale clients; raw-only score
+edits preserve KP. Archived views remain owner-only and read-only.
+
+In the event purse editor, add a **KP Competition** source for the round.
+Its unsaved default is **100.00 in the plan currency**, one pot shared with the
+event budget, never extra money per player/hole or automatically added settings.
+While entries are open, the pot stays reserved. After closure, divide the entire
+pot equally among holes with qualifying measured contenders. A golfer winning
+two holes receives two shares. Empty holes are excluded; an all-empty day stays
+fully unawarded for organizer review, with no rollover.
+
+Remainder cents go to the longest **winning** default-tee hole first, then the
+harder stroke index (lower is harder). Missing/ambiguous required inputs block
+final allocation. Exact closest-distance ties require the organizer to select
+one tied golfer or split among all tied golfers. Split remainder cents require
+explicit recipient selections. Decisions bind to current measurements and hole
+amounts; edits invalidate stale awards. Unresolved ties cannot claim fully
+allocated money. These are planned winnings, never payments or transfers.
+
 ### Churchy Game (experimental)
 
 Churchy is a separate version-1 game, enabled by the new API by default.
@@ -692,7 +733,8 @@ setup requests preserve existing choices, not silently reset them.
 
 Open **Purse and winnings** from the event overview or setup. Configure planned
 fixed funding or a buy-in multiplied by the current roster, choose the event
-currency, and add round/game place awards, overall place awards or manual
+currency, and add round/game place awards, overall place awards, KP round pots
+or manual
 side-pot recipients. Supported currencies are USD, CAD, EUR, GBP and AUD with
 two decimal places and no currency conversion.
 
@@ -712,8 +754,9 @@ requires explicit conflict review. Configuration saves are conditional,
 idempotent and audited; archived owner views are read-only.
 
 Budgets are planned, not collected. Calculated awards are not payments,
-transfers or round finalization. Closest-to-pin measurements, larger competition
-sides, payment processing and participant access are not implemented.
+transfers or round finalization. Larger competition sides and payment processing
+are not implemented. KP has its separate explicit cent-allocation policy above;
+existing place/manual pools retain their unallocated-remainder behavior.
 
 A later UI migration is planned to **Fluent UI v9 and Griffel**, using
 component-owned classes and named slots instead of generic tag selectors or

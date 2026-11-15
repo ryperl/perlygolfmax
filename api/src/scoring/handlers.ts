@@ -10,6 +10,7 @@ import type { VerifyIdentity } from '../identity.js';
 import type { RequestLimiter } from '../limits.js';
 import type { TableScoreStore } from './store.js';
 import { privateReadResponse } from '../private-transport.js';
+import { isKpSelection } from '../../../src/contracts/kp.js';
 
 export interface ScoringApi {
   readonly verify: VerifyIdentity;
@@ -17,7 +18,7 @@ export interface ScoringApi {
   readonly scores: TableScoreStore;
 }
 
-export type ScoringAction = 'scores' | 'score-hole' | 'score-history' | 'round-games' | 'event-leaderboard';
+export type ScoringAction = 'scores' | 'score-hole' | 'score-history' | 'round-games' | 'round-kp' | 'event-leaderboard';
 
 function uuid(value: unknown): string {
   if (!isUuid(value)) throw new ApiError(400, 'INVALID_REQUEST_ID');
@@ -37,7 +38,7 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
     try {
       const api = resolveApi();
       const identity = await api.verify(request.headers.get('authorization'));
-      const write = action === 'score-hole' || action === 'round-games';
+      const write = action === 'score-hole' || action === 'round-games' || action === 'round-kp';
       await api.limiter.check(identity, write ? 'scores-write' : 'scores-read');
       if (request.method !== (write ? 'PUT' : 'GET')) return response(405, { code: 'METHOD_NOT_ALLOWED' });
       const eventId = uuid(request.params.id);
@@ -46,6 +47,18 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
       }
       const roundId = uuid(request.params.roundId);
       if (action === 'scores') return response(200, privateReadResponse(request, await api.scores.get(identity, eventId, roundId)));
+      if (action === 'round-kp') {
+        const requestId = uuid(request.headers.get('Idempotency-Key'));
+        const expectedEtag = precondition(request, 'KP_REVISION_REQUIRED');
+        let body = await readJson(request, maximumGameConfigurationBytes);
+        if (isRecord(body) && (Object.hasOwn(body, 'privateUpload') || Object.hasOwn(body, 'privateCommit'))) {
+          const received = await api.scores.receiveKp(identity, eventId, roundId, body, expectedEtag, requestId);
+          if (received.kind === 'part') return response(200, { privateStaged: { id: received.id, index: received.index } });
+          body = received.value;
+        }
+        if (!isKpSelection(body)) throw new ApiError(400, 'INVALID_KP_SETUP');
+        return response(200, await api.scores.saveKp(identity, eventId, roundId, body, expectedEtag, requestId));
+      }
       if (action === 'round-games') {
         const requestId = uuid(request.headers.get('Idempotency-Key'));
         const expectedEtag = precondition(request, 'GAME_REVISION_REQUIRED');

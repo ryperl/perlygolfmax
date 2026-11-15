@@ -6,12 +6,15 @@ import type { GameChange, GameUnavailableReason, RoundGamesView } from './games.
 import type { PlayerTeeProfile } from './tees.js';
 import type { ChurchySpecials } from './churchy.js';
 import { sameChurchySpecials } from './churchy.js';
+import type { KpConfiguration, KpEntry } from './kp.js';
+import { sameKpEntry } from './kp.js';
+import type { PurseCurrency } from './purse.js';
 
 export type HoleScore = (
   | { readonly kind: 'unplayed' }
   | { readonly kind: 'strokes'; readonly strokes: number }
   | { readonly kind: 'picked-up'; readonly reportedStrokes?: number }
-  | { readonly kind: 'did-not-finish' }) & { readonly churchy?: ChurchySpecials };
+  | { readonly kind: 'did-not-finish' }) & { readonly churchy?: ChurchySpecials; readonly kp?: KpEntry | null };
 
 export interface ScoredHole {
   readonly number: number;
@@ -49,6 +52,10 @@ export interface PlayerCourseHandicap {
 }
 
 export interface RoundScores {
+  readonly kpEnabled?: boolean;
+  readonly kpCaptureIdentity?: string;
+  readonly kp?: KpConfiguration;
+  readonly kpPot?: { readonly amountMinor: number; readonly currency: PurseCurrency };
   readonly churchyEnabled?: boolean;
   readonly teeStrokeAllocation?: boolean;
   readonly eventId: string;
@@ -121,8 +128,17 @@ export const maximumExactHoleStrokes = Math.floor(Number.MAX_SAFE_INTEGER / 18);
 export function sameHoleScore(left: HoleScore, right: HoleScore): boolean {
   return left.kind === right.kind
     && sameChurchySpecials(left.churchy, right.churchy)
+    && sameKpEntry(left.kp, right.kp)
     && (left.kind !== 'strokes' || right.kind === 'strokes' && left.strokes === right.strokes)
     && (left.kind !== 'picked-up' || right.kind === 'picked-up' && left.reportedStrokes === right.reportedStrokes);
+}
+
+/** Omission by older clients preserves independently saved extras; explicit KP null clears. */
+export function preserveScoreExtras(score: HoleScore, saved: HoleScore): HoleScore {
+  return { ...score,
+    ...(score.churchy === undefined && saved.churchy ? { churchy: saved.churchy } : {}),
+    ...(score.kp === undefined && saved.kp !== undefined ? { kp: saved.kp } : {}),
+  };
 }
 
 export function sameScoreActor(left: ScoreActor, right: ScoreActor): boolean {

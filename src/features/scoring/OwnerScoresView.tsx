@@ -21,6 +21,9 @@ import type { HoleDraft } from './entry-state';
 import { planGroup, saveGroupEntries } from './save-group';
 import './scoring.css';
 import type { ChurchySpecials } from '../../domain/churchy';
+import type { KpEntry, KpSelection } from '../../domain/kp';
+import { calculateKp } from '../../domain/kp';
+import { KpPanel } from '../kp';
 import { scoreEntryText } from '../../contracts/scoring';
 
 export interface OwnerScoresViewProps {
@@ -55,17 +58,18 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
   const groupHoles = useRef(new Map<number, number>());
   useLayoutEffect(() => { locationHandler.current = onLocationChange; }, [onLocationChange]);
   const [gamesDirty, setGamesDirty] = useState(false);
+  const [kpDirty, setKpDirty] = useState(false);
   const [notice, setNotice] = useState<{ readonly kind: 'attention'; readonly message: string } | { readonly kind: 'saved' } | null>(null);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const saving = useRef(false);
   const alive = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const { round, busy, error, stale, run, refresh, accept, pauseForEdit, currentRound } = useOwnerScores(
-    client, eventId, roundId, drafts.size > 0 || gamesDirty, onSessionExpired,
+    client, eventId, roundId, drafts.size > 0 || gamesDirty || kpDirty, onSessionExpired,
   );
   useLayoutEffect(() => {
-    onNavigationBlockedChange?.(busy || drafts.size > 0 || gamesDirty);
-  }, [busy, drafts.size, gamesDirty, onNavigationBlockedChange]);
+    onNavigationBlockedChange?.(busy || drafts.size > 0 || gamesDirty || kpDirty);
+  }, [busy, drafts.size, gamesDirty, kpDirty, onNavigationBlockedChange]);
   useEffect(() => () => { onNavigationBlockedChange?.(false); }, [onNavigationBlockedChange]);
   const gameDirtyChanged = useCallback((dirty: boolean) => {
     if (dirty) pauseForEdit();
@@ -106,6 +110,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     draftAccess.current = null;
     setDrafts(new Map());
     setGamesDirty(false);
+    setKpDirty(false);
     setNotice(null);
   }, [round]);
 
@@ -134,16 +139,43 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     const previous = currentDrafts.current.get(key);
     if (currentDrafts.current.size === 0) draftAccess.current = scoreAccessKey(round);
     pauseForEdit();
-    update(key, { ...editedDraft(previous?.text ?? scoreEntryText(savedHole(card, hole.number)), card, previous), churchy });
+    update(key, { ...editedDraft(previous?.text ?? scoreEntryText(savedHole(card, hole.number)), card, previous, false), churchy });
     setNotice(null);
+  }
+  function editKp(playerId: string, kp: KpEntry | null) {
+    if (!round || !hole || round.kpEnabled !== true || round.kp?.status !== 'open'
+      || busy || saving.current || !canEditGroup || !writeIds.includes(playerId)) return;
+    const card = cardFor(round, playerId);
+    const key = entryKey(playerId, hole.number);
+    const previous = currentDrafts.current.get(key);
+    if (currentDrafts.current.size === 0) draftAccess.current = scoreAccessKey(round);
+    pauseForEdit();
+    update(key, { ...editedDraft(previous?.text ?? scoreEntryText(savedHole(card, hole.number)), card, previous, false), kp });
+    setNotice(null);
+  }
+  async function saveKpSettings(selection: KpSelection, etag: string | null, requestId: string) {
+    if (!client.saveKp || !round || drafts.size > 0) throw new Error('Save or discard round drafts before changing KP settings.');
+    const result = await run(async (signal) => {
+      if (!client.saveKp) throw new Error('KP management unavailable.');
+      const current = currentRound();
+      if (!current || current.permissions?.role !== 'owner' || current.eventStatus !== 'active') throw new Error('KP organizer permission required.');
+      const value = await client.saveKp(eventId, roundId, selection, etag, requestId, signal);
+      signal.throwIfAborted();
+      accept(value);
+      return value;
+    });
+    if (!result) throw new Error('Wait for the active operation before retrying KP settings.');
   }
   function review(playerId: string) {
     if (!round || !hole || busy || !canEditGroup || !writeIds.includes(playerId)) return;
     const key = entryKey(playerId, hole.number);
     const local = currentDrafts.current.get(key);
     if (!local || local.status !== 'conflict' || local.conflictAt === undefined || refreshVersion <= local.conflictAt) return;
-    update(key, { text: local.text, baseEtag: cardFor(round, playerId).etag, status: 'draft', mustWrite: true,
-      ...(local.churchy ? { churchy: local.churchy } : {}) });
+    const currentCard = cardFor(round, playerId);
+    update(key, { text: local.kp !== undefined && !local.rawEdited ? scoreEntryText(savedHole(currentCard, hole.number)) : local.text,
+      baseEtag: currentCard.etag, status: 'draft', mustWrite: true,
+      ...(local.rawEdited ? { rawEdited: true } : {}),
+      ...(local.churchy ? { churchy: local.churchy } : {}), ...(local.kp !== undefined ? { kp: local.kp } : {}) });
     setNotice(null);
   }
   async function refreshSavedRound(): Promise<RoundScores | null> {
@@ -151,7 +183,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     if (!value) return null;
     for (const [key, local] of currentDrafts.current) {
       const playerId = key.slice(0, key.lastIndexOf(':'));
-      const score = entryScore(local.text, local.churchy);
+      const score = entryScore(local.text, local.churchy, local.kp);
       const card = cardFor(value, playerId);
       if (score && local.status !== 'conflict' && !local.attempt?.sent && card.etag !== local.baseEtag) {
         update(key, conflictedDraft(score, card, refreshVersion, local));
@@ -184,7 +216,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
       for (const playerId of plan.conflicts) {
         const key = entryKey(playerId, hole.number);
         const local = currentDrafts.current.get(key);
-        const score = local && entryScore(local.text, local.churchy);
+        const score = local && entryScore(local.text, local.churchy, local.kp);
         if (local && score && local.status !== 'conflict') update(key, conflictedDraft(score, cardFor(round, playerId), refreshVersion, local));
       }
       setNotice({ kind: 'attention', message: 'Nothing sent. Refresh saved round and review each conflict before saving this group.' });
@@ -196,6 +228,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     const next = following?.number === groupStartingHole(group, round.layout) ? undefined : following;
     function complete(writes: number) {
       setNotice(writes > 0 ? { kind: 'saved' } : null);
+      if (screen === 'kp') return;
       if (next) { setHoleNumber(next.number); setFocusHole(next.number); }
       else setScreen('cards');
     }
@@ -238,7 +271,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     setNotice(null);
   }
   function selectGroup(number: number) {
-    if (busy || [...currentDrafts.current.values()].some((draft) => draft.churchy !== undefined)) {
+    if (busy || [...currentDrafts.current.values()].some((draft) => draft.churchy !== undefined || draft.kp !== undefined)) {
       setNotice({ kind: 'attention', message: 'Save or discard all unsaved scores and dots before changing groups.' });
       return;
     }
@@ -259,6 +292,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
       }} aria-pressed={screen === 'entry'}>
         <ScoreActionIcon kind="entry" /><span className="score-action-label">Enter scores</span><span className="score-action-short-label" aria-hidden="true">Score</span>
       </button>
+      <button aria-label="KP Competition" disabled={busy || gamesDirty} onClick={() => { setScreen('kp'); }} aria-pressed={screen === 'kp'}>KP</button>
       <button aria-label="Games" disabled={busy} onClick={() => { setScreen('games'); }} aria-pressed={screen === 'games'}>
         <ScoreActionIcon kind="games" /><span className="score-action-label">Games</span><span className="score-action-short-label" aria-hidden="true">Games</span>
       </button>
@@ -315,6 +349,9 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
       {screen === 'entry' && !canEditGroup && writeIds.length > 0 && !accessChanged && <p>This playing group is read-only. Select your assigned playing group to enter scores.</p>}
       {round.eventStatus === 'archived' && <p role="status">Archived event: owner read-only. Drafts cannot be saved.</p>}
       {screen === 'entry' && group && hole && <GroupHoleEntry groups={round.groups} groupNumber={group.number} layout={round.layout} hole={hole}
+        kpEligible={round.kpEnabled === true && calculateKp(round).status !== 'unavailable' && hole.par === 3}
+        kpClosed={round.kp?.status === 'closed'}
+        onKpEdit={editKp}
         churchy={round.churchyEnabled === true ? round.games?.configuration.games.find((game) =>
           game.kind === 'churchy' && game.groupNumber === group.number && group.playerIds.length === 4
           && game.playerIds.every((id) => group.playerIds.includes(id))) : undefined}
@@ -344,7 +381,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
         feedbackState={feedbackState}
         onGroupChange={selectGroup}
         onHoleChange={(number) => {
-          if ([...currentDrafts.current.values()].some((draft) => draft.churchy !== undefined)) setNotice({ kind: 'attention', message: 'Save or discard all unsaved scores and dots before changing holes.' });
+          if ([...currentDrafts.current.values()].some((draft) => draft.churchy !== undefined || draft.kp !== undefined)) setNotice({ kind: 'attention', message: 'Save or discard all unsaved scores, dots and KP before changing holes.' });
           else { setHoleNumber(number); setNotice(null); }
         }} onEdit={edit} onReview={review}
         onDiscard={(playerId) => { update(entryKey(playerId, hole.number), null); }}
@@ -355,6 +392,16 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
         <SavedScorecards round={round} groupNumber={group.number} busy={busy}
           onGroupChange={selectGroup} onEnterScores={() => { setScreen('entry'); }} />
       </div>}
+      {group && hole && <div hidden={screen !== 'kp'}><KpPanel round={round} busy={busy} dirty={drafts.size > 0} groupNumber={group.number} holeNumber={hole.number}
+        onGroup={selectGroup} onHole={(number) => { if (!busy && drafts.size === 0) setHoleNumber(number); }}
+        onEdit={editKp} onSave={() => { void save(); }} onDiscard={discardAll} onManage={saveKpSettings}
+        draftFor={(playerId) => {
+          const draft = drafts.get(entryKey(playerId, hole.number));
+          const savedValue = savedHole(cardFor(round, playerId), hole.number).kp;
+          return { value: draft?.kp !== undefined ? draft.kp : savedValue, savedValue, dirty: draft?.kp !== undefined,
+            conflict: draft?.status === 'conflict', canReview: draft?.status === 'conflict' && draft.conflictAt !== undefined && refreshVersion > draft.conflictAt };
+        }} onReview={review} onUseSaved={(playerId) => { if (!busy) update(entryKey(playerId, hole.number), null); }}
+        onPendingChange={setKpDirty} /></div>}
       <div hidden={screen !== 'games'}>
         <RoundGamesPanel round={round} busy={busy} onDirtyChange={gameDirtyChanged}
           onSave={saveGameSettings} onRefresh={refreshSavedRound} />

@@ -7,6 +7,7 @@ import type { PurseTieResolution } from '../../domain/purse';
 import { purseTestId } from '../../domain/purse.test-support';
 import { buildPurseDraft, draftFromPlan, newPool } from './purse-draft';
 import { PurseSettings } from './PurseSettings';
+import { kpContext } from '../../domain/kp';
 
 function Fixture({ value = fictionalPurse(40), disabled = false, manual = true }: {
   readonly value?: EventPurseView; readonly disabled?: boolean; readonly manual?: boolean;
@@ -23,6 +24,24 @@ function Fixture({ value = fictionalPurse(40), disabled = false, manual = true }
 }
 
 describe('PurseSettings', () => {
+  it('offers KP as one round pot with unsaved 100.00 default without changing existing pools or budget', () => {
+    const original = fictionalPurse(4);
+    const roundScores = original.roundScores.map((round) => ({ ...round, kpEnabled: true,
+      kp: { version: 1 as const, context: kpContext(round.layout, round.cards.map((card) => card.playerId)),
+        status: 'open' as const, decisions: [], etag: 'kp-current' } }));
+    render(<Fixture manual={false} value={{ ...original, roundScores }} />);
+    const before = screen.getByLabelText('Planned budget amount').getAttribute('value');
+    fireEvent.click(screen.getByRole('button', { name: 'Add award pool' }));
+    const source = screen.getByLabelText('Pool 2 source');
+    const option = within(source).getByRole('option', { name: /KP Competition/ });
+    if (!(option instanceof HTMLOptionElement)) throw new Error('Missing KP source');
+    fireEvent.change(source, { target: { value: option.value } });
+    expect(screen.getByLabelText('Pool 2 total pot amount')).toHaveValue('100.00');
+    expect(screen.getByLabelText('Planned budget amount')).toHaveValue(before);
+    expect(screen.getByLabelText('Pool 1 source')).not.toHaveValue(option.value);
+    expect(screen.queryByLabelText('Pool 2 tie policy')).toBeNull();
+    expect(screen.queryByLabelText('Pool 2 prize 1 amount')).toBeNull();
+  });
   it('pages and searches forty explicit recipients without dropping hidden selected values', () => {
     render(<Fixture />);
     fireEvent.click(screen.getByRole('checkbox', { name: 'Fictional golfer 1' }));

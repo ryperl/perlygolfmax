@@ -15,6 +15,8 @@ import type { RoundGameDefinition } from '../../domain/games';
 import type { ChurchySpecials } from '../../domain/churchy';
 import { ChurchyDots } from '../churchy';
 import { CourseHandicap } from './CourseHandicap';
+import { KpEntryButton } from '../kp';
+import type { KpEntry } from '../../domain/kp';
 
 // Allow a pause between digits (including 10/12) before moving to another score.
 const scoreTypingPauseMs = 850;
@@ -32,6 +34,9 @@ export interface GroupHoleEntryRow {
   readonly teeLabel?: string;
 }
 export interface GroupHoleEntryProps {
+  readonly kpEligible?: boolean;
+  readonly kpClosed?: boolean;
+  readonly onKpEdit?: (playerId: string, value: KpEntry | null) => void;
   readonly churchy?: RoundGameDefinition | undefined;
   readonly gameEtag?: string | null;
   readonly onDotsEdit?: (playerId: string, value: ChurchySpecials) => void;
@@ -56,7 +61,8 @@ export interface GroupHoleEntryProps {
 }
 
 export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, readOnly, unsavedCount, focusHole, feedbackState,
-  onGroupChange, onHoleChange, onEdit, onReview, onDiscard, onDiscardAll, onSave, onRefresh, churchy, gameEtag, onDotsEdit }: GroupHoleEntryProps) {
+  onGroupChange, onHoleChange, onEdit, onReview, onDiscard, onDiscardAll, onSave, onRefresh, churchy, gameEtag, onDotsEdit,
+  kpEligible, kpClosed, onKpEdit }: GroupHoleEntryProps) {
   const previous = adjacentHole(layout, hole.number, -1);
   const next = adjacentHole(layout, hole.number, 1);
   const last = next?.number === groupStartingHole(groups.find((group) => group.number === groupNumber), layout);
@@ -191,6 +197,9 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
               onEdit(row.playerId, pickedUp ? numeric === undefined ? '' : String(numeric) : numeric === undefined ? 'X' : `X${String(numeric)}`);
             }}>X</button>
           </div>
+          {kpEligible && onKpEdit && <KpEntryButton name={row.displayName} disabled={disabled || kpClosed === true}
+            value={row.draft?.kp !== undefined ? row.draft.kp : row.saved.kp} draft={row.draft?.kp !== undefined}
+            onOpen={cancelMovement} onChange={(value) => { cancelMovement(); onKpEdit(row.playerId, value); }} />}
           {churchy?.kind === 'churchy' && churchy.playerIds.includes(row.playerId) && gameEtag && onDotsEdit && <>
             <p className="entry-tee">Churchy relative handicap: {row.churchyRelativeHandicap ?? 'unavailable'} · Relative strokes this hole: {
               row.churchyStrokesReceived ?? 'unavailable'}</p>

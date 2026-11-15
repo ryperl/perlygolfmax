@@ -29,7 +29,7 @@ export function planGroup(round: RoundScores, playerIds: readonly string[], hole
     const card = cardFor(round, playerId);
     const saved = savedHole(card, holeNumber);
     const draft = drafts.get(entryKey(playerId, holeNumber));
-    const score = draft ? entryScore(draft.text, draft.churchy ?? saved.churchy) : saved;
+    const score = draft ? entryScore(draft.text, draft.churchy ?? saved.churchy, draft.kp !== undefined ? draft.kp : saved.kp) : saved;
     if (!score) { invalid.push(playerId); continue; }
     targets.set(playerId, score);
     if (!draft) continue;
@@ -68,7 +68,8 @@ export async function saveGroupEntries({ client, round, holeNumber, plan, signal
       if (queued.some((write) => write.playerId === playerId) && !acknowledged.has(playerId)) continue;
       const card = cardFor(latest, playerId);
       if (!sameHoleScore(savedHole(card, holeNumber), intended)) {
-        onDraft(entryKey(playerId, holeNumber), conflictedDraft(intended, card, refreshVersion, undefined, acknowledged.get(playerId)));
+        onDraft(entryKey(playerId, holeNumber), conflictedDraft(intended, card, refreshVersion,
+          queued.find((write) => write.playerId === playerId)?.draft, acknowledged.get(playerId)));
         changed = true;
       }
     }

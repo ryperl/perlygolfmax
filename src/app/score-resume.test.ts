@@ -65,7 +65,7 @@ describe('navigation-only scoring recovery', () => {
     expect(clearScoreLocation(localStorage)).toMatch(/could not be cleared/);
   });
 
-  it.each(['entry', 'cards', 'games', 'leaderboard'] as const)('round-trips an explicit %s deep link without scores or credentials', (view) => {
+  it.each(['entry', 'cards', 'games', 'leaderboard', 'kp'] as const)('round-trips an explicit %s deep link without scores or credentials', (view) => {
     const value = { ...location, view };
     expect(scoreLocationHref(value)).toBe(`#events?event=${value.eventId}&round=${value.roundId}&group=52&hole=2&view=${view}`);
     expect(readScoreLocation(scoreLocationHref(value))).toEqual(value);

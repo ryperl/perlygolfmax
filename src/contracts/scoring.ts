@@ -17,6 +17,8 @@ import { calculateStrokeGameResults } from '../domain/stroke-games.js';
 import { sameJsonValue } from './round-context.js';
 import { isChurchySpecials } from './churchy.js';
 import { calculateChurchyResults } from '../domain/churchy.js';
+import { isKpConfiguration, isKpEntry } from './kp.js';
+import { purseCurrencies } from '../domain/purse.js';
 
 export function isScoreActor(value: unknown): value is ScoreActor {
   return isPublicScoreIdentity(value) || isEventTesterIdentity(value) || isRecord(value) && !Object.hasOwn(value, 'kind')
@@ -39,7 +41,8 @@ function isCourseHandicap(value: unknown): value is PlayerCourseHandicap {
 export function isHoleScore(value: unknown): value is HoleScore {
   if (!isRecord(value)) return false;
   if (value.churchy !== undefined && !isChurchySpecials(value.churchy)) return false;
-  const count = Object.keys(value).filter((key) => key !== 'churchy').length;
+  if (value.kp !== undefined && !isKpEntry(value.kp)) return false;
+  const count = Object.keys(value).filter((key) => key !== 'churchy' && key !== 'kp').length;
   if (value.kind === 'strokes') {
     return count === 2 && positiveInteger(value.strokes, maximumExactHoleStrokes);
   }
@@ -86,6 +89,15 @@ export function isScorecard(value: unknown): value is Scorecard {
 }
 
 export function isRoundScores(value: unknown): value is RoundScores {
+  if (isRecord(value) && (value.kpEnabled !== undefined && typeof value.kpEnabled !== 'boolean'
+    || value.kpCaptureIdentity !== undefined && (typeof value.kpCaptureIdentity !== 'string' || value.kpCaptureIdentity.length === 0)
+    || value.kp !== undefined && !isKpConfiguration(value.kp))) return false;
+  if (isRecord(value) && value.kpPot !== undefined) {
+    const pot = value.kpPot;
+    if (!isRecord(pot) || Object.keys(pot).length !== 2 || typeof pot.amountMinor !== 'number'
+      || !Number.isSafeInteger(pot.amountMinor) || pot.amountMinor < 0
+      || !purseCurrencies.some((currency) => currency === pot.currency)) return false;
+  }
   if (isRecord(value) && value.churchyEnabled !== undefined && typeof value.churchyEnabled !== 'boolean') return false;
   if (isRecord(value) && value.teeStrokeAllocation !== undefined && typeof value.teeStrokeAllocation !== 'boolean') return false;
   if (!isRecord(value) || !isUuid(value.eventId) || !isUuid(value.roundId) || !isEventStatus(value.eventStatus)

@@ -121,7 +121,12 @@ export function PurseSettings({ value, draft, plan, resolutions, disabled, onCha
             {!value.workspace.overallCompetition && pool.source.kind !== 'overall' && <option value="overall" disabled>Overall competition (not configured)</option>}
           </select></label>
         </div>
-        {pool.source.kind === 'manual' ? <>
+        {pool.source.kind === 'kp' ? <>
+          <label>Pool {index + 1} total pot amount<input inputMode="decimal" value={pool.amount}
+            onChange={(event) => { changePool({ ...pool, amount: event.target.value }); }} /></label>
+          <p>One round pot shared equally per winning hole after organizer closure. Longest winning default-tee hole,
+            then hardest stroke index, receives remainder cents. Resolve distance ties in KP review. Planned awards, never payments.</p>
+        </> : pool.source.kind === 'manual' ? <>
           <label>Pool {index + 1} total pot amount<input inputMode="decimal" value={pool.amount}
             onChange={(event) => { changePool({ ...pool, amount: event.target.value }); }} /></label>
           <p>One pot, equally split among the explicitly selected roster recipients. Indivisible cents stay unallocated.</p>
