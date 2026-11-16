@@ -5,6 +5,7 @@ import { SessionExpiredError } from '../../client/events';
 import { PrivateRequestError } from '../../client/private-request';
 import { EventSkinsBoard } from './EventSkinsBoard';
 import { EventSkinsDetailsView } from './EventSkinsDetailsView';
+import type { EventSkinsHoleSelection } from './EventSkinsDetailsView';
 
 export function EventSkinsPanel({ value, loadDetails, onSessionExpired, onAccessEnded }: {
   readonly value: EventSkinsDisplay;
@@ -15,6 +16,7 @@ export function EventSkinsPanel({ value, loadDetails, onSessionExpired, onAccess
   const [open, setOpen] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [denied, setDenied] = useState(false);
+  const [selection, setSelection] = useState<EventSkinsHoleSelection>();
   const [result, setResult] = useState<{ readonly attempt: number; readonly value?: EventSkinsDetails; readonly error?: string }>();
   const trigger = useRef<HTMLButtonElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -59,6 +61,6 @@ export function EventSkinsPanel({ value, loadDetails, onSessionExpired, onAccess
     {!current && <p role="status">Loading skins details…</p>}
     {current?.error && <p role="alert">{current.error}</p>}
     {denied && <a href="#events">Choose another event</a>}
-    {current?.value && <EventSkinsDetailsView value={current.value} />}
+    {current?.value && <EventSkinsDetailsView value={current.value} selection={selection} onSelect={setSelection} />}
   </section>;
 }

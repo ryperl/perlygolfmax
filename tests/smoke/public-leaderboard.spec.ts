@@ -96,14 +96,65 @@ test('public overall and skins each load only one purpose-specific response with
     await expect(page.getByRole('checkbox')).toHaveCount(0);
     await page.getByRole('button', { name: 'View skins details', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Skins details', exact: true })).toBeVisible();
-    await page.getByText('Hole 1 · Fictional golfer 1', { exact: true }).click();
     await expect(page.getByRole('table', { name: 'Hole 1 skins comparison' })).toBeVisible();
+    const navigator = page.getByRole('navigation', { name: 'Skins holes', exact: true });
+    await expect(navigator.getByRole('button')).toHaveCount(18);
+    const lastHole = navigator.getByRole('button', { name: /^Hole 18:/ });
+    await lastHole.focus(); await page.keyboard.press('Enter');
+    await expect(lastHole).toBeFocused();
+    await expect(page.getByRole('table', { name: 'Hole 18 skins comparison', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Next hole', exact: true }).click();
+    await expect(page.getByRole('table', { name: 'Hole 1 skins comparison', exact: true })).toBeVisible();
+    const secondRound = full.workspace.rounds[1];
+    if (!secondRound) throw new Error('Missing second fictional round');
+    await page.getByRole('combobox', { name: 'Round', exact: true }).selectOption(secondRound.id);
+    await navigator.getByRole('button', { name: /^Hole 2:/ }).click();
+    const comparison = page.getByRole('table', { name: 'Hole 2 skins comparison', exact: true });
+    await expect(comparison).toBeVisible();
+    await expect(comparison.getByRole('columnheader')).toHaveText(['Player', 'Par', 'Gross', 'Shots', 'Net']);
+    await expect(page.getByRole('table')).toHaveCount(1);
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      for (const theme of ['light', 'dark']) {
+        await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+        const selected = navigator.locator('[aria-pressed="true"]');
+        const colors = await selected.evaluate((element) => {
+          const label = element.querySelector('small');
+          if (!label) throw new Error('Missing hole status');
+          const style = getComputedStyle(element);
+          return { text: style.color, status: getComputedStyle(label).color, background: style.backgroundColor };
+        });
+        expect(contrastRatio(colors.text, colors.background)).toBeGreaterThanOrEqual(4.5);
+        expect(contrastRatio(colors.status, colors.background)).toBeGreaterThanOrEqual(4.5);
+        for (const button of await navigator.getByRole('button').all()) {
+          const box = await button.boundingBox();
+          expect(box?.width).toBeGreaterThanOrEqual(44);
+          expect(box?.height).toBeGreaterThanOrEqual(48);
+        }
+        for (const header of await comparison.getByRole('columnheader').all()) {
+          expect(await header.evaluate((element) => getComputedStyle(element).whiteSpace)).toBe('nowrap');
+        }
+        expect(await comparison.locator('caption').evaluate((element) => getComputedStyle(element).clipPath)).toBe('inset(50%)');
+        const layout = await comparison.evaluate((element) => ({ width: element.getBoundingClientRect().width,
+          available: element.parentElement?.clientWidth ?? 0,
+          columns: Array.from(element.querySelectorAll('thead th'), (cell) => ({
+            label: cell.textContent, width: cell.getBoundingClientRect().width, font: getComputedStyle(cell).fontSize,
+          })) }));
+        expect(layout.width, JSON.stringify(layout)).toBeLessThanOrEqual(layout.available + 1);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      }
+    }
+    await page.locator('.event-skins-details').screenshot({ path: testInfo.outputPath('skins-hole-navigator.png') });
     await expect(back).toBeVisible();
     expect(reads).toEqual(['overall', 'event-skins', 'event-skins-details']);
+    await page.getByRole('button', { name: 'Refresh skins details', exact: true }).click();
+    await expect(page.getByRole('table', { name: 'Hole 2 skins comparison', exact: true })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Round', exact: true })).toHaveValue(secondRound.id);
+    expect(reads).toEqual(['overall', 'event-skins', 'event-skins-details', 'event-skins-details']);
     await page.getByRole('button', { name: 'Back to skins', exact: true }).click();
     await page.getByRole('button', { name: 'Refresh event skins' }).click();
     await expect(page.getByRole('list', { name: 'Event skins standings' })).toBeVisible();
-    expect(reads).toEqual(['overall', 'event-skins', 'event-skins-details', 'event-skins']);
+    expect(reads).toEqual(['overall', 'event-skins', 'event-skins-details', 'event-skins-details', 'event-skins']);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     expect(errors).toEqual([]);
   } finally {

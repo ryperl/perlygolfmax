@@ -527,12 +527,15 @@ grouped by round with the same configured-order pastel accents as round cards.
 This expansion uses the already-loaded summary and issues no API request.
 Known zero provisional/unavailable golfers retain their explicit state without
 an empty expansion or a fabricated rank. **View skins details** loads a separate
-comparison view on demand: select any round/hole to inspect saved gross/net
-strokes, personal par and received strokes. Hole-level summaries retain the
-winner or covering golfers; the table omits repeated per-golfer outcome labels.
+comparison view on demand. A numbered hole navigator shows the selected round's
+saved statuses and one open comparison of gross/net strokes, personal par and
+received strokes. Previous/Next wraps through captured holes, not assumed
+eighteen-hole numbering. Tied-hole summaries show a compact count instead of
+long lists; every golfer remains in the comparison. The table omits repeated
+per-golfer outcome labels. Round/hole selection survives detail refresh and
+retry; missing refreshed selections fall back to the first available input.
 Shared canonical decisions drive both views; details do not introduce carryovers
-or new tie rules.
-Covered-hole summaries name the saved covering golfers without opening the table.
+or new tie rules, and the winner cards are unchanged.
 The public skins page keeps a **Back to event overview** link available while
 loading, after errors and inside details. Round cards use one labeled SVG
 scorecard link instead of a text-and-arrow action.

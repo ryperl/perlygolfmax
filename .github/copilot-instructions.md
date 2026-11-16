@@ -239,8 +239,12 @@
   rollover. Unresolved/stale ties never claim fully allocated money. Preserve
   existing public/legacy permissions, ordinary captures, Churchy and other purses.
 - Event-wide skins is an independently enabled version-1 event competition,
-  never a replacement for primary overall or round Skins games. Compete each
-  round/hole separately, sum actual wins across all configured rounds, no carry.
+  never a replacement for primary overall or round Skins games.
+  Details use captured-hole navigation and one saved comparison, without row
+  outcomes or repeated covering-name lists. Keep winner cards unchanged.
+  Preserve selection across refresh/retry and retain all golfer rows.
+  Compete each round/hole separately, sum actual wins across all configured
+  rounds, no carry.
   Lowest net numeric strokes uses 100% captured CH/personal tees. Only net ties
   prefer actual gross birdie-or-better on personal par, then lower qualifying
   gross; equal qualifying gross stays tied, gross par never breaks a tie.

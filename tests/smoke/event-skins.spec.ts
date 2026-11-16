@@ -57,17 +57,18 @@ test('event skins explicit setup, per-round saved wins, exact pot and readonly a
         await expect(select).toBeFocused();
         expect(await select.evaluate((element) => getComputedStyle(element).outlineWidth)).toBe('3px');
       }
-      expect(styles).toHaveLength(2);
+      expect(styles).toHaveLength(1);
       filterStyles.push({ theme, styles });
     }
     await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
-    await page.getByText('Hole 1 · Fictional golfer 1', { exact: true }).click();
     const comparison = page.getByRole('table', { name: 'Hole 1 skins comparison' });
-    await expect(comparison.getByRole('columnheader')).toHaveText(['Player', 'Par', 'Gross', 'Received', 'Net']);
+    await expect(comparison.getByRole('columnheader')).toHaveText(['Player', 'Par', 'Gross', 'Shots', 'Net']);
     await expect(comparison.getByRole('rowheader', { name: 'Fictional golfer 2', exact: true })).toBeVisible();
     await page.getByRole('combobox', { name: 'Round', exact: true }).selectOption({ label: 'Fictional Round 3' });
-    await page.getByRole('combobox', { name: 'Hole', exact: true }).selectOption('2');
-    await expect(page.getByText('Hole 2 · Covered by Fictional golfer 1, Fictional golfer 2 — no skin', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: /^Hole 2:/ }).click();
+    await expect(page.getByRole('heading', { name: '2 tied · no skin', exact: true })).toBeVisible();
+    await expect(page.getByRole('table', { name: 'Hole 2 skins comparison', exact: true })).toBeVisible();
+    await expect(page.getByRole('table')).toHaveCount(1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.getByRole('button', { name: 'Back to skins', exact: true }).click();
     await expect(page.getByRole('button', { name: 'View skins details', exact: true })).toBeFocused();
