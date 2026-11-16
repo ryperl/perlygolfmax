@@ -24,6 +24,11 @@ for (const width of [320, 1280]) {
       await page.getByRole('button', { name: 'Open full setup' }).click();
       await page.getByLabel('Event name').fill('Fictional public afternoon');
       await page.getByLabel('Tee time').fill('13:30');
+      await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      for (const control of await page.locator('.quick-round select, .quick-round input:not([type="checkbox"]), .quick-golfer-options label').all()) {
+        expect((await control.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+      }
       await page.getByRole('button', { name: 'Compact setup' }).click();
       await page.getByRole('button', { name: 'Save round', exact: true }).click();
       await expect(page.getByRole('alert')).toContainText('Save is not confirmed');

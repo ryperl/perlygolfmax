@@ -23,6 +23,18 @@
 .quick-round input:not([type="checkbox"]) {
   width: 100%;
   min-width: 0;
+  min-height: 44px;
+  font: inherit;
+}
+
+.quick-round select {
+  height: max(44px, 2.75rem);
+  contain: layout;
+  padding: .5rem;
+  color: var(--cp-text);
+  background: var(--cp-surface);
+  border: 1px solid var(--cp-border-strong);
+  border-radius: .625rem;
 }
 
 .quick-golfer-options label,
@@ -30,6 +42,7 @@
   display: flex;
   align-items: center;
   gap: .5rem;
+  min-height: 44px;
 }
 
 .quick-actions {
