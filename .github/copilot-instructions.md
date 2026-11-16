@@ -39,6 +39,13 @@
   visible focus, and narrow-screen layout. No `any` or unchecked type assertions.
 - Use theme variables for component colors. Keep UI copy honest about demo,
   persistence, synchronization, sign-in, and offline behavior.
+- Keep public views compact and informative: remove redundant metrics and
+  routine explanatory text. Prefer small inline SVGs for familiar meaning,
+  retaining accessible labels and essential state/error explanations.
+- Shape network reads for their display purpose. Use explicit allowlisted
+  summary contracts instead of sending full scorecards, captures or editing
+  context to simple public views. Preserve server authority, exact money,
+  freshness, coherent snapshots, compatibility and distributed request budgets.
 - Add co-located success and edge-case tests for each changed component/module.
 - Run `npm run check:lockfile`, `npm run typecheck`, `npm run lint`, `npm test`,
   `npm run build`, and `npm run test:smoke`; inspect individual suite outcomes.
@@ -195,6 +202,11 @@
   individual members; pool occupied-place ties or explicit organizer resolution.
   Keep remainders unallocated, partial results projected, unavailable totals
   distinct from zero, and stale decisions readable for repair. No money transfers.
+- Public purse uses a course/round pool selector and an event-wide winnings
+  table: each roster player, calculated awards and winning pool names only.
+  Exclude projected awards from that public summary, not from organizer
+  calculations. Known non-winners show 0.00/no pools; missing/overflowed money
+  and unavailable sources remain explicit. This is not payment or finalization.
 - KP is one separate competition per saved round, using saved default-tee par 3
   holes/lengths/stroke indexes, never personal tees or current catalogs. Whole
   feet/inches require on-green confirmation; explicit zero is a hole-in-one.

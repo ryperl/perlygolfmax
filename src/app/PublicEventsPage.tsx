@@ -14,9 +14,9 @@ import { OwnerScoresView } from '../features/scoring';
 import { eventTabHref, isEventTab, readEventRoute } from './navigation';
 import type { EventTab } from './navigation';
 import { SavedEventPage } from './SavedEventPage';
-import { EventLeaderboardPage } from './EventLeaderboardPage';
+import { PublicLeaderboardPage } from './PublicLeaderboardPage';
 import { clearScoreLocation, loadScoreLocation, readScoreLocation, saveScoreLocation, scoreLocationHref } from './score-resume';
-const PursePage = lazy(async () => ({ default: (await import('./PursePage')).PursePage }));
+const PublicPursePage = lazy(async () => ({ default: (await import('./PublicPursePage')).PublicPursePage }));
 
 function configuration(): { readonly services?: PublicServices; readonly error?: string } {
   try {
@@ -50,9 +50,9 @@ export function PublicEventsPage({ services: override }: { readonly services?: P
   const [kind, eventId, roundId] = current.split(':');
   if (kind === 'score' && eventId && roundId) return <PublicRoundPage key={`${eventId}:${roundId}`}
     services={services} eventId={eventId} roundId={roundId} onUnavailable={ended} />;
-  if ((kind === 'leaderboard' || kind === 'event-skins') && eventId) return <EventLeaderboardPage eventSkins={kind === 'event-skins'} client={services.leaderboard} eventId={eventId} onSessionExpired={ended} />;
+  if ((kind === 'leaderboard' || kind === 'event-skins') && eventId) return <PublicLeaderboardPage eventSkins={kind === 'event-skins'} client={services.leaderboard} eventId={eventId} onSessionExpired={ended} />;
   if (kind === 'purse' && eventId) return <Suspense fallback={<p role="status">Loading winnings…</p>}>
-    <PursePage client={services.purse} eventId={eventId} onSessionExpired={ended} />
+    <PublicPursePage client={services.purse} eventId={eventId} onSessionExpired={ended} />
   </Suspense>;
   if (isEventTab(kind) && eventId) return <SavedEventPage client={services.setup} scores={services.scores}
     eventId={eventId} view={kind} onSessionExpired={ended} />;

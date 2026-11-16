@@ -5,6 +5,10 @@ import { fictionalChange, scoreResult } from './scoring.test-support';
 import { fictionalId, fictionalSetup, fictionalWorkspace } from './catalog.test-support';
 import { SessionExpiredError } from './events';
 import { PrivateRequestError } from './private-request';
+import { fictionalPurse } from '../../tests/smoke/purse-fixture-data';
+import { publicPurseSummary } from '../domain/public-purse';
+import { publicLeaderboardFixture } from '../domain/public-leaderboard.test-support';
+import { publicLeaderboardSummary } from '../domain/public-leaderboard';
 
 const signal = new AbortController().signal;
 function fixture(value: unknown, status = 200) {
@@ -12,6 +16,31 @@ function fixture(value: unknown, status = 200) {
   return { send, services: createPublicServices('https://fictional.example.test/api', send) };
 }
 describe('unsigned public event transport', () => {
+  it.each(['overall', 'event-skins'] as const)('requests only %s display data and remains compatible with an old full-response API', async (kind) => {
+    const full = publicLeaderboardFixture();
+    const summary = publicLeaderboardSummary(full, kind);
+    for (const response of [summary, full]) {
+      const f = fixture(response);
+      expect(await f.services.leaderboard.load(full.workspace.event.id, signal, kind)).toEqual(summary);
+      expect(f.send.mock.calls[0]?.[0]).toBe(`https://fictional.example.test/api/public/events/${full.workspace.event.id}/leaderboard?view=${kind}`);
+      expect(f.send.mock.calls[0]?.[1]).toMatchObject({ credentials: 'omit', cache: 'no-store' });
+      expect(new Headers(f.send.mock.calls[0]?.[1]?.headers).get('authorization')).toBeNull();
+    }
+    await expect(fixture({ ...summary, roundScores: [] }).services.leaderboard.load(full.workspace.event.id, signal, kind))
+      .rejects.toThrow('Invalid public leaderboard');
+  });
+  it('requests only the compact purse contract with no identity, cookies or cached scores', async () => {
+    const summary = publicPurseSummary(fictionalPurse());
+    const f = fixture(summary);
+    expect(await f.services.purse.load(summary.eventId, signal)).toEqual(summary);
+    expect(f.send.mock.calls[0]?.[0]).toBe(`https://fictional.example.test/api/public/events/${summary.eventId}/purse?view=summary`);
+    expect(f.send.mock.calls[0]?.[1]).toMatchObject({ credentials: 'omit', cache: 'no-store', signal });
+    expect(new Headers(f.send.mock.calls[0]?.[1]?.headers).get('authorization')).toBeNull();
+    for (const invalid of [{ ...summary, eventId: fictionalId(999) }, { ...summary, roundScores: [] }, fictionalPurse()]) {
+      await expect(fixture(invalid).services.purse.load(summary.eventId, signal)).rejects.toThrow('Invalid public winnings');
+    }
+  });
+
   it('lists only active public events with the exact continuation parameter and no Authorization/cookies', async () => {
     const f = fixture({ events: [fictionalPublicWorkspace.event], continuationToken: 'next-page' });
     await f.services.events.list(signal, 'opaque-page');

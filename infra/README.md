@@ -21,7 +21,9 @@ It composes the following resources:
 
 - A new Free Static Web App, with an Azure-generated HTTPS address.
 - One Node 22 Functions Flex app/plan, 2,048 MB instances, HTTP concurrency 8,
-  at most two on-demand instances by default, and zero always-ready instances.
+  at most five on-demand instances by default, and zero always-ready instances.
+  This is a burst ceiling, not five reserved workers; usage charges can increase.
+  Application request budgets remain separate from this compute ceiling.
 - A separate LRS host/deployment account and private package container.
 - An LRS application data account/table with a `CanNotDelete` management lock.
 - Application Insights with AAD-only ingestion and a Log Analytics workspace

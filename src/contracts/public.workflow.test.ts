@@ -11,7 +11,7 @@ import { TableEventStore } from '../../api/src/events/store.js';
 import { SessionExpiredError } from '../client/events';
 
 describe('public app client/HTTP/storage workflow', () => {
-  it('discovers and scores without identity, reads standings/prizes, then denies an archived event', async () => {
+  it.each([true, false])('discovers and scores without identity, reads compact prizes (summary API=%s), then denies archives', async (summaryApi) => {
     const f = await publicFixture();
     const api = { ...f, limiter: { check: vi.fn().mockResolvedValue(undefined) } };
     const context = new InvocationContext({ invocationId: 'fictional-public-workflow', logHandler: () => undefined });
@@ -26,7 +26,9 @@ describe('public app client/HTTP/storage workflow', () => {
       else if (parts[4] === 'scores') action = 'scores';
       else if (parts[4] === 'players' && parts[6] === 'holes') action = 'score-hole';
       else throw new Error('Unregistered public route.');
-      const request = new HttpRequest({ url, method: options?.method ?? 'GET',
+      const requestUrl = new URL(url);
+      if (!summaryApi && (action === 'purse' || action === 'event-leaderboard')) requestUrl.search = '';
+      const request = new HttpRequest({ url: requestUrl.href, method: options?.method ?? 'GET',
         headers: Object.fromEntries(new Headers(options?.headers).entries()),
         params: { id: parts[1] ?? '', roundId: parts[3] ?? '', playerId: parts[5] ?? '', holeNumber: parts[7] ?? '' },
         ...(typeof options?.body === 'string' ? { body: { string: options.body } } : {}),
@@ -49,13 +51,17 @@ describe('public app client/HTTP/storage workflow', () => {
     expect(result.round.cards.find((card) => card.playerId === f.peerId)?.holes[0]?.score).toEqual({ kind: 'strokes', strokes: 4 });
     expect(await client.scores.save(event.id, f.roundId, f.peerId, 1, { kind: 'strokes', strokes: 4 },
       null, identifier(8000), signal)).toEqual(result);
-    expect((await client.leaderboard.load(event.id, signal)).workspace.publicAccess).toBe(true);
-    expect((await client.purse.load(event.id, signal)).workspace.publicAccess).toBe(true);
+    expect((await client.leaderboard.load(event.id, signal)).workspace.event.role).toBe('viewer');
+    const purse = await client.purse.load(event.id, signal);
+    expect(purse.eventId).toBe(event.id);
+    expect(purse.version).toBe(1);
+    expect(JSON.stringify(purse)).not.toMatch(/roundScores|handicapIndex|projected|configuration/);
     for (const [, request] of send.mock.calls) expect(new Headers(request?.headers).get('authorization')).toBeNull();
     const owner = await f.workspace.get(creator, event.id);
     await new TableEventStore(f.table).setStatus(creator, event.id, 'archived', owner.etag);
     expect((await client.events.list(signal)).events).toEqual([]);
     await expect(client.scores.load(event.id, f.roundId, signal)).rejects.toBeInstanceOf(SessionExpiredError);
+    await expect(client.purse.load(event.id, signal)).rejects.toBeInstanceOf(SessionExpiredError);
     await expect(client.scores.save(event.id, f.roundId, f.foreignId, 1, { kind: 'strokes', strokes: 4 },
       null, identifier(8001), signal)).rejects.toBeInstanceOf(SessionExpiredError);
     expect((await f.scores.get(creator, event.id, f.roundId)).cards.find((card) => card.playerId === f.peerId)?.holes[0]?.score)

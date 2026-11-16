@@ -9,6 +9,8 @@ import { isRecord } from '../../src/contracts/events.js';
 import { canonical, isConflict, optionalRow } from './catalog/entities.js';
 import { ApiError } from './errors.js';
 
+export const maximumInlineReadBytes = 256 * 1024;
+
 export interface StagedPublication {
   readonly id: string;
   readonly sha256: string;
@@ -73,14 +75,14 @@ export async function receivePrivateWrite(table: TableClient, identity: AccountI
   return { kind: 'value', value, publication: { id: upload.id, sha256: upload.sha256 } };
 }
 
-/** Recomputed pages are digest-bound: a concurrent edit rejects, never combines two revisions. */
+/** Keep ordinary projections in one read; larger recomputed pages remain digest-bound. */
 export function privateReadResponse(request: HttpRequest, value: unknown): unknown {
   const text = JSON.stringify(value);
   const bytes = Buffer.byteLength(text, 'utf8');
   if (bytes > maximumPrivateValueBytes) throw new ApiError(413, 'PRIVATE_VALUE_TOO_LARGE');
   const rawIndex = request.query.get('privatePart');
   const expected = request.query.get('privateHash');
-  if (rawIndex === null && text.length <= privateReadPartCharacters) return value;
+  if (rawIndex === null && bytes <= maximumInlineReadBytes) return value;
   if (rawIndex !== null && (!/^(0|[1-9]\d{0,6})$/.test(rawIndex) || expected === null)) throw new ApiError(400, 'INVALID_PRIVATE_PAGE');
   const sha256 = hash(text);
   if (expected !== null && expected !== sha256) throw new ApiError(409, 'EVENT_CHANGED');

@@ -32,6 +32,24 @@
 .purse-panel th, .purse-panel td { padding: .75rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--cp-border); }
 .purse-panel td:not(:last-child) { white-space: nowrap; }
 .purse-panel td ul { margin: 0; padding-inline-start: 1rem; min-width: 13rem; }
+.purse-symbol { width: 1.15em; height: 1.15em; flex: 0 0 1.15em; vertical-align: middle; }
+.purse-public header h2, .purse-label, .purse-pool-title { display: flex; align-items: center; gap: .5rem; }
+.purse-public > section { display: grid; gap: .75rem; min-width: 0; }
+.purse-public :is(h3, p) { margin: 0; }
+.purse-public-pools { display: grid; gap: .5rem; margin: 0; padding: 0; list-style: none; }
+.purse-public-pools > li { padding: .75rem; border: 1px solid var(--cp-border); border-radius: .625rem; background: var(--cp-surface); }
+.purse-pool-title { justify-content: space-between; margin-bottom: .25rem; }
+.purse-pool-state { display: inline-flex; color: var(--cp-text-muted); }
+.purse-public table { min-width: 0; table-layout: fixed; }
+.purse-public caption { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); }
+.purse-public th, .purse-public td { padding: .5rem .25rem; overflow-wrap: anywhere; }
+.purse-public th:first-child { width: 72%; }
+.purse-public th:nth-child(2) { width: 28%; }
+.purse-public td:not(:last-child) { white-space: normal; }
+.purse-public td ul { min-width: 0; padding: 0; list-style: none; }
+.purse-winnings { font-weight: 700; }
+.purse-column-currency { display: block; color: var(--cp-text-muted); font-size: .8em; font-weight: 400; }
+.purse-player-pools { margin: .125rem 0 0; padding: 0; list-style: none; font-size: .875em; font-weight: 400; color: var(--cp-text-muted); }
 @media (max-width: 480px) {
   .purse-panel fieldset { padding: .75rem; }
   .purse-actions > button { flex: 1 1 10rem; }

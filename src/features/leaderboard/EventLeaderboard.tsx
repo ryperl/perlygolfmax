@@ -1,4 +1,5 @@
-import type { EventLeaderboardView, EventStandingCell, EventStandingReason, EventStandingStatus } from '../../domain/event-leaderboard';
+import type { EventStandingCell, EventStandingReason, EventStandingStatus } from '../../domain/event-leaderboard';
+import type { OverallResultsDisplay } from '../../domain/public-leaderboard';
 import './leaderboard.css';
 
 const reasons: Readonly<Record<EventStandingReason, string>> = {
@@ -33,7 +34,7 @@ function Result({ cell, stroke }: { readonly cell: Omit<EventStandingCell, 'roun
   </>;
 }
 
-export function EventLeaderboard({ value }: { readonly value: EventLeaderboardView }) {
+export function EventLeaderboard({ value }: { readonly value: OverallResultsDisplay }) {
   const { workspace, standings } = value;
   const competition = workspace.overallCompetition;
   if (workspace.event.status === 'archived' && workspace.event.role !== 'owner') return <p role="alert">Archived results are available to the event owner only.</p>;

@@ -17,6 +17,21 @@ function urlText(url: string | URL | Request): string {
 }
 
 describe('large private browser values', () => {
+  it('loads coherent inline values above the legacy page size in one request, reading fresh data on navigation', async () => {
+    const value = { fictional: 'F'.repeat(208_000), revision: 1 };
+    const updated = { ...value, revision: 2 };
+    const token = vi.fn().mockResolvedValue('fictional');
+    const send = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(value)))
+      .mockResolvedValueOnce(new Response(JSON.stringify(updated)));
+    const request = createPrivateRequest('https://fictional.example.test/api', token, send);
+    expect(await readPrivateValue(request, path, signal())).toEqual(value);
+    expect(send).toHaveBeenCalledOnce();
+    expect(await readPrivateValue(request, path, signal())).toEqual(updated);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls.every((call) => call[1]?.cache === 'no-store' && call[1].credentials === 'omit')).toBe(true);
+  });
+
   it('continues at the same upload part after the 30-write quota boundary and respects Retry-After', async () => {
     vi.useFakeTimers();
     try {

@@ -94,7 +94,7 @@ test('runtime and retained application storage use LRS without keys or anonymous
 test('API host defaults disabled, identity defaults unconfigured and on-demand scaling is bounded', () => {
   assert.equal(template.parameters.enableApi.defaultValue, false);
   assert.equal(template.parameters.identityConfiguration.defaultValue.state, 'unconfigured');
-  assert.equal(template.parameters.maximumInstanceCount.defaultValue, 2);
+  assert.equal(template.parameters.maximumInstanceCount.defaultValue, 5);
   assert.deepEqual(template.parameters.maximumInstanceCount.allowedValues, [1, 2, 3, 4, 5]);
   const wiring = parameters(template, 'perlygolfmax-test-stack');
   assert.equal(wiring.enableApi.value, "[parameters('enableApi')]");
@@ -165,6 +165,7 @@ test('monitoring is bounded and example parameters contain no real identity conf
   assert.deepEqual(example.parameters.identityConfiguration.value, { state: 'unconfigured' });
   assert.equal(example.parameters.enableApi.value, false);
   assert.equal(example.parameters.location.value, 'westus2');
+  assert.equal(example.parameters.maximumInstanceCount.value, 5);
 });
 
 test('pipeline federation is test-environment-only and deployment access is scoped to the test API', () => {

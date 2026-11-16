@@ -1,7 +1,7 @@
-import type { EventLeaderboardView } from '../../domain/event-leaderboard';
+import type { EventSkinsDisplay } from '../../domain/public-leaderboard';
 import './event-skins.css';
 
-export function EventSkinsBoard({ value }: { readonly value: EventLeaderboardView }) {
+export function EventSkinsBoard({ value }: { readonly value: EventSkinsDisplay }) {
   const { workspace, eventSkins: results } = value;
   if (workspace.eventSkinsSupported !== true) return <p>Event-wide skins is not supported by this API.</p>;
   if (!workspace.eventSkins) return <section><h1>Event-wide skins</h1><p>Event skins is not configured.</p>

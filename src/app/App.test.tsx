@@ -15,6 +15,7 @@ import { isRecord } from '../contracts/events';
 import { fictionalEventPurse } from '../client/purse.test-support';
 import { eventSkinsFixture, publicEventSkinsFixture } from '../domain/event-skins.test-support';
 import { calculateEventSkins } from '../domain/event-skins';
+import { publicLeaderboardSummary } from '../domain/public-leaderboard';
 import { calculateEventStandings } from '../domain/event-leaderboard';
 
 let testServices: EventServices | undefined;
@@ -63,8 +64,8 @@ describe('public app and organizer boundary', () => {
     const f = publicEventSkinsFixture();
     const services = fakePublicServices();
     vi.mocked(services.setup.load).mockResolvedValue(f.workspace);
-    vi.mocked(services.leaderboard.load).mockResolvedValue({ workspace: f.workspace, roundScores: f.rounds,
-      standings: calculateEventStandings(f.workspace, f.rounds), eventSkins: calculateEventSkins(f.workspace, f.rounds) });
+    vi.mocked(services.leaderboard.load).mockResolvedValue(publicLeaderboardSummary({ workspace: f.workspace, roundScores: f.rounds,
+      standings: calculateEventStandings(f.workspace, f.rounds), eventSkins: calculateEventSkins(f.workspace, f.rounds) }, 'event-skins'));
     navigate(`#overview?event=${f.workspace.event.id}`);
     render(<App publicServices={services} />);
     const link = await screen.findByRole('link', { name: 'Event-wide skins' });

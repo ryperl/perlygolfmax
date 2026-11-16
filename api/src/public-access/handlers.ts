@@ -10,6 +10,8 @@ import type { TableWorkspaceStore } from '../setup/store.js';
 import type { TableScoreStore } from '../scoring/store.js';
 import type { TablePurseStore } from '../purse/store.js';
 import type { TablePublicEventStore } from './store.js';
+import { publicPurseSummary } from '../../../src/domain/public-purse.js';
+import { publicLeaderboardSummary } from '../../../src/domain/public-leaderboard.js';
 
 export type PublicAction = 'events' | 'workspace' | 'scores' | 'score-hole' | 'event-leaderboard' | 'purse';
 export interface PublicApi {
@@ -64,9 +66,15 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
       if (action === 'workspace') return response(200, privateReadResponse(request, await api.workspace.get(identity, eventId)));
       const chargeRead = () => api.limiter.check(identity, 'scores-read');
       if (action === 'event-leaderboard') {
-        return response(200, privateReadResponse(request, await api.scores.leaderboard(identity, eventId, chargeRead)));
+        const value = await api.scores.leaderboard(identity, eventId, chargeRead);
+        const view = request.query.get('view');
+        return response(200, privateReadResponse(request, view === 'overall' || view === 'event-skins'
+          ? publicLeaderboardSummary(value, view) : value));
       }
-      if (action === 'purse') return response(200, privateReadResponse(request, await api.purse.get(identity, eventId, chargeRead)));
+      if (action === 'purse') {
+        const value = await api.purse.get(identity, eventId, chargeRead);
+        return response(200, privateReadResponse(request, request.query.get('view') === 'summary' ? publicPurseSummary(value) : value));
+      }
       const roundId = uuid(request.params.roundId);
       if (action === 'scores') return response(200, privateReadResponse(request, await api.scores.get(identity, eventId, roundId)));
       const playerId = uuid(request.params.playerId);

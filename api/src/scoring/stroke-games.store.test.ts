@@ -64,7 +64,9 @@ describe('persisted stroke games share existing conditional scoring authority', 
     expect(isGameWriteResult(commit)).toBe(true);
     if (!isGameWriteResult(commit)) throw new Error('Missing fictional game acknowledgement');
     expect(commit.round.games?.configuration.games).toEqual(games);
-    const page = privateReadResponse(new HttpRequest({ method: 'GET', url: 'http://127.0.0.1/fixture' }), commit.round);
+    const digest = createHash('sha256').update(JSON.stringify(commit.round)).digest('hex');
+    const page = privateReadResponse(new HttpRequest({ method: 'GET',
+      url: `http://127.0.0.1/fixture?privatePart=0&privateHash=${digest}` }), commit.round);
     expect(isPrivateReadPart(page)).toBe(true);
     if (!isPrivateReadPart(page)) throw new Error('Missing fictional bounded results');
     expect(page.privateRead.parts).toBeGreaterThan(1);

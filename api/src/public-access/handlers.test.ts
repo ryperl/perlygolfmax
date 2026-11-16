@@ -1,6 +1,6 @@
 import { HttpRequest, InvocationContext } from '@azure/functions';
 import { describe, expect, it, vi } from 'vitest';
-import { event } from '../../test/fixtures.js';
+import { creator, event } from '../../test/fixtures.js';
 import { identifier } from '../../test/catalog-fixtures.js';
 import { ApiError } from '../errors.js';
 import { createScoringHandler } from '../scoring/handlers.js';
@@ -13,6 +13,8 @@ import { isRoundScores, isScoreWriteResult } from '../../../src/contracts/scorin
 import { isEventLeaderboardView } from '../../../src/contracts/event-leaderboard.js';
 import { isEventPurseView } from '../../../src/contracts/purse-settings.js';
 import { isRecord } from '../../../src/contracts/events.js';
+import { isPublicPurseSummary } from '../../../src/contracts/public-purse.js';
+import { isPublicLeaderboardSummary } from '../../../src/contracts/public-leaderboard.js';
 import { createPublicHandler } from './handlers.js';
 import type { PublicAction } from './handlers.js';
 import { publicFixture } from './test-support.js';
@@ -40,6 +42,49 @@ async function fixture() {
 }
 
 describe('explicit unsigned public HTTP namespace', () => {
+  it('returns only the selected public board, preserving per-round quota and legacy aggregate contracts', async () => {
+    const f = await fixture();
+    const before = await f.workspace.get(creator, event.id);
+    await f.workspace.save(creator, event.id, { ...f.input, overallCompetition: { kind: 'stroke-play', basis: 'gross' } }, before.etag);
+    const current = await f.workspace.get(creator, event.id);
+    await f.scores.saveEventSkins(creator, event.id, { version: 1 }, current.etag, identifier(5250));
+    for (const view of ['overall', 'event-skins']) {
+      f.api.limiter.check.mockClear();
+      const result = await f.invoke('event-leaderboard', undefined, {}, {}, `?view=${view}`);
+      expect(result.status).toBe(200);
+      expect(isPublicLeaderboardSummary(result.jsonBody)).toBe(true);
+      expect(JSON.stringify(result.jsonBody)).not.toMatch(/roundScores|teeProfile|handicap|cards|contenderIds|netStrokes/);
+      expect(f.api.limiter.check).toHaveBeenCalledTimes(1 + f.input.rounds.length);
+    }
+    expect(isEventLeaderboardView((await f.invoke('event-leaderboard')).jsonBody)).toBe(true);
+    f.seed({ ...f.row('event'), status: 'archived' });
+    expect((await f.invoke('event-leaderboard', undefined, {}, {}, '?view=overall')).status).toBe(404);
+  });
+  it('serves an opt-in compact purse without cards, captures, projected shares or management configuration', async () => {
+    const f = await fixture();
+    const playerId = f.input.playerIds[0];
+    if (!playerId) throw new Error('Missing fictional golfer');
+    await f.purse.save(creator, event.id, {
+      eventId: event.id, currency: 'USD', funding: { kind: 'fixed', budgetMinor: 10000 },
+      pools: [{ id: identifier(5200), name: 'Fictional award', source: { kind: 'manual' },
+        awardUnit: 'pot', amountMinor: 10000, recipientIds: [playerId] }],
+    }, [], null, identifier(5201), () => Promise.resolve());
+    f.api.limiter.check.mockClear();
+    const response = await f.invoke('purse', undefined, {}, {}, '?view=summary');
+    expect(response.status).toBe(200);
+    expect(response.headers).toMatchObject({ 'Cache-Control': 'no-store' });
+    expect(isPublicPurseSummary(response.jsonBody)).toBe(true);
+    if (!isPublicPurseSummary(response.jsonBody)) throw new Error('Missing fictional compact purse');
+    expect(response.jsonBody.players.find((player) => player.playerId === playerId))
+      .toMatchObject({ amountMinor: 10000, poolIds: [identifier(5200)] });
+    expect(JSON.stringify(response.jsonBody)).not.toMatch(/roundScores|teeProfile|cards|handicap|projected|configuration|resolutions|recordedBy|etag/);
+    expect(f.api.limiter.check).toHaveBeenCalledTimes(1 + f.input.rounds.length);
+    expect(f.api.limiter.check.mock.calls.every((call) => call[1] === 'scores-read')).toBe(true);
+    expect(isEventPurseView((await f.invoke('purse')).jsonBody)).toBe(true);
+    f.seed({ ...f.row('event'), status: 'archived' });
+    expect((await f.invoke('purse', undefined, {}, {}, '?view=summary')).status).toBe(404);
+  });
+
   it('serves discovery, workspace, every group, overall and purse without verifying JWT or credentials', async () => {
     const f = await fixture();
     expect(await f.invoke('events')).toMatchObject({ status: 200, jsonBody: {
@@ -148,7 +193,7 @@ describe('explicit unsigned public HTTP namespace', () => {
   it('uses existing digest-bound response pages, never silently truncating public data', async () => {
     const f = await fixture();
     const base = await f.workspace.get(f.actor, event.id);
-    vi.spyOn(f.workspace, 'get').mockResolvedValue({ ...base, location: 'x'.repeat(80_000) });
+    vi.spyOn(f.workspace, 'get').mockResolvedValue({ ...base, location: 'x'.repeat(300_000) });
     const first = await f.invoke('workspace');
     if (!isRecord(first.jsonBody) || !isRecord(first.jsonBody.privateRead)) throw new Error('Missing fictional public digest page');
     expect(first.jsonBody.privateRead.index).toBe(0);

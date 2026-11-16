@@ -7,6 +7,6 @@
     "identityConfiguration": { "value": { "state": "unconfigured" } },
     "enableApi": { "value": false },
     "enableDevDomain": { "value": false },
-    "maximumInstanceCount": { "value": 2 }
+    "maximumInstanceCount": { "value": 5 }
   }
 }

@@ -349,6 +349,16 @@ The service checks the event and current authority revisions before returning th
 aggregate; concurrent changes fail explicitly instead of returning mixed data.
 It does not write cards, refresh handicap captures or manufacture missing scores.
 
+The public app requests `?view=overall` for overall standings or
+`?view=event-skins` for event skins on that endpoint. Each version-1 response
+contains only that board's saved results and required heading/round labels.
+Overall reads omit raw cards, setup/captured inputs, game definitions and skins;
+skins reads omit overall standings, raw cards, unused contender IDs and net
+stroke detail. Exact saved points/ranks/progress and per-hole skin outcomes
+remain server-derived. Both views retain per-round quotas and revision/access
+checks; the query-free full response and validated old-API fallback preserve
+compatibility. Never create a partial fake workspace to satisfy the old model.
+
 Stableford uses saved daily points unchanged; stroke play derives gross/net
 relative-to-par from numeric holes using captured inputs. Pickup/DNF invalidates
 a valid stroke total; unplayed holes stay pending. Neither mode provides
@@ -376,7 +386,14 @@ batch. Existing inline JSON remains readable; no bulk migration is performed.
 Staged/inactive fragments are retained, not public or active application data.
 Automatic cleanup/retention is separate policy work, not an implicit deletion.
 
-Large private reads use bounded digest-bound pages. Each page reauthorizes and
+Coherent read projections up to 256 KiB of UTF-8 JSON return in one response.
+This avoids repeating full-event scoring/purse calculations and per-round quota
+charges for small transport fragments. There is no score cache or freshness
+delay: each read still loads and verifies current source/access revisions.
+Larger private reads use the existing 24 Ki-character digest-bound pages.
+Explicit continuation requests retain that page size even below the new inline
+threshold, so an old in-flight read can finish after an API update.
+Each page reauthorizes and
 rejects changed source data; clients reassemble and verify the whole value
 before exposing a complete typed result. Cursor/digest values are not authority.
 Quota waits retain the current part/page, honor Retry-After and can be aborted.
@@ -417,6 +434,24 @@ game/event rankings, explicit team/member units, pooled occupied-place ties or
 organizer resolutions. Leaderboard positions are not rewritten. Stored stale
 decisions remain readable as unavailable for repair, not fabricated valid awards.
 Projection, reserves, rounding remainders and overcommitment are explicit.
+
+The public app requests `/api/public/events/<event-id>/purse?view=summary`.
+Its version-1 display contract contains event/currency, course/round selector
+labels, saved pool prizes/statuses, roster names and exact calculated awards.
+It omits raw scorecards, layouts, handicap captures, game results, owner editing
+configuration, tie decisions, audits and projected shares. Source loading and
+event-revision checks still run server-side; each configured round remains
+quota-charged. The ordinary endpoint without the query retains its legacy
+contract, and new clients can project an old API's validated public response
+locally during rollout. No browser cache or score persistence is introduced.
+
+The public selector filters pool details, not the event-wide player totals.
+Only calculated pools contribute to winnings; each known non-winner remains
+visible with 0.00 and no winning pools. Pending/unavailable pools are identified
+without showing speculative money. An unavailable source or arithmetic
+overflow is not silently treated as a complete zero total. Organizer tools
+retain their full calculations, projections, reserves, reconciliation and
+conditional editing. All amounts remain awards, never evidence of payment.
 
 All totals are individual winnings calculations, not collected/paid balances.
 There is no payment provider, transfer, banking data or ordinary round
@@ -558,8 +593,14 @@ changed, and clearing scores does not unlock it. This conservative simulation
 does not define finalization, score deletion, unlock or future handicap policy.
 Audit/score rows use the existing application table and runtime data-plane role;
 there is no new database, queue, role or infrastructure grant.
-Score reads and writes have separate durable limits of 60 requests per
-identity/minute. The existing 4 KiB request cap is unchanged. Polling honors
+Score reads have a durable limit of 600 charged units per minute; score writes
+remain separately limited to 60 requests per minute. Private reads are scoped
+to identity, public reads/writes to the shared event, not to each visitor.
+Aggregate reads still charge once per request plus once per configured round;
+every transport page remains charged. With inline responses, twelve viewers
+making four single-round polls and two five-round aggregate visits each
+consume 192 read units, not an
+unlimited allowance. The existing 4 KiB request cap is unchanged. Polling honors
 bounded `Retry-After` seconds/dates and exponential backoff; explicit retries
 do not bypass the server minimum. These are application controls, not global
 ingress protection or new production quota approval.
@@ -824,6 +865,18 @@ Ordinary JSON writes are limited to 4 KiB, event names to 100 characters and aut
 headers to 8 KiB. Discovery scans at most 50 metadata rows/page and rechecks
 active state (public) or membership (private) before returning each event.
 Public counters are shared site/event budgets, not per-person limits.
+Public discovery permits 240 reads per site/minute and public workspace reads
+240 per event/minute; public score reads share the 600-unit event budget above.
+Write, identity, private event/setup, catalog and legacy tester setup limits
+are unchanged. ETag counters still enforce budgets across API instances and
+quota-store failures fail closed. Conflicting counter writes use short bounded
+exponential jitter between the existing five attempts, rather than retrying
+in lockstep. `REQUEST_LIMIT_EXCEEDED` identifies a full budget;
+`REQUEST_LIMIT_CONTENTION` identifies exhausted conflict retries. Both remain
+429 responses with `Retry-After`, never permission to bypass the counter.
+These application budgets are independent
+of Functions memory, HTTP concurrency and scale-out ceilings: adding compute
+does not increase them or remedy an exhausted shared quota.
 Private quotas are 20 identity reads, 60 event
 reads, 10 creates and 10 archive/restore requests per user/minute. Reusing an
 idempotency key with changed

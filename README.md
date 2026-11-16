@@ -396,7 +396,13 @@ requests allow 12 KiB UTF-8; other ordinary writes retain their 4 KiB limit.
 Larger configurations use bounded immutable upload parts and conditional
 publication, not partially active saves. Stored values exceeding an inline
 Table property use verified immutable fragments. Large reads are digest-bound
-pages reassembled before a complete result is exposed. Quota waits retain
+pages reassembled before a complete result is exposed. Coherent read responses
+up to 256 KiB of UTF-8 JSON return inline, avoiding repeated whole-event work
+for small fragments without caching scores. Larger reads retain digest paging.
+Shared public event score reads allow 600 charged units/minute, including
+per-round aggregate charges; score writes retain their separate 60/minute limit.
+Compute scaling does not bypass these durable application budgets.
+Quota waits retain
 progress and can be cancelled.
 
 ### Team Stableford games
@@ -765,6 +771,19 @@ the option cannot be disabled to reinterpret a scored mixed-tee round. Legacy
 setup requests preserve existing choices, not silently reset them.
 
 ### Organizer purse and individual winnings
+
+The public **Purse and winnings** page keeps one course/round's prize pools in
+view with a dropdown, plus event-wide pools as a separate choice. Player rows
+show event-wide calculated awards and the pools won; known non-winners show
+0.00 with no pools. Projected amounts, funding reconciliation and editing
+controls are omitted. Pending/unavailable sources remain identifiable.
+The public API sends a dedicated summary, not full scorecards or setup inputs;
+fresh reads and server-side scoring/permission checks are preserved.
+Public overall and event-skins boards likewise request separate display-only
+summaries, retaining authoritative points/ranks/progress without downloading
+raw scorecards or the other board's results.
+
+Organizer tools retain the complete plan and calculation detail below.
 
 Open **Purse and winnings** from the event overview or setup. Configure planned
 fixed funding or a buy-in multiplied by the current roster, choose the event

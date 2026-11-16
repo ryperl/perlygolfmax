@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { privateWritePartBytes, maximumPrivateWriteBytes } from '../../src/contracts/private-values.js';
 import { memoryTable, identifier } from '../test/catalog-fixtures.js';
 import { creator, event, member } from '../test/fixtures.js';
-import { privateReadResponse, receivePrivateWrite } from './private-transport.js';
+import { maximumInlineReadBytes, privateReadResponse, receivePrivateWrite } from './private-transport.js';
 
 function upload(value: unknown) {
   const bytes = Buffer.from(JSON.stringify(value));
@@ -17,6 +17,32 @@ function upload(value: unknown) {
 }
 
 describe('bounded private transport', () => {
+  it('returns a typical five-round purse in one fresh response rather than nine recomputed pages', () => {
+    const request = new HttpRequest({ method: 'GET', url: 'http://fictional.example.test/api/purse' });
+    const value = { fictional: 'F'.repeat(208_350 - Buffer.byteLength(JSON.stringify({ fictional: '' }))) };
+    expect(Buffer.byteLength(JSON.stringify(value))).toBe(208_350);
+    expect(privateReadResponse(request, value)).toBe(value);
+    const changed = { ...value, revision: 'new' };
+    expect(privateReadResponse(request, changed)).toBe(changed);
+  });
+
+  it('bounds inline UTF-8 bytes and preserves old in-flight 24 KiB continuation pages below the new threshold', () => {
+    const request = (query = '') => new HttpRequest({ method: 'GET', url: `http://fictional.example.test/api/workspace${query}` });
+    const overhead = Buffer.byteLength(JSON.stringify({ fictional: '' }));
+    const value = { fictional: 'F'.repeat(maximumInlineReadBytes - overhead) };
+    expect(Buffer.byteLength(JSON.stringify(value))).toBe(maximumInlineReadBytes);
+    expect(privateReadResponse(request(), value)).toBe(value);
+    expect(privateReadResponse(request(), { fictional: `${value.fictional}F` })).toHaveProperty('privateRead.index', 0);
+    const unicode = { fictional: '界'.repeat(Math.floor(maximumInlineReadBytes / 3)) };
+    expect(JSON.stringify(unicode).length).toBeLessThan(maximumInlineReadBytes);
+    expect(Buffer.byteLength(JSON.stringify(unicode))).toBeGreaterThan(maximumInlineReadBytes);
+    expect(privateReadResponse(request(), unicode)).toHaveProperty('privateRead.index', 0);
+    const hash = createHash('sha256').update(JSON.stringify(value)).digest('hex');
+    expect(privateReadResponse(request(`?privatePart=1&privateHash=${hash}`), value)).toHaveProperty('privateRead.index', 1);
+    expect(() => privateReadResponse(request(`?privatePart=1&privateHash=${hash}`), { ...value, revision: 'new' }))
+      .toThrow('EVENT_CHANGED');
+  });
+
   it('idempotently stages bounded owner-bound parts and returns only a complete hash-checked value', async () => {
     const f = memoryTable();
     const value = { fictional: '⛳'.repeat(20_000) };
@@ -63,7 +89,7 @@ describe('bounded private transport', () => {
   it('returns digest-bound read pages, preserves small legacy responses and rejects revision/page drift', () => {
     const request = (query = '') => new HttpRequest({ method: 'GET', url: `http://fictional.example.test/api/events/${event.id}/workspace${query}` });
     expect(privateReadResponse(request(), { fictional: 'small' })).toEqual({ fictional: 'small' });
-    const value = { fictional: '⛳'.repeat(30_000) };
+    const value = { fictional: '⛳'.repeat(maximumInlineReadBytes) };
     const first = privateReadResponse(request(), value);
     expect(first).toHaveProperty('privateRead.index', 0);
     const hash = createHash('sha256').update(JSON.stringify(value)).digest('hex');

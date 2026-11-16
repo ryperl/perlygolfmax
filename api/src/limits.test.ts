@@ -17,7 +17,7 @@ describe('shared identity request limits', () => {
     expect(update.mock.calls.map((call) => call[0].partitionKey)).toEqual([
       'quota:public-browse', 'quota:public-browse', `quota:public-score:${event.id}`, `quota:public-score:${identifier(4001)}`,
     ]);
-    get.mockImplementation(() => Promise.resolve({ etag: 'full', window: 0, count: 60 }));
+    get.mockImplementation(() => Promise.resolve({ etag: 'full', window: 0, count: 240 }));
     for (const actor of [{ kind: 'public-browse' as const }, { kind: 'public-score' as const, eventId: event.id }]) {
       await expect(limiter.check(actor, 'events-read')).rejects.toMatchObject({ status: 429 });
       get.mockRejectedValueOnce(new Error('Fictional shared public quota outage'));
@@ -29,7 +29,7 @@ describe('shared identity request limits', () => {
 
   it.each(['public-browse', 'public-score'] as const)('shares the final %s quota slot across independent instances', async (kind) => {
     const table = new TableClient('https://fictional.table.core.windows.net', 'Events');
-    let count = 59;
+    let count = 239;
     vi.spyOn(table, 'getEntity').mockImplementation(() => Promise.resolve({ etag: String(count), window: 0, count }));
     vi.spyOn(table, 'updateEntity').mockImplementation((_entity, _mode, options) => {
       if (options?.etag !== String(count)) return Promise.reject(Object.assign(new Error('Fictional shared quota conflict'), { statusCode: 412 }));
@@ -43,7 +43,7 @@ describe('shared identity request limits', () => {
     ]);
     expect(outcomes.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
     expect(outcomes.filter((result) => result.status === 'rejected')).toHaveLength(1);
-    expect(count).toBe(60);
+    expect(count).toBe(240);
   });
   it('uses separate durable tester-link event principals and fails closed on their quota-store outage', async () => {
     const table = new TableClient('https://fictional.table.core.windows.net', 'Events');
@@ -62,7 +62,7 @@ describe('shared identity request limits', () => {
   });
   it.each([
     ['catalog-read', 60], ['catalog-write', 60], ['setup-read', 60], ['setup-write', 30],
-    ['scores-read', 60], ['scores-write', 60],
+    ['scores-read', 600], ['scores-write', 60],
   ] as const)('enforces a separate bounded %s bucket without fallback', async (action, limit) => {
     const table = new TableClient('https://fictional.table.core.windows.net', 'Events');
     let count = 0;
@@ -76,6 +76,87 @@ describe('shared identity request limits', () => {
     await expect(limiter.check(creator, action)).rejects.toMatchObject({ status: 429 });
     expect(update).toHaveBeenCalledTimes(limit);
     expect(update.mock.calls[0]?.[0]).toMatchObject({ rowKey: action });
+  });
+
+  it('supports twelve viewers polling and navigating in one minute while retaining shared read and write ceilings', async () => {
+    const table = new TableClient('https://fictional.table.core.windows.net', 'Events');
+    const counts = new Map<string, number>();
+    vi.spyOn(table, 'getEntity').mockImplementation((partition, key) => {
+      const count = counts.get(`${partition}|${key}`) ?? 0;
+      return Promise.resolve({ etag: String(count), window: 0, count });
+    });
+    vi.spyOn(table, 'updateEntity').mockImplementation((entity, _mode, options) => {
+      const key = `${entity.partitionKey}|${entity.rowKey}`;
+      const count = counts.get(key) ?? 0;
+      if (options?.etag !== String(count)) return Promise.reject(Object.assign(new Error('Fictional quota conflict'), { statusCode: 412 }));
+      counts.set(key, count + 1);
+      return Promise.resolve({ etag: String(count + 1) });
+    });
+    const actor = { kind: 'public-score' as const, eventId: event.id };
+    const first = new TableRequestLimiter(table, () => 1);
+    const second = new TableRequestLimiter(table, () => 1);
+    const instances = [first, second];
+    for (let viewer = 0; viewer < 12; viewer++) {
+      const limiter = instances[viewer % instances.length];
+      if (!limiter) throw new Error('Missing fictional API instance');
+      await limiter.check({ kind: 'public-browse' }, 'events-read');
+      await limiter.check(actor, 'setup-read');
+      // Four foreground polls and two five-round aggregate visits, each charged once plus every round.
+      for (let read = 0; read < 4 + 2 * 6; read++) await limiter.check(actor, 'scores-read');
+    }
+    const scoreKey = `quota:public-score:${event.id}|scores-read`;
+    expect(counts.get(scoreKey)).toBe(192);
+    for (let count = 192; count < 599; count++) await first.check(actor, 'scores-read');
+    const outcomes = await Promise.allSettled(instances.map((limiter) => limiter.check(actor, 'scores-read')));
+    expect(outcomes.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(outcomes.filter((result) => result.status === 'rejected')).toHaveLength(1);
+    expect(counts.get(scoreKey)).toBe(600);
+    for (let count = 0; count < 60; count++) await first.check(actor, 'scores-write');
+    await expect(second.check(actor, 'scores-write')).rejects.toMatchObject({ status: 429 });
+    expect(counts.get(`quota:public-score:${event.id}|scores-write`)).toBe(60);
+  });
+
+  it('does not raise private event browsing or tester-link setup limits with the shared public budgets', async () => {
+    const table = new TableClient('https://fictional.table.core.windows.net', 'Events');
+    vi.spyOn(table, 'getEntity').mockImplementation(() => Promise.resolve({ etag: 'full', window: 0, count: 60 }));
+    const update = vi.spyOn(table, 'updateEntity').mockResolvedValue({ etag: 'next' });
+    const limiter = new TableRequestLimiter(table, () => 1);
+    await expect(limiter.check(creator, 'events-read')).rejects.toMatchObject({ status: 429 });
+    await expect(limiter.check({ kind: 'tester-link', eventId: event.id, linkId: identifier(3000) }, 'setup-read'))
+      .rejects.toMatchObject({ status: 429 });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('admits a twelve-viewer burst across independent instances without treating ETag contention as exhausted quota', async () => {
+    const table = new TableClient('https://fictional.table.core.windows.net', 'Events');
+    let count = 0;
+    vi.spyOn(table, 'getEntity').mockImplementation(() => Promise.resolve({ etag: String(count), window: 0, count }));
+    vi.spyOn(table, 'updateEntity').mockImplementation((_entity, _mode, options) => {
+      if (options?.etag !== String(count)) return Promise.reject(Object.assign(new Error('Fictional simultaneous quota read'), { statusCode: 412 }));
+      count++;
+      return Promise.resolve({ etag: String(count) });
+    });
+    const actor = { kind: 'public-score' as const, eventId: event.id };
+    const first = new TableRequestLimiter(table, () => 1);
+    const second = new TableRequestLimiter(table, () => 1);
+    const outcomes = await Promise.allSettled(Array.from({ length: 12 }, (_, index) =>
+      (index % 2 ? first : second).check(actor, 'scores-read')));
+    expect(outcomes.filter((result) => result.status === 'rejected')).toEqual([]);
+    expect(count).toBe(12);
+  });
+
+  it('keeps conflict retries bounded and reports contention separately from an exhausted budget', async () => {
+    const table = new TableClient('https://fictional.table.core.windows.net', 'Events');
+    const get = vi.spyOn(table, 'getEntity').mockImplementation(() => Promise.resolve({ etag: 'racing', window: 0, count: 1 }));
+    const update = vi.spyOn(table, 'updateEntity').mockRejectedValue({ statusCode: 412 });
+    await expect(new TableRequestLimiter(table, () => 1).check(creator, 'scores-read'))
+      .rejects.toMatchObject({ status: 429, code: 'REQUEST_LIMIT_CONTENTION' });
+    expect(get).toHaveBeenCalledTimes(5);
+    expect(update).toHaveBeenCalledTimes(5);
+    get.mockImplementation(() => Promise.resolve({ etag: 'full', window: 0, count: 600 }));
+    await expect(new TableRequestLimiter(table, () => 1).check(creator, 'scores-read'))
+      .rejects.toMatchObject({ status: 429, code: 'REQUEST_LIMIT_EXCEEDED' });
+    expect(update).toHaveBeenCalledTimes(5);
   });
   it('creates the first counter from an SDK-mapped missing entity and rejects other 404s', async () => {
     const table = new TableClient('https://fictional.table.core.windows.net', 'Events');

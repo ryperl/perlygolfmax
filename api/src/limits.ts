@@ -1,4 +1,5 @@
 import type { TableClient } from '@azure/data-tables';
+import { setTimeout as delay } from 'node:timers/promises';
 import type { ScoreActor } from '../../src/domain/test-access.js';
 import type { PublicBrowseIdentity } from '../../src/domain/public-access.js';
 import { isPublicBrowseIdentity } from '../../src/contracts/public-access.js';
@@ -12,7 +13,10 @@ export type RequestClass = 'identity-read' | 'events-read' | 'events-create' | '
 const limits: Readonly<Record<RequestClass, number>> = {
   'identity-read': 20, 'events-read': 60, 'events-create': 10, 'events-manage': 10,
   'catalog-read': 60, 'catalog-write': 60, 'setup-read': 60, 'setup-write': 30,
-  'scores-read': 60, 'scores-write': 60,
+  'scores-read': 600, 'scores-write': 60,
+};
+const sharedPublicReadLimits: Readonly<Partial<Record<RequestClass, number>>> = {
+  'events-read': 240, 'setup-read': 240,
 };
 
 export interface RequestLimiter {
@@ -30,6 +34,8 @@ export class TableRequestLimiter implements RequestLimiter {
           : `quota:tester-link:${identity.eventId}:${identity.linkId}`
       : `quota:${identity.tenantId}:${identity.objectId}`;
     const rowKey = action;
+    const limit = 'kind' in identity && (identity.kind === 'public-browse' || identity.kind === 'public-score')
+      ? sharedPublicReadLimits[action] ?? limits[action] : limits[action];
     const window = Math.floor(this.now() / 60_000);
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
@@ -46,15 +52,19 @@ export class TableRequestLimiter implements RequestLimiter {
           || !Number.isSafeInteger(current.count) || current.count < 0 || !current.etag) {
           throw new ApiError(503, 'INVALID_REQUEST_QUOTA');
         }
-        if (current.window === window && current.count >= limits[action]) throw new ApiError(429, 'REQUEST_LIMIT_EXCEEDED');
+        if (current.window === window && current.count >= limit) throw new ApiError(429, 'REQUEST_LIMIT_EXCEEDED');
         const count = current.window === window ? current.count + 1 : 1;
         await this.table.updateEntity({ partitionKey, rowKey, window, count }, 'Replace', { etag: current.etag });
         return;
       } catch (error) {
-        if (isRecord(error) && (error.statusCode === 409 || error.statusCode === 412)) continue;
+        if (isRecord(error) && (error.statusCode === 409 || error.statusCode === 412)) {
+          // Desynchronize competing instances instead of exhausting retries in lockstep.
+          if (attempt < 4) await delay(10 * 2 ** attempt + Math.floor(Math.random() * 10));
+          continue;
+        }
         throw error;
       }
     }
-    throw new ApiError(429, 'REQUEST_LIMIT_EXCEEDED');
+    throw new ApiError(429, 'REQUEST_LIMIT_CONTENTION');
   }
 }

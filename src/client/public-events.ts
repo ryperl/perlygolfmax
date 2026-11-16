@@ -2,21 +2,25 @@ import type { EventsClient } from './events';
 import type { SetupClient } from './setup';
 import type { ScoresClient } from './scoring';
 import { createScoresClient } from './scoring';
-import type { EventLeaderboardClient } from './event-leaderboard';
-import type { PurseClient } from './purse';
+import type { PublicLeaderboardClient } from './public-leaderboard';
+import type { PublicPurseClient } from './public-purse';
 import { createPrivateRequest, PrivateRequestError, readPrivateValue } from './private-request';
 import { isEventPage, isUuid } from '../contracts/events';
 import { isEventWorkspace } from '../contracts/setup';
 import { isEventLeaderboardView } from '../contracts/event-leaderboard';
 import { isEventPurseView } from '../contracts/purse-settings';
 import { isPublicScoreIdentity } from '../contracts/public-access';
+import { isPublicPurseSummary } from '../contracts/public-purse';
+import { publicPurseSummary } from '../domain/public-purse';
+import { publicLeaderboardSummary } from '../domain/public-leaderboard';
+import { isPublicLeaderboardSummary } from '../contracts/public-leaderboard';
 
 export interface PublicServices {
   readonly events: Pick<EventsClient, 'list'>;
   readonly setup: SetupClient;
   readonly scores: ScoresClient;
-  readonly leaderboard: EventLeaderboardClient;
-  readonly purse: PurseClient;
+  readonly leaderboard: PublicLeaderboardClient;
+  readonly purse: PublicPurseClient;
 }
 
 export function createPublicServices(apiUrl: string, send: typeof fetch = fetch): PublicServices {
@@ -71,19 +75,21 @@ export function createPublicServices(apiUrl: string, send: typeof fetch = fetch)
       },
     },
     leaderboard: {
-      async load(eventId, signal) {
-        const value = await readPrivateValue(request, `${path(eventId)}/leaderboard`, signal);
-        if (!isEventLeaderboardView(value) || value.workspace.event.id !== eventId
-          || value.workspace.publicAccess !== true || value.workspace.event.role !== 'viewer') throw new Error('Invalid public leaderboard.');
-        return value;
+      async load(eventId, signal, kind = 'overall') {
+        const value = await readPrivateValue(request, `${path(eventId)}/leaderboard?view=${kind}`, signal);
+        if (isPublicLeaderboardSummary(value) && value.kind === kind && value.workspace.event.id === eventId) return value;
+        if (isEventLeaderboardView(value) && value.workspace.event.id === eventId
+          && value.workspace.publicAccess === true && value.workspace.event.role === 'viewer') return publicLeaderboardSummary(value, kind);
+        throw new Error('Invalid public leaderboard.');
       },
     },
     purse: {
       async load(eventId, signal) {
-        const value = await readPrivateValue(request, `${path(eventId)}/purse`, signal);
-        if (!isEventPurseView(value) || value.workspace.event.id !== eventId
-          || value.workspace.publicAccess !== true || value.workspace.event.role !== 'viewer') throw new Error('Invalid public winnings response.');
-        return value;
+        const value = await readPrivateValue(request, `${path(eventId)}/purse?view=summary`, signal);
+        if (isPublicPurseSummary(value) && value.eventId === eventId) return value;
+        if (isEventPurseView(value) && value.workspace.event.id === eventId
+          && value.workspace.publicAccess === true && value.workspace.event.role === 'viewer') return publicPurseSummary(value);
+        throw new Error('Invalid public winnings response.');
       },
       save: denied,
     },

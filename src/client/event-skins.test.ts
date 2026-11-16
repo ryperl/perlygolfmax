@@ -78,8 +78,11 @@ describe('event skins private/public adapters', () => {
     const value = { ...f.value, workspace, roundScores, eventSkins: calculateEventSkins(workspace, roundScores) };
     const send = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(value)));
     const client = createPublicServices('https://fictional.example.test/api', send).leaderboard;
-    expect(client.configureEventSkins).toBeUndefined();
-    expect(await client.load(workspace.event.id, signal())).toEqual(value);
+    expect('configureEventSkins' in client).toBe(false);
+    const summary = await client.load(workspace.event.id, signal(), 'event-skins');
+    expect(summary.kind).toBe('event-skins');
+    expect(summary.workspace.event.id).toBe(workspace.event.id);
+    expect(JSON.stringify(summary)).not.toMatch(/roundScores|handicap|netStrokes|contenderIds/);
     expect(send.mock.calls[0]?.[0]).toContain('/public/events/');
     expect(send.mock.calls[0]?.[1]?.headers).not.toHaveProperty('Authorization');
   });

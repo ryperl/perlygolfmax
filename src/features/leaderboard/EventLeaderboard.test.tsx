@@ -59,7 +59,7 @@ describe('overall leaderboard presentation', () => {
   it('uses Stableford points and explicit team-member credit, not browser score math', () => {
     const value = fixture();
     render(<EventLeaderboard value={{ ...value, workspace: { ...value.workspace,
-      overallCompetition: { kind: 'stableford', credit: 'team', roundGames: [] } } }} />);
+      overallCompetition: { kind: 'stableford', credit: 'team' } } }} />);
     expect(screen.getByText(/full team points credited to each member/)).toBeVisible();
     expect(screen.getAllByText('+4')).toHaveLength(34);
     expect(screen.queryByText('4 strokes')).not.toBeInTheDocument();

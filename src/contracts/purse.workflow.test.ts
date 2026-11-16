@@ -11,6 +11,7 @@ import { identifier } from '../../api/test/catalog-fixtures.js';
 import { creator, event, member } from '../../api/test/fixtures.js';
 import { ApiError } from '../../api/src/errors.js';
 import { isEventPurseView, isPurseWriteResult } from './purse-settings.js';
+import { maximumInlineReadBytes } from '../../api/src/private-transport.js';
 
 async function fixture() {
   const f = await scoringFixture();
@@ -42,11 +43,11 @@ async function fixture() {
 }
 
 describe('purse browser/HTTP/storage contract', () => {
-  it('saves, reloads and retries a large exact prize plan through bounded parts and paged reads', async () => {
+  it.each([[160, false], [600, true]] as const)('saves, reloads and retries %i exact prizes with bounded parts and paged read=%s', async (poolCount, paged) => {
     const f = await fixture();
     const plan: PursePlan = {
-      eventId: event.id, currency: 'USD', funding: { kind: 'fixed', budgetMinor: 2000000 },
-      pools: Array.from({ length: 160 }, (_, index) => ({
+      eventId: event.id, currency: 'USD', funding: { kind: 'fixed', budgetMinor: 10000000 },
+      pools: Array.from({ length: poolCount }, (_, index) => ({
         id: identifier(2000 + index), name: `Fictional award ${String(index + 1)} ${'A'.repeat(65)}`,
         source: { kind: 'manual' }, awardUnit: 'pot', amountMinor: 9001, recipientIds: f.input.playerIds.slice(0, 3),
       })),
@@ -60,18 +61,23 @@ describe('purse browser/HTTP/storage contract', () => {
     const result = await f.client.save(event.id, plan, [], null, identifier(800), f.signal);
     expect(isPurseWriteResult(result)).toBe(true);
     expect(result.change.after.plan).toEqual(plan);
-    expect(result.current.view?.calculation.allocatedMinor).toBe(1440000);
-    expect(result.current.view?.calculation.unallocatedMinor).toBe(160);
+    expect(result.current.view?.calculation.allocatedMinor).toBe(9000 * poolCount);
+    expect(result.current.view?.calculation.unallocatedMinor).toBe(poolCount);
     expect(f.submit).toHaveBeenCalledOnce();
     const stored = f.rows.get(`${event.id}|purse`);
     const audit = f.rows.get(`${event.id}|purse-change:${identifier(800)}`);
     expect(JSON.parse(String(stored?.content))).toMatchObject({ privateValue: 1 });
     expect(JSON.parse(String(audit?.content))).toMatchObject({ privateValue: 1 });
+    const beforeRead = f.send.mock.calls.length;
     const loaded = await f.client.load(event.id, f.signal);
     expect(isEventPurseView(loaded)).toBe(true);
     expect(loaded).toEqual(result.current);
-    expect(f.send.mock.calls.some(([target]) => (typeof target === 'string'
-      ? target : target instanceof URL ? target.href : target.url).includes('privatePart='))).toBe(true);
+    expect(Buffer.byteLength(JSON.stringify(loaded)) > maximumInlineReadBytes).toBe(paged);
+    const readCalls = f.send.mock.calls.slice(beforeRead);
+    expect(readCalls.some(([target]) => (typeof target === 'string'
+      ? target : target instanceof URL ? target.href : target.url).includes('privatePart='))).toBe(paged);
+    if (paged) expect(readCalls.length).toBeGreaterThan(1);
+    else expect(readCalls).toHaveLength(1);
     for (const [, options] of f.send.mock.calls) {
       if (typeof options?.body === 'string') expect(Buffer.byteLength(options.body, 'utf8')).toBeLessThanOrEqual(maximumPurseRequestBytes);
       expect(options?.credentials).toBe('omit');

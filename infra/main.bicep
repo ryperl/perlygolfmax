@@ -33,7 +33,7 @@ param enableApi bool = false
 param enableDevDomain bool = false
 
 @allowed([1, 2, 3, 4, 5])
-param maximumInstanceCount int = 2
+param maximumInstanceCount int = 5
 
 var tags = {
   application: 'perlygolfmax'

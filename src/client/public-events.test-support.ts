@@ -6,6 +6,8 @@ import { PrivateRequestError } from './private-request';
 import { fictionalEvent, fictionalId, fictionalWorkspace } from './catalog.test-support';
 import { fictionalChange, fictionalRoundScores, scoreResult } from './scoring.test-support';
 import { fictionalEventPurse } from './purse.test-support';
+import { publicPurseSummary } from '../domain/public-purse';
+import { publicLeaderboardSummary } from '../domain/public-leaderboard';
 
 export const fictionalPublicScores: RoundScores = { ...fictionalRoundScores,
   permissions: { role: 'public', writePlayerIds: fictionalRoundScores.cards.map((card) => card.playerId), canManageGames: false },
@@ -39,10 +41,10 @@ export function fakePublicServices(): PublicServices {
       }),
       history: vi.fn().mockImplementation(denied), saveGames: vi.fn().mockImplementation(denied),
     },
-    leaderboard: { load: vi.fn<PublicServices['leaderboard']['load']>().mockResolvedValue({
+    leaderboard: { load: vi.fn<PublicServices['leaderboard']['load']>().mockResolvedValue(publicLeaderboardSummary({
       workspace: fictionalPublicWorkspace, roundScores: [], standings: { status: 'disabled', rounds: [], players: [], staleRoundIds: [] },
-    }) },
-    purse: { load: vi.fn<PublicServices['purse']['load']>().mockResolvedValue({ ...purse,
-      workspace: fictionalPublicWorkspace, roundScores: [fictionalPublicScores] }), save: vi.fn().mockImplementation(denied) },
+    }, 'overall')) },
+    purse: { load: vi.fn<PublicServices['purse']['load']>().mockResolvedValue(publicPurseSummary({ ...purse,
+      workspace: fictionalPublicWorkspace, roundScores: [fictionalPublicScores] })), save: vi.fn().mockImplementation(denied) },
   };
 }
