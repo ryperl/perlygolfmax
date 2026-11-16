@@ -130,6 +130,7 @@
 .skins-hole-actions button { flex: 1 1 0; min-width: 0; min-height: 48px; margin: 0; padding: .5rem .375rem; font-size: .8rem; }
 @media (max-width: 600px) {
   .skins-hole-nav { grid-template-columns: repeat(auto-fit, minmax(44px, 1fr)); }
+  .event-skins-comparisons { margin-inline: .5rem; }
   .event-skins-comparisons table { font-size: .8rem; }
   .event-skins-comparisons :is(th, td) { padding: .5rem .25rem; }
   .event-skins-comparisons thead th { font-size: .65rem; }
