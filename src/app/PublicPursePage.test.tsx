@@ -26,7 +26,7 @@ describe('public purse loading', () => {
     vi.mocked(service.load).mockRejectedValueOnce(new SessionExpiredError('Event no longer available.'));
     fireEvent.click(screen.getByRole('button', { name: 'Refresh prize results' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Event no longer available');
-    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Player winnings' })).not.toBeInTheDocument();
     expect(expired).toHaveBeenCalledWith('Event no longer available.');
     expect(service.save).not.toHaveBeenCalled();
   });
@@ -38,7 +38,7 @@ describe('public purse loading', () => {
     const view = render(<PublicPursePage {...props} client={old} />);
     const latest = client();
     view.rerender(<PublicPursePage {...props} client={latest} />);
-    await screen.findByRole('table');
+    await screen.findByRole('list', { name: 'Player winnings' });
     expect(vi.mocked(old.load).mock.calls[0]?.[1].aborted).toBe(true);
     await act(async () => { resolve?.({ ...value, eventName: 'Fictional stale event' }); await Promise.resolve(); });
     expect(screen.queryByText('Fictional stale event')).not.toBeInTheDocument();

@@ -4,6 +4,7 @@ import { publicLeaderboardFixture } from '../../src/domain/public-leaderboard.te
 import { publicLeaderboardSummary } from '../../src/domain/public-leaderboard';
 import { calculateEventSkinsDetails } from '../../src/domain/event-skins';
 import { compactSkinsDetails, compactSkinsSummary } from '../../src/contracts/compact-event-skins';
+import { contrastRatio } from './contrast';
 
 test('public overall and skins each load only one purpose-specific response without raw scorecard pages', async ({ page }, testInfo) => {
   const server = await createServer({
@@ -65,6 +66,33 @@ test('public overall and skins each load only one purpose-specific response with
     await expect(back).toHaveAttribute('href', `#overview?event=${full.workspace.event.id}`);
     await expect(page.getByRole('list', { name: 'Event skins standings' })).toContainText('90 skins');
     expect(reads).toEqual(['overall', 'event-skins']);
+    const card = page.getByRole('article', { name: 'Skins for Fictional golfer 1', exact: true });
+    const winningHoles = card.locator('.skins-ticket-details > summary');
+    await expect(winningHoles).toContainText('View winning holes');
+    await winningHoles.focus();
+    await page.keyboard.press('Enter');
+    await expect(winningHoles).toContainText('Hide winning holes');
+    await expect(card.getByRole('list', { name: 'Won holes at Fictional Round 1', exact: true }).getByText('Hole 1', { exact: true })).toBeVisible();
+    expect(await winningHoles.locator('.skins-win-count').evaluate((element) => getComputedStyle(element).borderWidth)).toBe('0px');
+    expect(await winningHoles.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(48);
+    expect(reads).toEqual(['overall', 'event-skins']);
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate((value) => { document.documentElement.dataset.theme = value; document.documentElement.style.fontSize = '125%'; }, theme);
+      const colors = await card.evaluate((element) => {
+        const heading = element.querySelector('h2');
+        const summary = element.querySelector('summary');
+        const round = element.querySelector('.skins-winning-round');
+        if (!heading || !summary || !round) throw new Error('Missing skins ticket contents');
+        const control = getComputedStyle(summary); const roundStyle = getComputedStyle(round);
+        return { name: getComputedStyle(heading).color, background: getComputedStyle(element).backgroundColor,
+          action: control.color, actionBackground: control.backgroundColor, roundText: roundStyle.color, roundBackground: roundStyle.backgroundColor };
+      });
+      expect(contrastRatio(colors.name, colors.background)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(colors.action, colors.actionBackground)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(colors.roundText, colors.roundBackground)).toBeGreaterThanOrEqual(4.5);
+      expect(await card.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    }
+    await card.screenshot({ path: testInfo.outputPath('compact-skins-ticket.png') });
     await expect(page.getByRole('checkbox')).toHaveCount(0);
     await page.getByRole('button', { name: 'View skins details', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Skins details', exact: true })).toBeVisible();

@@ -4,6 +4,7 @@ import { fictionalPurse, fictionalPurseSave } from './purse-fixture-data';
 import { publicPurseSummary } from '../../src/domain/public-purse';
 import { purseTestId } from '../../src/domain/purse.test-support';
 import { playerWinningsBreakdown } from '../../src/domain/winnings-breakdown';
+import { contrastRatio } from './contrast';
 
 test('public purse is compact, course-filtered and refreshed through one minimal read without identity or writes', async ({ page }, testInfo) => {
   const server = await createServer({
@@ -67,11 +68,12 @@ test('public purse is compact, course-filtered and refreshed through one minimal
     await expect(review.getByRole('status')).toContainText('Organizer review needed · 1');
     await review.getByText('Organizer review needed · 1', { exact: true }).click();
     await expect(review.getByText(/Resolve the prize tie/)).toBeVisible();
-    await expect(page.getByRole('columnheader')).toHaveText(['Player / pools won', 'Won (USD)']);
-    await expect(page.getByRole('rowheader').nth(0)).toContainText('Fictional golfer 1');
-    await expect(page.getByRole('rowheader').nth(1)).toContainText('Fictional golfer 5');
-    await expect(page.getByRole('rowheader').nth(2)).toContainText('Fictional golfer 9');
-    await expect(page.getByRole('row', { name: /Fictional golfer 4 / })).toContainText('0.00');
+    const winnings = page.getByRole('list', { name: 'Player winnings', exact: true });
+    await expect(winnings.getByRole('article')).toHaveCount(12);
+    await expect(winnings.getByRole('heading', { level: 4 }).nth(0)).toHaveText('Fictional golfer 1');
+    await expect(winnings.getByRole('heading', { level: 4 }).nth(1)).toHaveText('Fictional golfer 5');
+    await expect(winnings.getByRole('heading', { level: 4 }).nth(2)).toHaveText('Fictional golfer 9');
+    await expect(winnings.getByRole('article', { name: 'Winnings for Fictional golfer 4', exact: true })).toContainText('0.00');
     await expect(page.getByText(/projected|planned budget|remaining unscheduled/i)).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Edit purse|Save purse/ })).toHaveCount(0);
     await expect(page.getByRole('region', { name: 'Course prize pools' }).locator('svg')).not.toHaveCount(0);
@@ -83,7 +85,8 @@ test('public purse is compact, course-filtered and refreshed through one minimal
     await expect(courses.getByText('Fictional overall prizes')).toBeVisible();
     expect(reads).toBe(1);
     expect(detailReads).toBe(0);
-    await page.getByRole('button', { name: 'Fictional golfer 1', exact: true }).click();
+    const trigger = page.getByRole('button', { name: 'View winnings breakdown for Fictional golfer 1', exact: true });
+    await trigger.click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('heading', { level: 2 })).toBeFocused();
     await expect(dialog.getByText(/Place 1/)).toBeVisible();
@@ -112,7 +115,7 @@ test('public purse is compact, course-filtered and refreshed through one minimal
     expect(detailReads).toBe(1);
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Fictional golfer 1', exact: true })).toBeFocused();
+    await expect(trigger).toBeFocused();
     const refresh = page.getByRole('button', { name: 'Refresh prize results', exact: true });
     await refresh.click();
     await expect(refresh).toBeEnabled();
@@ -123,19 +126,36 @@ test('public purse is compact, course-filtered and refreshed through one minimal
       await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       expect(await picker.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
-      for (const element of await page.locator('.purse-public table, .purse-public-pools').all()) {
+      for (const element of await page.locator('.purse-winnings-cards, .purse-award-card, .purse-public-pools').all()) {
         expect(await element.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
       }
+      for (const theme of ['light', 'dark']) {
+        await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+        const colors = await winnings.locator('article').first().evaluate((element) => {
+          const heading = element.querySelector('h4');
+          const amount = element.querySelector('.purse-award-card-total strong');
+          const button = element.querySelector('button');
+          if (!heading || !amount || !button) throw new Error('Missing winnings card contents');
+          const card = getComputedStyle(element); const control = getComputedStyle(button);
+          return { background: card.backgroundColor, name: getComputedStyle(heading).color, amount: getComputedStyle(amount).color,
+            action: control.color, actionBackground: control.backgroundColor, actionHeight: button.getBoundingClientRect().height };
+        });
+        expect(contrastRatio(colors.name, colors.background)).toBeGreaterThanOrEqual(4.5);
+        expect(contrastRatio(colors.amount, colors.background)).toBeGreaterThanOrEqual(4.5);
+        expect(contrastRatio(colors.action, colors.actionBackground)).toBeGreaterThanOrEqual(4.5);
+        expect(colors.actionHeight).toBeGreaterThanOrEqual(48);
+      }
     }
+    await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
     await picker.selectOption(base.rounds[0]?.id ?? '');
     await page.screenshot({ path: testInfo.outputPath('compact-public-purse.png'), fullPage: true });
     limited = true;
     await refresh.click();
     await expect(page.getByRole('alert')).toContainText('Too many requests');
-    await expect(page.getByRole('table')).toHaveCount(0);
+    await expect(winnings).toHaveCount(0);
     limited = false;
     await refresh.click();
-    await expect(page.getByRole('table')).toBeVisible();
+    await expect(winnings).toBeVisible();
     expect(reads).toBe(4);
     expect(errors).toEqual([]);
   } finally {

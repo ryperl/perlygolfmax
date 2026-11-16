@@ -61,18 +61,22 @@ export function PublicPurseResults({ value, loadPlayer, onSessionExpired }: {
       <section aria-label="Player winnings">
         <h3>Player winnings <span className="purse-hint">· All courses</span></h3>
         <p className="purse-hint">Awarded pools only · Not payments</p>
-        <table><caption className="visually-hidden">Event winnings in {currency}</caption>
-          <thead><tr><th scope="col">Player / pools won</th><th scope="col">Won <span className="purse-column-currency">({currency})</span></th></tr></thead>
-          <tbody>{players.map((player) => <tr key={player.playerId}>
-            <th scope="row">{loadPlayer ? <button className="purse-player-link" type="button" onClick={(event) => {
+        <ul className="purse-winnings-cards" aria-label="Player winnings">{players.map((player) => <li key={player.playerId}>
+          <article className="purse-award-card" aria-label={`Winnings for ${player.displayName}`}>
+            <header className="purse-award-card-heading"><h4>{player.displayName}</h4>
+              <p className="purse-award-card-total"><span>{currency}</span>{' '}
+                <strong>{player.amountMinor === null ? 'Unavailable' : moneyText(player.amountMinor)}</strong>
+              </p>
+            </header>
+            {player.poolIds.length > 0 && <ul className="purse-player-pools" aria-label="Pools won">{player.poolIds.map((poolId) =>
+              <li key={poolId}>{value.pools.find((pool) => pool.id === poolId)?.name ?? 'Pool unavailable'}</li>)}</ul>}
+            {player.amountMinor === 0 && player.poolIds.length === 0 && <p className="purse-hint">No winning pools</p>}
+            {loadPlayer && <button className="purse-breakdown-button" type="button"
+              aria-label={`View winnings breakdown for ${player.displayName}`} onClick={(event) => {
               trigger.current = event.currentTarget; setPlayerDetail(player);
-            }}>{player.displayName}</button> : player.displayName}
-              {player.poolIds.length > 0 && <ul className="purse-player-pools" aria-label="Pools won">{player.poolIds.map((poolId) =>
-                <li key={poolId}>{value.pools.find((pool) => pool.id === poolId)?.name}</li>)}</ul>}
-            </th>
-            <td className="purse-winnings">{player.amountMinor === null ? 'Unavailable' : moneyText(player.amountMinor)}</td>
-          </tr>)}</tbody>
-        </table>
+            }}>View winnings breakdown</button>}
+          </article>
+        </li>)}</ul>
       </section>
     </>}
     {currency !== null && playerDetail && loadPlayer && <PlayerWinningsDialog key={playerDetail.playerId}

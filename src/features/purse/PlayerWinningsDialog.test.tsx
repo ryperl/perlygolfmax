@@ -33,7 +33,7 @@ describe('lazy public winnings breakdown', () => {
       ],
     }] };
     render(<PublicPurseResults value={summary} loadPlayer={vi.fn().mockResolvedValue(detail)} />);
-    await userEvent.click(screen.getByRole('button', { name: first.displayName }));
+    await userEvent.click(screen.getByRole('button', { name: `View winnings breakdown for ${first.displayName}` }));
     const table = within(await screen.findByRole('table', { name: 'Allocated winnings by pool' }));
     expect(table.getByRole('columnheader', { name: 'Award / detail' })).toBeVisible();
     expect(table.getByRole('rowheader', { name: /Hole 1 · 1 ft 0 in/ })).toBeVisible();
@@ -48,7 +48,7 @@ describe('lazy public winnings breakdown', () => {
     if (!player) throw new Error('Missing fictional nonwinner');
     const load = vi.fn().mockResolvedValue(playerWinningsBreakdown(value, player.playerId));
     render(<PublicPurseResults value={summary} loadPlayer={load} />);
-    await userEvent.click(screen.getByRole('button', { name: player.displayName }));
+    await userEvent.click(screen.getByRole('button', { name: `View winnings breakdown for ${player.displayName}` }));
     const dialog = within(screen.getByRole('dialog'));
     expect(await dialog.findByText('No allocated winnings.')).toBeVisible();
     expect(dialog.queryByRole('table')).not.toBeInTheDocument();
@@ -63,7 +63,7 @@ describe('lazy public winnings breakdown', () => {
     const user = userEvent.setup();
     render(<PublicPurseResults value={{ ...summary, players: summary.players.map((player) => ({ ...player, amountMinor: 0 })) }} loadPlayer={load} />);
     expect(load).not.toHaveBeenCalled();
-    const button = screen.getByRole('button', { name: first.displayName });
+    const button = screen.getByRole('button', { name: `View winnings breakdown for ${first.displayName}` });
     await user.click(button);
     const dialog = within(screen.getByRole('dialog'));
     expect(dialog.getByRole('heading', { level: 2 })).toHaveFocus();
@@ -88,7 +88,7 @@ describe('lazy public winnings breakdown', () => {
       .mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
     const user = userEvent.setup();
     render(<PublicPurseResults value={summary} loadPlayer={load} />);
-    await user.click(screen.getByRole('button', { name: first.displayName }));
+    await user.click(screen.getByRole('button', { name: `View winnings breakdown for ${first.displayName}` }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Read failed');
     await user.click(screen.getByRole('button', { name: 'Refresh winnings' }));
     await user.click(screen.getByRole('button', { name: 'Close winnings' }));

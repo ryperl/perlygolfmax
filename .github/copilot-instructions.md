@@ -214,7 +214,7 @@
   Exclude projected awards from that public summary, not from organizer
   calculations. Known non-winners show 0.00/no pools; missing/overflowed money
   and unavailable sources remain explicit. This is not payment or finalization.
-  Player-name dialogs lazily load allowlisted winnings explanations, never
+  Award-card breakdown actions lazily load allowlisted winnings explanations, never
   protected edit/audit history. Keep pending money out, exact shares intact,
   newer totals explicit, and abort/ignore closed or superseded reads.
 - Review notices use already-loaded canonical data, without extra global scans.

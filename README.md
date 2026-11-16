@@ -521,8 +521,13 @@ versus net par remains a tie. There are **no carryovers**, even within a round.
 Unplayed field entries keep the hole pending; pickup, X7 and DNF are ineligible,
 not penalty scores. Missing net inputs are unavailable, never scratch.
 
-The saved-results board lists only won holes beneath each golfer's total,
-grouped by round. **View skins details** loads a separate comparison view on
+The saved-results board uses compact golfer tickets with their saved position
+and skins count. **View winning holes** expands only that golfer's won holes,
+grouped by round with the same configured-order pastel accents as round cards.
+This expansion uses the already-loaded summary and issues no API request.
+Known zero provisional/unavailable golfers retain their explicit state without
+an empty expansion or a fabricated rank. **View skins details** loads a separate
+comparison view on
 demand: select any round/hole to inspect saved gross/net strokes, personal par,
 received strokes and the golfers who covered or beat a score. Shared canonical
 decisions drive both views; details do not introduce carryovers or new tie rules.
@@ -839,7 +844,7 @@ setup requests preserve existing choices, not silently reset them.
 ### Organizer purse and individual winnings
 
 The public **Purse and winnings** page keeps one course/round's prize pools in
-view with a dropdown, plus event-wide pools as a separate choice. Player rows
+view with a dropdown, plus event-wide pools as a separate choice. Player award cards
 show event-wide calculated awards and the pools won; known non-winners show
 0.00 with no pools. Players sort by money won, highest first; ties retain their
 existing order and unavailable amounts follow known amounts.
@@ -851,7 +856,9 @@ Public overall and event-skins boards likewise request separate display-only
 summaries, retaining authoritative points/ranks/progress without downloading
 raw scorecards or the other board's results.
 
-Click a player's name for an on-demand winnings breakdown: actual pool awards,
+Each card shows the exact amount/currency, compact winning-pool labels and a
+**View winnings breakdown** button. That action loads the existing on-demand
+explanation: actual pool awards,
 place/tie/team shares, KP winning holes/distances and skins count times the exact
 per-skin rate. It contains no protected audit actors, edit history or projected
 money. Newer totals are identified rather than pretending they match an older

@@ -13,21 +13,23 @@ describe('compact public purse', () => {
     const unavailable = { ...otherZero, playerId: purseTestId(99), displayName: 'Fictional unavailable', amountMinor: null };
     const players = Object.freeze([zero, second, unavailable, winner, otherZero]);
     render(<PublicPurseResults value={{ ...summary, players }} />);
-    const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1);
+    const rows = within(screen.getByRole('list', { name: 'Player winnings' })).getAllByRole('article');
     for (const [index, player] of [winner, second, zero, otherZero, unavailable].entries()) {
       expect(rows[index]).toHaveTextContent(player.displayName);
     }
     expect(rows[4]).toHaveTextContent('Unavailable');
+    expect(within(screen.getByRole('article', { name: 'Winnings for Fictional unavailable' })).queryByText('No winning pools')).not.toBeInTheDocument();
     expect(players[0]).toBe(zero);
   });
   it('shows only player, awarded amount and winning pools, retaining zero winners without projected/budget fields', () => {
     render(<PublicPurseResults value={publicPurseSummary(fictionalPurse())} />);
-    expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual(['Player / pools won', 'Won (USD)']);
-    const table = screen.getByRole('table');
-    expect(within(table).getByRole('row', { name: /Fictional golfer 1/ })).toHaveTextContent('1.00');
-    const zero = within(table).getByRole('row', { name: /Fictional golfer 4/ });
+    const cards = screen.getByRole('list', { name: 'Player winnings' });
+    expect(within(cards).getByRole('article', { name: 'Winnings for Fictional golfer 1' })).toHaveTextContent('1.00');
+    const zero = within(cards).getByRole('article', { name: 'Winnings for Fictional golfer 4' });
     expect(zero).toHaveTextContent('0.00');
     expect(within(zero).queryByRole('list', { name: 'Pools won' })).not.toBeInTheDocument();
+    expect(within(zero).getByText('No winning pools')).toBeVisible();
+    expect(screen.queryByRole('button', { name: /View winnings breakdown/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/projected|planned budget|reserved|remaining unscheduled|per-pool breakdown/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Edit purse|Save purse/ })).not.toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Results calculated' })).toBeVisible();
@@ -50,7 +52,7 @@ describe('compact public purse', () => {
     expect(within(region).queryByText('Fictional awards')).not.toBeInTheDocument();
     view.rerender(<PublicPurseResults value={{ ...next, needsReview: true }} />);
     expect(picker).toHaveValue(secondId);
-    expect(within(screen.getByRole('table')).getByRole('row', { name: /Fictional golfer 1/ })).toHaveTextContent('1.00');
+    expect(screen.getByRole('article', { name: 'Winnings for Fictional golfer 1' })).toHaveTextContent('1.00');
     fireEvent.change(picker, { target: { value: 'event' } });
     expect(within(region).getByText('Fictional overall prizes')).toBeVisible();
     expect(screen.getByRole('status')).toHaveTextContent('known awards only');
@@ -68,6 +70,6 @@ describe('compact public purse', () => {
     expect(screen.getByRole('img', { name: 'Results unavailable' })).toBeVisible();
     view.rerender(<PublicPurseResults value={{ ...summary, currency: null, pools: [] }} />);
     expect(screen.getByText('No purse configured.')).toBeVisible();
-    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Player winnings' })).not.toBeInTheDocument();
   });
 });

@@ -47,7 +47,8 @@ describe('saved event skins board', () => {
     view.rerender(<EventSkinsBoard value={{ ...value, workspace: unavailable.workspace,
       eventSkins: calculateEventSkins(unavailable.workspace, unavailable.rounds) }} />);
     expect(screen.getByRole('status')).toHaveTextContent('Unavailable inputs');
-    expect(screen.getAllByText(/0 known skins · complete total unavailable/)).toHaveLength(2);
+    expect(screen.getAllByText('Complete total unavailable')).toHaveLength(2);
+    expect(screen.queryByText('View winning holes')).not.toBeInTheDocument();
   });
   it('distinguishes unsupported, unconfigured, unavailable and all-no-winners states', () => {
     const f = fixture();
