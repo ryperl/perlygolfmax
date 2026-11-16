@@ -271,18 +271,16 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     return projection;
   }
 
-  async leaderboard(identity: ScoreActor, eventId: string, chargeRead: () => Promise<void>): Promise<EventLeaderboardView> {
+  async leaderboard(identity: ScoreActor, eventId: string, chargeRead: (units: number) => Promise<void>): Promise<EventLeaderboardView> {
     const access = await this.access(identity, eventId);
     if (access.testerLink) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
     const workspace = await this.workspace.get(identity, eventId);
     if (workspace.etag !== access.summary.etag) throw new ApiError(409, 'EVENT_CHANGED');
     const roundScores: RoundScores[] = [];
     if (workspace.overallCompetition || workspace.eventSkins) {
+      if (workspace.rounds.length > 0) await chargeRead(workspace.rounds.length);
       for (let index = 0; index < workspace.rounds.length; index += 3) {
-        const batch = await Promise.all(workspace.rounds.slice(index, index + 3).map(async (round) => {
-          await chargeRead();
-          return this.get(identity, eventId, round.id);
-        }));
+        const batch = await Promise.all(workspace.rounds.slice(index, index + 3).map((round) => this.get(identity, eventId, round.id)));
         roundScores.push(...batch);
       }
     }

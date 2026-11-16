@@ -55,7 +55,8 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
         return response(200, await api.scores.saveEventSkins(identity, eventId, body.configuration, etag, requestId));
       }
       if (action === 'event-leaderboard') {
-        return response(200, privateReadResponse(request, await api.scores.leaderboard(identity, eventId, () => api.limiter.check(identity, 'scores-read'))));
+        return response(200, privateReadResponse(request, await api.scores.leaderboard(identity, eventId,
+          (units) => api.limiter.check(identity, 'scores-read', units))));
       }
       const roundId = uuid(request.params.roundId);
       if (action === 'scores') return response(200, privateReadResponse(request, await api.scores.get(identity, eventId, roundId)));

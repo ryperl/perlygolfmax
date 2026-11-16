@@ -62,23 +62,21 @@ export class TablePurseStore {
     return value;
   }
 
-  private async source(identity: AccountIdentity | PublicScoreIdentity, eventId: string, chargeRead: () => Promise<void>) {
+  private async source(identity: AccountIdentity | PublicScoreIdentity, eventId: string, chargeRead: (units: number) => Promise<void>) {
     const access = await this.access(identity, eventId);
     const workspace = await this.workspace.get(identity, eventId);
     if (workspace.etag !== access.summary.etag) throw new ApiError(409, 'EVENT_CHANGED');
     const configuration = await this.configuration(eventId, access.event);
     const roundScores: RoundScores[] = [];
+    if (workspace.rounds.length > 0) await chargeRead(workspace.rounds.length);
     for (let index = 0; index < workspace.rounds.length; index += 3) {
-      roundScores.push(...await Promise.all(workspace.rounds.slice(index, index + 3).map(async (round) => {
-        await chargeRead();
-        return this.scores.get(identity, eventId, round.id);
-      })));
+      roundScores.push(...await Promise.all(workspace.rounds.slice(index, index + 3).map((round) => this.scores.get(identity, eventId, round.id))));
     }
     await assertEventAccessUnchanged(this.table, identity, eventId, access);
     return { ...access, workspace, roundScores, configuration };
   }
 
-  async get(identity: AccountIdentity | PublicScoreIdentity, eventId: string, chargeRead: () => Promise<void>): Promise<EventPurseView> {
+  async get(identity: AccountIdentity | PublicScoreIdentity, eventId: string, chargeRead: (units: number) => Promise<void>): Promise<EventPurseView> {
     const state = await this.source(identity, eventId, chargeRead);
     const { plan, resolutions } = state.configuration;
     return { workspace: state.workspace, roundScores: state.roundScores, configuration: state.configuration,
@@ -118,7 +116,7 @@ export class TablePurseStore {
   }
 
   async save(identity: AccountIdentity, eventId: string, plan: PursePlan, resolutions: readonly PurseTieResolution[],
-    expected: string | null, requestId: string, chargeRead: () => Promise<void>,
+    expected: string | null, requestId: string, chargeRead: (units: number) => Promise<void>,
     publication?: StagedPublication): Promise<PurseWriteResult> {
     if (!isUuid(requestId) || expected !== null && !isEventRevision(expected)) throw new ApiError(400, 'INVALID_PURSE_SETUP');
     if (Buffer.byteLength(JSON.stringify({ plan, resolutions }), 'utf8') > maximumPrivateWriteBytes) throw new ApiError(413, 'REQUEST_TOO_LARGE');

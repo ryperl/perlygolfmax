@@ -141,10 +141,12 @@ describe('event-wide skins persisted authority and read consistency', () => {
     const value = await f.scores.leaderboard(creator, event.id, charge);
     expect(isEventLeaderboardView(value)).toBe(true);
     expect(value.eventSkins?.totalHoles).toBe(count * 18);
-    expect(charge).toHaveBeenCalledTimes(count);
+    expect(charge).toHaveBeenCalledExactlyOnceWith(count);
     expect(max).toBeLessThanOrEqual(3);
+    get.mockClear();
     await expect(f.scores.leaderboard(creator, event.id, async () => Promise.reject(new ApiError(429, 'REQUEST_LIMIT_EXCEEDED'))))
       .rejects.toMatchObject({ status: 429 });
+    expect(get).not.toHaveBeenCalled();
     get.mockImplementationOnce(async (...args) => {
       const result = await read(...args);
       const row = f.rows.get(`${event.id}|event`);

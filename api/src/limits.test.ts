@@ -1,10 +1,92 @@
 import { TableClient } from '@azure/data-tables';
+import { setTimeout as delay } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
 import { creator, event } from '../test/fixtures.js';
 import { identifier } from '../test/catalog-fixtures.js';
 import { TableRequestLimiter } from './limits.js';
 
 describe('shared identity request limits', () => {
+  it('reserves whole aggregate costs atomically across instances and rejects invalid costs before touching storage', async () => {
+    const table = new TableClient('https://fictional.table.core.windows.net', 'Events');
+    let count = 597;
+    const get = vi.spyOn(table, 'getEntity').mockImplementation(() => Promise.resolve({ etag: String(count), window: 0, count }));
+    const update = vi.spyOn(table, 'updateEntity').mockImplementation((entity, _mode, options) => {
+      if (options?.etag !== String(count)) return Promise.reject(Object.assign(new Error('Fictional cost race'), { statusCode: 412 }));
+      if (!('count' in entity) || typeof entity.count !== 'number') throw new Error('Missing fictional cost');
+      count = entity.count;
+      return Promise.resolve({ etag: String(count) });
+    });
+    const first = new TableRequestLimiter(table, () => 1);
+    const second = new TableRequestLimiter(table, () => 1);
+    const results = await Promise.allSettled([first.check(creator, 'scores-read', 3), second.check(creator, 'scores-read', 3)]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(count).toBe(600);
+    expect(update).toHaveBeenCalledTimes(2);
+    get.mockClear();
+    for (const units of [0, -1, .5, NaN, Infinity, 601]) {
+      await expect(first.check(creator, 'scores-read', units)).rejects.toMatchObject({ status: 503, code: 'INVALID_REQUEST_QUOTA_COST' });
+    }
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it.each([4, 25, 75])('handles twelve aggregate readers with %i ms storage RPCs, charging all 72 units exactly once', { timeout: 15_000 }, async (rpcMs) => {
+    const table = new TableClient('https://fictional.table.core.windows.net', 'Events');
+    let count = 0;
+    vi.spyOn(table, 'getEntity').mockImplementation(async () => {
+      const snapshot = { etag: String(count), window: 0, count };
+      await delay(rpcMs);
+      return snapshot;
+    });
+    vi.spyOn(table, 'updateEntity').mockImplementation(async (entity, _mode, options) => {
+      await delay(rpcMs);
+      if (options?.etag !== String(count)) throw Object.assign(new Error('Fictional network-overlap conflict'), { statusCode: 412 });
+      if (!('count' in entity) || typeof entity.count !== 'number') throw new Error('Missing fictional aggregate cost');
+      count = entity.count;
+      return { etag: String(count) };
+    });
+    const actor = { kind: 'public-score' as const, eventId: event.id };
+    const first = new TableRequestLimiter(table, () => 1);
+    const second = new TableRequestLimiter(table, () => 1);
+    const results = await Promise.allSettled(Array.from({ length: 12 }, async (_, index) => {
+      const limiter = index % 2 ? first : second;
+      await limiter.check(actor, 'scores-read');
+      await limiter.check(actor, 'scores-read', 5);
+    }));
+    expect(results.filter((result) => result.status === 'rejected')).toEqual([]);
+    expect(count).toBe(72);
+  });
+
+  it('does not reset a newer quota window after a slow read or a clock-behind request', async () => {
+    const table = new TableClient('https://fictional.table.core.windows.net', 'Events');
+    let now = 59_999;
+    const get = vi.spyOn(table, 'getEntity').mockImplementation(() => {
+      now = 60_001;
+      return Promise.resolve({ etag: 'new-window', window: 1, count: 600 });
+    });
+    const update = vi.spyOn(table, 'updateEntity');
+    const limiter = new TableRequestLimiter(table, () => now);
+    await expect(limiter.check(creator, 'scores-read', 5)).rejects.toMatchObject({ status: 429, code: 'REQUEST_LIMIT_EXCEEDED' });
+    now = 59_999;
+    get.mockImplementation(() => Promise.resolve({ etag: 'clock-ahead', window: 1, count: 600 }));
+    await expect(limiter.check(creator, 'scores-read', 5)).rejects.toMatchObject({ status: 429 });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('creates and rolls over counters with the full reserved cost, retaining fail-closed storage behavior', async () => {
+    const table = new TableClient('https://fictional.table.core.windows.net', 'Events');
+    const get = vi.spyOn(table, 'getEntity').mockRejectedValue({ statusCode: 404, code: 'ResourceNotFound' });
+    const create = vi.spyOn(table, 'createEntity').mockResolvedValue({ etag: 'created' });
+    await new TableRequestLimiter(table, () => 1).check(creator, 'scores-read', 8);
+    expect(create).toHaveBeenCalledWith({ partitionKey: `quota:${creator.tenantId}:${creator.objectId}`,
+      rowKey: 'scores-read', window: 0, count: 8 });
+    get.mockImplementation(() => Promise.resolve({ etag: 'old', window: 0, count: 599 }));
+    const update = vi.spyOn(table, 'updateEntity').mockResolvedValue({ etag: 'next' });
+    await new TableRequestLimiter(table, () => 60_001).check(creator, 'scores-read', 8);
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ window: 1, count: 8 }), 'Replace', { etag: 'old' });
+    get.mockRejectedValue(new Error('Fictional reservation store outage'));
+    await expect(new TableRequestLimiter(table).check(creator, 'scores-read', 8)).rejects.toThrow('reservation store outage');
+  });
+
   it('uses one site-wide browse bucket and one event-scoped shared public bucket, never visitor/account identity', async () => {
     const table = new TableClient('https://fictional.table.core.windows.net', 'Events');
     const get = vi.spyOn(table, 'getEntity').mockImplementation(() => Promise.resolve({ etag: 'current', window: 0, count: 59 }));
@@ -145,18 +227,18 @@ describe('shared identity request limits', () => {
     expect(count).toBe(12);
   });
 
-  it('keeps conflict retries bounded and reports contention separately from an exhausted budget', async () => {
+  it('keeps conflict retries bounded and reports contention separately from an exhausted budget', { timeout: 10_000 }, async () => {
     const table = new TableClient('https://fictional.table.core.windows.net', 'Events');
     const get = vi.spyOn(table, 'getEntity').mockImplementation(() => Promise.resolve({ etag: 'racing', window: 0, count: 1 }));
     const update = vi.spyOn(table, 'updateEntity').mockRejectedValue({ statusCode: 412 });
     await expect(new TableRequestLimiter(table, () => 1).check(creator, 'scores-read'))
       .rejects.toMatchObject({ status: 429, code: 'REQUEST_LIMIT_CONTENTION' });
-    expect(get).toHaveBeenCalledTimes(5);
-    expect(update).toHaveBeenCalledTimes(5);
+    expect(get).toHaveBeenCalledTimes(16);
+    expect(update).toHaveBeenCalledTimes(16);
     get.mockImplementation(() => Promise.resolve({ etag: 'full', window: 0, count: 600 }));
     await expect(new TableRequestLimiter(table, () => 1).check(creator, 'scores-read'))
       .rejects.toMatchObject({ status: 429, code: 'REQUEST_LIMIT_EXCEEDED' });
-    expect(update).toHaveBeenCalledTimes(5);
+    expect(update).toHaveBeenCalledTimes(16);
   });
   it('creates the first counter from an SDK-mapped missing entity and rejects other 404s', async () => {
     const table = new TableClient('https://fictional.table.core.windows.net', 'Events');

@@ -6,6 +6,20 @@ import { purseTestId } from '../../domain/purse.test-support';
 import { PublicPurseResults } from './PublicPurseResults';
 
 describe('compact public purse', () => {
+  it('orders money won highest first with stable ties, zero amounts before unavailable, without changing the source order', () => {
+    const summary = publicPurseSummary(fictionalPurse());
+    const [winner, second, zero, otherZero] = summary.players;
+    if (!winner || !second || !zero || !otherZero) throw new Error('Missing fictional winnings');
+    const unavailable = { ...otherZero, playerId: purseTestId(99), displayName: 'Fictional unavailable', amountMinor: null };
+    const players = Object.freeze([zero, second, unavailable, winner, otherZero]);
+    render(<PublicPurseResults value={{ ...summary, players }} />);
+    const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1);
+    for (const [index, player] of [winner, second, zero, otherZero, unavailable].entries()) {
+      expect(rows[index]).toHaveTextContent(player.displayName);
+    }
+    expect(rows[4]).toHaveTextContent('Unavailable');
+    expect(players[0]).toBe(zero);
+  });
   it('shows only player, awarded amount and winning pools, retaining zero winners without projected/budget fields', () => {
     render(<PublicPurseResults value={publicPurseSummary(fictionalPurse())} />);
     expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual(['Player / pools won', 'Won (USD)']);

@@ -23,6 +23,8 @@ export function PublicPurseResults({ value }: { readonly value: PublicPurseSumma
   const selection = choices.some((choice) => choice.id === selected) ? selected : initialRound?.id ?? 'event';
   const pools = value.pools.filter((pool) => pool.roundId === (selection === 'event' ? null : selection));
   const currency = value.currency;
+  const players = [...value.players].sort((left, right) => left.amountMinor === null
+    ? right.amountMinor === null ? 0 : 1 : right.amountMinor === null ? -1 : right.amountMinor - left.amountMinor);
   return <section className="purse-panel purse-public" aria-label="Event purse">
     <header><p className="purse-hint">{value.eventName}</p><h2><PurseSymbol kind="trophy" />Event purse</h2></header>
     {currency === null ? <p>No purse configured.</p> : <>
@@ -51,7 +53,7 @@ export function PublicPurseResults({ value }: { readonly value: PublicPurseSumma
         <p className="purse-hint">Awarded pools only · Not payments</p>
         <table><caption className="visually-hidden">Event winnings in {currency}</caption>
           <thead><tr><th scope="col">Player / pools won</th><th scope="col">Won <span className="purse-column-currency">({currency})</span></th></tr></thead>
-          <tbody>{value.players.map((player) => <tr key={player.playerId}>
+          <tbody>{players.map((player) => <tr key={player.playerId}>
             <th scope="row">{player.displayName}
               {player.poolIds.length > 0 && <ul className="purse-player-pools" aria-label="Pools won">{player.poolIds.map((poolId) =>
                 <li key={poolId}>{value.pools.find((pool) => pool.id === poolId)?.name}</li>)}</ul>}

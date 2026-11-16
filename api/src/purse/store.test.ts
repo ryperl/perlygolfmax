@@ -6,6 +6,7 @@ import { identifier } from '../../test/catalog-fixtures.js';
 import { creator, event, member } from '../../test/fixtures.js';
 import { TableEventStore } from '../events/store.js';
 import { TablePurseStore } from './store.js';
+import { ApiError } from '../errors.js';
 
 async function fixture() {
   const f = await scoringFixture();
@@ -20,6 +21,25 @@ async function fixture() {
 }
 
 describe('owner purse settings and authoritative winnings', () => {
+  it('reserves all round reads in one charge and does no score work when that reservation is denied', async () => {
+    const f = await fixture();
+    const first = f.input.rounds[0];
+    if (!first) throw new Error('Missing fictional round');
+    await f.workspace.save(creator, event.id, { ...f.input,
+      rounds: Array.from({ length: 5 }, (_, index) => ({ ...first, id: identifier(500 + index), name: `Fictional round ${String(index)}` })),
+    }, f.saved.etag);
+    const get = vi.spyOn(f.scores, 'get');
+    f.charge.mockRejectedValueOnce(new ApiError(429, 'REQUEST_LIMIT_EXCEEDED'));
+    await expect(f.store.get(creator, event.id, f.charge)).rejects.toMatchObject({ status: 429 });
+    expect(f.charge).toHaveBeenCalledExactlyOnceWith(5);
+    expect(get).not.toHaveBeenCalled();
+    f.charge.mockClear();
+    const value = await f.store.get(creator, event.id, f.charge);
+    expect(value.roundScores).toHaveLength(5);
+    expect(f.charge).toHaveBeenCalledExactlyOnceWith(5);
+    expect(get).toHaveBeenCalledTimes(5);
+  });
+
   it('starts unconfigured and atomically saves exact individual shares, remainder and immutable receipt', async () => {
     const f = await fixture();
     const initial = await f.store.get(creator, event.id, f.charge);

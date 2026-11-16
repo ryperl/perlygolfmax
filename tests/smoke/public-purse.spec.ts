@@ -49,6 +49,9 @@ test('public purse is compact, course-filtered and refreshed through one minimal
     const picker = page.getByRole('combobox', { name: 'Course', exact: true });
     await expect(picker).toBeVisible();
     await expect(page.getByRole('columnheader')).toHaveText(['Player / pools won', 'Won (USD)']);
+    await expect(page.getByRole('rowheader').nth(0)).toContainText('Fictional golfer 1');
+    await expect(page.getByRole('rowheader').nth(1)).toContainText('Fictional golfer 5');
+    await expect(page.getByRole('rowheader').nth(2)).toContainText('Fictional golfer 9');
     await expect(page.getByRole('row', { name: /Fictional golfer 4 / })).toContainText('0.00');
     await expect(page.getByText(/projected|planned budget|remaining unscheduled/i)).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Edit purse|Save purse/ })).toHaveCount(0);

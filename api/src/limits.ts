@@ -20,13 +20,13 @@ const sharedPublicReadLimits: Readonly<Partial<Record<RequestClass, number>>> = 
 };
 
 export interface RequestLimiter {
-  check(identity: ScoreActor | PublicBrowseIdentity, action: RequestClass): Promise<void>;
+  check(identity: ScoreActor | PublicBrowseIdentity, action: RequestClass, units?: number): Promise<void>;
 }
 
 export class TableRequestLimiter implements RequestLimiter {
   constructor(private readonly table: TableClient, private readonly now: () => number = Date.now) {}
 
-  async check(identity: ScoreActor | PublicBrowseIdentity, action: RequestClass): Promise<void> {
+  async check(identity: ScoreActor | PublicBrowseIdentity, action: RequestClass, units = 1): Promise<void> {
     if (!isScoreActor(identity) && !isPublicBrowseIdentity(identity)) throw new ApiError(503, 'INVALID_REQUEST_PRINCIPAL');
     const partitionKey = 'kind' in identity
       ? identity.kind === 'public-browse' ? 'quota:public-browse'
@@ -36,15 +36,15 @@ export class TableRequestLimiter implements RequestLimiter {
     const rowKey = action;
     const limit = 'kind' in identity && (identity.kind === 'public-browse' || identity.kind === 'public-score')
       ? sharedPublicReadLimits[action] ?? limits[action] : limits[action];
-    const window = Math.floor(this.now() / 60_000);
-    for (let attempt = 0; attempt < 5; attempt++) {
+    if (!Number.isSafeInteger(units) || units < 1 || units > limit) throw new ApiError(503, 'INVALID_REQUEST_QUOTA_COST');
+    for (let attempt = 0; attempt < 16; attempt++) {
       try {
         let current;
         try {
           current = await this.table.getEntity(partitionKey, rowKey);
         } catch (error) {
           if (!isMissingTableEntity(error)) throw error;
-          await this.table.createEntity({ partitionKey, rowKey, window, count: 1 });
+          await this.table.createEntity({ partitionKey, rowKey, window: Math.floor(this.now() / 60_000), count: units });
           return;
         }
         if (typeof current.window !== 'number' || !Number.isSafeInteger(current.window) || current.window < 0
@@ -52,14 +52,15 @@ export class TableRequestLimiter implements RequestLimiter {
           || !Number.isSafeInteger(current.count) || current.count < 0 || !current.etag) {
           throw new ApiError(503, 'INVALID_REQUEST_QUOTA');
         }
-        if (current.window === window && current.count >= limit) throw new ApiError(429, 'REQUEST_LIMIT_EXCEEDED');
-        const count = current.window === window ? current.count + 1 : 1;
+        const window = Math.max(current.window, Math.floor(this.now() / 60_000));
+        if (current.window === window && units > limit - current.count) throw new ApiError(429, 'REQUEST_LIMIT_EXCEEDED');
+        const count = current.window === window ? current.count + units : units;
         await this.table.updateEntity({ partitionKey, rowKey, window, count }, 'Replace', { etag: current.etag });
         return;
       } catch (error) {
         if (isRecord(error) && (error.statusCode === 409 || error.statusCode === 412)) {
           // Desynchronize competing instances instead of exhausting retries in lockstep.
-          if (attempt < 4) await delay(10 * 2 ** attempt + Math.floor(Math.random() * 10));
+          if (attempt < 15) await delay(25 + Math.floor(Math.random() * Math.min(500, 25 * 2 ** attempt)));
           continue;
         }
         throw error;

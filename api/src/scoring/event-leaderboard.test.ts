@@ -61,9 +61,24 @@ describe('saved owner-only overall leaderboard service', () => {
     expect(isEventLeaderboardView(result)).toBe(true);
     expect(result.roundScores.map((round) => round.roundId)).toEqual(Array.from({ length: count }, (_, index) => identifier(500 + index)));
     expect(result.standings).toEqual(calculateEventStandings(result.workspace, result.roundScores));
-    expect(charge).toHaveBeenCalledTimes(count);
+    expect(charge).toHaveBeenCalledOnce();
+    expect(charge).toHaveBeenCalledWith(count);
     expect(maximum).toBe(Math.min(3, count));
     expect(f.submit).toHaveBeenCalledTimes(writes);
+  });
+
+  it('refuses an aggregate reservation before starting any round-score reads', async () => {
+    const f = await scoringFixture();
+    const first = f.input.rounds[0];
+    if (!first) throw new Error('Missing fictional round');
+    await f.workspace.save(creator, event.id, { ...f.input, overallCompetition: { kind: 'stroke-play', basis: 'gross' },
+      rounds: Array.from({ length: 5 }, (_, index) => ({ ...first, id: identifier(500 + index), name: `Fictional round ${String(index)}` })),
+    }, f.saved.etag);
+    const get = vi.spyOn(f.scores, 'get');
+    const charge = vi.fn().mockRejectedValue(new ApiError(429, 'REQUEST_LIMIT_EXCEEDED'));
+    await expect(f.scores.leaderboard(creator, event.id, charge)).rejects.toMatchObject({ status: 429 });
+    expect(charge).toHaveBeenCalledExactlyOnceWith(5);
+    expect(get).not.toHaveBeenCalled();
   });
 
   it('persists actual saved-game bindings, preserves them for old clients and explicitly disables without rewriting scores', async () => {

@@ -26,7 +26,7 @@ export function createPurseHandler(resolveApi: () => PurseApi) {
       if (request.method !== 'GET' && request.method !== 'PUT') return response(405, { code: 'METHOD_NOT_ALLOWED' });
       const eventId = request.params.id;
       if (!isUuid(eventId)) throw new ApiError(400, 'INVALID_REQUEST_ID');
-      const chargeRead = () => api.limiter.check(identity, 'scores-read');
+      const chargeRead = (units: number) => api.limiter.check(identity, 'scores-read', units);
       if (request.method === 'GET') return response(200, privateReadResponse(request, await api.purse.get(identity, eventId, chargeRead)));
       const match = request.headers.get('If-Match');
       const none = request.headers.get('If-None-Match');

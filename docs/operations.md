@@ -597,6 +597,9 @@ Score reads have a durable limit of 600 charged units per minute; score writes
 remain separately limited to 60 requests per minute. Private reads are scoped
 to identity, public reads/writes to the shared event, not to each visitor.
 Aggregate reads still charge once per request plus once per configured round;
+all round units are reserved atomically before score reads, using one counter
+update instead of racing a separate update for every parallel round. A rejected
+reservation starts no round reads and never partially consumes round units.
 every transport page remains charged. With inline responses, twelve viewers
 making four single-round polls and two five-round aggregate visits each
 consume 192 read units, not an
@@ -870,8 +873,10 @@ Public discovery permits 240 reads per site/minute and public workspace reads
 Write, identity, private event/setup, catalog and legacy tester setup limits
 are unchanged. ETag counters still enforce budgets across API instances and
 quota-store failures fail closed. Conflicting counter writes use short bounded
-exponential jitter between the existing five attempts, rather than retrying
-in lockstep. `REQUEST_LIMIT_EXCEEDED` identifies a full budget;
+exponential jitter between at most sixteen attempts, rather than retrying
+in lockstep. Retry delays start at 25 ms with capped 500 ms jitter; the durable
+counter never rolls a newer window backward after a slow read or clock skew.
+`REQUEST_LIMIT_EXCEEDED` identifies a full budget;
 `REQUEST_LIMIT_CONTENTION` identifies exhausted conflict retries. Both remain
 429 responses with `Retry-After`, never permission to bypass the counter.
 These application budgets are independent

@@ -64,7 +64,7 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
       const identity: PublicScoreIdentity = { kind: 'public-score', eventId };
       await api.limiter.check(identity, action === 'score-hole' ? 'scores-write' : action === 'workspace' ? 'setup-read' : 'scores-read');
       if (action === 'workspace') return response(200, privateReadResponse(request, await api.workspace.get(identity, eventId)));
-      const chargeRead = () => api.limiter.check(identity, 'scores-read');
+      const chargeRead = (units: number) => api.limiter.check(identity, 'scores-read', units);
       if (action === 'event-leaderboard') {
         const value = await api.scores.leaderboard(identity, eventId, chargeRead);
         const view = request.query.get('view');

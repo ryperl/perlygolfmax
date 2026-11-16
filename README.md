@@ -775,7 +775,9 @@ setup requests preserve existing choices, not silently reset them.
 The public **Purse and winnings** page keeps one course/round's prize pools in
 view with a dropdown, plus event-wide pools as a separate choice. Player rows
 show event-wide calculated awards and the pools won; known non-winners show
-0.00 with no pools. Projected amounts, funding reconciliation and editing
+0.00 with no pools. Players sort by money won, highest first; ties retain their
+existing order and unavailable amounts follow known amounts.
+Projected amounts, funding reconciliation and editing
 controls are omitted. Pending/unavailable sources remain identifiable.
 The public API sends a dedicated summary, not full scorecards or setup inputs;
 fresh reads and server-side scoring/permission checks are preserved.

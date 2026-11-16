@@ -54,7 +54,8 @@ describe('explicit unsigned public HTTP namespace', () => {
       expect(result.status).toBe(200);
       expect(isPublicLeaderboardSummary(result.jsonBody)).toBe(true);
       expect(JSON.stringify(result.jsonBody)).not.toMatch(/roundScores|teeProfile|handicap|cards|contenderIds|netStrokes/);
-      expect(f.api.limiter.check).toHaveBeenCalledTimes(1 + f.input.rounds.length);
+      expect(f.api.limiter.check).toHaveBeenCalledTimes(2);
+      expect(f.api.limiter.check).toHaveBeenNthCalledWith(2, f.actor, 'scores-read', f.input.rounds.length);
     }
     expect(isEventLeaderboardView((await f.invoke('event-leaderboard')).jsonBody)).toBe(true);
     f.seed({ ...f.row('event'), status: 'archived' });
@@ -78,7 +79,8 @@ describe('explicit unsigned public HTTP namespace', () => {
     expect(response.jsonBody.players.find((player) => player.playerId === playerId))
       .toMatchObject({ amountMinor: 10000, poolIds: [identifier(5200)] });
     expect(JSON.stringify(response.jsonBody)).not.toMatch(/roundScores|teeProfile|cards|handicap|projected|configuration|resolutions|recordedBy|etag/);
-    expect(f.api.limiter.check).toHaveBeenCalledTimes(1 + f.input.rounds.length);
+    expect(f.api.limiter.check).toHaveBeenCalledTimes(2);
+    expect(f.api.limiter.check).toHaveBeenNthCalledWith(2, f.actor, 'scores-read', f.input.rounds.length);
     expect(f.api.limiter.check.mock.calls.every((call) => call[1] === 'scores-read')).toBe(true);
     expect(isEventPurseView((await f.invoke('purse')).jsonBody)).toBe(true);
     f.seed({ ...f.row('event'), status: 'archived' });
