@@ -3,7 +3,8 @@ import { expect, test } from './test';
 import { contrastRatio } from './contrast';
 import type { Locator } from '@playwright/test';
 
-test('round accents remain distinct and readable without tinting fields or changing round identity', async ({ page }, testInfo) => {
+for (const theme of ['light', 'dark']) {
+test(`round accents remain distinct and readable without tinting fields or changing round identity (${theme})`, async ({ page }, testInfo) => {
   const server = await createServer({ configFile: false, cacheDir: testInfo.outputPath('vite-cache'),
     server: { host: '127.0.0.1', port: 0, hmr: false }, esbuild: { jsx: 'automatic' },
     optimizeDeps: { noDiscovery: true, include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'] }, logLevel: 'error' });
@@ -22,7 +23,6 @@ test('round accents remain distinct and readable without tinting fields or chang
     const scores = page.getByRole('region', { name: 'Round scores', exact: true });
     await expect(picker).toBeEnabled();
     await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
-    for (const theme of ['light', 'dark']) {
       await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
       const colors = await headers.evaluateAll((elements) => elements.map((element) => {
         const heading = element.querySelector('h3');
@@ -101,7 +101,6 @@ test('round accents remain distinct and readable without tinting fields or chang
       }
       expect(selectedColors.size).toBe(8);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    }
     const initialTone = await picker.locator('..').locator('..').getAttribute('data-round-tone');
     const third = await picker.getByRole('option', { name: 'Fictional Round 3', exact: true }).getAttribute('value');
     if (!third) throw new Error('Missing fictional round choice');
@@ -111,7 +110,8 @@ test('round accents remain distinct and readable without tinting fields or chang
     expect(selectedTone).not.toBe(initialTone);
     expect(selectedTone).toBe(await headers.nth(2).getAttribute('data-round-tone'));
     await scores.getByRole('button', { name: 'KP Competition', exact: true }).click();
-    await scores.screenshot({ path: testInfo.outputPath('round-context-kp.png') });
-    await page.screenshot({ path: testInfo.outputPath('pastel-round-accents.png'), fullPage: true });
+    await expect(scores.getByRole('heading', { name: 'KP Competition', exact: true })).toBeVisible();
+    await scores.locator('.kp-group-entries').screenshot({ path: testInfo.outputPath('round-context-kp.png') });
   } finally { await server.close(); }
 });
+}
