@@ -6,6 +6,7 @@ import type { TesterCredential } from '../../domain/test-access';
 import type { EventWorkspace } from '../../domain/setup';
 import { sortRoundsByStartDate } from '../../domain/event-schedule';
 import { OwnerScoresView } from '../scoring';
+import { RoundAccent, roundToneFor } from '../round-theme';
 import './test-access.css';
 
 export interface TesterEntryProps {
@@ -61,9 +62,9 @@ function TesterEntrySession({ client, credential, onExit }: TesterEntryProps) {
           <h2>{workspace.event.name}</h2>
           {workspace.rounds.length === 0 ? <p>The organizer needs to save a round and playing groups before you can enter scores.</p>
             : <>
-              <label>Saved round<select value={roundId} onChange={(event) => { setRoundId(event.target.value); }}>
+              <RoundAccent tone={roundToneFor(roundId, workspace.rounds)}><label>Saved round<select value={roundId} onChange={(event) => { setRoundId(event.target.value); }}>
                 {sortRoundsByStartDate(workspace.rounds).map((round) => <option key={round.id} value={round.id}>{round.name}</option>)}
-              </select></label>
+              </select></label></RoundAccent>
               <OwnerScoresView client={scores} eventId={credential.eventId} roundId={roundId}
                 overviewHref={null} onSessionExpired={loseAccess} />
             </>}

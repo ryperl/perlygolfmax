@@ -11,6 +11,7 @@ import type { EventWorkspace } from '../domain/setup';
 import type { ScoreLocation } from '../domain/score-location';
 import { groupStartingHole } from '../domain/round-navigation';
 import { OwnerScoresView } from '../features/scoring';
+import { roundToneFor } from '../features/round-theme';
 import { eventTabHref, isEventTab, readEventRoute } from './navigation';
 import type { EventTab } from './navigation';
 import { SavedEventPage } from './SavedEventPage';
@@ -140,6 +141,7 @@ function PublicRoundPage({ services, eventId, roundId, onUnavailable }: {
     {!workspace && !error && <p role="status">Loading saved round…</p>}
     {workspace && <>
       <OwnerScoresView client={services.scores} eventId={eventId} roundId={roundId}
+        roundTone={roundToneFor(roundId, workspace.rounds)}
         onNavigationBlockedChange={setBlocked}
         roundPicker={
           <label>Round<select aria-label="Round" value={roundId} disabled={blocked} onChange={(event) => {

@@ -45,6 +45,8 @@ describe('public directory date order', () => {
       expect(picker).toBeDisabled();
       expect(picker.closest('details')).toBeNull();
       expect(picker.closest('.score-round-picker')).not.toBeNull();
+      const firstTone = picker.closest('[data-round-tone]')?.getAttribute('data-round-tone');
+      expect(firstTone).toBeTruthy();
       await act(async () => { finish?.(fictionalPublicScores); await Promise.resolve(); });
       await waitFor(() => { expect(picker).toBeEnabled(); });
       expect(screen.queryByText('Round details & tools')).not.toBeInTheDocument();
@@ -65,6 +67,7 @@ describe('public directory date order', () => {
       await user.selectOptions(picker, second.id);
       await waitFor(() => { expect(services.scores.load).toHaveBeenLastCalledWith(fictionalPublicWorkspace.event.id, second.id, expect.any(AbortSignal)); });
       expect(await screen.findByRole('combobox', { name: 'Round' })).toHaveValue(second.id);
+      expect(screen.getByRole('combobox', { name: 'Round' }).closest('[data-round-tone]')?.getAttribute('data-round-tone')).not.toBe(firstTone);
       expect(services.scores.save).not.toHaveBeenCalled();
       expect(services.scores.saveGames).not.toHaveBeenCalled();
     });

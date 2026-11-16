@@ -64,13 +64,25 @@ export function PlayerWinningsDialog({ eventId, player, currency, load, onClose,
       <p className="purse-winnings">{value.currency === null ? 'No purse configured'
         : value.amountMinor === null ? 'Total unavailable' : formatMoney(value.amountMinor, value.currency)}</p>
       {value.needsReview && <p role="status">Some award details need organizer review.</p>}
-      {value.currency !== null && <ul className="purse-award-details">{value.awards.map((award) => <li key={award.poolId}>
-        <h3>{award.poolName} · {formatMoney(award.amountMinor, value.currency ?? currency)}</h3>
-        {award.roundName && <p className="purse-hint">{award.roundName}</p>}
-        <ul>{award.parts.map((part, index) => <li key={index}>
-          {explanation(part, value.currency ?? currency)} · {formatMoney(part.amountMinor, value.currency ?? currency)}
-        </li>)}</ul>
-      </li>)}</ul>}
+      {value.currency !== null && value.awards.length > 0 && <div className="purse-scroll purse-award-details"
+        role="region" aria-label="Winnings breakdown details" tabIndex={0}>
+        <table className="purse-award-table">
+          <caption className="visually-hidden">Allocated winnings by pool</caption>
+          <thead><tr><th scope="col">Award / detail</th><th scope="col">Won</th></tr></thead>
+          {value.awards.map((award) => <tbody key={award.poolId}>
+            <tr className="purse-award-pool"><th scope="rowgroup" colSpan={2}>{award.poolName}
+              {award.roundName && <small>{award.roundName}</small>}
+            </th></tr>
+            {award.parts.map((part, index) => <tr key={index}>
+              <th scope="row">{explanation(part, value.currency ?? currency)}</th>
+              <td>{formatMoney(part.amountMinor, value.currency ?? currency)}</td>
+            </tr>)}
+            {(award.parts.length !== 1 || award.parts[0]?.amountMinor !== award.amountMinor) && <tr className="purse-award-subtotal">
+              <th scope="row">Pool subtotal</th><td>{formatMoney(award.amountMinor, value.currency ?? currency)}</td>
+            </tr>}
+          </tbody>)}
+        </table>
+      </div>}
       {value.awards.length === 0 && value.amountMinor === 0 && <p>No allocated winnings.</p>}
       {(value.pendingPools > 0 || value.unavailablePools > 0) && <p className="purse-hint">
         {value.pendingPools} pending pools · {value.unavailablePools} unavailable. Not included above.</p>}

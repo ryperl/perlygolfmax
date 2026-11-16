@@ -53,6 +53,8 @@ describe('owner round navigation', () => {
     const f = fixture();
     await screen.findByRole('heading', { name: 'Round scorecard' });
     const picker = screen.getByLabelText('Round');
+    const firstTone = picker.closest('[data-round-tone]')?.getAttribute('data-round-tone');
+    expect(firstTone).toBeTruthy();
     expect(within(picker).getAllByRole('option').map((option) => option.textContent))
       .toEqual([f.second.name, fictionalWorkspace.rounds[0]?.name]);
     const user = userEvent.setup();
@@ -69,6 +71,7 @@ describe('owner round navigation', () => {
     expect(window.location.hash).toBe(`#organizer?event=${f.props.eventId}&round=${f.second.id}`);
     f.rerender(<OwnerRoundScoresPage {...f.props} roundId={f.second.id} />);
     await screen.findByRole('heading', { name: `Games · ${f.second.name}` });
+    expect(screen.getByLabelText('Round').closest('[data-round-tone]')?.getAttribute('data-round-tone')).not.toBe(firstTone);
     expect(screen.getByRole('button', { name: 'Add game' })).toBeEnabled();
     expect(f.props.setup.load).toHaveBeenCalledOnce();
     expect(f.props.scores.load).toHaveBeenLastCalledWith(f.props.eventId, f.second.id, expect.any(AbortSignal));

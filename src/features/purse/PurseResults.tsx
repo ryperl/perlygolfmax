@@ -13,10 +13,7 @@ export interface PurseResultsProps {
 
 export function PurseResults({ value, plan, calculation, draft = false }: PurseResultsProps) {
   const [query, setQuery] = useState('');
-  const [page, setPage] = useState(0);
   const filtered = value.workspace.roster.filter((player) => player.displayName.toLowerCase().includes(query.toLowerCase()));
-  const pages = Math.max(1, Math.ceil(filtered.length / 12));
-  const currentPage = Math.min(page, pages - 1);
   const money = (minor: number | null) => formatMoney(minor, plan.currency);
   const metrics = [
     ['Planned budget', calculation.plannedBudgetMinor], ['Scheduled awards', calculation.scheduledMinor],
@@ -66,16 +63,11 @@ export function PurseResults({ value, plan, calculation, draft = false }: PurseR
         </>}
       </details>;
     })}</div>
-    <label>Find winnings golfer<input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }} /></label>
-    <div className="purse-actions" aria-label="Winnings pages">
-      <button type="button" disabled={currentPage === 0} onClick={() => { setPage(currentPage - 1); }}>Previous winnings golfers</button>
-      <span>Page {currentPage + 1} of {pages} · {filtered.length} golfers</span>
-      <button type="button" disabled={currentPage + 1 >= pages} onClick={() => { setPage(currentPage + 1); }}>Next winnings golfers</button>
-    </div>
+    <label>Find winnings golfer<input type="search" value={query} onChange={(event) => { setQuery(event.target.value); }} /></label>
     <div className="purse-scroll" role="region" aria-label="Individual winnings table" tabIndex={0}>
       <table><caption>Known individual shares across every award pool · {plan.currency}</caption>
         <thead><tr><th scope="col">Golfer</th><th scope="col">Calculated</th><th scope="col">Projected</th><th scope="col">Cumulative winnings</th><th scope="col">Per-pool breakdown</th></tr></thead>
-        <tbody>{filtered.slice(currentPage * 12, currentPage * 12 + 12).map((player) => {
+        <tbody>{filtered.map((player) => {
           const winnings = calculation.players.find((entry) => entry.playerId === player.playerId);
           return <tr key={player.playerId}><th scope="row">{player.displayName}</th>
             <td>{money(winnings?.allocatedMinor ?? null)}</td><td>{money(winnings?.projectedMinor ?? null)}</td>

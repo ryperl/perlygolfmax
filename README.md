@@ -115,10 +115,18 @@ corporate feed configuration, or secrets to this public repository.
 
 ### PWA and offline boundaries
 
-Colors are centralized in `src/app/styles.css` as `--cp-*` theme variables;
+Base colors are centralized in `src/app/styles.css` as `--cp-*` theme variables;
 feature styles consume them rather than hardcoding colors. Keep the HTML theme
 metadata, manifest, SVG favicon and `scripts/generate-icons.mjs` in sync when
 changing the brand palette, then run `npm run icons` to regenerate the PNG assets.
+
+Saved round cards and round/scoring headers use the shared
+`src/features/round-theme/` pastel accents, including skins detail filters.
+Accents follow configured round order, not date-sorted display order, so the
+same round stays recognizable across these views. Eight accents cycle for
+larger events; this does not limit round count. Light/dark variants retain
+high-contrast text, neutral score fields and unchanged warning/status colors.
+Round names remain visible: color is supplementary, never the only identifier.
 
 The manifest and icons are a PWA foundation, not a guarantee of installation on
 every browser or platform. There is **no service worker**, explicit offline
@@ -814,6 +822,8 @@ place/tie/team shares, KP winning holes/distances and skins count times the exac
 per-skin rate. It contains no protected audit actors, edit history or projected
 money. Newer totals are identified rather than pretending they match an older
 player sheet. Requests are canceled on close or access/context changes.
+The breakdown groups awards into separated table rows with right-aligned
+amounts; pools with multiple entries show their saved subtotal.
 
 A compact **Organizer review needed** notice appears above affected loaded
 results for unresolved manual prize/KP ties, stale decisions/teams, unavailable
@@ -824,6 +834,8 @@ read; they do not add background event-wide requests or claim to scan unopened
 pages. Excel-readable export remains separate future scope.
 
 Organizer tools retain the complete plan and calculation detail below.
+The organizer winnings table shows all search matches without paging; recipient
+selection in the editor retains its separate controls for larger lists.
 
 Open **Purse and winnings** from the event overview or setup. Configure planned
 fixed funding or a buy-in multiplied by the current roster, choose the event

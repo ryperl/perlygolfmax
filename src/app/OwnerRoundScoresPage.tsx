@@ -8,6 +8,7 @@ import { sortRoundsByStartDate } from '../domain/event-schedule';
 import { groupStartingHole } from '../domain/round-navigation';
 import { OwnerScoresView } from '../features/scoring';
 import type { RoundCorrectionsClient } from '../client/round-corrections';
+import { roundToneFor } from '../features/round-theme';
 
 const RoundCorrectionsDialog = lazy(async () => ({ default: (await import('../features/corrections')).RoundCorrectionsDialog }));
 
@@ -62,6 +63,7 @@ export function OwnerRoundScoresPage({ setup, scores, corrections, eventId, roun
   const initialLocation = firstGroup && startingHole !== undefined
     ? { groupNumber: firstGroup.number, holeNumber: startingHole, view } : undefined;
   return <OwnerScoresView client={scores} eventId={eventId} roundId={roundId}
+    roundTone={roundToneFor(roundId, workspace.rounds)}
     initialLocation={initialLocation} onLocationChange={rememberView} onSessionExpired={onSessionExpired}
     onNavigationBlockedChange={setBlocked} overviewHref={`#overview?event=${encodeURIComponent(eventId)}`}
     roundPicker={

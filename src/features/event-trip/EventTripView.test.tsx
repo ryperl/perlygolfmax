@@ -32,6 +32,21 @@ function roundCard(name: string) {
 }
 
 describe('saved event overview', () => {
+  it('keeps round accents with their configured identities when dates reorder the visible cards', () => {
+    const tone = (name: string) => screen.getByRole('heading', { name, level: 3 }).closest('[data-round-tone]')?.getAttribute('data-round-tone');
+    const view = render(<EventTripView workspace={workspace} view="rounds" />);
+    const firstTone = tone(firstRound.name);
+    const secondTone = tone(secondRound.name);
+    expect(firstTone).toBeTruthy();
+    expect(secondTone).toBeTruthy();
+    expect(firstTone).not.toBe(secondTone);
+    view.rerender(<EventTripView workspace={{ ...workspace, rounds: [
+      { ...firstRound, startDate: '2026-11-02' }, { ...secondRound, startDate: '2026-11-01' },
+    ] }} view="rounds" />);
+    expect(screen.getAllByRole('heading', { level: 3 }).map((entry) => entry.textContent)).toEqual([secondRound.name, firstRound.name]);
+    expect(tone(firstRound.name)).toBe(firstTone);
+    expect(tone(secondRound.name)).toBe(secondTone);
+  });
   it.each(['overview', 'rounds', 'group'] as const)('uses concise headings without repeated disclaimers in %s', (view) => {
     render(<EventTripView workspace={workspace} view={view} />);
     expect(screen.getByRole('region', { name: 'Rounds' })).toBeVisible();

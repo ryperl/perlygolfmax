@@ -53,7 +53,7 @@ describe('PurseResults', () => {
     expect(screen.getByText('Each place is a team pot, split equally among its members.')).toBeInTheDocument();
     expect(screen.getAllByText(/team pot member share/)).toHaveLength(8);
   });
-  it('shows projected future sources with reserves, supports every golfer through search and paging', () => {
+  it('shows projected reserves and every golfer without paging, retaining search and empty recovery', () => {
     const value = fictionalPurse(40);
     const plan = value.configuration.plan;
     if (!plan) throw new Error('Missing fictional plan.');
@@ -67,11 +67,15 @@ describe('PurseResults', () => {
     render(<PurseResults value={value} plan={plan} calculation={calculatePurse(plan, value.workspace, pending)} />);
     expect(screen.getByRole('heading', { name: 'Individual winnings · projected' })).toBeVisible();
     expect(screen.getByText('Reserved').nextElementSibling).toHaveTextContent('1.50');
-    fireEvent.click(screen.getByRole('button', { name: 'Next winnings golfers' }));
+    expect(within(screen.getByRole('table')).getAllByRole('rowheader')).toHaveLength(40);
+    expect(screen.queryByRole('button', { name: /winnings golfers/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Winnings pages')).not.toBeInTheDocument();
     expect(screen.getByRole('row', { name: /Fictional golfer 13/ })).toBeVisible();
     fireEvent.change(screen.getByLabelText('Find winnings golfer'), { target: { value: '40' } });
     expect(screen.getByRole('row', { name: /Fictional golfer 40/ })).toBeVisible();
     fireEvent.change(screen.getByLabelText('Find winnings golfer'), { target: { value: 'no match' } });
     expect(screen.getByText('No golfers match this search.')).toBeVisible();
+    fireEvent.change(screen.getByLabelText('Find winnings golfer'), { target: { value: '' } });
+    expect(within(screen.getByRole('table')).getAllByRole('rowheader')).toHaveLength(40);
   });
 });

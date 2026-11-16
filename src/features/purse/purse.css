@@ -80,5 +80,49 @@
 }
 
 .purse-award-details {
-  padding-inline-start: 1.25rem;
+  margin-block: 1rem;
+}
+
+.purse-winnings-dialog .purse-award-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: auto;
+  border-collapse: collapse;
+}
+
+.purse-winnings-dialog .purse-award-table :is(th, td) {
+  padding: .5rem;
+  border-bottom: 1px solid var(--cp-border);
+  vertical-align: top;
+}
+
+.purse-winnings-dialog .purse-award-table th {
+  width: auto;
+  text-align: start;
+  font-weight: 400;
+}
+
+.purse-winnings-dialog .purse-award-table td,
+.purse-winnings-dialog .purse-award-table thead th:last-child {
+  text-align: end;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.purse-winnings-dialog .purse-award-table thead th,
+.purse-winnings-dialog .purse-award-pool th,
+.purse-winnings-dialog .purse-award-subtotal :is(th, td) {
+  font-weight: 600;
+}
+
+.purse-winnings-dialog .purse-award-pool th {
+  padding-block-start: .75rem;
+  border-top: 1px solid var(--cp-border-strong);
+  background: var(--cp-surface-soft);
+}
+
+.purse-award-pool small {
+  display: block;
+  font-weight: 400;
+  color: var(--cp-text-muted);
 }

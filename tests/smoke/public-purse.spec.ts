@@ -1,6 +1,6 @@
 import { createServer } from 'vite';
 import { expect, test } from './test';
-import { fictionalPurse } from './purse-fixture-data';
+import { fictionalPurse, fictionalPurseSave } from './purse-fixture-data';
 import { publicPurseSummary } from '../../src/domain/public-purse';
 import { purseTestId } from '../../src/domain/purse.test-support';
 import { playerWinningsBreakdown } from '../../src/domain/winnings-breakdown';
@@ -12,7 +12,13 @@ test('public purse is compact, course-filtered and refreshed through one minimal
     optimizeDeps: { noDiscovery: true, include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'] },
     logLevel: 'error',
   });
-  const base = publicPurseSummary(fictionalPurse(12));
+  const initial = fictionalPurse(12);
+  const plan = initial.configuration.plan;
+  if (!plan) throw new Error('Missing fictional plan');
+  const saved = fictionalPurseSave(initial, { ...plan, funding: { kind: 'fixed', budgetMinor: 301 }, pools: [...plan.pools,
+    { id: purseTestId(6100), name: 'Fictional bonus', source: { kind: 'manual' }, awardUnit: 'pot', amountMinor: 101, recipientIds: [purseTestId(1)] },
+  ] }, [], initial.configuration.etag, purseTestId(8101)).current;
+  const base = publicPurseSummary(saved);
   const first = base.pools[0];
   if (!first) throw new Error('Missing fictional pool');
   const secondRound = purseTestId(2001);
@@ -44,7 +50,7 @@ test('public purse is compact, course-filtered and refreshed through one minimal
       expect(url.pathname).toBe(`/__public-api/public/events/${summary.eventId}/purse`);
       if (url.searchParams.get('view') === 'player') {
         detailReads++;
-        const value = playerWinningsBreakdown(fictionalPurse(12), url.searchParams.get('playerId') ?? '');
+        const value = playerWinningsBreakdown(saved, url.searchParams.get('playerId') ?? '');
         await route.fulfill({ json: value });
         return;
       }
@@ -81,6 +87,28 @@ test('public purse is compact, course-filtered and refreshed through one minimal
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('heading', { level: 2 })).toBeFocused();
     await expect(dialog.getByText(/Place 1/)).toBeVisible();
+    const details = dialog.getByRole('table', { name: 'Allocated winnings by pool' });
+    await expect(details.getByRole('columnheader')).toHaveText(['Award / detail', 'Won']);
+    await expect(details.locator('.purse-award-pool')).toHaveCount(2);
+    await expect(details.getByRole('row', { name: /Designated award/ })).toContainText(/USD\s+1.01/);
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
+      for (const theme of ['light', 'dark']) {
+        await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+        for (const cell of await details.locator('tbody th, tbody td').all()) {
+          expect(await cell.evaluate((element) => getComputedStyle(element).borderBottomWidth)).toBe('1px');
+          expect(await cell.evaluate((element) => getComputedStyle(element).borderBottomStyle)).toBe('solid');
+        }
+        for (const amount of await details.locator('td').all()) {
+          expect(await amount.evaluate((element) => getComputedStyle(element).textAlign)).toBe('end');
+        }
+        expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+        expect(await details.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+      }
+    }
+    await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
+    await dialog.screenshot({ path: testInfo.outputPath('player-winnings-rows.png') });
     expect(detailReads).toBe(1);
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);

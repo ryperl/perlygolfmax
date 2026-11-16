@@ -9,6 +9,7 @@ import type { EventEntryProgress, RoundEntryProgressState } from './entry-progre
 import './event-trip.css';
 import { HandicapIndexBadge } from './HandicapIndexBadge';
 import { CourseHandicap } from '../scoring';
+import { RoundAccent, roundToneFor } from '../round-theme';
 
 interface EventTripViewProps {
   readonly workspace: EventWorkspace;
@@ -138,7 +139,7 @@ function SavedRounds({ workspace, showGroups, progress }: {
             const handicaps = new Map(publishedCourseHandicaps(round).map((entry) => [entry.playerId, entry]));
             return (
             <li className="panel event-trip-round" key={round.id}>
-              <div className="event-trip-round-heading">
+              <RoundAccent className="event-trip-round-heading" tone={roundToneFor(round.id, workspace.rounds)}>
                 <div>
                   <h3>{round.name}</h3>
                   {round.startDate && <p>Date: <time dateTime={round.startDate}>{eventStartDateLabel(round.startDate)}</time></p>}
@@ -158,7 +159,7 @@ function SavedRounds({ workspace, showGroups, progress }: {
                 )}
                 {(workspace.canViewScores || workspace.event.role === 'owner') && workspace.event.status === 'active' && workspace.viewerPlayerId && round.groups.some((group) => group.playerIds.includes(workspace.viewerPlayerId ?? '')) &&
                   <a href={scoreLink(workspace, round.id)}>Your playing group · Group {round.groups.find((group) => group.playerIds.includes(workspace.viewerPlayerId ?? ''))?.number}</a>}
-              </div>
+              </RoundAccent>
               {showGroups && (
                 <>
                   <dl className="event-trip-tee">

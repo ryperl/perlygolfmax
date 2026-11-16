@@ -1,0 +1,54 @@
+:root {
+  --cp-round-sage-surface: #edf4e9;
+  --cp-round-sage-line: #537149;
+  --cp-round-sky-surface: #eaf1f8;
+  --cp-round-sky-line: #4a6c8c;
+  --cp-round-sand-surface: #f6f0df;
+  --cp-round-sand-line: #806b36;
+  --cp-round-lavender-surface: #f0ebf7;
+  --cp-round-lavender-line: #75608c;
+  --cp-round-rose-surface: #f8ebee;
+  --cp-round-rose-line: #925b6b;
+  --cp-round-peach-surface: #f8eddf;
+  --cp-round-peach-line: #916739;
+  --cp-round-seafoam-surface: #e6f3ef;
+  --cp-round-seafoam-line: #417968;
+  --cp-round-slate-surface: #edf0f4;
+  --cp-round-slate-line: #626f82;
+}
+
+html[data-theme="dark"] {
+  --cp-round-sage-surface: #25372a;
+  --cp-round-sage-line: #a7c59c;
+  --cp-round-sky-surface: #263545;
+  --cp-round-sky-line: #a3bfdc;
+  --cp-round-sand-surface: #3a3425;
+  --cp-round-sand-line: #d3c28b;
+  --cp-round-lavender-surface: #332d42;
+  --cp-round-lavender-line: #c1addb;
+  --cp-round-rose-surface: #3e2d35;
+  --cp-round-rose-line: #d8aaba;
+  --cp-round-peach-surface: #3d3126;
+  --cp-round-peach-line: #d9b78c;
+  --cp-round-seafoam-surface: #243a33;
+  --cp-round-seafoam-line: #9dcbbb;
+  --cp-round-slate-surface: #2e3540;
+  --cp-round-slate-line: #b6c0d0;
+}
+
+[data-round-tone="sage"] { --cp-round-surface: var(--cp-round-sage-surface); --cp-round-line: var(--cp-round-sage-line); }
+[data-round-tone="sky"] { --cp-round-surface: var(--cp-round-sky-surface); --cp-round-line: var(--cp-round-sky-line); }
+[data-round-tone="sand"] { --cp-round-surface: var(--cp-round-sand-surface); --cp-round-line: var(--cp-round-sand-line); }
+[data-round-tone="lavender"] { --cp-round-surface: var(--cp-round-lavender-surface); --cp-round-line: var(--cp-round-lavender-line); }
+[data-round-tone="rose"] { --cp-round-surface: var(--cp-round-rose-surface); --cp-round-line: var(--cp-round-rose-line); }
+[data-round-tone="peach"] { --cp-round-surface: var(--cp-round-peach-surface); --cp-round-line: var(--cp-round-peach-line); }
+[data-round-tone="seafoam"] { --cp-round-surface: var(--cp-round-seafoam-surface); --cp-round-line: var(--cp-round-seafoam-line); }
+[data-round-tone="slate"] { --cp-round-surface: var(--cp-round-slate-surface); --cp-round-line: var(--cp-round-slate-line); }
+
+.round-accent[data-round-tone] {
+  min-width: 0;
+  padding: .5rem .75rem;
+  border-inline-start: 4px solid var(--cp-round-line);
+  border-radius: .625rem;
+  background: var(--cp-round-surface);
+}

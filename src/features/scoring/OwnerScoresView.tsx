@@ -27,6 +27,8 @@ import { KpPanel } from '../kp';
 import { scoreEntryText } from '../../contracts/scoring';
 import { EventReviewBanner } from '../event-review';
 import { roundReviewNotices } from '../../domain/event-review';
+import { RoundAccent } from '../round-theme';
+import type { RoundTone } from '../round-theme';
 
 export interface OwnerScoresViewProps {
   readonly client: ScoresClient;
@@ -38,6 +40,7 @@ export interface OwnerScoresViewProps {
   readonly onLocationChange?: ((location: ScoreLocation) => void) | undefined;
   readonly roundTools?: ReactNode;
   readonly roundPicker?: ReactNode;
+  readonly roundTone?: RoundTone | undefined;
   readonly onNavigationBlockedChange?: (blocked: boolean) => void;
 }
 
@@ -47,7 +50,7 @@ export function OwnerScoresView(props: OwnerScoresViewProps) {
   return <OwnerScoresController key={`${props.eventId}:${props.roundId}:${String(identity.generation)}`} {...props} />;
 }
 
-function OwnerScoresController({ client, eventId, roundId, onSessionExpired, overviewHref, initialLocation, onLocationChange, roundTools, roundPicker, onNavigationBlockedChange }: OwnerScoresViewProps) {
+function OwnerScoresController({ client, eventId, roundId, onSessionExpired, overviewHref, initialLocation, onLocationChange, roundTools, roundPicker, roundTone, onNavigationBlockedChange }: OwnerScoresViewProps) {
   const [drafts, setDrafts] = useState<ReadonlyMap<string, HoleDraft>>(new Map());
   const currentDrafts = useRef(drafts);
   const draftAccess = useRef<string | null>(null);
@@ -322,7 +325,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
   return <section ref={entryRegion} tabIndex={-1} aria-label="Round scores" className="owner-scores">
     {round && <EventReviewBanner notices={roundReviewNotices(round, round.roundName)} />}
     <h1>Round scores</h1>
-    {roundPicker && <div className="score-round-picker">{roundPicker}</div>}
+    {roundPicker && <RoundAccent className="score-round-picker" tone={roundTone}>{roundPicker}</RoundAccent>}
     {tools}
     {accessChanged && <p role="alert">Score permissions or playing groups changed. Your drafts are retained for review only. Discard them before starting new entries.</p>}
     {screen !== 'entry' && connection}

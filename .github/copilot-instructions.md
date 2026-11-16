@@ -39,6 +39,9 @@
   visible focus, and narrow-screen layout. No `any` or unchecked type assertions.
 - Use theme variables for component colors. Keep UI copy honest about demo,
   persistence, synchronization, sign-in, and offline behavior.
+- Reuse round-theme accents in configured round order, not date-sorted order.
+  Keep score fields neutral, status colors semantic and round names visible;
+  verify light/dark text contrast and never use color as the only identifier.
 - Keep public views compact and informative: remove redundant metrics and
   routine explanatory text. Prefer small inline SVGs for familiar meaning,
   retaining accessible labels and essential state/error explanations.

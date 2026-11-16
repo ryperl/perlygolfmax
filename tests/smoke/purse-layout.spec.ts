@@ -44,8 +44,10 @@ test('purse controls retain forty-golfer choices at 390/320 and enlarged text wi
     await page.getByLabel('Pool 3 prize 2 place', { exact: true }).fill('2');
     await page.getByLabel('Pool 3 prize 2 amount', { exact: true }).fill('0.01');
     const preview = page.getByRole('region', { name: 'Unsaved purse projection', exact: true });
-    await preview.getByRole('button', { name: 'Next winnings golfers', exact: true }).click();
+    await expect(preview.getByRole('button', { name: /winnings golfers/ })).toHaveCount(0);
+    await expect(preview.getByRole('rowheader')).toHaveCount(40);
     await expect(preview.getByRole('row', { name: /Fictional golfer 13 / })).toBeVisible();
+    await expect(preview.getByRole('row', { name: /Fictional golfer 40 / })).toBeVisible();
     for (const width of [390, 320]) {
       await page.setViewportSize({ width, height: 844 });
       await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });

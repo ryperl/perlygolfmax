@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { EventSkinsDetails } from '../../domain/event-skins-details';
+import { RoundAccent, roundToneFor } from '../round-theme';
 
 export function EventSkinsDetailsView({ value }: { readonly value: EventSkinsDetails }) {
   const [selected, setSelected] = useState(value.rounds[0]?.id ?? '');
@@ -8,7 +9,7 @@ export function EventSkinsDetailsView({ value }: { readonly value: EventSkinsDet
   const holes = value.holes.filter((entry) => entry.roundId === roundId);
   const name = (id: string) => value.players.find((player) => player.playerId === id)?.displayName ?? 'Player unavailable';
   return <div className="event-skins-details">
-    <div className="event-skins-filters">
+    <RoundAccent className="event-skins-filters" tone={roundId ? roundToneFor(roundId, value.rounds) : undefined}>
       <label>Round<select value={roundId} onChange={(event) => { setSelected(event.target.value); setHole('all'); }}>
         {value.rounds.map((round) => <option key={round.id} value={round.id}>{round.name}</option>)}
       </select></label>
@@ -16,7 +17,7 @@ export function EventSkinsDetailsView({ value }: { readonly value: EventSkinsDet
         <option value="all">All holes</option>
         {holes.map((entry) => <option key={entry.number} value={String(entry.number)}>Hole {entry.number}</option>)}
       </select></label>
-    </div>
+    </RoundAccent>
     <p className="purse-hint">Saved scores · Net first · No carryovers</p>
     {holes.filter((entry) => hole === 'all' || String(entry.number) === hole).map((entry) => <details key={`${entry.roundId}:${String(entry.number)}`}>
       <summary>Hole {entry.number} · {entry.winnerId ? name(entry.winnerId) : entry.status === 'tied'
