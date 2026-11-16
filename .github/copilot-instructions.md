@@ -40,6 +40,9 @@
 - Use theme variables for component colors. Keep UI copy honest about demo,
   persistence, synchronization, sign-in, and offline behavior.
 - Reuse round-theme accents in configured round order, not date-sorted order.
+  Scope the selected tone over round views, not only their picker, and use
+  round tokens for contextual selections/rails. Do not override global accent
+  tokens: save actions, status feedback and golf score marks keep their meaning.
   Keep score fields neutral, status colors semantic and round names visible;
   verify light/dark text contrast and never use color as the only identifier.
 - Keep public views compact and informative: remove redundant metrics and

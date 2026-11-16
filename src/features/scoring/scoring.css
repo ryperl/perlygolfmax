@@ -6,7 +6,7 @@
 .score-warning { padding: .6rem .8rem; border-left: 3px solid var(--cp-accent); background: var(--cp-accent-soft); font-size: .9rem; }
 .score-toolbar { display: flex; flex-wrap: wrap; gap: .4rem; }
 .score-toolbar button { margin: 0; padding: .5rem .75rem; }
-.score-toolbar [aria-pressed="true"] { border-color: var(--cp-accent); background: var(--cp-accent-soft); }
+.score-toolbar [aria-pressed="true"] { border-color: var(--cp-round-line, var(--cp-accent)); background: var(--cp-round-surface, var(--cp-accent-soft)); }
 .score-action-icon { display: none; width: 1.125rem; height: 1.125rem; flex-shrink: 0; }
 .score-action-short-label { display: none; }
 .score-context, .score-connection, .score-hint { font-size: .9rem; color: var(--cp-text-muted); }
@@ -17,6 +17,8 @@
 .score-selection select, .score-round-picker select { width: 100%; min-width: 0; height: 44px; min-height: 44px; font: inherit; padding: .35rem; border-radius: .5rem; border: 1px solid var(--cp-border-strong); background: var(--cp-surface); color: var(--cp-text); }
 .group-hole-entry > .score-hint { padding: 0 .75rem .4rem; margin: 0; }
 .owner-scores select:focus-visible, .owner-scores summary:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
+.owner-scores[data-round-tone] :is(button, input, select, summary, a, [tabindex]):focus-visible { outline-color: var(--cp-round-line); }
+[data-round-tone] .hole-heading { border-inline-start: 4px solid var(--cp-round-line); background: var(--cp-round-surface); }
 .hole-heading { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .5rem; padding: .5rem .75rem; border-block: 1px solid var(--cp-border); text-align: center; }
 .hole-heading button { margin: 0; min-width: 44px; min-height: 44px; font-size: 1.3rem; padding: .35rem; }
 .hole-heading h2 { font-size: 1.4rem; }

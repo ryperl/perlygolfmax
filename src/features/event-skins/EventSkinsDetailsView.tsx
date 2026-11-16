@@ -39,7 +39,7 @@ export function EventSkinsDetailsView({ value, selection, onSelect }: {
     if (roundId && next) onSelect({ roundId, holeNumber: next.number });
   }
   if (value.status === 'disabled') return <p>Event skins is no longer configured.</p>;
-  return <div className="event-skins-details">
+  return <div className="event-skins-details" data-round-tone={roundId ? roundToneFor(roundId, value.rounds) : undefined}>
     {roundId && <RoundAccent className="event-skins-filters" tone={roundToneFor(roundId, value.rounds)}>
       <label>Round<select value={roundId} onChange={(event) => { onSelect({ roundId: event.target.value }); }}>
         {value.rounds.map((round) => <option key={round.id} value={round.id}>{round.name}</option>)}

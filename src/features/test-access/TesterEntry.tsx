@@ -66,6 +66,7 @@ function TesterEntrySession({ client, credential, onExit }: TesterEntryProps) {
                 {sortRoundsByStartDate(workspace.rounds).map((round) => <option key={round.id} value={round.id}>{round.name}</option>)}
               </select></label></RoundAccent>
               <OwnerScoresView client={scores} eventId={credential.eventId} roundId={roundId}
+                roundTone={roundToneFor(roundId, workspace.rounds)}
                 overviewHref={null} onSessionExpired={loseAccess} />
             </>}
         </>}

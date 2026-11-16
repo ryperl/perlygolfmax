@@ -99,6 +99,8 @@ test('public overall and skins each load only one purpose-specific response with
     await expect(page.getByRole('table', { name: 'Hole 1 skins comparison' })).toBeVisible();
     const navigator = page.getByRole('navigation', { name: 'Skins holes', exact: true });
     await expect(navigator.getByRole('button')).toHaveCount(18);
+    const firstRoundHighlight = await navigator.locator('[aria-pressed="true"]').evaluate((element) => getComputedStyle(element).backgroundColor);
+    const awardColor = await page.locator('.skins-hole-state').evaluate((element) => getComputedStyle(element, '::before').backgroundColor);
     const lastHole = navigator.getByRole('button', { name: /^Hole 18:/ });
     await lastHole.focus(); await page.keyboard.press('Enter');
     await expect(lastHole).toBeFocused();
@@ -109,6 +111,8 @@ test('public overall and skins each load only one purpose-specific response with
     if (!secondRound) throw new Error('Missing second fictional round');
     await page.getByRole('combobox', { name: 'Round', exact: true }).selectOption(secondRound.id);
     await navigator.getByRole('button', { name: /^Hole 2:/ }).click();
+    expect(await navigator.locator('[aria-pressed="true"]').evaluate((element) => getComputedStyle(element).backgroundColor)).not.toBe(firstRoundHighlight);
+    expect(await page.locator('.skins-hole-state').evaluate((element) => getComputedStyle(element, '::before').backgroundColor)).toBe(awardColor);
     const comparison = page.getByRole('table', { name: 'Hole 2 skins comparison', exact: true });
     await expect(comparison).toBeVisible();
     await expect(comparison.getByRole('columnheader')).toHaveText(['Player', 'Par', 'Gross', 'Shots', 'Net']);
@@ -122,8 +126,15 @@ test('public overall and skins each load only one purpose-specific response with
           const label = element.querySelector('small');
           if (!label) throw new Error('Missing hole status');
           const style = getComputedStyle(element);
-          return { text: style.color, status: getComputedStyle(label).color, background: style.backgroundColor };
+          return { text: style.color, status: getComputedStyle(label).color, background: style.backgroundColor, line: style.borderColor };
         });
+        const palette = await page.locator('.event-skins-filters').evaluate((element) => ({
+          surface: getComputedStyle(element).backgroundColor, line: getComputedStyle(element).borderInlineStartColor,
+        }));
+        expect(colors.background).toBe(palette.surface);
+        expect(colors.line).toBe(palette.line);
+        expect(await page.locator('.skins-hole-panel').evaluate((element) => getComputedStyle(element).borderInlineStartColor)).toBe(palette.line);
+        expect(await page.locator('.skins-hole-number').evaluate((element) => getComputedStyle(element).backgroundColor)).toBe(palette.surface);
         expect(contrastRatio(colors.text, colors.background)).toBeGreaterThanOrEqual(4.5);
         expect(contrastRatio(colors.status, colors.background)).toBeGreaterThanOrEqual(4.5);
         for (const button of await navigator.getByRole('button').all()) {

@@ -27,7 +27,7 @@
 .recap-counting-marker { display: inline-block; margin-left: 3px; color: var(--cp-accent); font-size: .65rem; font-weight: 750; vertical-align: super; }
 .scorecard-game-context { color: var(--cp-accent); font-size: .9rem; }
 .scorecard-game-unavailable { color: var(--cp-text-muted); font-size: .85rem; }
-.recap-subtotal { background: var(--cp-accent-soft); color: var(--cp-accent); font-weight: 700; }
+.recap-subtotal { background: var(--cp-round-surface, var(--cp-accent-soft)); color: var(--cp-round-ink, var(--cp-accent)); font-weight: 700; }
 .score-mark { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; }
 .score-token { font-size: .75rem; white-space: nowrap; min-width: max-content; }
 .score-birdie, .score-eagle { border: 1px solid var(--cp-accent); border-radius: 50%; color: var(--cp-accent); }
@@ -38,11 +38,12 @@
 .round-card-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; padding-block: 12px; }
 .round-card-heading h2 { font-size: clamp(1.5rem, 3vw, 2rem); margin-block: 4px; }
 .round-card-heading p { margin: 0; }
+[data-round-tone] .round-card-heading { padding-inline: .75rem; border-inline-start: 4px solid var(--cp-round-line); border-radius: .625rem; background: var(--cp-round-surface); }
 .scorecard-game-summary { min-width: 0; }
 .scorecard-game-summary h3 { margin: 0 0 8px; font-size: .85rem; color: var(--cp-text-muted); }
 .scorecard-game-summary ul { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; margin: 0; }
 .scorecard-game-summary li { min-width: 0; overflow-wrap: anywhere; padding: 4px 8px; border: 1px solid var(--cp-border); border-radius: .5rem; background: var(--cp-surface); font-size: .85rem; }
-.scorecard-eyebrow { color: var(--cp-accent); font-size: .8rem; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
+.scorecard-eyebrow { color: var(--cp-round-ink, var(--cp-accent)); font-size: .8rem; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
 .scorecard-course { color: var(--cp-text-muted); font-size: .85rem; }
 .scorecard-controls { display: flex; flex-wrap: wrap; gap: 16px; }
 .scorecard-controls label { display: grid; gap: 4px; flex: 1 1 10rem; min-width: 0; font-size: .85rem; font-weight: 600; }
@@ -53,7 +54,7 @@
 .scorecard-handicap { display: inline-block; font-size: .75rem; font-weight: 500; color: var(--cp-text-muted); white-space: nowrap; }
 .scorecard-nine-picker { display: flex; flex-wrap: wrap; gap: 8px; }
 .scorecard-nine-picker button, .scorecard-back { margin: 0; min-height: 44px; }
-.scorecard-nine-picker [aria-pressed="true"] { background: var(--cp-accent-soft); border-color: var(--cp-accent); color: var(--cp-accent); }
+.scorecard-nine-picker [aria-pressed="true"] { background: var(--cp-round-surface, var(--cp-accent-soft)); border-color: var(--cp-round-line, var(--cp-accent)); color: var(--cp-round-ink, var(--cp-accent)); }
 @media (max-width: 600px) {
   .recap-table { min-width: 33rem; }
   .recap-table th:first-child { width: 5rem; min-width: 5rem; max-width: 5rem; padding-inline: 8px; }

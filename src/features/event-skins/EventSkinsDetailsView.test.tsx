@@ -49,6 +49,7 @@ describe('saved skins hole navigator', () => {
     const view = render(<Details value={unordered} />);
     const user = userEvent.setup();
     const nav = within(screen.getByRole('navigation', { name: 'Skins holes' }));
+    expect(screen.getByRole('navigation', { name: 'Skins holes' }).closest('.event-skins-details')).toHaveAttribute('data-round-tone', 'sage');
     expect(nav.getAllByRole('button').map((button) => button.textContent)).toEqual(['1Skin', '2None', '3None']);
     await user.click(screen.getByRole('button', { name: 'Previous hole' }));
     expect(screen.getByRole('table', { name: 'Hole 3 skins comparison' })).toBeVisible();
@@ -61,6 +62,7 @@ describe('saved skins hole navigator', () => {
     const nextRound = value.rounds[1];
     if (!nextRound) throw new Error('Missing fixture round');
     await user.selectOptions(screen.getByRole('combobox', { name: 'Round' }), nextRound.id);
+    expect(screen.getByRole('navigation', { name: 'Skins holes' }).closest('.event-skins-details')).toHaveAttribute('data-round-tone', 'sky');
     expect(screen.getByRole('table', { name: 'Hole 1 skins comparison' })).toBeVisible();
     view.rerender(<Details value={{ ...unordered, holes: unordered.holes.filter((hole) => hole.roundId !== nextRound.id || hole.number !== 1) }} />);
     expect(screen.getByRole('table', { name: 'Hole 2 skins comparison' })).toBeVisible();

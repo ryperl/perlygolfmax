@@ -19,6 +19,7 @@ describe('no-account tester entry', () => {
     expect(within(selector).getAllByRole('option').map((option) => option.textContent)).toEqual(['Fictional earlier round', first.name]);
     expect(selector).toHaveValue(first.id);
     await waitFor(() => { expect(scores.load).toHaveBeenLastCalledWith(credential.eventId, first.id, expect.any(AbortSignal)); });
+    expect(screen.getByRole('region', { name: 'Round scores' })).toHaveAttribute('data-round-tone', 'sage');
   });
   it('loads only the scoped workspace, selects saved rounds, and offers no login or management navigation', async () => {
     const { client, scores } = testerClient();
@@ -34,6 +35,7 @@ describe('no-account tester entry', () => {
     expect(screen.queryByRole('button', { name: /sign in|setup|purse|history/i })).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Saved round'), { target: { value: testerLink.revision } });
     await waitFor(() => { expect(scores.load).toHaveBeenLastCalledWith(credential.eventId, testerLink.revision, expect.any(AbortSignal)); });
+    expect(screen.getByRole('region', { name: 'Round scores' })).toHaveAttribute('data-round-tone', 'sky');
     fireEvent.click(screen.getByRole('button', { name: 'Games' }));
     expect(await screen.findByRole('heading', { name: /Games ·/ })).toBeVisible();
     expect(screen.queryByText('Saved game results · Settings are read-only.')).not.toBeInTheDocument();

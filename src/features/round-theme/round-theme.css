@@ -36,6 +36,7 @@ html[data-theme="dark"] {
   --cp-round-slate-line: #b6c0d0;
 }
 
+[data-round-tone] { --cp-round-ink: var(--cp-text); }
 [data-round-tone="sage"] { --cp-round-surface: var(--cp-round-sage-surface); --cp-round-line: var(--cp-round-sage-line); }
 [data-round-tone="sky"] { --cp-round-surface: var(--cp-round-sky-surface); --cp-round-line: var(--cp-round-sky-line); }
 [data-round-tone="sand"] { --cp-round-surface: var(--cp-round-sand-surface); --cp-round-line: var(--cp-round-sand-line); }

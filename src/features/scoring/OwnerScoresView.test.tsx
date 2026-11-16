@@ -39,6 +39,26 @@ async function loaded(user = userEvent.setup()) {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); document.documentElement.scrollTop = 0; });
 
 describe('hole-first owner scoring', () => {
+  it('scopes the supplied round tone over scoring controls without remounting drafts or reloading scores', async () => {
+    const store = memoryScores();
+    const props = { client: store.client, eventId: fictionalRoundScores.eventId, roundId: fictionalRoundScores.roundId,
+      onSessionExpired: vi.fn() };
+    const view = render(<OwnerScoresView {...props} roundTone="sky" />);
+    await loaded();
+    const user = userEvent.setup();
+    const field = input();
+    await enter(user, '7');
+    expect(screen.getByRole('region', { name: 'Round scores' })).toHaveAttribute('data-round-tone', 'sky');
+    view.rerender(<OwnerScoresView {...props} roundTone="rose" />);
+    expect(screen.getByRole('region', { name: 'Round scores' })).toHaveAttribute('data-round-tone', 'rose');
+    expect(input()).toBe(field);
+    expect(field).toHaveValue('7');
+    view.rerender(<OwnerScoresView {...props} />);
+    expect(screen.getByRole('region', { name: 'Round scores' })).not.toHaveAttribute('data-round-tone');
+    expect(field).toHaveValue('7');
+    expect(store.client.load).toHaveBeenCalledOnce();
+    expect(store.client.save).not.toHaveBeenCalled();
+  });
   it('keeps navigation visible and entry Refresh below Save & Next, blocking refresh until the save is acknowledged', async () => {
     const store = memoryScores();
     const original = vi.mocked(store.client.save).getMockImplementation();

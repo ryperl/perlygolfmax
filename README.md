@@ -120,12 +120,16 @@ feature styles consume them rather than hardcoding colors. Keep the HTML theme
 metadata, manifest, SVG favicon and `scripts/generate-icons.mjs` in sync when
 changing the brand palette, then run `npm run icons` to regenerate the PNG assets.
 
-Saved round cards and round/scoring headers use the shared
-`src/features/round-theme/` pastel accents, including skins detail filters.
+Saved round cards and scoring views use the shared
+`src/features/round-theme/` pastel accents. The selected round scopes active
+scoring tabs, hole/card headers, scorecard totals and nine selectors, KP accents,
+game selectors and skins detail highlights, not just the round picker.
 Accents follow configured round order, not date-sorted display order, so the
 same round stays recognizable across these views. Eight accents cycle for
 larger events; this does not limit round count. Light/dark variants retain
 high-contrast text, neutral score fields and unchanged warning/status colors.
+Primary save actions, saved/unsaved/error feedback and golf score marks retain
+their existing functional colors rather than inheriting decorative accents.
 Round names remain visible: color is supplementary, never the only identifier.
 
 **Rounds** and **The Group** share the same roster-card presentation. Playing
