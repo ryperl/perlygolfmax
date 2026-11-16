@@ -39,7 +39,10 @@ export function PublicLeaderboardPage({ client, eventId, eventSkins, onSessionEx
   }, [client, eventId, kind, generation]);
   return <section>
     {current?.value?.reviewNotices && <EventReviewBanner notices={current.value.reviewNotices} />}
-    <button disabled={!current} onClick={() => { setAttempt((value) => value + 1); }}>Refresh {eventSkins ? 'event skins' : 'overall results'}</button>
+    <div className="event-actions">
+      {eventSkins && <a href={`#overview?event=${encodeURIComponent(eventId)}`}>Back to event overview</a>}
+      <button disabled={!current} onClick={() => { setAttempt((value) => value + 1); }}>Refresh {eventSkins ? 'event skins' : 'overall results'}</button>
+    </div>
     {!current && <p role="status">Loading {eventSkins ? 'event skins' : 'overall results'}…</p>}
     {current?.error && <p role="alert">{current.error}</p>}
     {current?.value?.kind === 'overall' && <EventLeaderboard value={current.value} />}

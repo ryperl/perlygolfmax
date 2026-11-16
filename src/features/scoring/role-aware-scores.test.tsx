@@ -66,7 +66,8 @@ describe('role-aware round score access', () => {
     await screen.findByRole('heading', { name: 'Round scorecard' });
     expect(screen.getByRole('button', { name: 'Enter scores' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Games' }));
-    expect(screen.getByText(/Settings are read-only/)).toBeVisible();
+    expect(screen.getByRole('heading', { name: /Games ·/ })).toBeVisible();
+    expect(screen.queryByText('Saved game results · Settings are read-only.')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add game' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Leaderboard' }));
     expect(screen.getByRole('heading', { name: /Leaderboard ·/ })).toBeVisible();

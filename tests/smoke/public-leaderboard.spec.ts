@@ -3,6 +3,7 @@ import { expect, test } from './test';
 import { publicLeaderboardFixture } from '../../src/domain/public-leaderboard.test-support';
 import { publicLeaderboardSummary } from '../../src/domain/public-leaderboard';
 import { calculateEventSkinsDetails } from '../../src/domain/event-skins';
+import { compactSkinsDetails, compactSkinsSummary } from '../../src/contracts/compact-event-skins';
 
 test('public overall and skins each load only one purpose-specific response without raw scorecard pages', async ({ page }, testInfo) => {
   const server = await createServer({
@@ -33,17 +34,25 @@ test('public overall and skins each load only one purpose-specific response with
       expect(url.searchParams.has('privatePart')).toBe(false);
       const kind = url.searchParams.get('view');
       if (kind === 'event-skins-details') {
+        expect(url.searchParams.get('format')).toBe('compact');
         reads.push(kind);
         const detail = calculateEventSkinsDetails(full.workspace, full.roundScores);
         expect(JSON.stringify(detail)).not.toMatch(/roundScores|teeProfile|cards|handicapIndex|measurementId|recordedBy|etag/);
-        await route.fulfill({ json: detail });
+        const wire = compactSkinsDetails(detail);
+        expect(new TextEncoder().encode(JSON.stringify(wire)).length).toBeLessThan(48 * 1024);
+        await route.fulfill({ json: wire });
         return;
       }
       if (kind !== 'overall' && kind !== 'event-skins') throw new Error('Unexpected public result purpose');
       reads.push(kind);
       const summary = publicLeaderboardSummary(full, kind);
       expect(JSON.stringify(summary)).not.toMatch(/roundScores|teeProfile|cards|handicap|netStrokes|contenderIds/);
-      await route.fulfill({ json: summary });
+      if (summary.kind === 'event-skins') {
+        expect(url.searchParams.get('format')).toBe('compact');
+        const wire = compactSkinsSummary(summary);
+        expect(new TextEncoder().encode(JSON.stringify(wire)).length).toBeLessThan(8 * 1024);
+        await route.fulfill({ json: wire });
+      } else await route.fulfill({ json: summary });
     });
     await page.setViewportSize({ width: 320, height: 844 });
     await page.goto(`${origin}/#leaderboard?event=${full.workspace.event.id}`);
@@ -52,6 +61,8 @@ test('public overall and skins each load only one purpose-specific response with
     expect(reads).toEqual(['overall']);
     await page.evaluate((eventId) => { window.location.hash = `#event-skins?event=${eventId}`; }, full.workspace.event.id);
     await expect(page.getByRole('heading', { name: /Event-wide skins/ })).toBeVisible();
+    const back = page.getByRole('link', { name: 'Back to event overview', exact: true });
+    await expect(back).toHaveAttribute('href', `#overview?event=${full.workspace.event.id}`);
     await expect(page.getByRole('list', { name: 'Event skins standings' })).toContainText('90 skins');
     expect(reads).toEqual(['overall', 'event-skins']);
     await expect(page.getByRole('checkbox')).toHaveCount(0);
@@ -59,6 +70,7 @@ test('public overall and skins each load only one purpose-specific response with
     await expect(page.getByRole('heading', { name: 'Skins details', exact: true })).toBeVisible();
     await page.getByText('Hole 1 · Fictional golfer 1', { exact: true }).click();
     await expect(page.getByRole('table', { name: 'Hole 1 skins comparison' })).toBeVisible();
+    await expect(back).toBeVisible();
     expect(reads).toEqual(['overall', 'event-skins', 'event-skins-details']);
     await page.getByRole('button', { name: 'Back to skins', exact: true }).click();
     await page.getByRole('button', { name: 'Refresh event skins' }).click();

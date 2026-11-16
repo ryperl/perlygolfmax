@@ -20,7 +20,7 @@ export function ChurchyResults({ game, result }: {
   }
   return <section className="churchy-results" aria-label="Churchy Game results">
     <h3>Churchy Game · Experimental</h3>
-    <p>Saved earned dots only, never netted. {receipt.status === 'complete' ? 'All holes resolved; not round finalization.'
+    <p>Saved earned dots only, never netted. {receipt.status === 'complete' ? 'All holes resolved.'
       : receipt.status === 'unavailable' ? 'Unavailable comparisons: no final total or settlement.' : 'Provisional: pending holes are not ties.'}</p>
     <ol aria-label="Churchy standings">
       {ranked.map((player) => {

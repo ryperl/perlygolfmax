@@ -105,7 +105,8 @@ test('KP during/afterward, exact tied purse, closure and reopen at 320px / 125% 
     await page.getByRole('button', { name: 'Fictional round' }).click();
     await page.getByRole('button', { name: 'KP Competition', exact: true }).click();
     await page.getByRole('button', { name: 'Close KP entries' }).click();
-    await expect(page.getByText(/KP entries closed/)).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: /^Entries closed$/ })).toBeVisible();
+    await expect(page.getByText(/Closest on-green ball on each|ordinary golf scoring remains open|Round pot:/)).toHaveCount(0);
     await expect(page.getByRole('article', { name: 'KP hole 1 results' })).toContainText('USD 33.34');
     await expect(page.getByRole('article', { name: 'KP hole 4 results' })).toContainText('excluded from daily pot shares');
     const tie = page.getByRole('article', { name: 'KP hole 2 results' });
@@ -121,7 +122,7 @@ test('KP during/afterward, exact tied purse, closure and reopen at 320px / 125% 
     await tie.getByRole('button', { name: 'Split tied hole prize' }).click();
     await expect(tie).toContainText('Fictional golfer 1: USD 16.67 planned award');
     await expect(tie).toContainText('Fictional golfer 2: USD 16.66 planned award');
-    await expect(page.getByText(/Fully allocated planned awards/)).toBeVisible();
+    await expect(page.getByText(/Fully allocated planned awards/)).toHaveCount(0);
     await page.getByRole('button', { name: 'Fictional purse' }).click();
     const pool = page.getByText('Fictional daily KP · calculated', { exact: true });
     await expect(pool).toBeVisible();

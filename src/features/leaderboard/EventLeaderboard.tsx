@@ -49,7 +49,7 @@ export function EventLeaderboard({ value }: { readonly value: OverallResultsDisp
     <h1>{workspace.event.name} — Overall leaderboard</h1>
     <p>{stroke ? `${competition.basis === 'gross' ? 'Gross' : `Net (${String(competition.handicapAllowancePercent)}% allowance)`} stroke play · lowest relative-to-par leads`
       : `Stableford · highest points leads · ${competition.credit === 'team' ? 'full team points credited to each member' : 'individual components credited'}`}</p>
-    <p>Saved server results only. {standings.status === 'complete' ? 'All configured holes have results; this is not event finalization.'
+    <p>{standings.status === 'complete' ? 'All configured holes have results.'
       : standings.status === 'unavailable' ? 'Some standings are unavailable or pending setup. Available entries remain provisional; unresolved results are not ranked as zero.'
         : 'Provisional: progress differs. Pending and unavailable results are not ranked as zero.'}</p>
     {workspace.event.status === 'archived' && <p>Archived event — read-only results.</p>}

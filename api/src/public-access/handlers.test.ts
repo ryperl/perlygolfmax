@@ -20,6 +20,7 @@ import type { PublicAction } from './handlers.js';
 import { publicFixture } from './test-support.js';
 import { isEventSkinsDetails } from '../../../src/contracts/event-skins-details.js';
 import { isPlayerWinningsBreakdown } from '../../../src/contracts/winnings-breakdown.js';
+import { expandSkinsDetails, expandSkinsSummary } from '../../../src/contracts/compact-event-skins.js';
 
 async function fixture() {
   const f = await publicFixture();
@@ -44,6 +45,27 @@ async function fixture() {
 }
 
 describe('explicit unsigned public HTTP namespace', () => {
+  it('serves opt-in lossless compact skins with the same quota, freshness and archive guards as legacy reads', async () => {
+    const f = await fixture();
+    const current = await f.workspace.get(creator, event.id);
+    await f.scores.saveEventSkins(creator, event.id, { version: 1 }, current.etag, identifier(5280));
+    for (const [view, expand] of [
+      ['event-skins', expandSkinsSummary], ['event-skins-details', expandSkinsDetails],
+    ] as const) {
+      const legacy = await f.invoke('event-leaderboard', undefined, {}, {}, `?view=${view}`);
+      f.api.limiter.check.mockClear();
+      const result = await f.invoke('event-leaderboard', undefined, {}, {}, `?view=${view}&format=compact`);
+      expect(result.status).toBe(200);
+      expect(result.headers).toMatchObject({ 'Cache-Control': 'no-store' });
+      expect(expand(result.jsonBody)).toEqual(legacy.jsonBody);
+      expect(f.api.limiter.check).toHaveBeenCalledTimes(2);
+      expect(f.api.limiter.check).toHaveBeenLastCalledWith(f.actor, 'scores-read', f.input.rounds.length);
+      expect(JSON.stringify(result.jsonBody)).not.toMatch(/handicapIndex|measurementId|recordedBy|etag|configuration|roundScores/);
+    }
+    f.seed({ ...f.row('event'), status: 'archived' });
+    expect((await f.invoke('event-leaderboard', undefined, {}, {}, '?view=event-skins&format=compact')).status).toBe(404);
+    expect((await f.invoke('event-leaderboard', undefined, {}, {}, '?view=event-skins-details&format=compact')).status).toBe(404);
+  });
   it('returns on-demand comparisons and player awards without private history, retaining quotas and archive denial', async () => {
     const f = await fixture();
     const current = await f.workspace.get(creator, event.id);

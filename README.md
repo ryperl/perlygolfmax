@@ -519,11 +519,26 @@ demand: select any round/hole to inspect saved gross/net strokes, personal par,
 received strokes and the golfers who covered or beat a score. Shared canonical
 decisions drive both views; details do not introduce carryovers or new tie rules.
 Covered-hole summaries name the saved covering golfers without opening the table.
+The public skins page keeps a **Back to event overview** link available while
+loading, after errors and inside details. Round cards use one labeled SVG
+scorecard link instead of a text-and-arrow action.
 Mixed progress is provisional. Known zero winners are hidden only from complete
 ranked displays, not underlying results or winnings. Refresh reads fresh,
 coherent saved server data; drafts never count. Public visitors can read active
 event results, while archives remain owner-only and legacy testers receive no
 event-wide access.
+
+Public skins requests opt into a versioned compact wire format that sends
+repeated golfer/round identifiers once and encodes repeated rows positionally.
+Strictly validated expansion restores the same saved results, including covering
+golfers and pending/unavailable states; clients do not recalculate winners.
+The summary loads once on entry; comparisons load only on **View skins details**.
+Round/hole filtering and returning to the board do not issue extra requests.
+Older expanded API responses and existing digest continuations remain supported.
+An automated twelve-golfer/five-round numeric fixture measures uncompressed JSON
+at 6,005 bytes for the board and 28,548 bytes for details, versus 24,665 and
+175,121 bytes previously. These are fixture measurements, not live timings or
+limits on event size. Details skip unrelated overall/duplicate skins calculations.
 
 In the purse editor choose **Event-wide skins · pot per skin won** and enter
 an explicit amount in the event currency. There is one canonical event skins

@@ -128,7 +128,8 @@ test('guest edits any saved playing group with keyboard at narrow/enlarged width
       }
       await expect(page.getByText('Round details & tools', { exact: true })).toHaveCount(0);
       await page.getByRole('button', { name: 'Games', exact: true }).click();
-      await expect(page.getByText(/Settings are read-only/)).toBeVisible();
+      await expect(page.getByRole('heading', { name: /Games ·/ })).toBeVisible();
+      await expect(page.getByText('Saved game results · Settings are read-only.', { exact: true })).toHaveCount(0);
       await expect(page.getByRole('button', { name: /Add game|Edit Fictional|Save game|Configure|Update team/i })).toHaveCount(0);
       await fitsViewport(page, width);
       await page.getByRole('combobox', { name: 'Saved round', exact: true }).selectOption({ label: 'Fictional second round' });

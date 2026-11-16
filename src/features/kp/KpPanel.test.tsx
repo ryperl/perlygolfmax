@@ -12,6 +12,15 @@ function panel(round: RoundScores, manage = vi.fn().mockResolvedValue(undefined)
     onSave={vi.fn()} onDiscard={vi.fn()} onManage={manage} onPendingChange={vi.fn()} onReview={vi.fn()} onUseSaved={vi.fn()} />);
 }
 describe('round KP review', () => {
+  it('keeps only compact closure state without routine rule or round-pot paragraphs', () => {
+    const round = fictionalKpRound();
+    if (!round.kp) throw new Error('Missing fixture');
+    panel({ ...round, kp: { ...round.kp, status: 'closed' } });
+    expect(screen.getByRole('status')).toHaveTextContent(/^Entries closed$/);
+    expect(screen.queryByText(/Closest on-green ball on each|ordinary golf scoring remains open|Round pot:|Fully allocated planned awards/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reopen KP entries' })).toBeVisible();
+    for (const button of screen.getAllByRole('button', { name: /KP for/ })) expect(button).toBeDisabled();
+  });
   it.each([1, 2])('visibly identifies each entry for group %s using golfer IDs, not card order', (groupNumber) => {
     const source = fictionalKpRound();
     const groups = [

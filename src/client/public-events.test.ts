@@ -11,6 +11,7 @@ import { publicLeaderboardFixture } from '../domain/public-leaderboard.test-supp
 import { publicLeaderboardSummary } from '../domain/public-leaderboard';
 import { calculateEventSkinsDetails } from '../domain/event-skins';
 import { playerWinningsBreakdown } from '../domain/winnings-breakdown';
+import { compactSkinsDetails, compactSkinsSummary } from '../contracts/compact-event-skins';
 
 const signal = new AbortController().signal;
 function fixture(value: unknown, status = 200) {
@@ -21,11 +22,14 @@ describe('unsigned public event transport', () => {
   it('fetches strict skins comparisons and one player breakdown only through their on-demand public queries', async () => {
     const full = publicLeaderboardFixture();
     const details = calculateEventSkinsDetails(full.workspace, full.roundScores);
-    const f = fixture(details);
-    const load = f.services.leaderboard.details;
-    if (!load) throw new Error('Missing details adapter');
-    expect(await load(details.eventId, signal)).toEqual(details);
-    expect(f.send.mock.calls[0]?.[0]).toBe(`https://fictional.example.test/api/public/events/${details.eventId}/leaderboard?view=event-skins-details`);
+    for (const response of [compactSkinsDetails(details), details]) {
+      const f = fixture(response);
+      const load = f.services.leaderboard.details;
+      if (!load) throw new Error('Missing details adapter');
+      expect(await load(details.eventId, signal)).toEqual(details);
+      expect(f.send).toHaveBeenCalledOnce();
+      expect(f.send.mock.calls[0]?.[0]).toBe(`https://fictional.example.test/api/public/events/${details.eventId}/leaderboard?view=event-skins-details&format=compact`);
+    }
     const purse = fictionalPurse();
     const playerId = purse.workspace.roster[0]?.playerId;
     if (!playerId) throw new Error('Missing fictional player');
@@ -45,10 +49,11 @@ describe('unsigned public event transport', () => {
   it.each(['overall', 'event-skins'] as const)('requests only %s display data and remains compatible with an old full-response API', async (kind) => {
     const full = publicLeaderboardFixture();
     const summary = publicLeaderboardSummary(full, kind);
-    for (const response of [summary, full]) {
+    for (const response of [summary, full, ...(summary.kind === 'event-skins' ? [compactSkinsSummary(summary)] : [])]) {
       const f = fixture(response);
       expect(await f.services.leaderboard.load(full.workspace.event.id, signal, kind)).toEqual(summary);
-      expect(f.send.mock.calls[0]?.[0]).toBe(`https://fictional.example.test/api/public/events/${full.workspace.event.id}/leaderboard?view=${kind}`);
+      expect(f.send).toHaveBeenCalledOnce();
+      expect(f.send.mock.calls[0]?.[0]).toBe(`https://fictional.example.test/api/public/events/${full.workspace.event.id}/leaderboard?view=${kind}${kind === 'event-skins' ? '&format=compact' : ''}`);
       expect(f.send.mock.calls[0]?.[1]).toMatchObject({ credentials: 'omit', cache: 'no-store' });
       expect(new Headers(f.send.mock.calls[0]?.[1]?.headers).get('authorization')).toBeNull();
     }

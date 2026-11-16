@@ -56,7 +56,6 @@ export function KpPanel({ round, busy, dirty, groupNumber, holeNumber, onGroup, 
   const group = round.groups.find((entry) => entry.number === groupNumber);
   return <section className="kp-panel" aria-label="KP Competition">
     <h2>KP Competition</h2>
-    <p>Closest on-green ball on each saved default-tee par 3. Enter only contenders; blank and No measurement are not zero or missed greens.</p>
     {round.kpEnabled !== true ? <p role="status">KP requires a newer API. Entry is unavailable.</p> : !eligible.length
       ? <p role="status">No par 3 holes in the saved default tee. KP is not configurable.</p>
       : !round.kp ? <>{owner && <button disabled={locked} onClick={() => { void manage({
@@ -64,10 +63,8 @@ export function KpPanel({ round, busy, dirty, groupNumber, holeNumber, onGroup, 
       }); }}>Configure KP Competition</button>}<p>KP is not configured. The organizer can enable it without unlocking ordinary scores.</p></>
         : results.status === 'unavailable' ? <p role="alert">Saved KP layout or roster is stale. No entries or payouts can be changed until organizer review.</p>
           : <>
-            <p role="status">{round.kp.status === 'open' ? 'Entries open · provisional results; absent entries are unknown.'
-              : 'KP entries closed · ordinary golf scoring remains open.'}</p>
-            <p>{round.kpPot ? `Round pot: ${money(round.kpPot.amountMinor)}. ${payout?.status === 'final' ? 'Fully allocated planned awards.' : 'Pending organizer review / closure; reserved amounts are not paid.'}`
-              : 'No KP pot configured. Organizer: add a KP source in the event Purse editor (default unsaved input 100.00). No money has been added.'}</p>
+            <p role="status">{round.kp.status === 'open' ? 'Entries open' : 'Entries closed'}</p>
+            {!round.kpPot && owner && <p>No KP pot configured.</p>}
             {owner && <button disabled={locked} onClick={() => { if (round.kp) void manage({
               version: 1, context: round.kp.context, status: round.kp.status === 'open' ? 'closed' : 'open',
               decisions: [],

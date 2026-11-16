@@ -160,14 +160,21 @@ describe('saved event overview', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('event owner only');
     expect(screen.queryByRole('link', { name: /Open scorecard for/ })).not.toBeInTheDocument();
   });
-  it('links all admitted scorecards and the bound playing group without exposing organizer setup', () => {
+  it('uses one descriptive SVG scorecard link per round and shows the bound group without duplicate navigation', () => {
     const player = workspace.roster[0];
     if (!player) throw new Error('Missing fictional player.');
     render(<EventTripView workspace={{ ...workspace, purseConfigured: true, canViewScores: true, viewerPlayerId: player.playerId,
       event: { ...workspace.event, role: 'member' },
       overallCompetition: { kind: 'stroke-play', basis: 'gross' } }} view="rounds" />);
     expect(screen.getAllByRole('link', { name: /Open scorecard for/ })).toHaveLength(workspace.rounds.length);
-    expect(screen.getAllByRole('link', { name: /Your playing group/ }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('link', { name: /Your playing group/ })).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Your playing group/).length).toBeGreaterThan(0);
+    for (const link of screen.getAllByRole('link', { name: /Open scorecard for/ })) {
+      expect(link.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+      expect(link).toHaveTextContent('Scorecard');
+      expect(link).not.toHaveTextContent('→');
+      expect(document.querySelectorAll(`a[href="${link.getAttribute('href') ?? ''}"]`)).toHaveLength(1);
+    }
     expect(screen.getByRole('link', { name: 'Overall leaderboard' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'View purse and winnings' })).toBeVisible();
     expect(screen.queryByRole('link', { name: 'Configure event' })).not.toBeInTheDocument();

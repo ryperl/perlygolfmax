@@ -90,7 +90,7 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
       </> : !result || !standings || rows.length === 0 ? <p>Leaderboard results are unavailable. Refresh the saved round to retry.</p> : <>
         <p className="leaderboard-qualifier">{standings.provisional
           ? `Provisional standings · ${unit === 'points' ? 'Points earned so far.' : 'Saved results so far; no winner declared.'} ${teamGame ? 'Teams' : 'Golfers'} may have played different numbers of holes.`
-          : `Saved ${unit} · All game cards complete. This is not round finalization.`}</p>
+          : `Saved ${unit} · All game cards complete.`}</p>
         {ordered.length > pageSize && <div className="leaderboard-controls">
           <label>Find leaderboard golfers or teams<input type="search" value={query} onChange={(event) => {
             setQuery(event.target.value); setPageIndex(0);

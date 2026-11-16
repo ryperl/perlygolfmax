@@ -176,7 +176,8 @@ describe('round leaderboard', () => {
     render(<RoundLeaderboard round={{ ...leaderboardRound, games: {
       ...leaderboardRound.games, results: [{ gameId: first.id, players: [fictionalStanding(1, 0, 9)] }],
     } }} busy={false} onManageGames={vi.fn()} />);
-    expect(screen.getByText('Saved points · All game cards complete. This is not round finalization.')).toBeVisible();
+    expect(screen.getByText('Saved points · All game cards complete.')).toBeVisible();
+    expect(screen.queryByText(/not round finalization/)).not.toBeInTheDocument();
     expect(screen.getByText(/no tie-break is applied/)).toBeVisible();
     expect(screen.queryByText(/Provisional standings/)).not.toBeInTheDocument();
   });

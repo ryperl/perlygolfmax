@@ -8,7 +8,7 @@ import { eventStartDateLabel, numericEventDateLabel, sortRoundsByStartDate } fro
 import type { EventEntryProgress, RoundEntryProgressState } from './entry-progress';
 import './event-trip.css';
 import { HandicapIndexBadge } from './HandicapIndexBadge';
-import { CourseHandicap } from '../scoring';
+import { CourseHandicap, ScoreActionIcon } from '../scoring';
 import { RoundAccent, roundToneFor } from '../round-theme';
 
 interface EventTripViewProps {
@@ -155,10 +155,11 @@ function SavedRounds({ workspace, showGroups, progress }: {
                     className="event-trip-scorecard"
                     href={scoreLink(workspace, round.id)}
                     aria-label={`Open scorecard for ${round.name}`}
-                  >Open scorecard <span aria-hidden="true">→</span></a>
+                    title={`Open scorecard for ${round.name}`}
+                  ><ScoreActionIcon kind="cards" /><span>Scorecard</span></a>
                 )}
                 {(workspace.canViewScores || workspace.event.role === 'owner') && workspace.event.status === 'active' && workspace.viewerPlayerId && round.groups.some((group) => group.playerIds.includes(workspace.viewerPlayerId ?? '')) &&
-                  <a href={scoreLink(workspace, round.id)}>Your playing group · Group {round.groups.find((group) => group.playerIds.includes(workspace.viewerPlayerId ?? ''))?.number}</a>}
+                  <p>Your playing group · Group {round.groups.find((group) => group.playerIds.includes(workspace.viewerPlayerId ?? ''))?.number}</p>}
               </RoundAccent>
               {showGroups && (
                 <>

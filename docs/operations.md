@@ -359,6 +359,24 @@ remain server-derived. Both views retain per-round quotas and revision/access
 checks; the query-free full response and validated old-API fallback preserve
 compatibility. Never create a partial fake workspace to satisfy the old model.
 
+Public event-skins board/detail requests add `format=compact` to
+`view=event-skins` or `view=event-skins-details`. Version-1 compact envelopes use
+shared round/player dictionaries and fixed positional rows; detail disposition/
+outcome ordinals are stable append-only values. The shared
+`src/contracts/compact-event-skins.ts` codec validates row sizes, references and
+the fully expanded allowlisted contract before display. No score math moves to
+the client. Requests without that format retain expanded response shapes, and
+new clients accept validated older expanded responses without an extra fallback
+GET. Existing no-store, coherent reads, digest continuations, archive denial and
+atomic per-round quota reservation remain in force.
+
+The public details read uses the same bounded coherent source loader directly,
+avoiding the unused overall board and duplicate skins summary calculation.
+Disabled skins do not read round scores just because overall is configured.
+Enabled details still reserve every round unit before reading any child round.
+Public board initialization never prefetches comparison data; in-memory detail
+round/hole filtering issues no additional API requests.
+
 Stableford uses saved daily points unchanged; stroke play derives gross/net
 relative-to-par from numeric holes using captured inputs. Pickup/DNF invalidates
 a valid stroke total; unplayed holes stay pending. Neither mode provides

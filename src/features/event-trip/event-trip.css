@@ -19,7 +19,9 @@
 .event-trip h4 { font-size: 1rem; }
 .event-trip h5 { font-size: .9rem; }
 .event-trip-round p, .event-trip-section > p { color: var(--cp-text-muted); }
-.event-trip-scorecard { flex-shrink: 0; }
+.event-trip-scorecard { flex-shrink: 0; flex-direction: column; justify-content: center; padding: .5rem .75rem; border: 1px solid var(--cp-border-strong); border-radius: .625rem; background: var(--cp-surface); text-decoration: none; font-size: .85rem; }
+.event-trip-scorecard .score-action-icon { width: 2rem; height: 2rem; }
+.event-trip-scorecard:hover { border-color: var(--cp-accent); }
 .event-trip-progress { margin-top: 20px; padding: 16px; border: 1px solid var(--cp-border); border-radius: 8px; background: var(--cp-bg-elevated); }
 .event-trip-progress ul { padding-left: 20px; }
 .event-trip-tee { display: flex; flex-wrap: wrap; gap: 16px 32px; margin: 20px 0; }

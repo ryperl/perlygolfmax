@@ -174,7 +174,6 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
           {(round.playerTees?.length ?? 0) > 0 && ' · Personal tees assigned; points use each golfer’s captured tee.'}</p>
       </header>
       {archived && <p>This trip is archived. Game settings are read-only.</p>}
-      {!canManage && <p>Saved game results · Settings are read-only.</p>}
       {games.length === 0 && <p>No games configured for this round.</p>}
       {visibleGames(games, round.churchyEnabled).map((game) => <div className="round-game" key={game.id}>
         <GameResults game={game} result={round.games?.results.find((result) => result.gameId === game.id)}

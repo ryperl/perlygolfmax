@@ -100,6 +100,12 @@ for (const view of ['overview', 'rounds', 'group'] as const) {
     await expect(open).toHaveAttribute('href', `#organizer?event=${id(50)}&round=${id(71)}`);
     await open.focus();
     await expect(open).toBeFocused();
+    await expect(open.locator('svg')).toHaveCount(1);
+    await expect(open).toHaveText('Scorecard');
+    await expect(page.locator(`a[href="#organizer?event=${id(50)}&round=${id(71)}"]`)).toHaveCount(1);
+    const buttonSize = await open.boundingBox();
+    expect(buttonSize?.height).toBeGreaterThanOrEqual(44);
+    expect(buttonSize?.width).toBeGreaterThanOrEqual(44);
     await expect(page.getByText('In progress', { exact: false }).first()).toBeVisible();
     await expect(page.getByText('Entries complete', { exact: false }).first()).toBeVisible();
     await expect(page.getByText('No scores yet', { exact: false }).first()).toBeVisible();

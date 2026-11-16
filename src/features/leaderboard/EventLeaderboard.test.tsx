@@ -71,7 +71,8 @@ describe('overall leaderboard presentation', () => {
     standings: { ...value.standings, status: 'complete', staleRoundIds: [fictionalId(99)] } }} />);
     expect(screen.getByText(/Net \(95% allowance\)/)).toBeVisible();
     expect(screen.getByText(/Archived event/)).toBeVisible();
-    expect(screen.getByText(/not event finalization/)).toBeVisible();
+    expect(screen.getByText('All configured holes have results.')).toBeVisible();
+    expect(screen.queryByText(/not event finalization/)).not.toBeInTheDocument();
     expect(screen.getByText(/Review removed-round/)).toBeVisible();
   });
   it('shows disabled setup to owners and published result rows to admitted nonowners', () => {

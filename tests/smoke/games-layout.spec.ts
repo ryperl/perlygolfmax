@@ -163,7 +163,7 @@ test('compact game cards keep golfers visible with shared scrolling and working 
     await board.getByRole('combobox', { name: 'Leaderboard game' }).selectOption(id(701));
     await expect(board.getByLabel('Tied position 1', { exact: true })).toHaveCount(4);
     await expect(board.getByRole('list', { name: 'Standings' }).getByRole('listitem')).toHaveCount(4);
-    await expect(board.getByText('Saved points · All game cards complete. This is not round finalization.', { exact: true })).toBeVisible();
+    await expect(board.getByText('Saved points · All game cards complete.', { exact: true })).toBeVisible();
     for (const [width, fontSize] of [[390, '100%'], [320, '125%']] as const) {
       await page.setViewportSize({ width, height: 844 });
       await page.evaluate((size) => { document.documentElement.style.fontSize = size; }, fontSize);

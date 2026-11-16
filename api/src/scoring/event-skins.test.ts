@@ -13,8 +13,47 @@ import { ApiError } from '../errors.js';
 import { isEventLeaderboardView } from '../../../src/contracts/event-leaderboard.js';
 import { isEventSkinsChange } from '../../../src/contracts/event-skins.js';
 import { isEventPurseView } from '../../../src/contracts/purse-settings.js';
+import { calculateEventSkinsDetails } from '../../../src/domain/event-skins.js';
+import { isEventSkinsDetails } from '../../../src/contracts/event-skins-details.js';
 
 describe('event-wide skins persisted authority and read consistency', () => {
+  it('loads coherent detail sources once without calculating the unused overall board or a second skins summary', async () => {
+    const f = await publicFixture();
+    const before = await f.workspace.get(creator, event.id);
+    await f.scores.saveEventSkins(creator, event.id, { version: 1 }, before.etag, identifier(8795));
+    const legacy = await f.scores.leaderboard(f.actor, event.id, vi.fn().mockResolvedValue(undefined));
+    const read = f.scores.get.bind(f.scores);
+    const get = vi.spyOn(f.scores, 'get');
+    const aggregate = vi.spyOn(f.scores, 'leaderboard');
+    const charge = vi.fn().mockResolvedValue(undefined);
+    const details = await f.scores.skinsDetails(f.actor, event.id, charge);
+    expect(details).toEqual(calculateEventSkinsDetails(legacy.workspace, legacy.roundScores));
+    expect(isEventSkinsDetails(details)).toBe(true);
+    expect(get).toHaveBeenCalledTimes(legacy.workspace.rounds.length);
+    expect(aggregate).not.toHaveBeenCalled();
+    expect(charge).toHaveBeenCalledExactlyOnceWith(legacy.workspace.rounds.length);
+    get.mockClear();
+    await expect(f.scores.skinsDetails(f.actor, event.id, vi.fn().mockRejectedValue(new ApiError(429, 'REQUEST_LIMIT_EXCEEDED'))))
+      .rejects.toMatchObject({ status: 429 });
+    expect(get).not.toHaveBeenCalled();
+    get.mockImplementationOnce(async (...args) => {
+      const value = await read(...args);
+      f.seed({ ...f.row('event'), name: 'Fictional changed event' });
+      return value;
+    });
+    await expect(f.scores.skinsDetails(f.actor, event.id, charge)).rejects.toMatchObject({ status: 409 });
+  });
+  it('does not read or charge disabled skins even when an independent overall competition exists', async () => {
+    const f = await scoringFixture();
+    await f.workspace.save(creator, event.id, { ...f.input, overallCompetition: { kind: 'stroke-play', basis: 'gross' } }, f.saved.etag);
+    const get = vi.spyOn(f.scores, 'get');
+    const charge = vi.fn().mockResolvedValue(undefined);
+    const result = await f.scores.skinsDetails(creator, event.id, charge);
+    expect(result).toMatchObject({ status: 'disabled', holes: [] });
+    expect(isEventSkinsDetails(result)).toBe(true);
+    expect(get).not.toHaveBeenCalled();
+    expect(charge).not.toHaveBeenCalled();
+  });
   it('fails closed on malformed stored settings and refuses stale conditional/header races without an audit or changed configuration', async () => {
     const f = await scoringFixture(1);
     const header = f.rows.get(`${event.id}|workspace`);

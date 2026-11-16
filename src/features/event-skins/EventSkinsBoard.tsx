@@ -16,7 +16,7 @@ export function EventSkinsBoard({ value, onDetails, detailsTrigger }: {
     <details><summary>Skins rules</summary><p>Net strokes first, using 100% captured Course Handicap and each golfer’s tee.
       Only when net ties, actual gross birdie or better has priority, then the lower qualifying gross score.
       Gross par ties stay tied. No carryovers; every hole competes only within its round.</p></details>
-    <p role="status">{results.status === 'complete' ? 'All hole outcomes known — not round finalization'
+    <p role="status">{results.status === 'complete' ? 'All hole outcomes known'
       : results.status === 'unavailable' ? 'Unavailable inputs — known wins retained, totals not complete' : 'Provisional standings'}
       {` · ${String(results.awardedSkins)} skins awarded · ${String(results.totalHoles - results.pendingHoles - results.unavailableHoles)}/${String(results.totalHoles)} holes decided`}
       {` · ${String(results.pendingHoles)} pending · ${String(results.unavailableHoles)} unavailable`}</p>

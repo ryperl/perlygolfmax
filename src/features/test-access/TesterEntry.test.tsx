@@ -35,7 +35,8 @@ describe('no-account tester entry', () => {
     fireEvent.change(screen.getByLabelText('Saved round'), { target: { value: testerLink.revision } });
     await waitFor(() => { expect(scores.load).toHaveBeenLastCalledWith(credential.eventId, testerLink.revision, expect.any(AbortSignal)); });
     fireEvent.click(screen.getByRole('button', { name: 'Games' }));
-    expect(await screen.findByText(/Settings are read-only/)).toBeVisible();
+    expect(await screen.findByRole('heading', { name: /Games ·/ })).toBeVisible();
+    expect(screen.queryByText('Saved game results · Settings are read-only.')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add game' })).not.toBeInTheDocument();
     expect(scores.history).not.toHaveBeenCalled();
     expect(scores.saveGames).not.toHaveBeenCalled();
@@ -58,7 +59,8 @@ describe('no-account tester entry', () => {
     expect(vi.mocked(scores.save).mock.calls[0]?.[2]).toBe(workspace.roster[1]?.playerId);
     await screen.findByRole('status', { name: 'Scores saved' });
     fireEvent.click(screen.getByRole('button', { name: 'Games' }));
-    expect(screen.getByText(/Settings are read-only/)).toBeVisible();
+    expect(screen.getByRole('heading', { name: /Games ·/ })).toBeVisible();
+    expect(screen.queryByText('Saved game results · Settings are read-only.')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add game' })).not.toBeInTheDocument();
   });
 

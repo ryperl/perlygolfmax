@@ -64,7 +64,8 @@ describe('saved event skins board', () => {
     view.rerender(<EventSkinsBoard value={{ ...value, workspace: allTied.workspace,
       eventSkins: calculateEventSkins(allTied.workspace, allTied.rounds) }} />);
     expect(screen.getByText(/No skins won/)).toBeVisible();
-    expect(screen.getByRole('status')).toHaveTextContent('not round finalization');
+    expect(screen.getByRole('status')).toHaveTextContent('All hole outcomes known');
+    expect(screen.queryByText(/not round finalization/)).not.toBeInTheDocument();
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   });
 });

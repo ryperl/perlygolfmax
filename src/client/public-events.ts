@@ -5,7 +5,7 @@ import { createScoresClient } from './scoring';
 import type { PublicLeaderboardClient } from './public-leaderboard';
 import type { PublicPurseClient } from './public-purse';
 import { createPrivateRequest, PrivateRequestError, readPrivateValue } from './private-request';
-import { isEventPage, isUuid } from '../contracts/events';
+import { isEventPage, isRecord, isUuid } from '../contracts/events';
 import { isEventWorkspace } from '../contracts/setup';
 import { isEventLeaderboardView } from '../contracts/event-leaderboard';
 import { isEventPurseView } from '../contracts/purse-settings';
@@ -16,6 +16,7 @@ import { publicLeaderboardSummary } from '../domain/public-leaderboard';
 import { isPublicLeaderboardSummary } from '../contracts/public-leaderboard';
 import { isEventSkinsDetails } from '../contracts/event-skins-details';
 import { isPlayerWinningsBreakdown } from '../contracts/winnings-breakdown';
+import { expandSkinsDetails, expandSkinsSummary } from '../contracts/compact-event-skins';
 
 export interface PublicServices {
   readonly events: Pick<EventsClient, 'list'>;
@@ -78,12 +79,18 @@ export function createPublicServices(apiUrl: string, send: typeof fetch = fetch)
     },
     leaderboard: {
       async details(eventId, signal) {
-        const value = await readPrivateValue(request, `${path(eventId)}/leaderboard?view=event-skins-details`, signal);
-        if (!isEventSkinsDetails(value) || value.eventId !== eventId) throw new Error('Skins details are unavailable from this API. Refresh to retry.');
-        return value;
+        const value = await readPrivateValue(request, `${path(eventId)}/leaderboard?view=event-skins-details&format=compact`, signal);
+        const detail = expandSkinsDetails(value) ?? (isEventSkinsDetails(value) ? value : null);
+        if (!detail || detail.eventId !== eventId) throw new Error('Skins details are unavailable from this API. Refresh to retry.');
+        return detail;
       },
       async load(eventId, signal, kind = 'overall') {
-        const value = await readPrivateValue(request, `${path(eventId)}/leaderboard?view=${kind}`, signal);
+        const value = await readPrivateValue(request, `${path(eventId)}/leaderboard?view=${kind}${kind === 'event-skins' ? '&format=compact' : ''}`, signal);
+        if (kind === 'event-skins') {
+          const expanded = expandSkinsSummary(value);
+          if (expanded?.workspace.event.id === eventId) return expanded;
+          if (isRecord(value) && value.kind === 'event-skins-summary-compact') throw new Error('Invalid public leaderboard.');
+        }
         if (isPublicLeaderboardSummary(value) && value.kind === kind && value.workspace.event.id === eventId) return value;
         if (isEventLeaderboardView(value) && value.workspace.event.id === eventId
           && value.workspace.publicAccess === true && value.workspace.event.role === 'viewer') return publicLeaderboardSummary(value, kind);

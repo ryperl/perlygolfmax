@@ -35,7 +35,8 @@ test('assigned player entry and readonly controls work at 390 and 320 pixels', a
       await expect(page.getByRole('button', { name: 'Save & Next Hole' })).toBeDisabled();
       await expect(page.getByText('Round details & tools', { exact: true })).toHaveCount(0);
       await page.getByRole('button', { name: 'Games', exact: true }).click();
-      await expect(page.getByText(/Settings are read-only/)).toBeVisible();
+      await expect(page.getByRole('heading', { name: /Games ·/ })).toBeVisible();
+      await expect(page.getByText('Saved game results · Settings are read-only.', { exact: true })).toHaveCount(0);
       await expect(page.getByRole('button', { name: /Add game|Edit Fictional|Save game/ })).toHaveCount(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       await page.goto(`${origin}/__player-fixture?readonly`);

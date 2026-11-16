@@ -12,8 +12,8 @@ import type { TablePurseStore } from '../purse/store.js';
 import type { TablePublicEventStore } from './store.js';
 import { publicPurseSummary } from '../../../src/domain/public-purse.js';
 import { publicLeaderboardSummary } from '../../../src/domain/public-leaderboard.js';
-import { calculateEventSkinsDetails } from '../../../src/domain/event-skins.js';
 import { playerWinningsBreakdown } from '../../../src/domain/winnings-breakdown.js';
+import { compactSkinsDetails, compactSkinsSummary } from '../../../src/contracts/compact-event-skins.js';
 
 export type PublicAction = 'events' | 'workspace' | 'scores' | 'score-hole' | 'event-leaderboard' | 'purse';
 export interface PublicApi {
@@ -68,11 +68,16 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
       if (action === 'workspace') return response(200, privateReadResponse(request, await api.workspace.get(identity, eventId)));
       const chargeRead = (units: number) => api.limiter.check(identity, 'scores-read', units);
       if (action === 'event-leaderboard') {
-        const value = await api.scores.leaderboard(identity, eventId, chargeRead);
         const view = request.query.get('view');
-        if (view === 'event-skins-details') return response(200, privateReadResponse(request, calculateEventSkinsDetails(value.workspace, value.roundScores)));
-        return response(200, privateReadResponse(request, view === 'overall' || view === 'event-skins'
-          ? publicLeaderboardSummary(value, view) : value));
+        const compact = request.query.get('format') === 'compact';
+        if (view === 'event-skins-details') {
+          const details = await api.scores.skinsDetails(identity, eventId, chargeRead);
+          return response(200, privateReadResponse(request, compact ? compactSkinsDetails(details) : details));
+        }
+        const value = await api.scores.leaderboard(identity, eventId, chargeRead);
+        const summary = view === 'overall' || view === 'event-skins' ? publicLeaderboardSummary(value, view) : value;
+        return response(200, privateReadResponse(request,
+          compact && 'kind' in summary && summary.kind === 'event-skins' ? compactSkinsSummary(summary) : summary));
       }
       if (action === 'purse') {
         const selectedPlayer = request.query.get('view') === 'player' ? uuid(request.query.get('playerId')) : null;

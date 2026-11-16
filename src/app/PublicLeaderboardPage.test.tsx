@@ -6,9 +6,31 @@ import type { PublicLeaderboardSummary } from '../domain/public-leaderboard';
 import type { PublicLeaderboardClient } from '../client/public-leaderboard';
 import { PrivateRequestError } from '../client/private-request';
 import { PublicLeaderboardPage } from './PublicLeaderboardPage';
+import { calculateEventSkinsDetails } from '../domain/event-skins';
 
 const full = publicLeaderboardFixture(4, 2);
 describe('public compact leaderboard lifecycle', () => {
+  it('keeps the correct overview link through loading, errors and on-demand details without extra summary requests', async () => {
+    const load = vi.fn<PublicLeaderboardClient['load']>().mockRejectedValueOnce(new Error('Read failed'))
+      .mockResolvedValue(publicLeaderboardSummary(full, 'event-skins'));
+    const details = vi.fn().mockResolvedValue(calculateEventSkinsDetails(full.workspace, full.roundScores));
+    const eventId = full.workspace.event.id;
+    render(<PublicLeaderboardPage client={{ load, details }} eventId={eventId} eventSkins onSessionExpired={vi.fn()} />);
+    const back = screen.getByRole('link', { name: 'Back to event overview' });
+    expect(back).toHaveAttribute('href', `#overview?event=${eventId}`);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Read failed');
+    expect(back).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh event skins' }));
+    await screen.findByRole('heading', { name: /Event-wide skins/ });
+    expect(details).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'View skins details' }));
+    await screen.findByRole('combobox', { name: 'Round' });
+    expect(back).toBeVisible();
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(details).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to skins' }));
+    expect(load).toHaveBeenCalledTimes(2);
+  });
   it('requests the selected board only, recovers explicit quota failure and never exposes owner controls', async () => {
     const load = vi.fn<PublicLeaderboardClient['load']>().mockImplementation((_event, _signal, kind = 'overall') =>
       Promise.resolve(publicLeaderboardSummary(full, kind)));

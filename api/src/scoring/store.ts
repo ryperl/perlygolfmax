@@ -15,7 +15,7 @@ import { canonical, decode, isConflict, optionalRow, page, revision } from '../c
 import { ApiError } from '../errors.js';
 import type { TableWorkspaceStore } from '../setup/store.js';
 import { scoringLock } from './lock.js';
-import { calculateEventSkins } from '../../../src/domain/event-skins.js';
+import { calculateEventSkins, calculateEventSkinsDetails } from '../../../src/domain/event-skins.js';
 import type { EventSkinsConfiguration } from '../../../src/domain/event-skins.js';
 import type { ScoringLock, StoredScoringLock } from './lock.js';
 import { configuredGameRounds, gameChangeKey, gameConfigurationContent, gameConfigurationKey, readGameConfiguration } from './games.js';
@@ -273,13 +273,14 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     return projection;
   }
 
-  async leaderboard(identity: ScoreActor, eventId: string, chargeRead: (units: number) => Promise<void>): Promise<EventLeaderboardView> {
+  private async leaderboardSources(identity: ScoreActor, eventId: string, chargeRead: (units: number) => Promise<void>,
+    skinsOnly = false): Promise<Pick<EventLeaderboardView, 'workspace' | 'roundScores'>> {
     const access = await this.access(identity, eventId);
     if (access.testerLink) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
     const workspace = await this.workspace.get(identity, eventId);
     if (workspace.etag !== access.summary.etag) throw new ApiError(409, 'EVENT_CHANGED');
     const roundScores: RoundScores[] = [];
-    if (workspace.overallCompetition || workspace.eventSkins) {
+    if (workspace.eventSkins || !skinsOnly && workspace.overallCompetition) {
       if (workspace.rounds.length > 0) await chargeRead(workspace.rounds.length);
       for (let index = 0; index < workspace.rounds.length; index += 3) {
         const batch = await Promise.all(workspace.rounds.slice(index, index + 3).map((round) => this.get(identity, eventId, round.id)));
@@ -287,6 +288,16 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       }
     }
     await this.unchanged(identity, eventId, access);
+    return { workspace, roundScores };
+  }
+
+  async skinsDetails(identity: ScoreActor, eventId: string, chargeRead: (units: number) => Promise<void>) {
+    const { workspace, roundScores } = await this.leaderboardSources(identity, eventId, chargeRead, true);
+    return calculateEventSkinsDetails(workspace, roundScores);
+  }
+
+  async leaderboard(identity: ScoreActor, eventId: string, chargeRead: (units: number) => Promise<void>): Promise<EventLeaderboardView> {
+    const { workspace, roundScores } = await this.leaderboardSources(identity, eventId, chargeRead);
     return { workspace, roundScores, standings: calculateEventStandings(workspace, roundScores),
       ...(workspace.eventSkins ? { eventSkins: calculateEventSkins(workspace, roundScores) } : {}) };
   }
