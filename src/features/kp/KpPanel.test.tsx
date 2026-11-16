@@ -6,12 +6,34 @@ import type { RoundScores } from '../../domain/scoring';
 import { calculateKp } from '../../domain/kp';
 import { fictionalId } from '../../client/catalog.test-support';
 
-function panel(round: RoundScores, manage = vi.fn().mockResolvedValue(undefined)) {
-  return render(<KpPanel round={round} busy={false} dirty={false} groupNumber={1} holeNumber={1}
+function panel(round: RoundScores, manage = vi.fn().mockResolvedValue(undefined), groupNumber = 1) {
+  return render(<KpPanel round={round} busy={false} dirty={false} groupNumber={groupNumber} holeNumber={1}
     onGroup={vi.fn()} onHole={vi.fn()} onEdit={vi.fn()} draftFor={() => ({ value: undefined, savedValue: undefined, dirty: false, conflict: false, canReview: false })}
     onSave={vi.fn()} onDiscard={vi.fn()} onManage={manage} onPendingChange={vi.fn()} onReview={vi.fn()} onUseSaved={vi.fn()} />);
 }
 describe('round KP review', () => {
+  it.each([1, 2])('visibly identifies each entry for group %s using golfer IDs, not card order', (groupNumber) => {
+    const source = fictionalKpRound();
+    const groups = [
+      { number: 1, playerIds: source.cards.slice(0, 2).map((card) => card.playerId) },
+      { number: 2, playerIds: source.cards.slice(2).map((card) => card.playerId) },
+    ];
+    panel({ ...source, groups, cards: [...source.cards].reverse() }, undefined, groupNumber);
+    const entry = within(screen.getByRole('article', { name: 'KP entry group' }));
+    const selected = groups.find((group) => group.number === groupNumber);
+    if (!selected) throw new Error('Missing fictional group.');
+    const names = selected.playerIds.map((id) => source.cards.find((card) => card.playerId === id)?.displayName);
+    expect(entry.getAllByRole('heading', { level: 4 }).map((heading) => heading.textContent)).toEqual(names);
+    for (const card of source.cards) {
+      if (selected.playerIds.includes(card.playerId)) {
+        const row = within(entry.getByRole('group', { name: `${card.displayName} KP entry` }));
+        expect(row.getByRole('heading', { name: card.displayName, level: 4 })).toBeVisible();
+        expect(row.getByRole('button', { name: `KP for ${card.displayName}` })).toBeVisible();
+      } else {
+        expect(entry.queryByRole('heading', { name: card.displayName })).not.toBeInTheDocument();
+      }
+    }
+  });
   it('exposes owner closure independently of scoring and keeps public/old API management unavailable', () => {
     const round = fictionalKpRound();
     const manage = vi.fn().mockResolvedValue(undefined);

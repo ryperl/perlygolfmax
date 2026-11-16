@@ -13,6 +13,8 @@
 .kp-check input { flex: 0 0 24px; }
 .kp-panel { display: grid; gap: .75rem; min-width: 0; overflow-wrap: anywhere; contain: layout; }
 .kp-panel article { border: 1px solid var(--cp-border); border-radius: .5rem; padding: .75rem; min-width: 0; }
+.kp-player-entry { display: grid; gap: .25rem; min-width: 0; padding-block: .5rem; }
+.kp-player-entry h4 { margin: 0; font-size: 1rem; }
 .kp-panel li { margin-block: .5rem; }
 .kp-panel label:not(.kp-check) { display: grid; gap: .25rem; }
 .kp-panel select { width: 100%; min-width: 0; }

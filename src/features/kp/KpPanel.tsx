@@ -87,7 +87,9 @@ export function KpPanel({ round, busy, dirty, groupNumber, holeNumber, onGroup, 
               {group?.playerIds.map((playerId) => {
                 const card = round.cards.find((entry) => entry.playerId === playerId);
                 const draft = draftFor(playerId);
-                return card && <div key={playerId}><KpEntryButton name={card.displayName} value={draft.value} draft={draft.dirty}
+                return card && <div className="kp-player-entry" role="group" aria-label={`${card.displayName} KP entry`} key={playerId}>
+                  <h4>{card.displayName}</h4>
+                  <KpEntryButton name={card.displayName} value={draft.value} draft={draft.dirty}
                   disabled={busy || round.kp?.status !== 'open' || !permission.writePlayerIds.includes(playerId)}
                   onChange={(value) => { onEdit(playerId, value); }} />
                   {draft.conflict && <>

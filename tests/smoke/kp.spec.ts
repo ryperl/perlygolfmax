@@ -22,6 +22,12 @@ test('KP during/afterward, exact tied purse, closure and reopen at 320px / 125% 
     await page.getByRole('button', { name: 'KP Competition', exact: true }).click();
     await page.getByRole('button', { name: 'Configure KP Competition' }).click();
     await expect(page.getByText(/Entries open/)).toBeVisible();
+    const entryGroup = page.getByRole('article', { name: 'KP entry group', exact: true });
+    for (const name of ['Fictional golfer 1', 'Fictional golfer 2', 'Fictional golfer 3', 'Fictional golfer 4']) {
+      const row = entryGroup.getByRole('group', { name: `${name} KP entry`, exact: true });
+      await expect(row.getByRole('heading', { name, exact: true })).toBeVisible();
+      await expect(row.getByRole('button', { name: `KP for ${name}`, exact: true })).toBeVisible();
+    }
     await page.getByRole('button', { name: 'Enter scores', exact: true }).click();
     await page.getByRole('textbox', { name: 'Fictional golfer 1 score', exact: true }).fill('3');
 
