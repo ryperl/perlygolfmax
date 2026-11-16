@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { RoundScores } from '../../domain/scoring';
 import { writablePlayerIds } from './score-access';
-import { isTeamGameDefinition, visibleGames } from '../../domain/games';
+import { visibleGames } from '../../domain/games';
 import { ChurchyResults } from '../churchy';
 import { gameScoringLabel } from '../games';
 import { PlayerScorecardRecap } from './PlayerScorecardRecap';
@@ -61,11 +61,9 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
         {games.map((entry) => <option value={entry.id} key={entry.id}>{entry.name} · {gameScoringLabel(entry)}</option>)}
       </select></label>}
     </div>
-    {game?.definition.kind === 'ball-drop' ? <p className="scorecard-game-context">
+    {game?.definition.kind === 'ball-drop' && <p className="scorecard-game-context">
       Counting balls: {game.definition.format === 'ball-drop-two-net' ? 'N net'
         : game.definition.format === 'ball-drop-two-gross' ? 'G gross' : 'N net · G gross'}
-    </p> : game && isTeamGameDefinition(game.definition) && <p className="scorecard-game-unavailable">
-      Team game · These golfer scorecards show individual component points, not full team credits. See Games or Leaderboard for team totals.
     </p>}
     {player ? <>
       <button type="button" className="scorecard-back" onClick={() => { setPlayerId(null); }}>Back to group scorecard</button>

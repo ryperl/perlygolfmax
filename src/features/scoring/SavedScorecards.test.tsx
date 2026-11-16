@@ -126,13 +126,13 @@ describe('golfer-facing round scorecards', () => {
     expect(screen.getByRole('button', { name: 'Open scorecard for Fictional Player 1' })).toBeVisible();
   });
 
-  it('labels team-game golfer points as individual components in group and expanded scorecards', async () => {
+  it('keeps team-game golfer scorecards free of the explanatory banner in group and expanded views', async () => {
     render(<SavedScorecards {...props()} round={teamLeaderboardRound} />);
-    expect(screen.getByText(/individual component points, not full team credits/)).toBeVisible();
-    expect(screen.getByText(/See Games or Leaderboard for team totals/)).toBeVisible();
+    expect(screen.queryByText(/individual component points|See Games or Leaderboard for team totals/)).not.toBeInTheDocument();
+    expect(screen.getByRole('table', { name: 'Front nine scorecard' })).toBeVisible();
     await userEvent.setup().click(screen.getByRole('button', { name: 'Open scorecard for Fictional golfer 1' }));
     expect(screen.getByRole('region', { name: 'Fictional golfer 1 full scorecard' })).toBeVisible();
-    expect(screen.getByText(/individual component points, not full team credits/)).toBeVisible();
+    expect(screen.queryByText(/individual component points|See Games or Leaderboard for team totals/)).not.toBeInTheDocument();
     await userEvent.setup().selectOptions(screen.getByLabelText('Game'), '');
     expect(screen.queryByText(/individual component points/)).not.toBeInTheDocument();
   });

@@ -201,7 +201,7 @@ test('compact game cards keep golfers visible with shared scrolling and working 
     await golferCards.getByRole('table', { name: 'Front nine scorecard', exact: true })
       .getByRole('button', { name: 'Open scorecard for Fictional golfer 1', exact: true }).click();
     await expect(golferCards.getByRole('region', { name: 'Fictional golfer 1 full scorecard', exact: true })).toBeVisible();
-    await expect(golferCards.getByText(/individual component points, not full team credits/)).toBeVisible();
+    await expect(golferCards.getByText(/individual component points, not full team credits/)).toHaveCount(0);
     for (const [width, fontSize] of [[390, '100%'], [320, '125%']] as const) {
       await page.setViewportSize({ width, height: 844 });
       await page.evaluate((size) => { document.documentElement.style.fontSize = size; }, fontSize);
