@@ -111,7 +111,7 @@ test(`round accents remain distinct and readable without tinting fields or chang
     expect(selectedTone).toBe(await headers.nth(2).getAttribute('data-round-tone'));
     await scores.getByRole('button', { name: 'KP Competition', exact: true }).click();
     await expect(scores.getByRole('heading', { name: 'KP Competition', exact: true })).toBeVisible();
-    await scores.locator('.kp-group-entries').screenshot({ path: testInfo.outputPath('round-context-kp.png') });
+    if (!process.env.CI) await scores.locator('.kp-group-entries').screenshot({ path: testInfo.outputPath('round-context-kp.png') });
   } finally { await server.close(); }
 });
 }

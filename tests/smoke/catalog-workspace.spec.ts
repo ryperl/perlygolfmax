@@ -2,8 +2,10 @@ import { createServer } from 'vite';
 import { expect, test } from './test';
 import { catalogExport, catalogVersions } from './catalog-workspace-data';
 import { contrastRatio } from './contrast';
+import type { Locator } from '@playwright/test';
 
-test('compact course/player catalogs support complete search and focused create/edit workflows at narrow widths', async ({ page }, testInfo) => {
+for (const workflow of ['courses', 'create player', 'edit player'] as const) {
+test(`compact catalog ${workflow} workflow preserves complete search and focused editing at narrow widths`, async ({ page }, testInfo) => {
   const server = await createServer({ configFile: false, cacheDir: testInfo.outputPath('vite-cache'),
     server: { host: '127.0.0.1', port: 0, hmr: false }, esbuild: { jsx: 'automatic' },
     optimizeDeps: { noDiscovery: true, include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'] }, logLevel: 'error' });
@@ -19,6 +21,9 @@ test('compact course/player catalogs support complete search and focused create/
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${origin}/__catalogs`);
     await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
+    async function capture(target: Locator, name: string) {
+      if (!process.env.CI) await target.screenshot({ path: testInfo.outputPath(name) });
+    }
     async function checkLayout() {
       for (const width of [1280, 390, 320]) {
         await page.setViewportSize({ width, height: 844 });
@@ -34,6 +39,7 @@ test('compact course/player catalogs support complete search and focused create/
         }
       }
     }
+    if (workflow === 'courses') {
     const courses = page.getByRole('list', { name: 'Saved courses', exact: true });
     await expect(courses.getByRole('listitem')).toHaveCount(6);
     await expect(page.getByRole('heading', { name: 'Add a course', exact: true })).toHaveCount(0);
@@ -62,7 +68,7 @@ test('compact course/player catalogs support complete search and focused create/
     await expect(preview).toHaveValue('');
     await preview.selectOption(String(firstTee.id));
     await checkLayout();
-    await page.locator('.catalog-editor').screenshot({ path: testInfo.outputPath('focused-course-import.png') });
+    await capture(page.locator('.catalog-editor'), 'focused-course-import.png');
     await page.getByRole('button', { name: 'Close import', exact: true }).click();
     await page.getByRole('button', { name: 'Resume import', exact: true }).click();
     await expect(preview).toHaveValue(String(firstTee.id));
@@ -82,13 +88,17 @@ test('compact course/player catalogs support complete search and focused create/
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       }
     }
-    await page.locator('.catalog-view').screenshot({ path: testInfo.outputPath('compact-course-catalog.png') });
+    await capture(page.locator('.catalog-view'), 'compact-course-catalog.png');
+    expect(errors).toEqual([]);
+    return;
+    }
     await page.getByRole('button', { name: 'Fictional Players', exact: true }).click();
     const players = page.getByRole('list', { name: 'Saved players', exact: true });
     await expect(players.getByRole('listitem')).toHaveCount(8);
     await page.getByRole('searchbox', { name: 'Search players', exact: true }).fill('golfer 8');
     await expect(players.getByRole('listitem')).toHaveCount(1);
     await page.getByRole('searchbox', { name: 'Search players', exact: true }).clear();
+    if (workflow === 'create player') {
     await page.getByRole('button', { name: 'Add player', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Create a saved player', exact: true })).toBeFocused();
     await expect(page.getByLabel('Initial index effective date', { exact: true })).not.toBeVisible();
@@ -100,11 +110,20 @@ test('compact course/player catalogs support complete search and focused create/
     await page.getByLabel('Initial handicap index (optional)', { exact: true }).fill('0');
     await page.getByLabel('Initial index effective date', { exact: true }).fill('2026-01-03');
     await checkLayout();
-    await page.locator('.catalog-editor').screenshot({ path: testInfo.outputPath('focused-player-creation.png') });
+    await capture(page.locator('.catalog-editor'), 'focused-player-creation.png');
     await page.getByRole('button', { name: 'Save player', exact: true }).click();
     await expect(players.getByRole('listitem')).toHaveCount(10);
     await page.getByRole('button', { name: 'Close player creation', exact: true }).click();
-    await page.getByRole('button', { name: 'Edit Fictional New Player', exact: true }).click();
+    const newPlayerEdit = page.getByRole('button', { name: 'Edit Fictional New Player', exact: true });
+    await newPlayerEdit.click();
+    const createdEditor = page.getByRole('region', { name: 'Player editor', exact: true });
+    await expect(createdEditor.getByRole('heading')).toBeFocused();
+    await createdEditor.getByRole('button', { name: 'Close player editor', exact: true }).click();
+    await expect(newPlayerEdit).toBeFocused();
+    expect(errors).toEqual([]);
+    return;
+    }
+    await page.getByRole('button', { name: 'Edit Fictional golfer 1', exact: true }).click();
     const editor = page.getByRole('region', { name: 'Player editor', exact: true });
     await expect(editor.getByRole('heading')).toBeFocused();
     await checkLayout();
@@ -140,7 +159,7 @@ test('compact course/player catalogs support complete search and focused create/
         expect(contrastRatio(colors.text, colors.background)).toBeGreaterThanOrEqual(4.5);
       }
     }
-    await page.locator('.catalog-view').screenshot({ path: testInfo.outputPath('compact-player-editor.png') });
+    await capture(page.locator('.catalog-view'), 'compact-player-editor.png');
     await editor.getByRole('button', { name: 'Profile', exact: true }).click();
     await editor.getByLabel('Saved player name', { exact: true }).fill('Fictional unsaved name');
     await editor.getByRole('button', { name: 'Close player editor', exact: true }).click();
@@ -153,3 +172,4 @@ test('compact course/player catalogs support complete search and focused create/
     expect(errors).toEqual([]);
   } finally { await server.close(); }
 });
+}
