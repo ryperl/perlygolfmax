@@ -13,11 +13,57 @@ function sourceFile(value: unknown = fictionalSource()) {
 }
 
 describe('manager course catalog', () => {
+  it('starts with compact searchable rows, keeps version IDs secondary and retains a closed import draft', async () => {
+    const client = fakeCatalog();
+    const user = userEvent.setup();
+    render(<CoursesCatalog client={client} />);
+    await screen.findByRole('heading', { name: fictionalEntry.name });
+    expect(screen.queryByRole('heading', { name: 'Add a course' })).not.toBeInTheDocument();
+    expect(screen.queryByText(fictionalEntry.currentVersionId)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Add course' }));
+    await user.upload(screen.getByLabelText('Course JSON file'), sourceFile());
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Preview tee' }), '905');
+    await user.click(screen.getByRole('button', { name: 'Close import' }));
+    expect(screen.queryByRole('combobox', { name: 'Preview tee' })).not.toBeInTheDocument();
+    await user.type(screen.getByRole('searchbox', { name: 'Search courses' }), 'missing');
+    expect(screen.getByText('No courses match your search.')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Resume import' }));
+    expect(screen.getByRole('combobox', { name: 'Preview tee' })).toHaveValue('905');
+    expect(client.beginImport).not.toHaveBeenCalled();
+  });
+  it('continues a failed directory page before presenting whole-catalog search results', async () => {
+    const client = fakeCatalog();
+    const later = { ...fictionalEntry, id: 'ghin:902:999', name: 'Fictional Later Course' };
+    vi.mocked(client.courses).mockResolvedValueOnce({ courses: [fictionalEntry], continuationToken: 'next' })
+      .mockRejectedValueOnce(new Error('Course catalog limited.')).mockResolvedValueOnce({ courses: [later] });
+    const user = userEvent.setup();
+    render(<CoursesCatalog client={client} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Course catalog limited');
+    await user.type(screen.getByRole('searchbox', { name: 'Search courses' }), 'Later');
+    expect(screen.queryByText('No courses match your search.')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Refresh course catalog' }));
+    expect(await screen.findByRole('heading', { name: later.name })).toBeVisible();
+    expect(screen.queryByRole('heading', { name: fictionalEntry.name })).not.toBeInTheDocument();
+    expect(vi.mocked(client.courses).mock.calls.map((call) => call[1])).toEqual([undefined, 'next', 'next']);
+    expect(screen.getByText('1 of 2 courses')).toBeVisible();
+  });
+  it('binds Update to the selected course and refuses an export for another course before staging', async () => {
+    const client = fakeCatalog();
+    const user = userEvent.setup();
+    render(<CoursesCatalog client={client} />);
+    await user.click(await screen.findByRole('button', { name: `Update ${fictionalEntry.name}` }));
+    expect(screen.getByRole('heading', { name: `Update ${fictionalEntry.name}` })).toHaveFocus();
+    await user.upload(screen.getByLabelText('Course JSON file'), sourceFile({ ...fictionalSource(), CourseId: 999 }));
+    expect(await screen.findByText(/This export belongs to a different course/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Stage import' })).toBeDisabled();
+    expect(client.beginImport).not.toHaveBeenCalled();
+  });
   it('validates and stages fictional nullable tee metadata without defaulting or auto-publishing', async () => {
     const client = fakeCatalog();
     const user = userEvent.setup();
     const source = fictionalSource();
     render(<CoursesCatalog client={client} />);
+    await user.click(screen.getByRole('button', { name: 'Add course' }));
     await user.upload(screen.getByLabelText('Course JSON file'), sourceFile({
       ...source, TeeSets: source.TeeSets.map((tee) => ({ ...tee, IsShorter: null, EligibleSides: null })),
     }));
@@ -42,6 +88,7 @@ describe('manager course catalog', () => {
     const refresh = screen.getByRole('button', { name: 'Refresh course catalog' });
     expect(refresh).toBeDisabled();
     await user.click(refresh);
+    await user.click(screen.getByRole('button', { name: 'Add course' }));
     await user.upload(screen.getByLabelText('Course JSON file'), sourceFile());
     await screen.findByText(/independent tee profiles/);
     expect(screen.getByRole('button', { name: 'Stage import' })).toBeDisabled();
@@ -65,6 +112,7 @@ describe('manager course catalog', () => {
     await act(async () => { reject?.(new Error('Initial courses unavailable.')); await initial.catch(() => undefined); });
     expect(await screen.findByRole('alert')).toHaveTextContent('Initial courses unavailable');
     expect(screen.getByRole('button', { name: 'Refresh course catalog' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Add course' }));
     await user.upload(screen.getByLabelText('Course JSON file'), sourceFile());
     expect(screen.getByRole('button', { name: 'Stage import' })).toBeDisabled();
     await user.click(screen.getByRole('button', { name: 'Refresh course catalog' }));
@@ -78,6 +126,7 @@ describe('manager course catalog', () => {
     vi.mocked(client.publish).mockReturnValueOnce(publish);
     const user = userEvent.setup();
     render(<CoursesCatalog client={client} />);
+    await user.click(screen.getByRole('button', { name: 'Add course' }));
     await user.upload(screen.getByLabelText('Course JSON file'), sourceFile());
     await user.click(screen.getByRole('button', { name: 'Stage import' }));
     await user.click(await screen.findByRole('checkbox', { name: /I approve publishing/ }));
@@ -109,6 +158,7 @@ describe('manager course catalog', () => {
     vi.mocked(client.publish).mockRejectedValueOnce(new Error('Uncertain publish.'));
     const user = userEvent.setup();
     render(<CoursesCatalog client={client} />);
+    await user.click(screen.getByRole('button', { name: 'Add course' }));
     await user.upload(screen.getByLabelText('Course JSON file'), sourceFile());
     await user.click(screen.getByRole('button', { name: 'Stage import' }));
     await user.click(await screen.findByRole('checkbox', { name: /I approve publishing/ }));
@@ -127,6 +177,7 @@ describe('manager course catalog', () => {
     render(<CoursesCatalog client={client} />);
     await user.click(await screen.findByRole('button', { name: 'View Fictional Meadows version' }));
     expect(await screen.findByRole('region', { name: 'Published course version' })).toHaveTextContent('freshness unknown');
+    await user.click(screen.getByText('Version details', { selector: 'summary' }));
     expect(screen.getByText(/Import time does not establish source freshness/)).toBeVisible();
     expect(screen.getAllByText(/Fictional Teal/)).toHaveLength(2);
     expect(client.version).toHaveBeenCalledWith(fictionalVersion.courseId, fictionalVersion.id, expect.any(AbortSignal));
@@ -145,6 +196,7 @@ describe('manager course catalog', () => {
     const user = userEvent.setup();
     render(<CoursesCatalog client={client} />);
     const read = vi.fn().mockResolvedValue('not read');
+    await user.click(screen.getByRole('button', { name: 'Add course' }));
     const large = new File([' '.repeat(1_000_001)], 'fictional-large.json', { type: 'application/json' });
     Object.defineProperty(large, 'text', { value: read });
     await user.upload(screen.getByLabelText('Course JSON file'), large);
@@ -168,6 +220,7 @@ describe('manager course catalog', () => {
     const user = userEvent.setup();
     render(<CoursesCatalog client={client} />);
     await screen.findByText('Fictional City');
+    await user.click(screen.getByRole('button', { name: 'Add course' }));
     await user.upload(screen.getByLabelText('Course JSON file'), sourceFile());
     await screen.findByText(/2 independent tee profiles/);
     expect(screen.getAllByText(/Fictional Teal/)).toHaveLength(2);
@@ -203,6 +256,7 @@ describe('manager course catalog', () => {
     vi.mocked(client.publish).mockRejectedValueOnce(new EventChangedError('Data changed. Refresh before approving.'));
     const user = userEvent.setup();
     render(<CoursesCatalog client={client} />);
+    await user.click(screen.getByRole('button', { name: 'Add course' }));
     await user.upload(screen.getByLabelText('Course JSON file'), sourceFile());
     await user.click(screen.getByRole('button', { name: 'Stage import' }));
     await screen.findByText('Manifest response lost.');
@@ -228,6 +282,7 @@ describe('manager course catalog', () => {
     const client = fakeCatalog();
     const user = userEvent.setup();
     render(<CoursesCatalog client={client} />);
+    await user.click(screen.getByRole('button', { name: 'Add course' }));
     await user.upload(screen.getByLabelText('Course JSON file'), sourceFile({ CourseId: 1 }));
     await screen.findByText(/missing or unsupported fields/);
     expect(screen.getByRole('button', { name: 'Stage import' })).toBeDisabled();
@@ -249,6 +304,7 @@ describe('manager course catalog', () => {
     vi.mocked(client.beginImport).mockReturnValue(response);
     const user = userEvent.setup();
     const { unmount } = render(<CoursesCatalog client={client} />);
+    await user.click(screen.getByRole('button', { name: 'Add course' }));
     await user.upload(screen.getByLabelText('Course JSON file'), sourceFile());
     const stage = screen.getByRole('button', { name: 'Stage import' });
     await user.dblClick(stage);

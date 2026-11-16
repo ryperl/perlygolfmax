@@ -249,12 +249,12 @@ describe('EventsPage composition', () => {
     vi.mocked(services.events.capabilities).mockResolvedValue({ canCreateEvents: true, canManageCatalog: true });
     window.history.replaceState(null, '', '#events?catalog=courses');
     render(<EventsPage services={services} />);
-    expect(await screen.findByRole('heading', { name: 'Saved course catalog' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Courses' })).toBeVisible();
     act(() => {
       window.history.replaceState(null, '', '#events?catalog=players');
       window.dispatchEvent(new HashChangeEvent('hashchange'));
     });
-    expect(await screen.findByRole('heading', { name: 'Saved player catalog' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Players' })).toBeVisible();
     act(() => {
       window.history.replaceState(null, '', `#events?event=${fictionalEvent.id}`);
       window.dispatchEvent(new HashChangeEvent('hashchange'));

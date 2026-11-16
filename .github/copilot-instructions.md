@@ -60,6 +60,11 @@
 - Identity sign-in is not event admission. Verify access tokens, authoritative
   object permissions and owner-versus-global-creator grants on every operation.
 - Only the bootstrapped organizer manages global course/player catalogs.
+  Keep catalogs compact with whole-directory search and focused editors.
+  Retain page/cursor progress on interrupted reads; never call a loaded-page
+  filter a complete search. Preserve import/creation drafts, publish approval,
+  conditional revisions and retry identities independently of presentation.
+  Course Update publishes an immutable version, never an in-place scored edit.
   Event ownership is not catalog authority. Use allowlisted member projections,
   immutable course versions and captured round inputs. Active unstarted rounds
   use current catalog HI; atomically freeze all indexes with the first saved

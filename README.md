@@ -753,6 +753,15 @@ search/import/edit rights. Participants receive only authorized event-local
 course and roster projections, never the global player directory or its index
 history.
 
+Both catalogs use compact searchable rows and a focused add/edit panel.
+**Add course** opens the export, review/stage and explicit publish workflow;
+**Update** binds the export to the chosen course. Version IDs and import
+identifiers live under technical details rather than on every row.
+Closing an import retains its local draft and selected preview on this page.
+Catalog search waits for every bounded directory page; interrupted reads retain
+their loaded rows and cursor, and **Refresh** continues loading before search or
+editing is enabled. No partial list is presented as complete search results.
+
 Course import validates the supplied export and stages metadata plus each
 independently identified tee-rating profile before publishing an immutable
 version. Matching names/colors do not merge source categories, hole definitions
@@ -774,8 +783,13 @@ Players are independent of sign-in accounts and event membership. Manual index
 observations have effective dates, source labels and audit history. Unknown is
 not zero, and plus-index notation is preserved without calculating handicaps.
 An optional starting index can be entered when creating a player; the player
-and first audited observation are saved together. Editing opens beside the
-selected player rather than below the whole directory.
+and first audited observation are saved together. **Add player** starts with a
+name and optional HI; date/source fields appear only when an HI is supplied.
+The focused player editor has separate **Profile**, **Handicap** and **History**
+sections. Name and handicap edits remain separate conditional saves; section
+changes retain drafts, and closing an edited player requires explicit discard.
+Audit identifiers remain available under observation details. Closed creation
+drafts can be resumed on the same page; catalog drafts are never stored offline.
 Backdated observations remain in history rather than replacing a newer current
 observation. Active rounds that have not started use the latest current catalog
 observation, including NH when no observation exists. The first saved score
