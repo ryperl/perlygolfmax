@@ -1,5 +1,6 @@
 import { test, expect } from './test';
 import { createServer } from 'vite';
+import { controlStyle } from './control-style';
 
 test('event skins explicit setup, per-round saved wins, exact pot and readonly at 320px / 125% text', async ({ page }, testInfo) => {
   const server = await createServer({
@@ -38,11 +39,33 @@ test('event skins explicit setup, per-round saved wins, exact pot and readonly a
     await expect(page.getByText(/Only when net ties, actual gross birdie or better/)).toBeVisible();
     await page.getByRole('button', { name: 'View skins details', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Skins details', exact: true })).toBeFocused();
+    const filterStyles: { readonly theme: string; readonly styles: readonly ReturnType<typeof controlStyle>[] }[] = [];
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+      const styles: ReturnType<typeof controlStyle>[] = [];
+      for (const select of await page.locator('.event-skins-filters select').all()) {
+        styles.push(await select.evaluate(controlStyle));
+        const actual = await select.evaluate((element) => {
+          const style = getComputedStyle(element);
+          return { height: element.getBoundingClientRect().height, width: element.getBoundingClientRect().width,
+            parentWidth: element.parentElement?.getBoundingClientRect().width ?? 0, containment: style.contain };
+        });
+        expect(actual.height).toBeGreaterThanOrEqual(44);
+        expect(actual.width).toBeLessThanOrEqual(actual.parentWidth + 1);
+        expect(actual.containment).toContain('layout');
+        await select.focus();
+        await expect(select).toBeFocused();
+        expect(await select.evaluate((element) => getComputedStyle(element).outlineWidth)).toBe('3px');
+      }
+      expect(styles).toHaveLength(2);
+      filterStyles.push({ theme, styles });
+    }
+    await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
     await page.getByText('Hole 1 · Fictional golfer 1', { exact: true }).click();
     await expect(page.getByRole('table', { name: 'Hole 1 skins comparison' })).toContainText('covered by Fictional golfer 1');
     await page.getByRole('combobox', { name: 'Round', exact: true }).selectOption({ label: 'Fictional Round 3' });
     await page.getByRole('combobox', { name: 'Hole', exact: true }).selectOption('2');
-    await expect(page.getByText('Hole 2 · ineligible', { exact: true })).toBeVisible();
+    await expect(page.getByText('Hole 2 · Covered by Fictional golfer 1, Fictional golfer 2 — no skin', { exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.getByRole('button', { name: 'Back to skins', exact: true }).click();
     await expect(page.getByRole('button', { name: 'View skins details', exact: true })).toBeFocused();
@@ -55,6 +78,12 @@ test('event skins explicit setup, per-round saved wins, exact pot and readonly a
     await page.getByLabel('Pool 1 name', { exact: true }).fill('Fictional Event Skins');
     const source = page.getByRole('combobox', { name: 'Pool 1 source', exact: true });
     await source.selectOption('event-skins');
+    for (const { theme, styles } of filterStyles) {
+      await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+      const reference = await source.evaluate(controlStyle);
+      for (const style of styles) expect(style).toEqual(reference);
+    }
+    await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
     await expect(page.getByLabel('Event skins pot amount')).toHaveValue('');
     await expect(page.getByRole('button', { name: 'Save purse', exact: true })).toBeDisabled();
     for (const select of await page.getByRole('combobox').all()) {

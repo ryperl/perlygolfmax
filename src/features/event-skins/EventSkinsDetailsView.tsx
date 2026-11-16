@@ -6,7 +6,7 @@ export function EventSkinsDetailsView({ value }: { readonly value: EventSkinsDet
   const [hole, setHole] = useState('all');
   const roundId = value.rounds.some((entry) => entry.id === selected) ? selected : value.rounds[0]?.id;
   const holes = value.holes.filter((entry) => entry.roundId === roundId);
-  const name = (id: string) => value.players.find((player) => player.playerId === id)?.displayName;
+  const name = (id: string) => value.players.find((player) => player.playerId === id)?.displayName ?? 'Player unavailable';
   return <div className="event-skins-details">
     <div className="event-skins-filters">
       <label>Round<select value={roundId} onChange={(event) => { setSelected(event.target.value); setHole('all'); }}>
@@ -19,7 +19,8 @@ export function EventSkinsDetailsView({ value }: { readonly value: EventSkinsDet
     </div>
     <p className="purse-hint">Saved scores · Net first · No carryovers</p>
     {holes.filter((entry) => hole === 'all' || String(entry.number) === hole).map((entry) => <details key={`${entry.roundId}:${String(entry.number)}`}>
-      <summary>Hole {entry.number} · {entry.winnerId ? name(entry.winnerId) : entry.status === 'tied' ? 'Covered — no skin' : entry.status}</summary>
+      <summary>Hole {entry.number} · {entry.winnerId ? name(entry.winnerId) : entry.status === 'tied'
+        ? `Covered by ${entry.contenderIds.map(name).join(', ')} — no skin` : entry.status}</summary>
       {entry.grossUnderParPriority && <p>Equal net: actual gross birdie-or-better priority, then lowest qualifying gross.</p>}
       {entry.reason && <p role="status">{entry.reason.replaceAll('-', ' ')}</p>}
       <div className="event-skins-comparisons"><table>

@@ -15,7 +15,10 @@ import { purseTestId } from '../../src/domain/purse.test-support';
 import { fictionalPurseSave } from './purse-fixture-data';
 import '../../src/app/styles.css';
 
-const f = eventSkinsFixture(undefined, undefined, 3);
+const source = eventSkinsFixture(undefined, undefined, 3);
+const f = { ...source, rounds: source.rounds.map((round) => ({ ...round, cards: round.cards.map((card, index) => ({
+  ...card, holes: card.holes.map((hole) => hole.number === 2 ? { ...hole, score: { kind: 'strokes' as const, strokes: 4 + index } } : hole),
+})) })) };
 const initial: EventWorkspace = { ...withoutEventSkins(f.workspace), eventSkinsSupported: true };
 export function Fixture() {
   const saved = useRef(initial);

@@ -1,5 +1,7 @@
 import { test, expect } from './test';
 import { createServer } from 'vite';
+import type { Locator } from '@playwright/test';
+import { controlStyle } from './control-style';
 
 test('KP during/afterward, exact tied purse, closure and reopen at 320px / 125% text', async ({ page }, testInfo) => {
   const server = await createServer({
@@ -22,6 +24,26 @@ test('KP during/afterward, exact tied purse, closure and reopen at 320px / 125% 
     await page.getByRole('button', { name: 'KP Competition', exact: true }).click();
     await page.getByRole('button', { name: 'Configure KP Competition' }).click();
     await expect(page.getByText(/Entries open/)).toBeVisible();
+    const pickerStyles: { readonly theme: string; readonly styles: readonly ReturnType<typeof controlStyle>[] }[] = [];
+    async function checkPicker(picker: Locator) {
+      expect(await picker.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+      expect(await picker.evaluate((element) => element.getBoundingClientRect().width
+        <= (element.parentElement?.getBoundingClientRect().width ?? 0) + 1)).toBe(true);
+      expect(await picker.evaluate((element) => getComputedStyle(element).contain)).toContain('layout');
+      await picker.focus();
+      await expect(picker).toBeFocused();
+      expect(await picker.evaluate((element) => getComputedStyle(element).outlineWidth)).toBe('3px');
+    }
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+      const styles: ReturnType<typeof controlStyle>[] = [];
+      for (const picker of await page.locator('.kp-panel select').all()) {
+        await checkPicker(picker); styles.push(await picker.evaluate(controlStyle));
+      }
+      expect(styles).toHaveLength(2);
+      pickerStyles.push({ theme, styles });
+    }
+    await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
     const entryGroup = page.getByRole('article', { name: 'KP entry group', exact: true });
     for (const name of ['Fictional golfer 1', 'Fictional golfer 2', 'Fictional golfer 3', 'Fictional golfer 4']) {
       const row = entryGroup.getByRole('group', { name: `${name} KP entry`, exact: true });
@@ -68,6 +90,12 @@ test('KP during/afterward, exact tied purse, closure and reopen at 320px / 125% 
     await page.getByRole('button', { name: 'Add award pool' }).click();
     await page.getByLabel('Pool 2 name', { exact: true }).fill('Fictional daily KP');
     const source = page.getByRole('combobox', { name: 'Pool 2 source', exact: true });
+    for (const { theme, styles } of pickerStyles) {
+      await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+      const reference = await source.evaluate(controlStyle);
+      for (const style of styles) expect(style).toEqual(reference);
+    }
+    await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
     const option = source.getByRole('option', { name: /KP Competition/ });
     await source.selectOption(await option.getAttribute('value') ?? '');
     await expect(page.getByLabel('Pool 2 total pot amount')).toHaveValue('100.00');
@@ -81,6 +109,13 @@ test('KP during/afterward, exact tied purse, closure and reopen at 320px / 125% 
     await expect(page.getByRole('article', { name: 'KP hole 1 results' })).toContainText('USD 33.34');
     await expect(page.getByRole('article', { name: 'KP hole 4 results' })).toContainText('excluded from daily pot shares');
     const tie = page.getByRole('article', { name: 'KP hole 2 results' });
+    const winner = tie.getByRole('combobox', { name: 'Chosen winner', exact: true });
+    for (const { theme, styles } of pickerStyles) {
+      await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+      await checkPicker(winner);
+      expect(await winner.evaluate(controlStyle)).toEqual(styles[0]);
+    }
+    await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
     await expect(tie.getByRole('button', { name: 'Split tied hole prize' })).toBeDisabled();
     await tie.getByRole('checkbox', { name: 'Extra cent: Fictional golfer 1' }).check();
     await tie.getByRole('button', { name: 'Split tied hole prize' }).click();

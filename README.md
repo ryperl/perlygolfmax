@@ -510,6 +510,7 @@ grouped by round. **View skins details** loads a separate comparison view on
 demand: select any round/hole to inspect saved gross/net strokes, personal par,
 received strokes and the golfers who covered or beat a score. Shared canonical
 decisions drive both views; details do not introduce carryovers or new tie rules.
+Covered-hole summaries name the saved covering golfers without opening the table.
 Mixed progress is provisional. Known zero winners are hidden only from complete
 ranked displays, not underlying results or winnings. Refresh reads fresh,
 coherent saved server data; drafts never count. Public visitors can read active

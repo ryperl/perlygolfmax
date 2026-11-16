@@ -59,11 +59,11 @@ body { margin: 0; background: var(--cp-bg); color: var(--cp-text); font-family: 
 a { color: var(--cp-accent); text-underline-offset: 4px; }
 a:hover { color: var(--cp-accent-hover); }
 a:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 5px; border-radius: 4px; }
-button, input { font: inherit; max-width: 100%; border: 1px solid var(--cp-border-strong); border-radius: 0.625rem; padding: 10px 16px; background: var(--cp-surface); color: var(--cp-text); }
+button, input, select { font: inherit; max-width: 100%; border: 1px solid var(--cp-border-strong); border-radius: 0.625rem; padding: 10px 16px; background: var(--cp-surface); color: var(--cp-text); }
 button { cursor: pointer; min-height: 44px; margin: 8px 8px 8px 0; }
 button:hover { border-color: var(--cp-accent); }
 button:disabled { opacity: 0.6; cursor: wait; }
-button:focus-visible, input:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
 .event-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-bottom: 20px; }
 .event-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
 .event-card-actions a { min-width: 0; overflow-wrap: anywhere; }
