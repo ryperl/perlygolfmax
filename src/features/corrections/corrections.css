@@ -1,0 +1,44 @@
+.round-corrections-dialog {
+  width: min(46rem, calc(100% - 2rem));
+  max-height: calc(100dvh - 2rem);
+  box-sizing: border-box;
+  overflow: auto;
+  border: 1px solid var(--cp-border);
+  border-radius: 0.625rem;
+  background: var(--cp-surface);
+  color: var(--cp-text);
+  padding: 1rem;
+}
+
+.round-corrections-dialog::backdrop {
+  background: var(--cp-overlay);
+}
+
+.round-corrections-dialog label:not(.correction-check) {
+  display: grid;
+  gap: 0.25rem;
+  margin-block: 0.75rem;
+}
+
+.round-corrections-dialog fieldset {
+  min-width: 0;
+}
+
+.round-corrections-dialog select {
+  width: 100%;
+  contain: inline-size;
+}
+
+.correction-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+}
+
+.round-corrections-dialog select,
+.round-corrections-dialog input,
+.round-corrections-dialog textarea {
+  min-width: 0;
+  max-width: 100%;
+}

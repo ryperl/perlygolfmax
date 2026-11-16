@@ -3,6 +3,7 @@ import type { PublicLeaderboardSummary } from '../domain/public-leaderboard.js';
 import { boundedText } from './catalog.js';
 import { isRecord, isUuid } from './events.js';
 import { isOverallCompetition } from './setup.js';
+import { isEventReviewNotices } from './event-review.js';
 
 function keys(value: Record<string, unknown>, required: readonly string[], optional: readonly string[] = []): boolean {
   return required.every((key) => Object.hasOwn(value, key))
@@ -46,13 +47,14 @@ function standingRound(value: unknown): value is { readonly roundId: string; rea
 }
 
 export function isPublicLeaderboardSummary(value: unknown): value is PublicLeaderboardSummary {
-  if (!isRecord(value) || value.version !== 1 || !isRecord(value.workspace) || !isRecord(value.workspace.event)) return false;
+  if (!isRecord(value) || value.version !== 1 || !isRecord(value.workspace) || !isRecord(value.workspace.event)
+    || value.reviewNotices !== undefined && !isEventReviewNotices(value.reviewNotices)) return false;
   const workspace = value.workspace;
   const event = workspace.event;
   if (!isRecord(event) || !keys(event, ['id', 'name', 'status', 'role']) || !isUuid(event.id) || !boundedText(event.name)
     || event.role !== 'viewer' || event.status !== 'active') return false;
   if (value.kind === 'overall') {
-    if (!keys(value, ['version', 'kind', 'workspace', 'standings']) || !keys(workspace, ['event'], ['overallCompetition'])
+    if (!keys(value, ['version', 'kind', 'workspace', 'standings'], ['reviewNotices']) || !keys(workspace, ['event'], ['overallCompetition'])
       || !isRecord(value.standings)) return false;
     const competition = workspace.overallCompetition;
     if (competition !== undefined && (!isRecord(competition) || (competition.kind === 'stableford'
@@ -74,7 +76,7 @@ export function isPublicLeaderboardSummary(value: unknown): value is PublicLeade
         && entry.cells.every((item) => rounds.some((round) => round.roundId === item.roundId))
         && (entry.rank === null || entry.rank <= players.length));
   }
-  if (value.kind !== 'event-skins' || !keys(value, ['version', 'kind', 'workspace'], ['eventSkins'])
+  if (value.kind !== 'event-skins' || !keys(value, ['version', 'kind', 'workspace'], ['eventSkins', 'reviewNotices'])
     || !keys(workspace, ['event', 'rounds', 'roster'], ['eventSkinsSupported', 'eventSkins', 'purseConfigured'])
     || workspace.eventSkinsSupported !== undefined && workspace.eventSkinsSupported !== true
     || workspace.purseConfigured !== undefined && typeof workspace.purseConfigured !== 'boolean'

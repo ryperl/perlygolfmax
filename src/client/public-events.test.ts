@@ -9,6 +9,8 @@ import { fictionalPurse } from '../../tests/smoke/purse-fixture-data';
 import { publicPurseSummary } from '../domain/public-purse';
 import { publicLeaderboardFixture } from '../domain/public-leaderboard.test-support';
 import { publicLeaderboardSummary } from '../domain/public-leaderboard';
+import { calculateEventSkinsDetails } from '../domain/event-skins';
+import { playerWinningsBreakdown } from '../domain/winnings-breakdown';
 
 const signal = new AbortController().signal;
 function fixture(value: unknown, status = 200) {
@@ -16,6 +18,30 @@ function fixture(value: unknown, status = 200) {
   return { send, services: createPublicServices('https://fictional.example.test/api', send) };
 }
 describe('unsigned public event transport', () => {
+  it('fetches strict skins comparisons and one player breakdown only through their on-demand public queries', async () => {
+    const full = publicLeaderboardFixture();
+    const details = calculateEventSkinsDetails(full.workspace, full.roundScores);
+    const f = fixture(details);
+    const load = f.services.leaderboard.details;
+    if (!load) throw new Error('Missing details adapter');
+    expect(await load(details.eventId, signal)).toEqual(details);
+    expect(f.send.mock.calls[0]?.[0]).toBe(`https://fictional.example.test/api/public/events/${details.eventId}/leaderboard?view=event-skins-details`);
+    const purse = fictionalPurse();
+    const playerId = purse.workspace.roster[0]?.playerId;
+    if (!playerId) throw new Error('Missing fictional player');
+    const breakdown = playerWinningsBreakdown(purse, playerId);
+    const p = fixture(breakdown);
+    const player = p.services.purse.player;
+    if (!player) throw new Error('Missing player adapter');
+    expect(await player(purse.workspace.event.id, playerId, signal)).toEqual(breakdown);
+    expect(p.send.mock.calls[0]?.[0]).toBe(`https://fictional.example.test/api/public/events/${purse.workspace.event.id}/purse?view=player&playerId=${playerId}`);
+    expect(p.send.mock.calls[0]?.[1]).toMatchObject({ signal, credentials: 'omit', cache: 'no-store' });
+    expect(new Headers(p.send.mock.calls[0]?.[1]?.headers).get('authorization')).toBeNull();
+    const old = fixture(full);
+    await expect(old.services.leaderboard.details?.(details.eventId, signal)).rejects.toThrow('unavailable from this API');
+    await expect(fixture({ ...breakdown, history: [] }).services.purse.player?.(purse.workspace.event.id, playerId, signal))
+      .rejects.toThrow('unavailable from this API');
+  });
   it.each(['overall', 'event-skins'] as const)('requests only %s display data and remains compatible with an old full-response API', async (kind) => {
     const full = publicLeaderboardFixture();
     const summary = publicLeaderboardSummary(full, kind);

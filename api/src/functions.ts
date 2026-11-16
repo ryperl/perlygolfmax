@@ -29,6 +29,7 @@ import type { TesterAction } from './test-access/handlers.js';
 import { createPublicHandler } from './public-access/handlers.js';
 import type { PublicAction, PublicApi } from './public-access/handlers.js';
 import { createPublicApi } from './public-access/runtime.js';
+import { createCorrectionsHandler } from './corrections/handlers.js';
 
 type RuntimeApi = EventApi & CatalogSetupApi & ScoringApi & PurseApi & {
   readonly admissions: AdmissionStore;
@@ -105,6 +106,14 @@ app.http('eventLeaderboard', {
 app.http('eventSkinsConfiguration', {
   route: 'events/{id}/event-skins', methods: ['PUT'], authLevel: 'anonymous',
   handler: createScoringHandler(resolveApi, 'event-skins-config'),
+});
+app.http('roundCorrectionsModel', {
+  route: 'events/{id}/rounds/{roundId}/corrections', methods: ['GET'], authLevel: 'anonymous',
+  handler: createCorrectionsHandler(resolveApi, 'model'),
+});
+app.http('roundCorrectionsWrite', {
+  route: 'events/{id}/rounds/{roundId}/corrections', methods: ['PUT'], authLevel: 'anonymous',
+  handler: createCorrectionsHandler(resolveApi, 'write'),
 });
 app.http('eventPurse', {
   route: 'events/{id}/purse', methods: ['GET', 'PUT'], authLevel: 'anonymous',

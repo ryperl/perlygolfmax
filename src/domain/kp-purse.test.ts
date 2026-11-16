@@ -1,11 +1,48 @@
 import { describe, expect, it } from 'vitest';
 import { purseTestContext, purseTestId } from './purse.test-support';
 import { calculatePurse, samePursePlan, validatePursePlanContext } from './purse';
-import { kpContext } from './kp';
+import { calculateKp, kpContext } from './kp';
+import { playerWinningsBreakdown } from './winnings-breakdown';
+import { roundReviewNotices, purseReviewNotices } from './event-review';
+import { isPlayerWinningsBreakdown } from '../contracts/winnings-breakdown';
 import { isPursePlan, isPurseView } from '../contracts/purse';
 import type { PurseKpPool, PursePlan } from './purse';
 
 describe('KP is a genuine purse source independent of place ranks and manual recipients', () => {
+  it('explains odd-cent split winnings without measurement identities and clears resolved-tie notices', () => {
+    const f = purseTestContext();
+    const source = f.rounds[0];
+    if (!source) throw new Error('Missing fixture');
+    const layout = source.layout.map((hole) => hole.number === 1 ? { ...hole, par: 3 } : hole);
+    const cards = source.cards.map((card, index) => ({ ...card, holes: card.holes.map((hole) => ({
+      ...hole, score: { ...hole.score, ...(index < 2 && hole.number === 1 ? {
+        kp: { kind: 'measured' as const, inches: 60, onGreen: true as const, measurementId: purseTestId(7000 + index) },
+      } : {}) },
+    })) }));
+    const round = { ...source, layout, cards, kp: { version: 1 as const, etag: 'fictional-kp',
+      context: kpContext(layout, cards.map((card) => card.playerId)), status: 'closed' as const, decisions: [] } };
+    const proof = calculateKp(round).holes[0]?.proof;
+    if (!proof) throw new Error('Missing fixture proof');
+    const closed = { ...round, kp: { ...round.kp, decisions: [{ holeNumber: 1, proof, kind: 'split' as const,
+      playerIds: [purseTestId(1), purseTestId(2)], holeAmountMinor: 10001, extraCentPlayerIds: [purseTestId(1)] }] } };
+    const workspace = { ...f.workspace, rounds: f.workspace.rounds.map((snapshot) => ({
+      ...snapshot, teeProfile: { ...snapshot.teeProfile, holes: layout, totalPar: 35 },
+    })) };
+    const pool: PurseKpPool = { id: purseTestId(6000), name: 'Fictional KP', source: { kind: 'kp', roundId: round.roundId },
+      amountMinor: 10001, awardUnit: 'pot' };
+    const plan: PursePlan = { ...f.plan, funding: { kind: 'fixed', budgetMinor: 10001 }, pools: [pool] };
+    const value = { workspace, roundScores: [closed], configuration: { eventId: workspace.event.id, plan, etag: null, resolutions: [] },
+      view: { plan, resolutions: [], calculation: calculatePurse(plan, workspace, [closed]) } };
+    const detail = playerWinningsBreakdown(value, purseTestId(1));
+    expect(detail).toMatchObject({ amountMinor: 5001, awards: [{ parts: [
+      { kind: 'kp', amountMinor: 5001, holeNumber: 1, distanceInches: 60, splitCount: 2, resolution: 'split' },
+    ] }] });
+    expect(isPlayerWinningsBreakdown(detail)).toBe(true);
+    expect(JSON.stringify(detail)).not.toMatch(/measurementId|proof|recordedBy/);
+    expect(roundReviewNotices(closed, 'Fictional round')).toEqual([]);
+    expect(purseReviewNotices(value)).toEqual([]);
+    expect(roundReviewNotices(closed, 'Fictional round', 10003)).toContainEqual(expect.objectContaining({ code: 'kp-tie', label: 'Fictional round' }));
+  });
   it('reserves one canonical budgeted pot until close, then credits repeated hole winners exactly', () => {
     const f = purseTestContext();
     const source = f.rounds[0];

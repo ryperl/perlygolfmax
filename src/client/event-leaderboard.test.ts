@@ -6,6 +6,8 @@ import type { RoundScores } from '../domain/scoring';
 import { fictionalId, fictionalWorkspace } from './catalog.test-support';
 import { createEventLeaderboardClient } from './event-leaderboard';
 import { SessionExpiredError } from './events';
+import { eventSkinsFixture } from '../domain/event-skins.test-support';
+import { calculateEventSkinsDetails } from '../domain/event-skins';
 
 function view(): EventLeaderboardView {
   const first = fictionalWorkspace.rounds[0];
@@ -27,6 +29,20 @@ function view(): EventLeaderboardView {
 }
 
 describe('overall leaderboard transport', () => {
+  it('loads strict on-demand skins comparisons through the authenticated existing aggregate route', async () => {
+    const f = eventSkinsFixture();
+    const value = calculateEventSkinsDetails(f.workspace, f.rounds);
+    const send = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(value)));
+    const client = createEventLeaderboardClient('https://fictional.example.test/api', () => Promise.resolve('fictional'), send);
+    const signal = new AbortController().signal;
+    expect(await client.details?.(value.eventId, signal)).toEqual(value);
+    expect(send.mock.calls[0]).toEqual([
+      `https://fictional.example.test/api/events/${value.eventId}/leaderboard?view=event-skins-details`,
+      expect.objectContaining({ signal, cache: 'no-store', credentials: 'omit', headers: { Authorization: 'Bearer fictional' } }),
+    ]);
+    send.mockResolvedValue(new Response(JSON.stringify({ ...value, audit: [] })));
+    await expect(client.details?.(value.eventId, signal)).rejects.toThrow('unavailable from this API');
+  });
   it('loads one owner projection with a bearer token, cancellation and no cookies/cache', async () => {
     const result = view();
     const send = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(result)));

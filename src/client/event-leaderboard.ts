@@ -5,8 +5,11 @@ import type { EventSkinsChange, EventSkinsConfiguration } from '../domain/event-
 import { isEventLeaderboardView } from '../contracts/event-leaderboard';
 import type { EventLeaderboardView } from '../domain/event-leaderboard';
 import { createPrivateRequest, readPrivateValue } from './private-request';
+import type { EventSkinsDetails } from '../domain/event-skins-details';
+import { isEventSkinsDetails } from '../contracts/event-skins-details';
 
 export interface EventLeaderboardClient {
+  readonly details?: (eventId: string, signal: AbortSignal) => Promise<EventSkinsDetails>;
   readonly configureEventSkins?: (eventId: string, configuration: EventSkinsConfiguration | null,
     etag: string, requestId: string, signal: AbortSignal) => Promise<EventSkinsChange>;
   readonly load: (eventId: string, signal: AbortSignal) => Promise<EventLeaderboardView>;
@@ -15,6 +18,12 @@ export interface EventLeaderboardClient {
 export function createEventLeaderboardClient(apiUrl: string, getToken: () => Promise<string>, send: typeof fetch = fetch): EventLeaderboardClient {
   const request = createPrivateRequest(apiUrl, getToken, send);
   return {
+    async details(eventId, signal) {
+      if (!isUuid(eventId)) throw new Error('Invalid event identifier.');
+      const value = await readPrivateValue(request, `events/${eventId}/leaderboard?view=event-skins-details`, signal);
+      if (!isEventSkinsDetails(value) || value.eventId !== eventId) throw new Error('Skins details are unavailable from this API. Refresh to retry.');
+      return value;
+    },
     async configureEventSkins(eventId, configuration, etag, requestId, signal) {
       if (!isUuid(eventId) || !isUuid(requestId) || !isEventRevision(etag)
         || configuration !== null && !isEventSkinsConfiguration(configuration)) {

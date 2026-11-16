@@ -12,6 +12,8 @@ import type { TableScoreStore } from './store.js';
 import { privateReadResponse } from '../private-transport.js';
 import { isKpSelection } from '../../../src/contracts/kp.js';
 import { isEventSkinsConfiguration } from '../../../src/contracts/event-skins.js';
+import { calculateEventSkinsDetails } from '../../../src/domain/event-skins.js';
+import type { HoleScore } from '../../../src/domain/scoring.js';
 
 export interface ScoringApi {
   readonly verify: VerifyIdentity;
@@ -32,6 +34,15 @@ function precondition(request: HttpRequest, code = 'SCORE_REVISION_REQUIRED'): s
   if (match !== null && none === null && isEventRevision(match) && !match.includes(',')) return match;
   if (match === null && none === '*') return null;
   throw new ApiError(400, code);
+}
+
+export function parseScoreWriteBody(body: unknown): { readonly score: HoleScore; readonly inputRevision?: string | null } {
+  if (!isRecord(body) || !Object.keys(body).every((key) => ['score', 'inputRevision'].includes(key))
+    || !isHoleScore(body.score)
+    || body.inputRevision !== undefined && body.inputRevision !== null && !isUuid(body.inputRevision)) {
+    throw new ApiError(400, 'INVALID_HOLE_SCORE');
+  }
+  return { score: body.score, ...(body.inputRevision === undefined ? {} : { inputRevision: body.inputRevision }) };
 }
 
 export function createScoringHandler(resolveApi: () => ScoringApi, action: ScoringAction) {
@@ -55,8 +66,12 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
         return response(200, await api.scores.saveEventSkins(identity, eventId, body.configuration, etag, requestId));
       }
       if (action === 'event-leaderboard') {
-        return response(200, privateReadResponse(request, await api.scores.leaderboard(identity, eventId,
-          (units) => api.limiter.check(identity, 'scores-read', units))));
+        const value = await api.scores.leaderboard(identity, eventId,
+          (units) => api.limiter.check(identity, 'scores-read', units));
+        if (request.query.get('view') === 'event-skins-details') {
+          return response(200, privateReadResponse(request, calculateEventSkinsDetails(value.workspace, value.roundScores)));
+        }
+        return response(200, privateReadResponse(request, value));
       }
       const roundId = uuid(request.params.roundId);
       if (action === 'scores') return response(200, privateReadResponse(request, await api.scores.get(identity, eventId, roundId)));
@@ -93,8 +108,9 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
       const rawHole = request.params.holeNumber;
       if (typeof rawHole !== 'string' || !/^(?:[1-9]|1[0-8])$/.test(rawHole)) throw new ApiError(400, 'INVALID_HOLE_NUMBER');
       const body = await readJson(request);
-      if (!isRecord(body) || Object.keys(body).length !== 1 || !isHoleScore(body.score)) throw new ApiError(400, 'INVALID_HOLE_SCORE');
-      return response(200, await api.scores.write(identity, eventId, roundId, playerId, Number(rawHole), body.score, expectedEtag, requestId));
+      const parsed = parseScoreWriteBody(body);
+      return response(200, await api.scores.write(identity, eventId, roundId, playerId, Number(rawHole),
+        parsed.score, expectedEtag, requestId, parsed.inputRevision));
     } catch (error) {
       const status = error instanceof ApiError ? error.status : 503;
       const code = error instanceof ApiError ? error.code : 'SERVICE_UNAVAILABLE';

@@ -38,6 +38,12 @@ function isCourseHandicap(value: unknown): value is PlayerCourseHandicap {
     : typeof value.courseHandicap === 'number' && Number.isSafeInteger(value.courseHandicap) && value.unavailableReason === undefined;
 }
 
+function isReviewWarnings(value: unknown): boolean {
+  const codes = ['kp-review-required', 'purse-review-required', 'team-review-required', 'churchy-review-required'];
+  return Array.isArray(value) && value.every((entry) => isRecord(entry) && Object.keys(entry).length === 2
+    && typeof entry.code === 'string' && codes.includes(entry.code) && boundedText(entry.message, 240));
+}
+
 export function isHoleScore(value: unknown): value is HoleScore {
   if (!isRecord(value)) return false;
   if (value.churchy !== undefined && !isChurchySpecials(value.churchy)) return false;
@@ -100,6 +106,8 @@ export function isRoundScores(value: unknown): value is RoundScores {
   }
   if (isRecord(value) && value.churchyEnabled !== undefined && typeof value.churchyEnabled !== 'boolean') return false;
   if (isRecord(value) && value.teeStrokeAllocation !== undefined && typeof value.teeStrokeAllocation !== 'boolean') return false;
+  if (isRecord(value) && value.inputRevision !== undefined && !isUuid(value.inputRevision)) return false;
+  if (isRecord(value) && value.reviewWarnings !== undefined && !isReviewWarnings(value.reviewWarnings)) return false;
   if (!isRecord(value) || !isUuid(value.eventId) || !isUuid(value.roundId) || !isEventStatus(value.eventStatus)
     || !boundedText(value.eventName) || !boundedText(value.roundName) || !boundedText(value.courseName, 200)
     || !boundedText(value.teeName) || !boundedText(value.teeCategory, 40)
@@ -269,6 +277,7 @@ export function isScoreChange(value: unknown): value is ScoreChange {
     && isUuid(value.playerId) && positiveInteger(value.holeNumber, 18)
     && isHoleScore(value.before) && isHoleScore(value.after)
     && (value.expectedEtag === null || isEventRevision(value.expectedEtag))
+    && (value.expectedInputRevision === undefined || isUuid(value.expectedInputRevision))
     && instant(value.recordedAt) && isScoreActor(value.recordedBy)
     && (!('kind' in value.recordedBy) || value.recordedBy.eventId === value.eventId);
 }

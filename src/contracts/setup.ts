@@ -6,6 +6,12 @@ import { isEventRevision, isEventStartDate, isEventSummary, isRecord, isUuid } f
 import { isPlayerTeeProfiles, isPlayerTeeSelections } from './tees.js';
 import { isEventSkinsConfiguration } from './event-skins.js';
 
+function isReviewWarnings(value: unknown): boolean {
+  const codes = ['kp-review-required', 'purse-review-required', 'team-review-required', 'churchy-review-required'];
+  return Array.isArray(value) && value.every((entry) => isRecord(entry) && Object.keys(entry).length === 2
+    && typeof entry.code === 'string' && codes.includes(entry.code) && boundedText(entry.message, 240));
+}
+
 export function isOverallCompetition(value: unknown): value is OverallCompetition {
   if (!isRecord(value)) return false;
   const keys = Object.keys(value);
@@ -86,6 +92,8 @@ function isRoundSnapshot(value: unknown, playerIds: readonly string[]): value is
     && (value.teeTime === undefined || isRoundTeeTime(value.teeTime))
     && (value.startDate === undefined || isEventStartDate(value.startDate))
     && (value.scoringStarted === undefined || typeof value.scoringStarted === 'boolean')
+    && (value.inputRevision === undefined || isUuid(value.inputRevision))
+    && (value.reviewWarnings === undefined || isReviewWarnings(value.reviewWarnings))
     && isCourseId(value.courseId) && isVersionId(value.courseVersionId)
     && isCourseMetadata(value.course) && isTeeProfile(value.teeProfile)
     && (value.playerTees === undefined || isPlayerTeeProfiles(value.playerTees, value.teeProfile, playerIds))

@@ -8,6 +8,27 @@ import { canonical } from '../catalog/entities.js';
 import { TableEventStore } from '../events/store.js';
 
 describe('owner-only saved-round gross scorecards', () => {
+  it('requires fresh input revision proof after organizer correction and preserves legacy shape before corrections', async () => {
+    const f = await scoringFixture();
+    const first = await f.write();
+    const before = await f.workspace.correctionModel(creator, event.id, f.roundId);
+    const corrected = await f.workspace.correctRound(creator, event.id, f.roundId, identifier(990), {
+      expected: { eventEtag: before.eventEtag, roundEtag: before.roundEtag, gamesEtag: before.gamesEtag ?? null, inputRevision: before.inputRevision ?? null },
+      reason: 'Fictional correction reason',
+      correction: {
+        teeProfileId: before.teeProfileId,
+        players: before.players.map((player) => ({ playerId: player.playerId, handicapIndexValue: player.handicapIndex?.value ?? null })),
+        groups: before.groups.map((group) => ({ ...group, startingHole: 2 })),
+      },
+    });
+    expect(corrected.applied).toBe(true);
+    const etag = first.round.cards[0]?.etag ?? null;
+    await expect(f.scores.write(creator, event.id, f.roundId, f.playerId, 2, { kind: 'strokes', strokes: 5 }, etag, identifier(991)))
+      .rejects.toMatchObject({ code: 'SCORE_INPUTS_CHANGED' });
+    await expect(f.scores.write(creator, event.id, f.roundId, f.playerId, 2, { kind: 'strokes', strokes: 5 }, etag, identifier(991), identifier(990)))
+      .resolves.toMatchObject({ change: { expectedInputRevision: identifier(990) } });
+  });
+
   it('projects exact saved selected-tee ratings, never mixing in later global catalog ratings', async () => {
     const f = await scoringFixture();
     const catalog = (await f.courses.list(creator)).courses[0];

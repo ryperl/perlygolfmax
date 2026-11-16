@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import type { SetupClient } from '../client/setup';
 import type { ScoresClient } from '../client/scoring';
 import { SessionExpiredError } from '../client/events';
@@ -7,8 +7,12 @@ import type { ScoreLocation, ScoreView } from '../domain/score-location';
 import { sortRoundsByStartDate } from '../domain/event-schedule';
 import { groupStartingHole } from '../domain/round-navigation';
 import { OwnerScoresView } from '../features/scoring';
+import type { RoundCorrectionsClient } from '../client/round-corrections';
 
-export function OwnerRoundScoresPage({ setup, scores, eventId, roundId, onSessionExpired }: {
+const RoundCorrectionsDialog = lazy(async () => ({ default: (await import('../features/corrections')).RoundCorrectionsDialog }));
+
+export function OwnerRoundScoresPage({ setup, scores, corrections, eventId, roundId, onSessionExpired }: {
+  readonly corrections?: RoundCorrectionsClient | undefined;
   readonly setup: SetupClient;
   readonly scores: ScoresClient;
   readonly eventId: string;
@@ -20,6 +24,7 @@ export function OwnerRoundScoresPage({ setup, scores, eventId, roundId, onSessio
   const [blocked, setBlocked] = useState(false);
   const [view, setView] = useState<ScoreView>('cards');
   const [attempt, setAttempt] = useState(0);
+  const [correcting, setCorrecting] = useState(false);
   const expired = useRef(onSessionExpired);
   useEffect(() => { expired.current = onSessionExpired; }, [onSessionExpired]);
   useEffect(() => {
@@ -44,6 +49,14 @@ export function OwnerRoundScoresPage({ setup, scores, eventId, roundId, onSessio
   const workspace = current.workspace;
   const selected = workspace?.rounds.find((round) => round.id === roundId);
   if (!workspace || !selected) return <p role="alert">This round is no longer available. Return to the event overview to select a saved round.</p>;
+  if (correcting && corrections && workspace.event.role === 'owner' && workspace.event.status === 'active') {
+    return <Suspense fallback={<p role="status">Loading correction tools…</p>}>
+      <RoundCorrectionsDialog client={corrections} eventId={eventId} roundId={roundId} roundName={selected.name}
+        onSessionExpired={onSessionExpired} onClose={() => {
+          setCorrecting(false); setResult(undefined); setAttempt((value) => value + 1);
+        }} />
+    </Suspense>;
+  }
   const firstGroup = selected.groups[0];
   const startingHole = groupStartingHole(firstGroup, selected.teeProfile.holes);
   const initialLocation = firstGroup && startingHole !== undefined
@@ -56,5 +69,8 @@ export function OwnerRoundScoresPage({ setup, scores, eventId, roundId, onSessio
         if (blocked) return;
         window.location.hash = `#organizer?${new URLSearchParams({ event: eventId, round: event.target.value }).toString()}`;
       }}>{sortRoundsByStartDate(workspace.rounds).map((round) => <option key={round.id} value={round.id}>{round.name}</option>)}</select></label>}
-    roundTools={<p className="score-hint">Switching rounds requires active requests to finish and local edits to be saved or discarded. Save or cancel game settings first.</p>} />;
+    roundTools={<><p className="score-hint">Switching rounds requires active requests to finish and local edits to be saved or discarded. Save or cancel game settings first.</p>
+      {corrections && workspace.event.role === 'owner' && workspace.event.status === 'active' && selected.scoringStarted
+        && <button type="button" disabled={blocked} onClick={() => { if (!blocked) setCorrecting(true); }}>Correct saved handicap, tees or groups</button>}
+    </>} />;
 }

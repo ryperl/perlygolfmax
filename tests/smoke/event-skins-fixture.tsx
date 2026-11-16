@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from 'react';
 import { EventLeaderboardPage } from '../../src/app/EventLeaderboardPage';
 import type { EventLeaderboardClient } from '../../src/client/event-leaderboard';
 import { eventSkinsFixture, publicEventSkinsFixture, withoutEventSkins } from '../../src/domain/event-skins.test-support';
-import { calculateEventSkins } from '../../src/domain/event-skins';
+import { calculateEventSkins, calculateEventSkinsDetails } from '../../src/domain/event-skins';
 import type { EventSkinsChange } from '../../src/domain/event-skins';
 import { calculateEventStandings } from '../../src/domain/event-leaderboard';
 import type { EventWorkspace } from '../../src/domain/setup';
@@ -26,6 +26,7 @@ export function Fixture() {
   const [etag, setEtag] = useState<string | null>(null);
   const [blocked, setBlocked] = useState(false);
   const owner = useMemo<EventLeaderboardClient>(() => ({
+    details: () => Promise.resolve(calculateEventSkinsDetails(saved.current, f.rounds)),
     load: () => {
       const workspace = saved.current;
       const rounds = workspace.eventSkins ? f.rounds : [];
@@ -46,6 +47,7 @@ export function Fixture() {
     },
   }), []);
   const readonly = useMemo<EventLeaderboardClient>(() => ({
+    details: () => Promise.resolve(calculateEventSkinsDetails(saved.current, f.rounds)),
     load: async (id, signal) => {
       const value = await owner.load(id, signal);
       const projection = publicEventSkinsFixture({ workspace: value.workspace, rounds: value.roundScores });

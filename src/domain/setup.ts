@@ -2,6 +2,7 @@ import type { CourseMetadata, IndexObservation, TeeProfile } from './catalog.js'
 import type { EventSummary } from './events.js';
 import type { PlayerTeeProfile, PlayerTeeSelection } from './tees.js';
 import type { EventSkinsConfiguration } from './event-skins.js';
+import type { RoundReviewWarning } from './round-corrections.js';
 
 export type OverallCompetition =
   | {
@@ -80,6 +81,8 @@ export interface RoundSnapshot {
   readonly groups: readonly RoundGroup[];
   readonly players: readonly RoundPlayerSnapshot[];
   readonly scoringStarted?: boolean;
+  readonly inputRevision?: string;
+  readonly reviewWarnings?: readonly RoundReviewWarning[];
   readonly playerTees?: readonly PlayerTeeProfile[];
 }
 

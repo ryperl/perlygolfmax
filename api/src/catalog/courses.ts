@@ -109,6 +109,10 @@ export class TableCourseCatalog {
 
   async getVersion(identity: AccountIdentity, courseId: string, versionId: string): Promise<CourseVersion> {
     requireManager(identity, this.allowed);
+    return this.readCapturedVersion(courseId, versionId);
+  }
+
+  async readCapturedVersion(courseId: string, versionId: string): Promise<CourseVersion> {
     const header = await optionalRow(this.table, coursePartition(courseId), versionRow(versionId));
     if (!header) throw new ApiError(404, 'COURSE_VERSION_NOT_FOUND');
     const manifest = decode(header.content, isCourseImportManifest);

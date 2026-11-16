@@ -1,6 +1,9 @@
 import type { PurseCurrency, PursePlacePrize } from './purse.js';
 import type { EventPurseView } from './purse-settings.js';
 import { sortRoundsByStartDate } from './event-schedule.js';
+import { allocatedPlayerAwards } from './purse-awards.js';
+import { purseReviewNotices } from './event-review.js';
+import type { EventReviewNotice } from './event-review.js';
 
 export interface PublicPursePool {
   readonly id: string;
@@ -13,6 +16,7 @@ export interface PublicPursePool {
 }
 
 export interface PublicPurseSummary {
+  readonly reviewNotices?: readonly EventReviewNotice[];
   readonly version: 1;
   readonly eventId: string;
   readonly eventName: string;
@@ -51,20 +55,13 @@ export function publicPurseSummary(value: EventPurseView): PublicPurseSummary {
   return {
     version: 1, eventId: value.workspace.event.id, eventName: value.workspace.event.name,
     currency: plan?.currency ?? null,
+    reviewNotices: purseReviewNotices(value),
     needsReview: plan !== null && (!calculation || calculation.status === 'unavailable'),
     rounds, pools,
     players: value.workspace.roster.map(({ playerId, displayName }) => {
-      const awards = (calculation?.pools ?? []).flatMap((pool) => {
-        if (pool.status !== 'calculated') return [];
-        const sum = pool.shares.filter((share) => share.playerId === playerId)
-          .reduce((total, share) => total + BigInt(share.amountMinor), 0n);
-        return sum > 0n && sum <= BigInt(Number.MAX_SAFE_INTEGER)
-          ? [{ poolId: pool.poolId, amountMinor: Number(sum) }] : [];
-      });
-      const total = awards.reduce((sum, award) => sum + BigInt(award.amountMinor), 0n);
-      const known = calculation?.players.find((player) => player.playerId === playerId)?.allocatedMinor;
-      return { playerId, displayName, poolIds: awards.map((award) => award.poolId),
-        amountMinor: plan === null || known === null || total > BigInt(Number.MAX_SAFE_INTEGER) ? null : Number(total) };
+      const awards = allocatedPlayerAwards(calculation, playerId);
+      return { playerId, displayName, poolIds: awards.pools.map((award) => award.poolId),
+        amountMinor: plan === null ? null : awards.amountMinor };
     }),
   };
 }

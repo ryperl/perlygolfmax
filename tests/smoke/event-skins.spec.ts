@@ -34,7 +34,18 @@ test('event skins explicit setup, per-round saved wins, exact pot and readonly a
     await expect(standings).toContainText('Fictional golfer 1');
     await expect(standings).not.toContainText('Fictional golfer 2');
     for (const number of [1, 2, 3]) await expect(standings).toContainText(`Fictional Round ${String(number)}`);
+    await page.getByText('Skins rules', { exact: true }).click();
     await expect(page.getByText(/Only when net ties, actual gross birdie or better/)).toBeVisible();
+    await page.getByRole('button', { name: 'View skins details', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Skins details', exact: true })).toBeFocused();
+    await page.getByText('Hole 1 · Fictional golfer 1', { exact: true }).click();
+    await expect(page.getByRole('table', { name: 'Hole 1 skins comparison' })).toContainText('covered by Fictional golfer 1');
+    await page.getByRole('combobox', { name: 'Round', exact: true }).selectOption({ label: 'Fictional Round 3' });
+    await page.getByRole('combobox', { name: 'Hole', exact: true }).selectOption('2');
+    await expect(page.getByText('Hole 2 · ineligible', { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.getByRole('button', { name: 'Back to skins', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'View skins details', exact: true })).toBeFocused();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
     await page.getByRole('button', { name: 'Fictional purse', exact: true }).click();

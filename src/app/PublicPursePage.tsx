@@ -10,6 +10,10 @@ export function PublicPursePage({ client, eventId, onSessionExpired }: {
   readonly onSessionExpired: (message: string) => void;
 }) {
   const [attempt, setAttempt] = useState(0);
+  const loadPlayer = useMemo(() => {
+    const load = client.player;
+    return load ? (playerId: string, signal: AbortSignal) => load(eventId, playerId, signal) : undefined;
+  }, [client, eventId]);
   const identity = useMemo(() => ({ client, eventId }), [client, eventId]);
   const expiry = useRef(onSessionExpired);
   const [result, setResult] = useState<{ readonly identity: object; readonly value?: PublicPurseSummary; readonly error?: string }>();
@@ -40,6 +44,7 @@ export function PublicPursePage({ client, eventId, onSessionExpired }: {
     </div>
     {!current && <p role="status">Loading winnings…</p>}
     {current?.error && <p role="alert">{current.error}</p>}
-    {current?.value && <PublicPurseResults key={eventId} value={current.value} />}
+    {current?.value && <PublicPurseResults key={eventId} value={current.value}
+      loadPlayer={loadPlayer} onSessionExpired={onSessionExpired} />}
   </section>;
 }

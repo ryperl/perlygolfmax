@@ -18,6 +18,8 @@ import { isPublicLeaderboardSummary } from '../../../src/contracts/public-leader
 import { createPublicHandler } from './handlers.js';
 import type { PublicAction } from './handlers.js';
 import { publicFixture } from './test-support.js';
+import { isEventSkinsDetails } from '../../../src/contracts/event-skins-details.js';
+import { isPlayerWinningsBreakdown } from '../../../src/contracts/winnings-breakdown.js';
 
 async function fixture() {
   const f = await publicFixture();
@@ -42,6 +44,35 @@ async function fixture() {
 }
 
 describe('explicit unsigned public HTTP namespace', () => {
+  it('returns on-demand comparisons and player awards without private history, retaining quotas and archive denial', async () => {
+    const f = await fixture();
+    const current = await f.workspace.get(creator, event.id);
+    await f.scores.saveEventSkins(creator, event.id, { version: 1 }, current.etag, identifier(5270));
+    f.api.limiter.check.mockClear();
+    const details = await f.invoke('event-leaderboard', undefined, {}, {}, '?view=event-skins-details');
+    expect(details.status).toBe(200);
+    expect(isEventSkinsDetails(details.jsonBody)).toBe(true);
+    expect(f.api.limiter.check).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(details.jsonBody)).not.toMatch(/handicapIndex|measurementId|recordedBy|etag|configuration/);
+    const playerId = f.input.playerIds[0];
+    if (!playerId) throw new Error('Missing fixture');
+    await f.purse.save(creator, event.id, { eventId: event.id, currency: 'USD',
+      funding: { kind: 'fixed', budgetMinor: 101 }, pools: [{ id: identifier(5271), name: 'Fictional award',
+        source: { kind: 'manual' }, awardUnit: 'pot', amountMinor: 101, recipientIds: [playerId] }],
+    }, [], null, identifier(5272), () => Promise.resolve());
+    f.api.limiter.check.mockClear();
+    const player = await f.invoke('purse', undefined, {}, {}, `?view=player&playerId=${playerId}`);
+    expect(player.status).toBe(200);
+    expect(isPlayerWinningsBreakdown(player.jsonBody)).toBe(true);
+    expect(player.jsonBody).toMatchObject({ amountMinor: 101, awards: [{ parts: [{ kind: 'manual', amountMinor: 101 }] }] });
+    expect(f.api.limiter.check).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(player.jsonBody)).not.toMatch(/recordedBy|measurementId|handicap|cards|etag|resolutions|projected/);
+    expect((await f.invoke('purse', undefined, {}, {}, '?view=player&playerId=bad')).status).toBe(400);
+    expect((await f.invoke('purse', undefined, {}, {}, `?view=player&playerId=${identifier(9999)}`)).status).toBe(404);
+    f.seed({ ...f.row('event'), status: 'archived' });
+    expect((await f.invoke('event-leaderboard', undefined, {}, {}, '?view=event-skins-details')).status).toBe(404);
+    expect((await f.invoke('purse', undefined, {}, {}, `?view=player&playerId=${playerId}`)).status).toBe(404);
+  });
   it('returns only the selected public board, preserving per-round quota and legacy aggregate contracts', async () => {
     const f = await fixture();
     const before = await f.workspace.get(creator, event.id);

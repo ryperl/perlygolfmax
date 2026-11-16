@@ -123,12 +123,12 @@ describe('owner scoring transport', () => {
     }));
   });
   it.each([null, 'card-v1'])('conditionally saves using base %s and a definitive audit acknowledgement', async (etag) => {
-    const result = scoreResult({ ...fictionalChange, expectedEtag: etag });
+    const result = scoreResult({ ...fictionalChange, expectedEtag: etag, expectedInputRevision: fictionalId(777) });
     const { client, send, signal } = fixture(result);
-    await client.save(eventId, roundId, playerId, 1, score, etag, id, signal);
+    await client.save(eventId, roundId, playerId, 1, score, etag, id, signal, fictionalId(777));
     const init = send.mock.calls[0]?.[1];
     expect(init?.method).toBe('PUT');
-    expect(init?.body).toBe(JSON.stringify({ score }));
+    expect(init?.body).toBe(JSON.stringify({ score, inputRevision: fictionalId(777) }));
     if (typeof init?.body !== 'string') throw new Error('Expected serialized score body.');
     expect(new TextEncoder().encode(init.body).length).toBeLessThanOrEqual(4096);
     const headers = new Headers(init.headers);
@@ -176,6 +176,7 @@ describe('owner scoring transport', () => {
     await expect(client.save(eventId, roundId, playerId, 0, score, null, id, signal)).rejects.toThrow('Invalid');
     await expect(client.save(eventId, roundId, playerId, 1, score, '', id, signal)).rejects.toThrow('Invalid');
     await expect(client.save(eventId, roundId, playerId, 1, score, null, 'bad', signal)).rejects.toThrow('Invalid');
+    await expect(client.save(eventId, roundId, playerId, 1, score, null, id, signal, 'bad')).rejects.toThrow('Invalid');
     expect(token).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
   });

@@ -505,7 +505,11 @@ versus net par remains a tie. There are **no carryovers**, even within a round.
 Unplayed field entries keep the hole pending; pickup, X7 and DNF are ineligible,
 not penalty scores. Missing net inputs are unavailable, never scratch.
 
-The saved-results board shows per-round counts, total skins and hole outcomes.
+The saved-results board lists only won holes beneath each golfer's total,
+grouped by round. **View skins details** loads a separate comparison view on
+demand: select any round/hole to inspect saved gross/net strokes, personal par,
+received strokes and the golfers who covered or beat a score. Shared canonical
+decisions drive both views; details do not introduce carryovers or new tie rules.
 Mixed progress is provisional. Known zero winners are hidden only from complete
 ranked displays, not underlying results or winnings. Refresh reads fresh,
 coherent saved server data; drafts never count. Public visitors can read active
@@ -725,6 +729,25 @@ before scoring. Course/tee/group selections and global profiles are unchanged.
 Correcting a started round requires a separately authorized, audited correction;
 ordinary catalog updates never unlock or recalculate it.
 
+An active event owner can open **Correct saved handicap, tees or groups** from
+round scoring after scoring starts. This separate correction workflow keeps the
+event roster and captured course/version fixed, but supports event-local captured
+HI/NH, compatible common/personal tees, playing groups/starting holes and existing
+competition-team assignments. A reason and explicit review are required in the
+editor. Existing score/KP/game tools continue to edit saved entries across rounds;
+closed KP must be explicitly reopened first.
+
+Corrections are conditional, idempotent and privately audited. Changed indexes
+receive new server-authored observations, never altered observation identities or
+global catalog writes. Original capture receipts, raw cards and scoring locks
+remain intact. Fresh canonical reads recalculate games, overall results, skins
+and purse awards; stale KP/prize decisions require review rather than silently
+receiving a new meaning. Scored Churchy foursome/order safeguards remain in force.
+Score writes bind to the corrected input revision, so an older browser cannot
+save a draft against changed captures merely because its card ETag still matches.
+Failed or uncertain correction saves retain the draft and operation identity;
+explicit discard/reload reads saved inputs before returning to scores.
+
 Owner setup selects saved players and an explicit course version/tee for one
 or more rounds, with positive numbered manual groups and at most four players per
 group. Every selected player must be assigned once per round. Group choices
@@ -784,6 +807,20 @@ fresh reads and server-side scoring/permission checks are preserved.
 Public overall and event-skins boards likewise request separate display-only
 summaries, retaining authoritative points/ranks/progress without downloading
 raw scorecards or the other board's results.
+
+Click a player's name for an on-demand winnings breakdown: actual pool awards,
+place/tie/team shares, KP winning holes/distances and skins count times the exact
+per-skin rate. It contains no protected audit actors, edit history or projected
+money. Newer totals are identified rather than pretending they match an older
+player sheet. Requests are canceled on close or access/context changes.
+
+A compact **Organizer review needed** notice appears above affected loaded
+results for unresolved manual prize/KP ties, stale decisions/teams, unavailable
+inputs, unassigned awards or an over-budget purse. Expand it for the affected
+round/pool and action. Ordinary covered skins, automatically pooled ties and
+future unplayed holes are not discrepancies. Notices reuse the page's canonical
+read; they do not add background event-wide requests or claim to scan unopened
+pages. Excel-readable export remains separate future scope.
 
 Organizer tools retain the complete plan and calculation detail below.
 

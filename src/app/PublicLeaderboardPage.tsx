@@ -3,7 +3,8 @@ import type { PublicLeaderboardClient } from '../client/public-leaderboard';
 import { SessionExpiredError } from '../client/events';
 import type { PublicLeaderboardSummary } from '../domain/public-leaderboard';
 import { EventLeaderboard } from '../features/leaderboard';
-import { EventSkinsBoard } from '../features/event-skins';
+import { EventSkinsPanel } from '../features/event-skins';
+import { EventReviewBanner } from '../features/event-review';
 
 export function PublicLeaderboardPage({ client, eventId, eventSkins, onSessionExpired }: {
   readonly client: PublicLeaderboardClient;
@@ -13,6 +14,10 @@ export function PublicLeaderboardPage({ client, eventId, eventSkins, onSessionEx
 }) {
   const [attempt, setAttempt] = useState(0);
   const kind = eventSkins ? 'event-skins' : 'overall';
+  const loadDetails = useMemo(() => {
+    const load = client.details;
+    return load ? (signal: AbortSignal) => load(eventId, signal) : undefined;
+  }, [client, eventId]);
   const generation = useMemo(() => ({ client, eventId, kind, attempt }), [client, eventId, kind, attempt]);
   const expiry = useRef(onSessionExpired);
   const [result, setResult] = useState<{ readonly generation: object; readonly value?: PublicLeaderboardSummary; readonly error?: string }>();
@@ -33,10 +38,12 @@ export function PublicLeaderboardPage({ client, eventId, eventSkins, onSessionEx
     return () => { controller.abort(); };
   }, [client, eventId, kind, generation]);
   return <section>
+    {current?.value?.reviewNotices && <EventReviewBanner notices={current.value.reviewNotices} />}
     <button disabled={!current} onClick={() => { setAttempt((value) => value + 1); }}>Refresh {eventSkins ? 'event skins' : 'overall results'}</button>
     {!current && <p role="status">Loading {eventSkins ? 'event skins' : 'overall results'}…</p>}
     {current?.error && <p role="alert">{current.error}</p>}
     {current?.value?.kind === 'overall' && <EventLeaderboard value={current.value} />}
-    {current?.value?.kind === 'event-skins' && <EventSkinsBoard value={current.value} />}
+    {current?.value?.kind === 'event-skins' && <EventSkinsPanel key={eventId} value={current.value}
+      loadDetails={loadDetails} onSessionExpired={onSessionExpired} />}
   </section>;
 }

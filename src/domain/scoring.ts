@@ -9,6 +9,7 @@ import { sameChurchySpecials } from './churchy.js';
 import type { KpConfiguration, KpEntry } from './kp.js';
 import { sameKpEntry } from './kp.js';
 import type { PurseCurrency } from './purse.js';
+import type { RoundReviewWarning } from './round-corrections.js';
 
 export type HoleScore = (
   | { readonly kind: 'unplayed' }
@@ -71,6 +72,8 @@ export interface RoundScores {
   readonly groups: readonly RoundGroup[];
   readonly cards: readonly Scorecard[];
   readonly setupLocked: boolean;
+  readonly inputRevision?: string;
+  readonly reviewWarnings?: readonly RoundReviewWarning[];
   readonly lastUpdatedAt: string | null;
   readonly games?: RoundGamesView;
   readonly playerTees?: readonly PlayerTeeProfile[];
@@ -92,6 +95,7 @@ export interface ScoreChange {
   readonly before: HoleScore;
   readonly after: HoleScore;
   readonly expectedEtag: string | null;
+  readonly expectedInputRevision?: string;
   readonly recordedAt: string;
   readonly recordedBy: ScoreActor;
 }

@@ -25,6 +25,8 @@ import type { KpEntry, KpSelection } from '../../domain/kp';
 import { calculateKp } from '../../domain/kp';
 import { KpPanel } from '../kp';
 import { scoreEntryText } from '../../contracts/scoring';
+import { EventReviewBanner } from '../event-review';
+import { roundReviewNotices } from '../../domain/event-review';
 
 export interface OwnerScoresViewProps {
   readonly client: ScoresClient;
@@ -318,6 +320,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
   const feedbackState: ScoreFeedbackState = needsAttention ? 'attention' : drafts.size > 0 ? 'unsaved'
     : notice?.kind === 'saved' ? 'saved' : 'idle';
   return <section ref={entryRegion} tabIndex={-1} aria-label="Round scores" className="owner-scores">
+    {round && <EventReviewBanner notices={roundReviewNotices(round, round.roundName)} />}
     <h1>Round scores</h1>
     {roundPicker && <div className="score-round-picker">{roundPicker}</div>}
     {tools}

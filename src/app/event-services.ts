@@ -7,6 +7,7 @@ import { createEventLeaderboardClient } from '../client/event-leaderboard';
 import { createPurseClient } from '../client/purse';
 import { createAdmissionsClient } from '../client/admission';
 import { createTesterAccessClient } from '../client/test-access';
+import { createRoundCorrectionsClient } from '../client/round-corrections';
 import { createEventSession } from '../client/identity';
 import type { EventServices } from './EventsPage';
 
@@ -18,7 +19,7 @@ export function configureEventServices(env: Record<string, unknown>): { readonly
     const token = () => session.token();
     return { services: { session, events: createEventsClient(settings.apiUrl, token),
       catalog: createCatalogClient(settings.apiUrl, token), setup: createSetupClient(settings.apiUrl, token),
-      scores: createScoresClient(settings.apiUrl, token),
+      scores: createScoresClient(settings.apiUrl, token), corrections: createRoundCorrectionsClient(settings.apiUrl, token),
       leaderboard: createEventLeaderboardClient(settings.apiUrl, token), purse: createPurseClient(settings.apiUrl, token),
       admissions: createAdmissionsClient(settings.apiUrl, token),
       testerAccess: createTesterAccessClient(settings.apiUrl, token) } };

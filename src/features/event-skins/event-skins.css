@@ -46,3 +46,30 @@
 .event-skins-players dd {
   margin-inline-start: 0;
 }
+
+.event-skins-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.event-skins-filters label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.event-skins-details details {
+  margin-block: 0.75rem;
+  border-block-end: 1px solid var(--cp-border);
+}
+
+.event-skins-comparisons {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.event-skins-comparisons th,
+.event-skins-comparisons td {
+  padding: 0.5rem;
+  text-align: start;
+}

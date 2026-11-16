@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { EventSkinsBoard } from './index';
 import { eventSkinsFixture, withoutEventSkins } from '../../domain/event-skins.test-support';
@@ -13,9 +14,11 @@ function fixture() {
   return { ...f, value };
 }
 describe('saved event skins board', () => {
-  it('shows saved per-round awards and exact rules, hides known zero winners only and reveals a refreshed winner without hidden search state', () => {
+  it('shows won holes only and expandable rules, hides known zero winners and reveals a refreshed winner without hidden search state', async () => {
     const f = fixture();
     const view = render(<EventSkinsBoard value={f.value()} />);
+    expect(screen.getByText(/Only when net ties, actual gross birdie or better/)).not.toBeVisible();
+    await userEvent.click(screen.getByText('Skins rules'));
     expect(screen.getByText(/Only when net ties, actual gross birdie or better/)).toBeVisible();
     expect(screen.getByText(/Gross par ties stay tied/)).toBeVisible();
     const board = screen.getByRole('list', { name: 'Event skins standings' });

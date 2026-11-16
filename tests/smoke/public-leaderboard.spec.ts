@@ -2,6 +2,7 @@ import { createServer } from 'vite';
 import { expect, test } from './test';
 import { publicLeaderboardFixture } from '../../src/domain/public-leaderboard.test-support';
 import { publicLeaderboardSummary } from '../../src/domain/public-leaderboard';
+import { calculateEventSkinsDetails } from '../../src/domain/event-skins';
 
 test('public overall and skins each load only one purpose-specific response without raw scorecard pages', async ({ page }, testInfo) => {
   const server = await createServer({
@@ -31,6 +32,13 @@ test('public overall and skins each load only one purpose-specific response with
       expect(url.pathname).toBe(`/__public-api/public/events/${full.workspace.event.id}/leaderboard`);
       expect(url.searchParams.has('privatePart')).toBe(false);
       const kind = url.searchParams.get('view');
+      if (kind === 'event-skins-details') {
+        reads.push(kind);
+        const detail = calculateEventSkinsDetails(full.workspace, full.roundScores);
+        expect(JSON.stringify(detail)).not.toMatch(/roundScores|teeProfile|cards|handicapIndex|measurementId|recordedBy|etag/);
+        await route.fulfill({ json: detail });
+        return;
+      }
       if (kind !== 'overall' && kind !== 'event-skins') throw new Error('Unexpected public result purpose');
       reads.push(kind);
       const summary = publicLeaderboardSummary(full, kind);
@@ -47,11 +55,15 @@ test('public overall and skins each load only one purpose-specific response with
     await expect(page.getByRole('list', { name: 'Event skins standings' })).toContainText('90 skins');
     expect(reads).toEqual(['overall', 'event-skins']);
     await expect(page.getByRole('checkbox')).toHaveCount(0);
-    await page.getByText('Hole outcomes and tie reasons', { exact: true }).click();
-    await expect(page.getByText(/Fictional Round 1 · Hole 1: awarded/)).toBeVisible();
+    await page.getByRole('button', { name: 'View skins details', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Skins details', exact: true })).toBeVisible();
+    await page.getByText('Hole 1 · Fictional golfer 1', { exact: true }).click();
+    await expect(page.getByRole('table', { name: 'Hole 1 skins comparison' })).toBeVisible();
+    expect(reads).toEqual(['overall', 'event-skins', 'event-skins-details']);
+    await page.getByRole('button', { name: 'Back to skins', exact: true }).click();
     await page.getByRole('button', { name: 'Refresh event skins' }).click();
     await expect(page.getByRole('list', { name: 'Event skins standings' })).toBeVisible();
-    expect(reads).toEqual(['overall', 'event-skins', 'event-skins']);
+    expect(reads).toEqual(['overall', 'event-skins', 'event-skins-details', 'event-skins']);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     expect(errors).toEqual([]);
   } finally {

@@ -242,6 +242,8 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
         type: rating.type, course: rating.course, slope: rating.slope, bogey: rating.bogey,
       })),
       groups: round.groups, cards, setupLocked: round.scoringStarted === true,
+      ...(capturedRound.inputRevision ? { inputRevision: capturedRound.inputRevision } : {}),
+      ...(capturedRound.reviewWarnings?.length ? { reviewWarnings: capturedRound.reviewWarnings } : {}),
       courseHandicaps: publishedCourseHandicaps(capturedRound),
       permissions: { role: access.publicAccess ? 'public' : access.testerLink ? 'tester' : owner ? 'owner' : viewerPlayerId ? 'player' : 'viewer',
         ...(viewerPlayerId ? { viewerPlayerId } : {}),
@@ -450,11 +452,13 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
   }
 
   private async replay(identity: ScoreActor, eventId: string, roundId: string, playerId: string,
-    holeNumber: number, score: HoleScore, expectedEtag: string | null, requestId: string): Promise<ScoreWriteResult | undefined> {
+    holeNumber: number, score: HoleScore, expectedEtag: string | null, requestId: string,
+    inputRevision?: string | null): Promise<ScoreWriteResult | undefined> {
     const change = await this.receipt(eventId, requestId);
     if (!change) return undefined;
     if (change.roundId !== roundId || change.playerId !== playerId || change.holeNumber !== holeNumber
       || change.expectedEtag !== expectedEtag || !sameScoreActor(change.recordedBy, identity)
+      || (change.expectedInputRevision ?? null) !== (inputRevision ?? null)
       || !sameHoleScore(change.after, preserveScoreExtras(score, change.after))) {
       throw new ApiError(409, 'SCORE_REQUEST_CONFLICT');
     }
@@ -464,15 +468,17 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
   }
 
   async write(identity: ScoreActor, eventId: string, roundId: string, playerId: string, holeNumber: number,
-    score: HoleScore, expectedEtag: string | null, requestId: string): Promise<ScoreWriteResult> {
+    score: HoleScore, expectedEtag: string | null, requestId: string, inputRevision?: string | null): Promise<ScoreWriteResult> {
     if (!isUuid(requestId) || !isUuid(playerId) || !isHoleScore(score) || !Number.isSafeInteger(holeNumber)
-      || expectedEtag !== null && !isEventRevision(expectedEtag)) throw new ApiError(400, 'INVALID_SCORE_WRITE');
+      || expectedEtag !== null && !isEventRevision(expectedEtag)
+      || inputRevision !== undefined && inputRevision !== null && !isUuid(inputRevision)) throw new ApiError(400, 'INVALID_SCORE_WRITE');
     const state = await this.snapshot(identity, eventId, roundId);
     if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     if (!state.round.teeProfile.holes.some((hole) => hole.number === holeNumber)) throw new ApiError(400, 'ROUND_HOLE_NOT_FOUND');
     if (!state.round.players.some((player) => player.playerId === playerId)) throw new ApiError(404, 'ROUND_PLAYER_NOT_FOUND');
     const grant = this.writer(state, playerId);
-    const replay = await this.replay(identity, eventId, roundId, playerId, holeNumber, score, expectedEtag, requestId);
+    if (state.round.inputRevision && state.round.inputRevision !== inputRevision) throw new ApiError(409, 'SCORE_INPUTS_CHANGED');
+    const replay = await this.replay(identity, eventId, roundId, playerId, holeNumber, score, expectedEtag, requestId, inputRevision);
     if (replay) return replay;
     const cards = await this.cards(eventId, state.round, state.lock);
     const card = cards.find((entry) => entry.playerId === playerId);
@@ -505,7 +511,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     const actor = scoreActor(identity);
     const change: ScoreChange = {
       id: requestId, eventId, roundId, playerId, holeNumber, before: before.score, after: savedScore,
-      expectedEtag, recordedAt, recordedBy: actor,
+      expectedEtag, ...(state.round.inputRevision ? { expectedInputRevision: state.round.inputRevision } : {}), recordedAt, recordedBy: actor,
     };
     const updated: StoredCard = {
       playerId: card.playerId, displayName: card.displayName, updatedAt: recordedAt,
@@ -570,7 +576,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     try { await this.table.submitTransaction(actions); }
     catch (error) {
       // Transport failures may occur after commit; the immutable receipt is the authoritative acknowledgement.
-      const committed = await this.replay(identity, eventId, roundId, playerId, holeNumber, score, expectedEtag, requestId);
+      const committed = await this.replay(identity, eventId, roundId, playerId, holeNumber, score, expectedEtag, requestId, inputRevision);
       if (committed) return committed;
       if (isConflict(error)) throw new ApiError(409, 'SCORECARD_CHANGED');
       throw error;

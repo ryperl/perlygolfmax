@@ -19,5 +19,5 @@ export function writablePlayerIds(round: RoundScores): readonly string[] {
 }
 
 export function scoreAccessKey(round: RoundScores): string {
-  return JSON.stringify([scorePermissions(round), round.eventStatus, round.groups]);
+  return JSON.stringify([scorePermissions(round), round.eventStatus, round.groups, round.inputRevision ?? null]);
 }

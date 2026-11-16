@@ -54,3 +54,31 @@
   .purse-panel fieldset { padding: .75rem; }
   .purse-actions > button { flex: 1 1 10rem; }
 }
+.purse-player-link {
+  padding-inline: 0;
+  background: none;
+  border: 0;
+  color: var(--cp-link);
+  text-align: start;
+  text-decoration: underline;
+}
+
+.purse-winnings-dialog {
+  width: min(36rem, calc(100% - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  box-sizing: border-box;
+  border: 1px solid var(--cp-border);
+  border-radius: 0.625rem;
+  background: var(--cp-surface);
+  color: var(--cp-text);
+  padding: 1rem;
+}
+
+.purse-winnings-dialog::backdrop {
+  background: var(--cp-overlay);
+}
+
+.purse-award-details {
+  padding-inline-start: 1.25rem;
+}

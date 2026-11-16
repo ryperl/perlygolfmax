@@ -1,4 +1,5 @@
 import type { TableClient, TransactionAction } from '@azure/data-tables';
+import { randomUUID } from 'node:crypto';
 import type { AccountIdentity, EventSummary } from '../../../src/domain/events.js';
 import type { ScoreActor } from '../../../src/domain/test-access.js';
 import type { PlayerProfile } from '../../../src/domain/catalog.js';
@@ -27,6 +28,16 @@ import { assertEventAccessUnchanged, readEventAccess } from '../event-access.js'
 import { isEventSkinsChange, isEventSkinsConfiguration } from '../../../src/contracts/event-skins.js';
 import type { EventSkinsChange, EventSkinsConfiguration } from '../../../src/domain/event-skins.js';
 import { isEventRevision } from '../../../src/contracts/events.js';
+import type {
+  RoundCorrectionInput, RoundCorrectionReadModel, RoundCorrectionReceipt, RoundCorrectionWriteRequest, RoundCorrectionWriteResult, RoundReviewWarning,
+} from '../../../src/domain/round-corrections.js';
+import {
+  isRoundCorrectionWriteRequest,
+} from '../../../src/contracts/round-corrections.js';
+import { isRoundGameDefinitions } from '../../../src/contracts/games.js';
+import { gameTeamsMatchRoster, isTeamGameDefinition } from '../../../src/domain/games.js';
+import type { RoundGameDefinition } from '../../../src/domain/games.js';
+import { isHandicapIndex } from '../../../src/contracts/catalog.js';
 
 interface WorkspaceHeader {
   readonly eventSkins?: EventSkinsConfiguration;
@@ -46,6 +57,26 @@ function isHeader(value: unknown): value is WorkspaceHeader {
     && value.roster.every((player: unknown) => isRecord(player) && isUuid(player.playerId) && typeof player.displayName === 'string')
     && Array.isArray(value.roundIds) && value.roundIds.length >= 1 && value.roundIds.length <= 8
     && value.roundIds.every(isUuid) && new Set(value.roundIds).size === value.roundIds.length;
+}
+
+function kpCaptureIdentity(round: RoundSnapshot): string {
+  return `${round.id}:${round.courseId}:${round.courseVersionId}:${String(round.teeProfile.id)}`;
+}
+
+function correctionInput(round: RoundSnapshot, games?: readonly RoundGameDefinition[]): RoundCorrectionInput {
+  const gameTeams = games?.flatMap((game) => isTeamGameDefinition(game)
+    ? [{ gameId: game.id, teams: game.teams.map((team) => ({ id: team.id, name: team.name, playerIds: team.playerIds })) }]
+    : []) ?? [];
+  return {
+    teeProfileId: round.teeProfile.id,
+    groups: round.groups.map((group) => ({ number: group.number, playerIds: group.playerIds,
+      ...(group.startingHole === undefined ? {} : { startingHole: group.startingHole }) })),
+    players: round.players.map((player) => ({ playerId: player.playerId, handicapIndexValue: player.handicapIndex?.value ?? null })),
+    ...(round.playerTees?.length ? {
+      playerTeeSelections: round.playerTees.map((entry) => ({ playerId: entry.playerId, teeProfileId: entry.profile.id })),
+    } : {}),
+    ...(gameTeams.length ? { gameTeams } : {}),
+  };
 }
 
 export class TableWorkspaceStore {
@@ -202,6 +233,8 @@ export class TableWorkspaceStore {
         id: round.id, name: round.name, courseId: round.courseId, courseVersionId: round.courseVersionId,
         ...(round.teeTime === undefined ? {} : { teeTime: round.teeTime }),
         ...(round.startDate === undefined ? {} : { startDate: round.startDate }),
+        ...(round.inputRevision ? { inputRevision: round.inputRevision } : {}),
+        ...(round.reviewWarnings?.length ? { reviewWarnings: round.reviewWarnings } : {}),
         course: metadata(round.course), teeProfile: profile(round.teeProfile),
         ...(round.playerTees?.length ? { playerTees: round.playerTees.map((entry) => ({
           playerId: entry.playerId, profile: profile(entry.profile),
@@ -244,6 +277,206 @@ export class TableWorkspaceStore {
     const workspace = await this.load(access.summary);
     await assertEventAccessUnchanged(this.table, identity, id, access);
     return workspace;
+  }
+
+  private async correctionState(identity: AccountIdentity, eventId: string, roundId: string) {
+    const access = await this.ownerAccess(identity, eventId);
+    if (access.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
+    const workspace = await this.load(access.summary, false);
+    const round = workspace.rounds.find((entry) => entry.id === roundId);
+    if (!round) throw new ApiError(404, 'ROUND_NOT_FOUND');
+    if (!round.scoringStarted) throw new ApiError(409, 'ROUND_SCORING_NOT_STARTED');
+    const roundRow = await optionalRow(this.table, eventId, `round:${roundId}`);
+    if (!roundRow) throw new ApiError(503, 'INVALID_STORED_WORKSPACE');
+    const lock = await scoringLock(this.table, eventId, roundId);
+    if (!lock) throw new ApiError(503, 'INVALID_STORED_SCORE_LOCK');
+    const configuredRounds = configuredGameRounds(access.event.gameRoundIds);
+    const games = await readGameConfiguration(this.table, eventId, roundId, configuredRounds);
+    return { access, workspace, round, roundRow, games };
+  }
+
+  private reviewWarnings(before: RoundSnapshot, after: RoundSnapshot, gamesChanged: boolean, churchyPresent: boolean): readonly RoundReviewWarning[] {
+    const warnings: RoundReviewWarning[] = [];
+    if (kpCaptureIdentity(before) !== kpCaptureIdentity(after)) warnings.push({
+      code: 'kp-review-required',
+      message: 'KP context changed; review tied decisions and reopen KP explicitly if needed.',
+    });
+    if (gamesChanged) warnings.push({
+      code: 'team-review-required',
+      message: 'Competition team assignments changed; review game team standings.',
+    });
+    if (churchyPresent && (gamesChanged || canonical(before.players) !== canonical(after.players)
+      || canonical(before.groups) !== canonical(after.groups)
+      || before.teeProfile.id !== after.teeProfile.id
+      || canonical(before.playerTees ?? []) !== canonical(after.playerTees ?? []))) warnings.push({
+      code: 'churchy-review-required',
+      message: 'Churchy inputs changed; review Churchy results and pending settlements.',
+    });
+    if (warnings.some((warning) => warning.code !== 'kp-review-required')
+      || canonical(before.players) !== canonical(after.players)
+      || before.teeProfile.id !== after.teeProfile.id
+      || canonical(before.playerTees ?? []) !== canonical(after.playerTees ?? [])) warnings.push({
+      code: 'purse-review-required',
+      message: 'Corrected inputs may change payouts; review purse and unresolved decisions.',
+    });
+    return warnings;
+  }
+
+  async correctionModel(identity: AccountIdentity, eventId: string, roundId: string): Promise<RoundCorrectionReadModel> {
+    const state = await this.correctionState(identity, eventId, roundId);
+    const version = await this.courses.readCapturedVersion(state.round.courseId, state.round.courseVersionId);
+    const compatibleTees = version.data.teeProfiles.filter((tee) => compatibleTeeLayouts(state.round.teeProfile, tee));
+    const ids = new Set(state.round.players.map((player) => player.playerId));
+    const gameTeams = state.games?.games.flatMap((game) => isTeamGameDefinition(game)
+      ? [{ gameId: game.id, teams: game.teams.map((team) => ({ id: team.id, name: team.name, playerIds: team.playerIds })) }] : []) ?? [];
+    const warnings = state.round.reviewWarnings ?? [];
+    return {
+      eventId,
+      roundId,
+      eventEtag: state.access.summary.etag,
+      roundEtag: revision(state.roundRow),
+      ...(state.games ? { gamesEtag: state.games.etag } : {}),
+      ...(state.round.inputRevision ? { inputRevision: state.round.inputRevision } : {}),
+      allowPerGolferTees: state.workspace.allowPerGolferTees === true,
+      teeProfileId: state.round.teeProfile.id,
+      compatibleTees,
+      players: state.round.players.map((player) => ({ playerId: player.playerId, displayName: player.displayName, handicapIndex: player.handicapIndex ?? null })),
+      playerTeeSelections: (state.round.playerTees ?? []).map((entry) => ({ playerId: entry.playerId, teeProfileId: entry.profile.id }))
+        .filter((entry) => ids.has(entry.playerId)),
+      groups: state.round.groups,
+      gameTeams,
+      warnings,
+    };
+  }
+
+  async correctRound(identity: AccountIdentity, eventId: string, roundId: string,
+    requestId: string, body: RoundCorrectionWriteRequest): Promise<RoundCorrectionWriteResult> {
+    if (!isUuid(requestId) || !isRoundCorrectionWriteRequest(body)) throw new ApiError(400, 'INVALID_ROUND_CORRECTION');
+    const state = await this.correctionState(identity, eventId, roundId);
+    const replayKey = `round-correction:${roundId}:${requestId}`;
+    const replay = await optionalRow(this.table, eventId, replayKey);
+    if (replay) {
+      const saved = decode(await privateContent(this.table, eventId, replayKey, replay.content), isRecord);
+      if (!isRecord(saved) || !isRoundCorrectionWriteRequest(saved.request) || saved.request.reason !== body.reason
+        || canonical(saved.request.expected) !== canonical(body.expected)
+        || canonical(saved.request.correction) !== canonical(body.correction)) {
+        throw new ApiError(409, 'ROUND_CORRECTION_REQUEST_CONFLICT');
+      }
+      return { applied: false, receiptId: requestId, model: await this.correctionModel(identity, eventId, roundId) };
+    }
+    if (body.expected.eventEtag !== state.access.summary.etag) throw new ApiError(409, 'EVENT_CHANGED');
+    const currentRoundEtag = revision(state.roundRow);
+    if (body.expected.roundEtag !== currentRoundEtag) throw new ApiError(409, 'ROUND_CHANGED');
+    if ((body.expected.gamesEtag ?? null) !== (state.games?.etag ?? null)) throw new ApiError(409, 'GAMES_CHANGED');
+    if ((body.expected.inputRevision ?? null) !== (state.round.inputRevision ?? null)) throw new ApiError(409, 'ROUND_INPUTS_CHANGED');
+    const version = await this.courses.readCapturedVersion(state.round.courseId, state.round.courseVersionId);
+    const byTee = new Map(version.data.teeProfiles.map((tee) => [tee.id, tee]));
+    const teeProfile = byTee.get(body.correction.teeProfileId);
+    if (!teeProfile || !compatibleTeeLayouts(state.round.teeProfile, teeProfile)) throw new ApiError(400, 'INCOMPATIBLE_TEE_PROFILE');
+    const roster = state.round.players.map((player) => player.playerId);
+    if (canonical([...body.correction.players].map((entry) => entry.playerId).sort())
+      !== canonical([...roster].sort())) throw new ApiError(400, 'ROUND_ROSTER_FIXED');
+    const grouped = body.correction.groups.flatMap((group) => group.playerIds);
+    if (grouped.length !== roster.length || canonical([...grouped].sort()) !== canonical([...roster].sort())) {
+      throw new ApiError(400, 'INVALID_ROUND_GROUPS');
+    }
+    const selections = body.correction.playerTeeSelections ?? [];
+    if (selections.some((entry) => !roster.includes(entry.playerId))) throw new ApiError(400, 'INVALID_ROUND_TEE_SELECTION');
+    const playerTees: PlayerTeeProfile[] = [];
+    for (const selection of selections) {
+      const selected = byTee.get(selection.teeProfileId);
+      if (!selected || !compatibleTeeLayouts(teeProfile, selected)) throw new ApiError(400, 'INCOMPATIBLE_PLAYER_TEE');
+      if (selected.id !== teeProfile.id) playerTees.push({ playerId: selection.playerId, profile: profile(selected) });
+    }
+    const playersById = new Map(body.correction.players.map((entry) => [entry.playerId, entry.handicapIndexValue]));
+    const recordedAt = new Date().toISOString();
+    const effectiveDate = recordedAt.slice(0, 10);
+    const sourcePrefix = 'Organizer correction: ';
+    const correctionSource = `${sourcePrefix}${body.reason}`.slice(0, 200);
+    const updatedRound: RoundSnapshot = {
+      ...state.round,
+      teeProfile: profile(teeProfile),
+      groups: body.correction.groups.map((group) => ({ number: group.number, playerIds: [...group.playerIds],
+        ...(group.startingHole === undefined ? {} : { startingHole: group.startingHole }) })),
+      players: state.round.players.map((player) => {
+        const nextValue = playersById.get(player.playerId);
+        if (nextValue === undefined) return player;
+        if (nextValue === null) return player.handicapIndex === null ? player : { ...player, handicapIndex: null };
+        if (!isHandicapIndex(nextValue)) throw new ApiError(400, 'INVALID_ROUND_CORRECTION');
+        if (player.handicapIndex?.value === nextValue) return player;
+        return {
+          ...player,
+          handicapIndex: {
+            id: randomUUID(),
+            value: nextValue,
+            effectiveDate,
+            source: correctionSource,
+            recordedAt,
+            recordedBy: { tenantId: identity.tenantId, objectId: identity.objectId },
+            previousObservationId: player.handicapIndex?.id ?? null,
+          },
+        };
+      }),
+      ...(playerTees.length ? { playerTees } : {}),
+      inputRevision: requestId,
+    };
+    if (!isRecord(updatedRound) || !isEventWorkspace({ ...state.workspace, rounds: state.workspace.rounds.map((round) =>
+      round.id === roundId ? updatedRound : round) })) throw new ApiError(503, 'INVALID_STORED_WORKSPACE');
+    const churchy = state.games?.games.find((game) => game.kind === 'churchy');
+    if (churchy?.kind === 'churchy') {
+      const group = updatedRound.groups.find((entry) => entry.number === churchy.groupNumber);
+      if (!group || group.playerIds.length !== 4 || group.playerIds.some((id, index) => id !== churchy.playerIds[index])) {
+        throw new ApiError(409, 'CHURCHY_SETUP_CHANGED');
+      }
+    }
+    let updatedGames = state.games?.games ?? [];
+    let gamesChanged = false;
+    if (state.games && body.correction.gameTeams) {
+      const updates = new Map(body.correction.gameTeams.map((entry) => [entry.gameId, entry.teams]));
+      updatedGames = state.games.games.map((game) => {
+        const teams = updates.get(game.id);
+        if (!teams) return game;
+        if (!isTeamGameDefinition(game)) throw new ApiError(400, 'INVALID_GAME_TEAMS');
+        const updated = { ...game, teams };
+        if (!gameTeamsMatchRoster(updated, roster)) throw new ApiError(400, 'INVALID_GAME_TEAMS');
+        gamesChanged ||= canonical(game.teams) !== canonical(teams);
+        return updated;
+      });
+      if (!isRoundGameDefinitions(updatedGames)) throw new ApiError(400, 'INVALID_GAME_TEAMS');
+      if ([...updates.keys()].some((gameId) => !updatedGames.some((game) => game.id === gameId && isTeamGameDefinition(game)))) {
+        throw new ApiError(400, 'INVALID_GAME_TEAMS');
+      }
+    }
+    const warnings = this.reviewWarnings(state.round, updatedRound, gamesChanged, churchy?.kind === 'churchy');
+    const withWarnings: RoundSnapshot = { ...updatedRound, ...(warnings.length ? { reviewWarnings: warnings } : { reviewWarnings: [] }) };
+    const before = correctionInput(state.round, state.games?.games);
+    const after = correctionInput(withWarnings, updatedGames);
+    if (canonical(before) === canonical(after) && warnings.length === (state.round.reviewWarnings?.length ?? 0)) {
+      return { applied: false, model: await this.correctionModel(identity, eventId, roundId) };
+    }
+    const receipt: RoundCorrectionReceipt = {
+      id: requestId, eventId, roundId, expected: body.expected, before, after, reason: body.reason,
+      ...(body.reviewSummary ? { reviewSummary: body.reviewSummary } : {}),
+      warnings, recordedAt,
+      recordedBy: { tenantId: identity.tenantId, objectId: identity.objectId },
+    };
+    const roundContent = await stagePrivateContent(this.table, eventId, `round:${roundId}`, identity, canonical(withWarnings));
+    const actions: TransactionAction[] = [
+      ['update', { partitionKey: eventId, rowKey: 'event', correctionsUpdatedAt: receipt.recordedAt }, 'Merge', { etag: state.access.summary.etag }],
+      ['update', { partitionKey: eventId, rowKey: `member:${identity.objectId}`,
+        tenantId: identity.tenantId, objectId: identity.objectId, role: 'owner' }, 'Merge', { etag: revision(state.access.member) }],
+      ['update', { partitionKey: eventId, rowKey: `round:${roundId}`, content: roundContent }, 'Merge', { etag: currentRoundEtag }],
+      ['create', { partitionKey: eventId, rowKey: replayKey,
+        content: await stagePrivateContent(this.table, eventId, replayKey, identity, canonical({ request: body, receipt })) }],
+    ];
+    if (state.games && canonical(updatedGames) !== canonical(state.games.games)) {
+      if (state.games.etag === null) throw new ApiError(503, 'INVALID_STORED_GAMES');
+      actions.push(['update', { partitionKey: eventId, rowKey: `round-games:${roundId}`, kind: 'round-games', schemaVersion: 1,
+        content: await stagePrivateContent(this.table, eventId, `round-games:${roundId}`, identity,
+          canonical({ eventId, roundId, games: updatedGames })) }, 'Replace', { etag: state.games.etag }]);
+    }
+    await transaction(this.table, actions, 'ROUND_CORRECTION_CONFLICT');
+    return { applied: true, receiptId: requestId, model: await this.correctionModel(identity, eventId, roundId) };
   }
 
   private async refreshReplay(identity: AccountIdentity, eventId: string, roundId: string, requestId: string, etag: string): Promise<boolean> {

@@ -58,8 +58,12 @@
   immutable course versions and captured round inputs. Active unstarted rounds
   use current catalog HI; atomically freeze all indexes with the first saved
   score, immutable capture receipt and setup lock. Started/archived rounds never
-  adopt later catalog changes. Scored-index corrections need explicit scope and
-  an audited conditional write; never unlock a round or rewrite raw cards.
+  adopt later catalog changes. Explicit owner corrections are event-local,
+  conditional/idempotent/audited and retain the roster and captured course/version.
+  Author changed HI observations on the server; never reuse an observation ID
+  for a different value or trust client-authored observation identities.
+  Preserve original capture receipts, raw cards and scoring locks. Bind score
+  writes/drafts to corrected input revisions, including unsigned public writes.
 - Keep archived events owner-only. Archive/restore must conditionally check
   both event and owner-grant revisions. Deletion or retention rules require
   a separate scope decision.
@@ -207,6 +211,13 @@
   Exclude projected awards from that public summary, not from organizer
   calculations. Known non-winners show 0.00/no pools; missing/overflowed money
   and unavailable sources remain explicit. This is not payment or finalization.
+  Player-name dialogs lazily load allowlisted winnings explanations, never
+  protected edit/audit history. Keep pending money out, exact shares intact,
+  newer totals explicit, and abort/ignore closed or superseded reads.
+- Review notices use already-loaded canonical data, without extra global scans.
+  Flag required manual ties, stale inputs/teams/decisions, unavailable required
+  inputs, unassigned awards and budget issues; do not flag normally covered
+  skins, automatically pooled ties or ordinary future unplayed holes.
 - KP is one separate competition per saved round, using saved default-tee par 3
   holes/lengths/stroke indexes, never personal tees or current catalogs. Whole
   feet/inches require on-green confirmation; explicit zero is a hole-in-one.

@@ -16,7 +16,7 @@ export interface ScoresClient {
     requestId: string, signal: AbortSignal) => Promise<RoundScores>;
   readonly load: (eventId: string, roundId: string, signal: AbortSignal) => Promise<RoundScores>;
   readonly save: (eventId: string, roundId: string, playerId: string, holeNumber: number, score: HoleScore,
-    etag: string | null, requestId: string, signal: AbortSignal) => Promise<ScoreWriteResult>;
+    etag: string | null, requestId: string, signal: AbortSignal, inputRevision?: string | null) => Promise<ScoreWriteResult>;
   readonly history: (eventId: string, roundId: string, playerId: string, signal: AbortSignal, cursor?: string) => Promise<ScoreHistoryPage>;
   readonly saveGames: (eventId: string, roundId: string, games: readonly RoundGameDefinition[], etag: string | null,
     requestId: string, signal: AbortSignal) => Promise<GameWriteResult>;
@@ -50,17 +50,20 @@ export function createScoresClient(apiUrl: string, getToken: () => Promise<strin
         || value.cards.some((card) => card.etag !== null) && (!value.setupLocked || value.lastUpdatedAt === null)) throw new Error('Invalid owner scorecards response. Nothing was loaded.');
       return value;
     },
-    async save(eventId, roundId, playerId, holeNumber, score, etag, requestId, signal) {
+    async save(eventId, roundId, playerId, holeNumber, score, etag, requestId, signal, inputRevision) {
       const base = path(eventId, roundId);
       if (!isUuid(playerId) || !Number.isInteger(holeNumber) || holeNumber < 1 || holeNumber > 18
-        || !isHoleScore(score) || etag !== null && !isEventRevision(etag) || !isUuid(requestId)) throw new Error('Invalid hole save request. Nothing was sent.');
+        || !isHoleScore(score) || etag !== null && !isEventRevision(etag) || !isUuid(requestId)
+        || inputRevision !== undefined && inputRevision !== null && !isUuid(inputRevision)) throw new Error('Invalid hole save request. Nothing was sent.');
       const value = await request(`${base}/players/${encodeURIComponent(playerId)}/holes/${String(holeNumber)}`, signal, {
-        method: 'PUT', body: { score }, requestId, ...(etag === null ? { createOnly: true } : { etag }),
+        method: 'PUT', body: { score, ...(inputRevision === undefined ? {} : { inputRevision }) }, requestId, ...(etag === null ? { createOnly: true } : { etag }),
       });
       if (!isScoreWriteResult(value) || value.round.permissions === undefined || value.round.eventId !== eventId || value.round.roundId !== roundId
         || value.change.eventId !== eventId || value.change.roundId !== roundId || value.change.playerId !== playerId
         || value.change.holeNumber !== holeNumber || value.change.id !== requestId
-        || value.change.expectedEtag !== etag || !sameHoleScore(value.change.after, preserveScoreExtras(score, value.change.after))
+        || value.change.expectedEtag !== etag
+        || value.change.expectedInputRevision !== (inputRevision ?? undefined)
+        || !sameHoleScore(value.change.after, preserveScoreExtras(score, value.change.after))
         || !value.round.setupLocked || value.round.lastUpdatedAt === null
         || !value.round.cards.some((card) => card.playerId === playerId && card.etag !== null)) {
         throw new Error('Invalid save acknowledgement. The outcome is uncertain; retain this draft and request ID and refresh to review.');

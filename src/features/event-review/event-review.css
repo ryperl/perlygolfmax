@@ -1,0 +1,24 @@
+.event-review-banner {
+  border: 1px solid var(--cp-warning);
+  border-radius: 0.625rem;
+  margin-block: 0 1rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--cp-surface);
+  color: var(--cp-text);
+  overflow-wrap: anywhere;
+}
+
+.event-review-banner summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.event-review-banner svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: none;
+}

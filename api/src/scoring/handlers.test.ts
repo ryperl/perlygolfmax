@@ -113,6 +113,9 @@ describe('JWT-first owner-only bounded scoring HTTP routes', () => {
       headers: { 'Cache-Control': 'no-store' },
     });
     expect(await f.call('score-history')).toMatchObject({ status: 200, jsonBody: { changes: [{ id: identifier(600) }] } });
+    expect(await f.call('event-leaderboard', {}, {}, {}, 'GET', '?view=event-skins-details')).toMatchObject({
+      status: 200, headers: { 'Cache-Control': 'no-store' },
+    });
     expect(f.api.verify).toHaveBeenCalledWith('Bearer fictional-test-token');
     expect(f.api.limiter.check).toHaveBeenNthCalledWith(1, creator, 'scores-read');
     expect(f.api.limiter.check).toHaveBeenNthCalledWith(2, creator, 'scores-write');

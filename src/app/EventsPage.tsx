@@ -24,6 +24,7 @@ import type { PurseClient } from '../client/purse';
 import type { AdmissionsClient } from '../client/admission';
 import { clearInvitationReturn } from '../client/invitation-return';
 import type { TesterAccessClient } from '../client/test-access';
+import type { RoundCorrectionsClient } from '../client/round-corrections';
 const PursePage = lazy(async () => ({ default: (await import('./PursePage')).PursePage }));
 const JoinEventPage = lazy(async () => ({ default: (await import('./JoinEventPage')).JoinEventPage }));
 const PlayerAccessPage = lazy(async () => ({ default: (await import('./PlayerAccessPage')).PlayerAccessPage }));
@@ -42,6 +43,7 @@ export function ConfiguredEventsPage(props: AccountPlacement) {
 }
 
 export interface EventServices {
+  readonly corrections?: RoundCorrectionsClient;
   readonly session: EventSession;
   readonly events: EventsClient;
   readonly catalog: CatalogClient;
@@ -305,7 +307,7 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
         : isEventTab(kind) && eventId ? <SavedEventPage key={eventId} eventId={eventId} view={kind}
           client={services.setup} scores={services.scores} onSessionExpired={expire} />
         : route.startsWith('score:') ? <OwnerRoundScoresPage key={eventId} eventId={route.split(':')[1] ?? ''} roundId={route.split(':')[2] ?? ''}
-          setup={services.setup} scores={services.scores} onSessionExpired={expire} />
+          setup={services.setup} scores={services.scores} corrections={services.corrections} onSessionExpired={expire} />
         : route.startsWith('event:') ? <EventWorkspaceView key={route} eventId={route.slice(6)}
         canManageCatalog={state.capabilities.canManageCatalog} setup={services.setup} catalog={services.catalog}
         scores={services.scores} onSessionExpired={expire} />

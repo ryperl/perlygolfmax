@@ -1,7 +1,6 @@
 import type { HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { isCreateTesterLink, isRenewTesterLink, isRevokeTesterLink } from '../../../src/contracts/test-access.js';
-import { isEventRevision, isRecord, isUuid } from '../../../src/contracts/events.js';
-import { isHoleScore } from '../../../src/contracts/scoring.js';
+import { isEventRevision, isUuid } from '../../../src/contracts/events.js';
 import { ApiError } from '../errors.js';
 import { readJson, response } from '../http.js';
 import type { VerifyIdentity } from '../identity.js';
@@ -10,6 +9,7 @@ import { privateReadResponse } from '../private-transport.js';
 import type { TableWorkspaceStore } from '../setup/store.js';
 import type { TableScoreStore } from '../scoring/store.js';
 import type { TableTesterAccessStore } from './store.js';
+import { parseScoreWriteBody } from '../scoring/handlers.js';
 
 export type TesterAction = 'list' | 'create' | 'revoke' | 'renew' | 'workspace' | 'scores' | 'score-hole';
 export interface TesterApi {
@@ -53,9 +53,9 @@ export function createTesterHandler(resolveApi: () => TesterApi, action: TesterA
         const etag = scoreRevision(request);
         const hole = request.params.holeNumber;
         if (typeof hole !== 'string' || !/^(?:[1-9]|1[0-8])$/.test(hole)) throw new ApiError(400, 'INVALID_HOLE_NUMBER');
-        const body = await readJson(request);
-        if (!isRecord(body) || Object.keys(body).length !== 1 || !isHoleScore(body.score)) throw new ApiError(400, 'INVALID_HOLE_SCORE');
-        return response(200, await api.scores.write(identity, eventId, roundId, playerId, Number(hole), body.score, etag, requestId));
+        const parsed = parseScoreWriteBody(await readJson(request));
+        return response(200, await api.scores.write(identity, eventId, roundId, playerId, Number(hole),
+          parsed.score, etag, requestId, parsed.inputRevision));
       }
       const identity = await api.verify(request.headers.get('authorization'));
       await api.limiter.check(identity, action === 'list' ? 'events-read' : 'events-manage');

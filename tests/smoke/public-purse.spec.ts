@@ -3,6 +3,7 @@ import { expect, test } from './test';
 import { fictionalPurse } from './purse-fixture-data';
 import { publicPurseSummary } from '../../src/domain/public-purse';
 import { purseTestId } from '../../src/domain/purse.test-support';
+import { playerWinningsBreakdown } from '../../src/domain/winnings-breakdown';
 
 test('public purse is compact, course-filtered and refreshed through one minimal read without identity or writes', async ({ page }, testInfo) => {
   const server = await createServer({
@@ -16,12 +17,14 @@ test('public purse is compact, course-filtered and refreshed through one minimal
   if (!first) throw new Error('Missing fictional pool');
   const secondRound = purseTestId(2001);
   const summary = { ...base,
+    reviewNotices: [{ code: 'prize-tie' as const, label: 'Fictional desert prizes', contextId: purseTestId(5001) }],
     rounds: [...base.rounds, { id: secondRound, label: 'Fictional Desert Course' }],
     pools: [...base.pools, { ...first, id: purseTestId(5001), name: 'Fictional desert prizes', roundId: secondRound, status: 'pending' as const },
       { ...first, id: purseTestId(5002), name: 'Fictional overall prizes', roundId: null, status: 'pending' as const }],
   };
   let reads = 0;
   let limited = false;
+  let detailReads = 0;
   const errors: string[] = [];
   page.on('pageerror', (error) => { errors.push(error.message); });
   try {
@@ -39,6 +42,12 @@ test('public purse is compact, course-filtered and refreshed through one minimal
       expect(request.method()).toBe('GET');
       expect(request.headers().authorization).toBeUndefined();
       expect(url.pathname).toBe(`/__public-api/public/events/${summary.eventId}/purse`);
+      if (url.searchParams.get('view') === 'player') {
+        detailReads++;
+        const value = playerWinningsBreakdown(fictionalPurse(12), url.searchParams.get('playerId') ?? '');
+        await route.fulfill({ json: value });
+        return;
+      }
       expect(url.searchParams.get('view')).toBe('summary');
       reads++;
       await route.fulfill(limited
@@ -48,6 +57,10 @@ test('public purse is compact, course-filtered and refreshed through one minimal
     await page.goto(`${origin}/#purse?event=${summary.eventId}`);
     const picker = page.getByRole('combobox', { name: 'Course', exact: true });
     await expect(picker).toBeVisible();
+    const review = page.getByRole('complementary', { name: 'Organizer review needed' });
+    await expect(review.getByRole('status')).toContainText('Organizer review needed · 1');
+    await review.getByText('Organizer review needed · 1', { exact: true }).click();
+    await expect(review.getByText(/Resolve the prize tie/)).toBeVisible();
     await expect(page.getByRole('columnheader')).toHaveText(['Player / pools won', 'Won (USD)']);
     await expect(page.getByRole('rowheader').nth(0)).toContainText('Fictional golfer 1');
     await expect(page.getByRole('rowheader').nth(1)).toContainText('Fictional golfer 5');
@@ -63,6 +76,15 @@ test('public purse is compact, course-filtered and refreshed through one minimal
     await picker.selectOption('event');
     await expect(courses.getByText('Fictional overall prizes')).toBeVisible();
     expect(reads).toBe(1);
+    expect(detailReads).toBe(0);
+    await page.getByRole('button', { name: 'Fictional golfer 1', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('heading', { level: 2 })).toBeFocused();
+    await expect(dialog.getByText(/Place 1/)).toBeVisible();
+    expect(detailReads).toBe(1);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Fictional golfer 1', exact: true })).toBeFocused();
     const refresh = page.getByRole('button', { name: 'Refresh prize results', exact: true });
     await refresh.click();
     await expect(refresh).toBeEnabled();

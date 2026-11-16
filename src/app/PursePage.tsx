@@ -4,6 +4,8 @@ import { SessionExpiredError } from '../client/events';
 import { PrivateRequestError } from '../client/private-request';
 import type { EventPurseView } from '../domain/purse-settings';
 import { PursePanel } from '../features/purse';
+import { EventReviewBanner } from '../features/event-review';
+import { purseReviewNotices } from '../domain/event-review';
 
 export function PursePage({ client, eventId, onSessionExpired }: {
   readonly client: PurseClient;
@@ -62,6 +64,7 @@ export function PursePage({ client, eventId, onSessionExpired }: {
   }, [load]);
 
   return <section>
+    {current?.value && <EventReviewBanner notices={purseReviewNotices(current.value)} />}
     <div className="event-actions">
       <a href={`#overview?event=${encodeURIComponent(eventId)}`}>Back to event overview</a>
       <button disabled={busy || dirty} onClick={() => { void load(); }}>Refresh prize results</button>

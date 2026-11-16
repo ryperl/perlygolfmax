@@ -14,6 +14,8 @@ import { isPublicPurseSummary } from '../contracts/public-purse';
 import { publicPurseSummary } from '../domain/public-purse';
 import { publicLeaderboardSummary } from '../domain/public-leaderboard';
 import { isPublicLeaderboardSummary } from '../contracts/public-leaderboard';
+import { isEventSkinsDetails } from '../contracts/event-skins-details';
+import { isPlayerWinningsBreakdown } from '../contracts/winnings-breakdown';
 
 export interface PublicServices {
   readonly events: Pick<EventsClient, 'list'>;
@@ -50,8 +52,8 @@ export function createPublicServices(apiUrl: string, send: typeof fetch = fetch)
       if (value.permissions?.role !== 'public') throw new Error('Invalid public score permissions. Nothing was loaded.');
       return value;
     },
-    async save(eventId, roundId, playerId, holeNumber, score, etag, requestId, signal) {
-      const value = await rawScores.save(eventId, roundId, playerId, holeNumber, score, etag, requestId, signal);
+    async save(eventId, roundId, playerId, holeNumber, score, etag, requestId, signal, inputRevision) {
+      const value = await rawScores.save(eventId, roundId, playerId, holeNumber, score, etag, requestId, signal, inputRevision);
       if (value.round.permissions?.role !== 'public' || !isPublicScoreIdentity(value.change.recordedBy)
         || value.change.recordedBy.eventId !== eventId) {
         throw new Error('Invalid public save acknowledgement. The outcome is uncertain; retain this draft and request ID and refresh to review.');
@@ -75,6 +77,11 @@ export function createPublicServices(apiUrl: string, send: typeof fetch = fetch)
       },
     },
     leaderboard: {
+      async details(eventId, signal) {
+        const value = await readPrivateValue(request, `${path(eventId)}/leaderboard?view=event-skins-details`, signal);
+        if (!isEventSkinsDetails(value) || value.eventId !== eventId) throw new Error('Skins details are unavailable from this API. Refresh to retry.');
+        return value;
+      },
       async load(eventId, signal, kind = 'overall') {
         const value = await readPrivateValue(request, `${path(eventId)}/leaderboard?view=${kind}`, signal);
         if (isPublicLeaderboardSummary(value) && value.kind === kind && value.workspace.event.id === eventId) return value;
@@ -84,6 +91,12 @@ export function createPublicServices(apiUrl: string, send: typeof fetch = fetch)
       },
     },
     purse: {
+      async player(eventId, playerId, signal) {
+        if (!isUuid(playerId)) throw new Error('Invalid player identifier.');
+        const value = await readPrivateValue(request, `${path(eventId)}/purse?view=player&playerId=${encodeURIComponent(playerId)}`, signal);
+        if (!isPlayerWinningsBreakdown(value) || value.eventId !== eventId || value.playerId !== playerId) throw new Error('Player winnings are unavailable from this API. Refresh to retry.');
+        return value;
+      },
       async load(eventId, signal) {
         const value = await readPrivateValue(request, `${path(eventId)}/purse?view=summary`, signal);
         if (isPublicPurseSummary(value) && value.eventId === eventId) return value;

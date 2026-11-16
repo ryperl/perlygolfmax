@@ -88,7 +88,8 @@ export async function saveGroupEntries({ client, round, holeNumber, plan, signal
       const attempt = { ...write.attempt, sent: true };
       onDraft(key, { ...write.draft, attempt, status: 'saving' });
       try {
-        const result = await client.save(round.eventId, round.roundId, write.playerId, holeNumber, write.score, attempt.etag, attempt.id, signal);
+        const result = await client.save(round.eventId, round.roundId, write.playerId, holeNumber, write.score,
+          attempt.etag, attempt.id, signal, round.inputRevision ?? null);
         signal.throwIfAborted();
         latest = result.round;
         acknowledged.set(write.playerId, result.change);

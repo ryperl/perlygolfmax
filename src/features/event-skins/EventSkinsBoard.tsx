@@ -1,7 +1,10 @@
 import type { EventSkinsDisplay } from '../../domain/public-leaderboard';
+import type { Ref } from 'react';
 import './event-skins.css';
 
-export function EventSkinsBoard({ value }: { readonly value: EventSkinsDisplay }) {
+export function EventSkinsBoard({ value, onDetails, detailsTrigger }: {
+  readonly value: EventSkinsDisplay; readonly onDetails?: () => void; readonly detailsTrigger?: Ref<HTMLButtonElement>;
+}) {
   const { workspace, eventSkins: results } = value;
   if (workspace.eventSkinsSupported !== true) return <p>Event-wide skins is not supported by this API.</p>;
   if (!workspace.eventSkins) return <section><h1>Event-wide skins</h1><p>Event skins is not configured.</p>
@@ -10,9 +13,9 @@ export function EventSkinsBoard({ value }: { readonly value: EventSkinsDisplay }
   const visible = results.players.filter((player) => player.skins > 0 || results.status !== 'complete');
   return <section className="event-skins-board">
     <h1>{workspace.event.name} · Event-wide skins</h1>
-    <p>Net strokes first, using 100% captured Course Handicap and each golfer’s tee.
+    <details><summary>Skins rules</summary><p>Net strokes first, using 100% captured Course Handicap and each golfer’s tee.
       Only when net ties, actual gross birdie or better has priority, then the lower qualifying gross score.
-      Gross par ties stay tied. No carryovers; every hole competes only within its round.</p>
+      Gross par ties stay tied. No carryovers; every hole competes only within its round.</p></details>
     <p role="status">{results.status === 'complete' ? 'All hole outcomes known — not round finalization'
       : results.status === 'unavailable' ? 'Unavailable inputs — known wins retained, totals not complete' : 'Provisional standings'}
       {` · ${String(results.awardedSkins)} skins awarded · ${String(results.totalHoles - results.pendingHoles - results.unavailableHoles)}/${String(results.totalHoles)} holes decided`}
@@ -22,20 +25,13 @@ export function EventSkinsBoard({ value }: { readonly value: EventSkinsDisplay }
       <h2>{player.rank === null ? '' : `${results.players.filter((entry) => entry.rank === player.rank).length > 1 ? 'T' : ''}${String(player.rank)}. `}{player.displayName}</h2>
       <p>{player.skins} {results.status !== 'complete' && 'known '}{player.skins === 1 ? 'skin' : 'skins'}
         {results.status === 'unavailable' && ' · complete total unavailable'}</p>
-      <dl>{player.cells.map((cell) => <div key={cell.roundId}>
+      <dl>{player.cells.filter((cell) => cell.skins > 0).map((cell) => <div key={cell.roundId}>
         <dt>{workspace.rounds.find((round) => round.id === cell.roundId)?.name}</dt>
-        <dd>{cell.skins} {cell.status !== 'complete' && 'known '}skins · {cell.decidedHoles}/{cell.totalHoles} holes · {cell.status}</dd>
+        <dd>{results.holes.filter((hole) => hole.roundId === cell.roundId && hole.winnerId === player.playerId)
+          .map((hole) => `Hole ${String(hole.number)}`).join(' · ')}</dd>
       </div>)}</dl>
     </li>)}</ol>
-    <details><summary>Hole outcomes and tie reasons</summary>
-      <ul>{results.holes.map((hole) => <li key={`${hole.roundId}:${String(hole.number)}`}>
-        {workspace.rounds.find((round) => round.id === hole.roundId)?.name} · Hole {hole.number}: {hole.status}
-        {hole.winnerId && ` — ${workspace.roster.find((player) => player.playerId === hole.winnerId)?.displayName ?? 'Winner unavailable'}`}
-        {hole.grossUnderParPriority && ' (actual gross birdie-or-better priority on equal net strokes)'}
-        {hole.status === 'tied' && ' — no skin; no carryover'}
-        {hole.reason && ` — ${hole.reason.replaceAll('-', ' ')}`}
-      </li>)}</ul>
-    </details>
+    <div><button ref={detailsTrigger} type="button" disabled={!onDetails} onClick={onDetails}>View skins details</button></div>
     {workspace.purseConfigured && <a href={`#purse?event=${encodeURIComponent(workspace.event.id)}`}>View planned purse and winnings</a>}
   </section>;
 }

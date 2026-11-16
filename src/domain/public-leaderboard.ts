@@ -2,12 +2,15 @@ import type { EventSummary } from './events.js';
 import type { EventLeaderboardView, EventStandings, EventStandingRound } from './event-leaderboard.js';
 import type { EventSkinsConfiguration, EventSkinsHole, EventSkinsResults } from './event-skins.js';
 import type { OverallCompetition } from './setup.js';
+import { leaderboardReviewNotices } from './event-review.js';
+import type { EventReviewNotice } from './event-review.js';
 
 type EventHeading = Pick<EventSummary, 'id' | 'name' | 'status' | 'role'>;
 type CompetitionDescription = { readonly kind: 'stableford'; readonly credit: 'individual' | 'team' }
   | Extract<OverallCompetition, { readonly kind: 'stroke-play' }>;
 
 export interface OverallResultsDisplay {
+  readonly reviewNotices?: readonly EventReviewNotice[];
   readonly workspace: {
     readonly event: EventHeading;
     readonly overallCompetition?: CompetitionDescription;
@@ -17,6 +20,7 @@ export interface OverallResultsDisplay {
   };
 }
 export interface EventSkinsDisplay {
+  readonly reviewNotices?: readonly EventReviewNotice[];
   readonly workspace: {
     readonly event: EventHeading;
     readonly eventSkinsSupported?: true;
@@ -40,7 +44,7 @@ export function publicLeaderboardSummary(value: EventLeaderboardView, kind: Publ
   if (kind === 'overall') {
     const competition = value.workspace.overallCompetition;
     return {
-      version: 1, kind, workspace: { event, ...(competition ? {
+      version: 1, kind, reviewNotices: leaderboardReviewNotices(value), workspace: { event, ...(competition ? {
         overallCompetition: competition.kind === 'stableford'
           ? { kind: 'stableford', credit: competition.credit } : { ...competition },
       } : {}) },
@@ -54,7 +58,7 @@ export function publicLeaderboardSummary(value: EventLeaderboardView, kind: Publ
   const workspace = value.workspace;
   const skins = value.eventSkins;
   return {
-    version: 1, kind,
+    version: 1, kind, reviewNotices: leaderboardReviewNotices(value),
     workspace: { event,
       ...(workspace.eventSkinsSupported === true ? { eventSkinsSupported: true } : {}),
       ...(workspace.eventSkins ? { eventSkins: { version: 1 } } : {}),

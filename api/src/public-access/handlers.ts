@@ -1,7 +1,7 @@
 import type { HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import type { PublicScoreIdentity } from '../../../src/domain/public-access.js';
 import { isEventRevision, isRecord, isUuid } from '../../../src/contracts/events.js';
-import { isHoleScore } from '../../../src/contracts/scoring.js';
+import { parseScoreWriteBody } from '../scoring/handlers.js';
 import { ApiError } from '../errors.js';
 import { readJson, response } from '../http.js';
 import type { RequestLimiter } from '../limits.js';
@@ -12,6 +12,8 @@ import type { TablePurseStore } from '../purse/store.js';
 import type { TablePublicEventStore } from './store.js';
 import { publicPurseSummary } from '../../../src/domain/public-purse.js';
 import { publicLeaderboardSummary } from '../../../src/domain/public-leaderboard.js';
+import { calculateEventSkinsDetails } from '../../../src/domain/event-skins.js';
+import { playerWinningsBreakdown } from '../../../src/domain/winnings-breakdown.js';
 
 export type PublicAction = 'events' | 'workspace' | 'scores' | 'score-hole' | 'event-leaderboard' | 'purse';
 export interface PublicApi {
@@ -68,11 +70,18 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
       if (action === 'event-leaderboard') {
         const value = await api.scores.leaderboard(identity, eventId, chargeRead);
         const view = request.query.get('view');
+        if (view === 'event-skins-details') return response(200, privateReadResponse(request, calculateEventSkinsDetails(value.workspace, value.roundScores)));
         return response(200, privateReadResponse(request, view === 'overall' || view === 'event-skins'
           ? publicLeaderboardSummary(value, view) : value));
       }
       if (action === 'purse') {
+        const selectedPlayer = request.query.get('view') === 'player' ? uuid(request.query.get('playerId')) : null;
         const value = await api.purse.get(identity, eventId, chargeRead);
+        if (selectedPlayer) {
+          const detail = playerWinningsBreakdown(value, selectedPlayer);
+          if (!detail) throw new ApiError(404, 'PLAYER_NOT_FOUND');
+          return response(200, privateReadResponse(request, detail));
+        }
         return response(200, privateReadResponse(request, request.query.get('view') === 'summary' ? publicPurseSummary(value) : value));
       }
       const roundId = uuid(request.params.roundId);
@@ -82,9 +91,8 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
       const etag = scoreRevision(request);
       const hole = request.params.holeNumber;
       if (typeof hole !== 'string' || !/^(?:[1-9]|1[0-8])$/.test(hole)) throw new ApiError(400, 'INVALID_HOLE_NUMBER');
-      const body = await readJson(request);
-      if (!isRecord(body) || Object.keys(body).length !== 1 || !isHoleScore(body.score)) throw new ApiError(400, 'INVALID_HOLE_SCORE');
-      return response(200, await api.scores.write(identity, eventId, roundId, playerId, Number(hole), body.score, etag, requestId));
+      const body = parseScoreWriteBody(await readJson(request));
+      return response(200, await api.scores.write(identity, eventId, roundId, playerId, Number(hole), body.score, etag, requestId, body.inputRevision));
     } catch (error) {
       const status = error instanceof ApiError ? error.status : 503;
       const code = error instanceof ApiError ? error.code : 'SERVICE_UNAVAILABLE';

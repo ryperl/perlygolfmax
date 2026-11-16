@@ -22,6 +22,33 @@ function fixture() {
 }
 
 describe('owner round navigation', () => {
+  it('offers explicit correction tools only after scoring and blocks them for unsaved strokes without preloading private inputs', async () => {
+    const setup = fakeSetup();
+    const scores = fakeScores();
+    const workspace = { ...fictionalWorkspace, rounds: fictionalWorkspace.rounds.map((round) => ({ ...round, scoringStarted: true })) };
+    const first = workspace.rounds[0];
+    if (!first) throw new Error('Missing fictional round');
+    vi.mocked(setup.load).mockResolvedValue(workspace);
+    const corrections = { load: vi.fn(), save: vi.fn() };
+    const props = { setup, scores, corrections, eventId: workspace.event.id, roundId: first.id, onSessionExpired: vi.fn() };
+    const view = render(<OwnerRoundScoresPage {...props} />);
+    await screen.findByRole('heading', { name: 'Round scorecard' });
+    const trigger = screen.getByRole('button', { name: 'Correct saved handicap, tees or groups' });
+    expect(trigger).toBeEnabled();
+    expect(corrections.load).not.toHaveBeenCalled();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Enter scores' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Fictional Player 1 score' }), { target: { value: '6' } });
+    expect(trigger).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Discard unsaved scores' }));
+    expect(trigger).toBeEnabled();
+    const readonly = fakeSetup();
+    vi.mocked(readonly.load).mockResolvedValue({ ...workspace, event: { ...workspace.event, role: 'viewer' } });
+    view.rerender(<OwnerRoundScoresPage {...props} setup={readonly} />);
+    await screen.findByRole('textbox', { name: 'Fictional Player 1 score' });
+    expect(screen.queryByRole('button', { name: 'Correct saved handicap, tees or groups' })).not.toBeInTheDocument();
+    expect(corrections.load).not.toHaveBeenCalled();
+  });
   it('orders saved rounds by date, retains Games across a switch, and blocks leaving unsaved game settings', async () => {
     const f = fixture();
     await screen.findByRole('heading', { name: 'Round scorecard' });

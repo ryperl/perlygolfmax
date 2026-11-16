@@ -2,6 +2,7 @@ import type { PublicPursePool, PublicPurseSummary } from '../domain/public-purse
 import { purseCurrencies } from '../domain/purse.js';
 import { isRecord, isUuid } from './events.js';
 import { boundedText } from './catalog.js';
+import { isEventReviewNotices } from './event-review.js';
 
 function keys(value: Record<string, unknown>, expected: readonly string[]): boolean {
   return Object.keys(value).length === expected.length && expected.every((key) => Object.hasOwn(value, key));
@@ -24,7 +25,9 @@ function pool(value: unknown): value is PublicPursePool {
 }
 
 export function isPublicPurseSummary(value: unknown): value is PublicPurseSummary {
-  if (!isRecord(value) || !keys(value, ['version', 'eventId', 'eventName', 'currency', 'needsReview', 'rounds', 'pools', 'players'])
+  if (!isRecord(value) || !keys(value, ['version', 'eventId', 'eventName', 'currency', 'needsReview', 'rounds', 'pools', 'players',
+    ...(Object.hasOwn(value, 'reviewNotices') ? ['reviewNotices'] : [])])
+    || value.reviewNotices !== undefined && !isEventReviewNotices(value.reviewNotices)
     || value.version !== 1 || !isUuid(value.eventId) || !boundedText(value.eventName) || typeof value.needsReview !== 'boolean'
     || value.currency !== null && !purseCurrencies.some((currency) => currency === value.currency)
     || !Array.isArray(value.rounds) || !value.rounds.every(round)
