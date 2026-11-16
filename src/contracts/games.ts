@@ -10,6 +10,7 @@ import { boundedText, isDateOnly } from './catalog.js';
 import { isEventRevision, isRecord, isUuid } from './events.js';
 import { isStrokeGameResult } from './stroke-games.js';
 import { isChurchyDefinition, isChurchyResult } from './churchy.js';
+import { isPublicScoreIdentity } from './public-access.js';
 
 function keys(value: Record<string, unknown>, required: readonly string[], optional: readonly string[] = []): boolean {
   return required.every((key) => Object.hasOwn(value, key))
@@ -110,8 +111,9 @@ export function isGameChange(value: unknown): value is GameChange {
     && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(value.recordedAt)
     && isDateOnly(value.recordedAt.slice(0, 10))
     && Number.isFinite(Date.parse(value.recordedAt))
-    && isRecord(value.recordedBy) && keys(value.recordedBy, ['tenantId', 'objectId'])
-    && isUuid(value.recordedBy.tenantId) && isUuid(value.recordedBy.objectId);
+    && (isPublicScoreIdentity(value.recordedBy) && value.recordedBy.eventId === value.eventId
+      || isRecord(value.recordedBy) && keys(value.recordedBy, ['tenantId', 'objectId'])
+      && isUuid(value.recordedBy.tenantId) && isUuid(value.recordedBy.objectId));
 }
 
 function total(holes: GamePlayerResult['holes']): number | null {

@@ -7,7 +7,7 @@ export function writablePlayerIds(round: RoundScores): readonly string[] {
   if (permissions.role === 'owner') return round.cards.map((card) => card.playerId);
   if (permissions.role === 'tester' || permissions.role === 'public') {
     const ids = round.cards.map((card) => card.playerId);
-    return !permissions.canManageGames && permissions.viewerPlayerId === undefined
+    return (!permissions.canManageGames || permissions.role === 'public' && round.quickRound === true) && permissions.viewerPlayerId === undefined
       && new Set(ids).size === ids.length
       && new Set(permissions.writePlayerIds).size === ids.length
       && permissions.writePlayerIds.length === ids.length
@@ -19,5 +19,5 @@ export function writablePlayerIds(round: RoundScores): readonly string[] {
 }
 
 export function scoreAccessKey(round: RoundScores): string {
-  return JSON.stringify([scorePermissions(round), round.eventStatus, round.groups, round.inputRevision ?? null]);
+  return JSON.stringify([scorePermissions(round), round.quickRound === true, round.eventStatus, round.groups, round.inputRevision ?? null]);
 }

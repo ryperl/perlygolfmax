@@ -32,6 +32,21 @@ const viewer = { role: 'viewer', writePlayerIds: [], canManageGames: false } as 
 afterEach(() => { vi.useRealTimers(); });
 
 describe('role-aware round score access', () => {
+  it('lets an authoritative public Quick round score and save games without owner promotion', async () => {
+    const round: RoundScores = { ...fictionalRoundScores, quickRound: true,
+      permissions: { role: 'public', canManageGames: true, writePlayerIds: fictionalRoundScores.cards.map((card) => card.playerId) } };
+    const store = mount(round);
+    await screen.findByRole('heading', { name: 'Round scorecard' });
+    expect(screen.getByRole('button', { name: 'Enter scores' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Games' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add game' }));
+    fireEvent.change(screen.getByLabelText('Game name'), { target: { value: 'Fictional public game' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save game' }));
+    await screen.findByText('Game settings saved.');
+    expect(store.client.saveGames).toHaveBeenCalledOnce();
+    expect(store.read().permissions?.role).toBe('public');
+    expect(store.client.history).not.toHaveBeenCalled();
+  });
   it('defaults to the actual assigned playing group, reads other groups, and saves all four own golfers with personal par nudges', async () => {
     const store = mount();
     await screen.findByRole('heading', { name: 'Round scorecard' });

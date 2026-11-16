@@ -7,9 +7,36 @@ import { fictionalId } from '../client/catalog.test-support';
 import type { RoundScores } from '../domain/scoring';
 import { PrivateRequestError } from '../client/private-request';
 import type { EventPage } from '../domain/events';
+import { quickSource } from '../features/quick-round/quick-round.test-support';
 
 beforeEach(() => { window.history.replaceState(null, '', '#events?choose=1'); });
 describe('public directory date order', () => {
+  it('offers creation and edit only for the authoritative Quick round directory marker without workspace scans', async () => {
+    const base = fakePublicServices();
+    const source = quickSource();
+    const services = { ...base, quickRounds: source.client };
+    vi.mocked(services.events.list).mockResolvedValue({ events: [
+      { ...fictionalPublicWorkspace.event, quickRound: true },
+      { ...fictionalPublicWorkspace.event, id: fictionalId(55), name: 'Fictional ordinary event' },
+    ] });
+    render(<PublicEventsPage services={services} />);
+    expect(await screen.findByRole('link', { name: 'New Quick round' })).toHaveAttribute('href', '#events?quick=1');
+    expect(await screen.findByRole('link', { name: `Edit Quick round · ${fictionalPublicWorkspace.event.name}` }))
+      .toHaveAttribute('href', `#events?event=${fictionalPublicWorkspace.event.id}&quick=1`);
+    expect(screen.queryByRole('link', { name: 'Edit Quick round · Fictional ordinary event' })).not.toBeInTheDocument();
+    expect(source.client.load).not.toHaveBeenCalled();
+    expect(services.setup.load).not.toHaveBeenCalled();
+  });
+  it('opens Quick setup before ordinary event details and keeps older services explicit', async () => {
+    window.history.replaceState(null, '', '#events?quick=1');
+    const services = fakePublicServices();
+    const view = render(<PublicEventsPage services={services} />);
+    expect(screen.getByRole('heading', { name: 'Quick rounds unavailable' })).toBeVisible();
+    const source = quickSource();
+    view.rerender(<PublicEventsPage services={{ ...services, quickRounds: source.client }} />);
+    expect(await screen.findByRole('heading', { name: 'Play a Quick round' })).toBeVisible();
+    expect(services.setup.load).not.toHaveBeenCalled();
+  });
   it('withholds partial cards until every page arrives, then shows saved calendar dates in global order', async () => {
     const services = fakePublicServices();
     const event = fictionalPublicWorkspace.event;

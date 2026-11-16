@@ -1,0 +1,57 @@
+import { createRoot } from 'react-dom/client';
+import type { QuickRoundClient } from '../../src/client/quick-round';
+import type { EventSetupInput, EventWorkspace } from '../../src/domain/setup';
+import type { ScoresClient } from '../../src/client/scoring';
+import { PublicEventsPage } from '../../src/app/PublicEventsPage';
+import { createPublicServices } from '../../src/client/public-events';
+import { fictionalCapturedRound, fictionalGamesRound } from './games-fixture-data';
+import '../../src/app/styles.css';
+
+const players = Array.from({ length: 5 }, (_, index) => ({
+  id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+  displayName: `Fictional golfer ${String(index + 1)}`, handicapIndexValue: index === 4 ? null : '0',
+}));
+let workspace: EventWorkspace | undefined;
+let interrupted = false;
+let setupInput: EventSetupInput | undefined;
+function confirm(eventId: string, input: EventSetupInput): EventWorkspace {
+  const round = input.rounds[0];
+  if (!round) throw new Error('Missing fictional round');
+  setupInput = input;
+  workspace = {
+    quickRound: true, publicAccess: true, canViewScores: true,
+    event: { id: eventId, name: input.name, role: 'viewer', status: 'active', etag: 'quick-v1', createdAt: '2026-01-01T00:00:00Z' },
+    location: input.location, etag: 'quick-v1', allowPerGolferTees: input.allowPerGolferTees ?? false,
+    roster: input.playerIds.map((playerId) => ({ playerId, displayName: players.find((player) => player.id === playerId)?.displayName ?? 'Fictional golfer', handicapIndexValue: '0' })),
+    rounds: [{ ...fictionalCapturedRound, ...round, scoringStarted: false,
+      players: input.playerIds.map((playerId) => ({ playerId, displayName: 'Fictional golfer', handicapIndexValue: '0' })) }],
+  };
+  return workspace;
+}
+const quick: QuickRoundClient = {
+  courses: () => Promise.resolve({ items: [{ id: fictionalCapturedRound.courseId, name: fictionalCapturedRound.course.name, latestVersionId: fictionalCapturedRound.courseVersionId }] }),
+  players: () => Promise.resolve({ items: players }),
+  version: () => Promise.resolve({ id: fictionalCapturedRound.courseVersionId, courseId: fictionalCapturedRound.courseId,
+    data: { ...fictionalCapturedRound.course, teeProfiles: [fictionalCapturedRound.teeProfile] } }),
+  create: (eventId, input) => {
+    const saved = confirm(eventId, input);
+    if (!interrupted) { interrupted = true; return Promise.reject(new Error('Fictional connection interrupted after saving.')); }
+    return Promise.resolve(saved);
+  },
+  save: (eventId, _etag, _request, input) => Promise.resolve(confirm(eventId, input)),
+  load: () => workspace ? Promise.resolve(workspace) : Promise.reject(new Error('Fictional round not created')),
+};
+const base = createPublicServices(`${window.location.origin}/__unused-public-api`);
+const scores: ScoresClient = {
+  ...base.scores,
+  load: (eventId, roundId) => Promise.resolve({ ...fictionalGamesRound, eventId, roundId, quickRound: true, churchyEnabled: true,
+    eventName: setupInput?.name ?? 'Fictional Quick round', groups: setupInput?.rounds[0]?.groups ?? [],
+    cards: players.map((player) => ({ playerId: player.id, displayName: player.displayName, etag: null, updatedAt: null,
+      holes: fictionalCapturedRound.teeProfile.holes.map((hole) => ({ number: hole.number, score: { kind: 'unplayed' } })) })),
+    setupLocked: false, lastUpdatedAt: null, games: { configuration: { eventId, roundId, etag: null, games: [] }, results: [] },
+    permissions: { role: 'public', canManageGames: true, writePlayerIds: players.map((player) => player.id) },
+  }),
+};
+const root = document.getElementById('quick-round-fixture');
+if (!root) throw new Error('Missing fictional Quick round fixture');
+createRoot(root).render(<main><PublicEventsPage services={{ ...base, scores, quickRounds: quick }} /></main>);

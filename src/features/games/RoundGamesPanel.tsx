@@ -8,6 +8,7 @@ import type { GameDraft } from './game-draft';
 import { buildGame, draftFromGame, newGameDraft, replaceGame } from './game-draft';
 import { GameResults } from './GameResults';
 import { GameSettings } from './GameSettings';
+import { canManageRoundGames } from './game-permissions';
 import './games.css';
 
 export interface RoundGamesPanelProps {
@@ -36,7 +37,7 @@ interface Editor {
 
 export function RoundGamesPanel({ round, busy, onDirtyChange, onSave, onRefresh }: RoundGamesPanelProps) {
   if (round.eventStatus === 'archived' && scorePermissions(round).role !== 'owner') return <p role="alert">Archived game results are available to the event owner only.</p>;
-  return <RoundGamesController key={JSON.stringify(scorePermissions(round))} round={round} busy={busy}
+  return <RoundGamesController key={JSON.stringify([scorePermissions(round), round.quickRound === true])} round={round} busy={busy}
     onDirtyChange={onDirtyChange} onSave={onSave} onRefresh={onRefresh} />;
 }
 
@@ -48,8 +49,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
   const dirtyCallback = useRef(onDirtyChange);
   const games = round.games?.configuration.games ?? [];
   const archived = round.eventStatus === 'archived';
-  const canManage = scorePermissions(round).role === 'owner' && scorePermissions(round).canManageGames
-    && (!editor?.latest || scorePermissions(editor.latest).role === 'owner' && scorePermissions(editor.latest).canManageGames);
+  const canManage = canManageRoundGames(round) && (!editor?.latest || canManageRoundGames(editor.latest));
   const disabled = busy || working || archived || !canManage;
 
   useEffect(() => { dirtyCallback.current = onDirtyChange; }, [onDirtyChange]);
@@ -152,7 +152,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
 
   function review() {
     if (!editor?.latest || disabled || editor.latest.eventStatus === 'archived'
-      || scorePermissions(editor.latest).role !== 'owner' || !scorePermissions(editor.latest).canManageGames) return;
+      || !canManageRoundGames(editor.latest)) return;
     setEditor({
       ...editor, base: editor.latest.games?.configuration.games ?? [],
       etag: editor.latest.games?.configuration.etag ?? null, attempt: null, conflict: false, latest: null,

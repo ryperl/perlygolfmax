@@ -1,4 +1,5 @@
 import type { AccountIdentity } from './events.js';
+import type { PublicScoreIdentity } from './public-access.js';
 import type { ChurchyGameDefinition, ChurchyResults } from './churchy.js';
 
 export type StablefordPreset = 'standard' | 'modified';
@@ -209,7 +210,7 @@ export interface GameChange {
   readonly before: readonly RoundGameDefinition[];
   readonly after: readonly RoundGameDefinition[];
   readonly recordedAt: string;
-  readonly recordedBy: AccountIdentity;
+  readonly recordedBy: AccountIdentity | PublicScoreIdentity;
 }
 
 export const defaultHandicapAllowancePercent = 95;

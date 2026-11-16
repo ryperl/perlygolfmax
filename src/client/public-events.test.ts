@@ -104,7 +104,7 @@ describe('unsigned public event transport', () => {
     await expect(fixture(scoreResult()).services.scores.save(change.eventId, change.roundId,
       change.playerId, 1, change.after, null, change.id, signal)).rejects.toThrow('outcome is uncertain');
   });
-  it('rejects all management and history requests before networking', async () => {
+  it('rejects protected organizer management/history and invalid game requests before networking', async () => {
     const f = fixture({});
     await expect(f.services.setup.save(fictionalPublicWorkspace.event.id, 'etag', fictionalSetup, signal)).rejects.toBeInstanceOf(PrivateRequestError);
     await expect(f.services.setup.refreshIndices(fictionalPublicWorkspace.event.id, fictionalId(70), 'etag', fictionalId(100), signal))
@@ -112,7 +112,7 @@ describe('unsigned public event transport', () => {
     await expect(f.services.scores.history(fictionalPublicWorkspace.event.id, fictionalId(70), fictionalId(1), signal))
       .rejects.toBeInstanceOf(PrivateRequestError);
     await expect(f.services.scores.saveGames(fictionalPublicWorkspace.event.id, fictionalId(70), [], null, fictionalId(100), signal))
-      .rejects.toBeInstanceOf(PrivateRequestError);
+      .rejects.toThrow('Check the game settings');
     expect(f.send).not.toHaveBeenCalled();
   });
   it.each([401, 403, 404])('clears unavailable public context on %i without a sign-in instruction', async (status) => {

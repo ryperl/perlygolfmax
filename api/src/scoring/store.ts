@@ -1,4 +1,5 @@
 import type { TableClient, TransactionAction } from '@azure/data-tables';
+import type { PublicScoreIdentity } from '../../../src/domain/public-access.js';
 import type { AccountIdentity } from '../../../src/domain/events.js';
 import type { ScoreActor } from '../../../src/domain/test-access.js';
 import type { EventWorkspace, RoundPlayerSnapshot, RoundSnapshot } from '../../../src/domain/setup.js';
@@ -166,9 +167,9 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     await assertEventAccessUnchanged(this.table, identity, eventId, before);
   }
 
-  private writer(state: EventAccess & { readonly round: RoundSnapshot }, playerId?: string) {
+  private writer(state: EventAccess & { readonly round: RoundSnapshot }, playerId?: string, manageGames = false) {
     if (state.publicAccess) {
-      if (!playerId) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
+      if (!playerId && !(manageGames && state.event.quickRound === true)) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
       return { etag: state.summary.etag, role: 'public' as const };
     }
     if (state.testerLink) {
@@ -228,6 +229,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     const kpProjection = await this.kpProjection(workspace.event.id, round.id, access.event.kpRoundIds);
     const kpPot = access.testerLink || !kpProjection.kp ? undefined : await readKpPot(this.table, workspace.event.id, round.id, access.event.purseConfigured);
     return {
+      ...(access.event.quickRound === true ? { quickRound: true as const } : {}),
       kpEnabled: true,
       kpCaptureIdentity: kpCaptureIdentity(capturedRound),
       ...(access.testerLink && kpProjection.kp ? { kp: { ...kpProjection.kp, decisions: [] } } : kpProjection),
@@ -248,7 +250,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       permissions: { role: access.publicAccess ? 'public' : access.testerLink ? 'tester' : owner ? 'owner' : viewerPlayerId ? 'player' : 'viewer',
         ...(viewerPlayerId ? { viewerPlayerId } : {}),
         writePlayerIds: !active ? [] : owner || access.testerLink || access.publicAccess ? round.players.map((player) => player.playerId) : ownGroup?.playerIds ?? [],
-        canManageGames: owner && active },
+        canManageGames: active && (owner || access.publicAccess === true && access.event.quickRound === true) },
       ...(competition?.kind === 'stroke-play' && competition.basis === 'net'
         ? { overallHandicaps: publishedPlayingHandicaps(round, competition.handicapAllowancePercent) } : {}),
       lastUpdatedAt: timestamps.at(-1) ?? null,
@@ -316,7 +318,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     return change;
   }
 
-  private async gameAcknowledgement(identity: AccountIdentity, change: GameChange): Promise<GameWriteResult> {
+  private async gameAcknowledgement(identity: AccountIdentity | PublicScoreIdentity, change: GameChange): Promise<GameWriteResult> {
     for (let attempt = 0; ; attempt++) {
       try {
         const round = await this.get(identity, change.eventId, change.roundId);
@@ -329,12 +331,12 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     }
   }
 
-  private async replayGames(identity: AccountIdentity, eventId: string, roundId: string,
+  private async replayGames(identity: AccountIdentity | PublicScoreIdentity, eventId: string, roundId: string,
     games: readonly RoundGameDefinition[], expectedEtag: string | null, requestId: string): Promise<GameWriteResult | undefined> {
     const change = await this.gameReceipt(eventId, roundId, requestId);
     if (!change) return undefined;
-    if (change.expectedEtag !== expectedEtag || change.recordedBy.tenantId !== identity.tenantId
-      || change.recordedBy.objectId !== identity.objectId || canonical(change.after) !== canonical(games)) {
+    if (change.expectedEtag !== expectedEtag || !sameScoreActor(change.recordedBy, identity)
+      || canonical(change.after) !== canonical(games)) {
       throw new ApiError(409, 'GAME_REQUEST_CONFLICT');
     }
     const result = await this.gameAcknowledgement(identity, change);
@@ -342,15 +344,16 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     return result;
   }
 
-  async saveGames(identity: AccountIdentity, eventId: string, roundId: string, games: readonly RoundGameDefinition[],
+  async saveGames(identity: AccountIdentity | PublicScoreIdentity, eventId: string, roundId: string, games: readonly RoundGameDefinition[],
     expectedEtag: string | null, requestId: string): Promise<GameWriteResult> {
     if (!isUuid(requestId) || !isRoundGameDefinitions(games) || games.length === 0
       || expectedEtag !== null && !isEventRevision(expectedEtag)) throw new ApiError(400, 'INVALID_GAME_SETUP');
     if (Buffer.byteLength(JSON.stringify({ games }), 'utf8') > maximumPrivateWriteBytes) {
       throw new ApiError(413, 'REQUEST_TOO_LARGE');
     }
-    const state = await this.snapshot(identity, eventId, roundId, true);
-    const grant = this.writer(state);
+    const state = await this.snapshot(identity, eventId, roundId);
+    if (state.summary.role !== 'owner' && !(state.publicAccess && state.event.quickRound === true)) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
+    const grant = this.writer(state, undefined, true);
     if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     const savedChurchy = state.games?.games.filter((game) => game.kind === 'churchy') ?? [];
     const nextChurchy = games.filter((game) => game.kind === 'churchy');
@@ -393,7 +396,8 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     if ((before?.etag ?? null) !== expectedEtag) throw new ApiError(409, 'GAMES_CHANGED');
     if (before?.games.some((saved) => !games.some((game) => game.id === saved.id))) throw new ApiError(409, 'GAME_REMOVAL_NOT_SUPPORTED');
     const recordedAt = new Date().toISOString();
-    const actor = { tenantId: identity.tenantId, objectId: identity.objectId };
+    const actor: GameChange['recordedBy'] = 'kind' in identity
+      ? { kind: 'public-score', eventId: identity.eventId } : { tenantId: identity.tenantId, objectId: identity.objectId };
     const change: GameChange = {
       id: requestId, eventId, roundId, expectedEtag, before: before?.games ?? [], after: games,
       recordedAt, recordedBy: actor,
@@ -407,9 +411,10 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     try {
       await this.table.submitTransaction([
         ['update', { partitionKey: eventId, rowKey: 'event', gameRoundIds: canonical(configuredRounds) }, 'Merge', { etag: state.summary.etag }],
-        ['update', {
-          partitionKey: eventId, rowKey: `member:${identity.objectId}`, ...actor, role: 'owner',
-        }, 'Merge', { etag: grant.etag }],
+        ...(!('kind' in identity) ? [[
+          'update', { partitionKey: eventId, rowKey: `member:${identity.objectId}`, ...actor, role: 'owner' },
+          'Merge', { etag: grant.etag },
+        ] satisfies TransactionAction] : []),
         expectedEtag === null ? ['create', entity] : ['update', entity, 'Replace', { etag: expectedEtag }],
         ['create', { partitionKey: eventId, rowKey: gameChangeKey(roundId, requestId), kind: 'game-change', roundId, content: changeContent }],
       ]);
@@ -422,9 +427,11 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     return this.gameAcknowledgement(identity, change);
   }
 
-  async receiveGames(identity: AccountIdentity, eventId: string, roundId: string, body: unknown, expected: string | null, requestId: string) {
+  async receiveGames(identity: AccountIdentity | PublicScoreIdentity,
+    eventId: string, roundId: string, body: unknown, expected: string | null, requestId: string) {
     if (!isUuid(roundId) || !isUuid(requestId)) throw new ApiError(400, 'INVALID_REQUEST_ID');
-    const state = await this.access(identity, eventId, true);
+    const state = await this.access(identity, eventId);
+    if (state.summary.role !== 'owner' && !(state.publicAccess && state.event.quickRound === true)) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
     if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     if (!await optionalRow(this.table, eventId, `round:${roundId}`)) throw new ApiError(404, 'ROUND_NOT_FOUND');
     // Parts are inactive. Check the head revision without repeatedly decoding a large configuration.
@@ -432,8 +439,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     const head = await optionalRow(this.table, eventId, gameConfigurationKey(roundId));
     if ((head ? revision(head) : null) !== expected) {
       const receipt = await this.gameReceipt(eventId, roundId, requestId);
-      if (!receipt || receipt.expectedEtag !== expected || receipt.recordedBy.tenantId !== identity.tenantId
-        || receipt.recordedBy.objectId !== identity.objectId) throw new ApiError(409, 'GAMES_CHANGED');
+      if (!receipt || receipt.expectedEtag !== expected || !sameScoreActor(receipt.recordedBy, identity)) throw new ApiError(409, 'GAMES_CHANGED');
     }
     return receivePrivateWrite(this.table, identity, eventId, `round-games:${roundId}`, expected, requestId, body);
   }

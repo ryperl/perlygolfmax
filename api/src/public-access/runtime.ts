@@ -10,6 +10,7 @@ import { ApiError } from '../errors.js';
 import type { PublicApi } from './handlers.js';
 import { TablePublicEventStore } from './store.js';
 import { churchyEnabled } from '../churchy/config.js';
+import { TableQuickRoundStore } from '../quick-round/store.js';
 
 export function createPublicApi(env: NodeJS.ProcessEnv): PublicApi {
   const endpoint = env.EVENTS_TABLE_ENDPOINT;
@@ -25,5 +26,5 @@ export function createPublicApi(env: NodeJS.ProcessEnv): PublicApi {
     new TablePlayerCatalog(table, denyCatalog), denyCatalog);
   const scores = new TableScoreStore(table, workspace, () => churchyEnabled(env));
   return { publicEvents: new TablePublicEventStore(table), limiter: new TableRequestLimiter(table),
-    workspace, scores, purse: new TablePurseStore(table, workspace, scores) };
+    workspace, scores, quickRounds: new TableQuickRoundStore(table, workspace), purse: new TablePurseStore(table, workspace, scores) };
 }

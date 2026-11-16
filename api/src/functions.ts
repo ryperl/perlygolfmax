@@ -30,6 +30,8 @@ import { createPublicHandler } from './public-access/handlers.js';
 import type { PublicAction, PublicApi } from './public-access/handlers.js';
 import { createPublicApi } from './public-access/runtime.js';
 import { createCorrectionsHandler } from './corrections/handlers.js';
+import { createQuickRoundHandler } from './quick-round/handlers.js';
+import type { QuickRoundAction } from './quick-round/handlers.js';
 
 type RuntimeApi = EventApi & CatalogSetupApi & ScoringApi & PurseApi & {
   readonly admissions: AdmissionStore;
@@ -157,6 +159,7 @@ const publicRoutes: readonly { readonly action: PublicAction; readonly route: st
   { action: 'score-hole', route: 'public/events/{id}/rounds/{roundId}/players/{playerId}/holes/{holeNumber}', method: 'PUT' },
   { action: 'event-leaderboard', route: 'public/events/{id}/leaderboard', method: 'GET' },
   { action: 'purse', route: 'public/events/{id}/purse', method: 'GET' },
+  { action: 'games', route: 'public/events/{id}/rounds/{roundId}/games', method: 'PUT' },
 ];
 let publicApi: PublicApi | undefined;
 function resolvePublicApi(): PublicApi {
@@ -165,4 +168,15 @@ function resolvePublicApi(): PublicApi {
 }
 for (const item of publicRoutes) app.http(`publicAccess-${item.action}`, {
   route: item.route, methods: [item.method], authLevel: 'anonymous', handler: createPublicHandler(resolvePublicApi, item.action),
+});
+
+const quickRoutes: readonly { readonly action: QuickRoundAction; readonly route: string; readonly methods: ('GET' | 'PUT')[] }[] = [
+  { action: 'courses', route: 'public/quick-rounds/courses', methods: ['GET'] },
+  { action: 'players', route: 'public/quick-rounds/players', methods: ['GET'] },
+  { action: 'version', route: 'public/quick-rounds/courses/{courseId}/versions/{versionId}', methods: ['GET'] },
+  { action: 'create', route: 'public/quick-rounds/{id}', methods: ['PUT'] },
+  { action: 'workspace', route: 'public/quick-rounds/{id}/workspace', methods: ['GET', 'PUT'] },
+];
+for (const item of quickRoutes) app.http(`quickRound-${item.action}`, {
+  route: item.route, methods: item.methods, authLevel: 'anonymous', handler: createQuickRoundHandler(resolvePublicApi, item.action),
 });

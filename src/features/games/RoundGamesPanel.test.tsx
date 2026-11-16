@@ -41,6 +41,21 @@ async function saved() {
 }
 
 describe('RoundGamesPanel', () => {
+  it('uses explicit public Quick capability without elevating public or player roles to owner', () => {
+    const round: RoundScores = { ...fictionalRoundScores, quickRound: true,
+      permissions: { role: 'public', writePlayerIds: [], canManageGames: true } };
+    const view = setup(round);
+    click('Add game');
+    expect(screen.getByLabelText('Game type')).toBeEnabled();
+    const ordinary = { ...round };
+    delete ordinary.quickRound;
+    view.rerender(<RoundGamesPanel {...view.props} round={ordinary} />);
+    expect(screen.queryByLabelText('Game type')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add game' })).not.toBeInTheDocument();
+    view.rerender(<RoundGamesPanel {...view.props} round={{ ...round,
+      permissions: { role: 'player', writePlayerIds: [], canManageGames: true } }} />);
+    expect(screen.queryByRole('button', { name: 'Add game' })).not.toBeInTheDocument();
+  });
   it.each(['skins', 'ball-drop'] as const)('creates %s with dedicated wire fields and retains the complete draft/request on unconfirmed save', async (kind) => {
     const view = setup();
     view.onSave.mockResolvedValue(null);

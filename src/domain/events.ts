@@ -15,6 +15,7 @@ export interface GolfEvent {
 }
 
 export interface EventSummary extends GolfEvent {
+  readonly quickRound?: true;
   readonly role: EventRole;
   readonly status: EventStatus;
   readonly etag: string;

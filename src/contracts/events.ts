@@ -34,6 +34,7 @@ export function isEventStartDate(value: unknown): value is string {
 
 export function isEventSummary(value: unknown): value is EventSummary {
   return isRecord(value) && isUuid(value.id)
+    && (value.quickRound === undefined || value.quickRound === true)
     && typeof value.name === 'string' && readEventName(value) === value.name
     && (value.startDate === undefined || isEventStartDate(value.startDate))
     && (value.endDate === undefined || isEventStartDate(value.endDate))

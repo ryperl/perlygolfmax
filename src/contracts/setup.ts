@@ -110,6 +110,7 @@ function isRoundSnapshot(value: unknown, playerIds: readonly string[]): value is
 
 export function isEventWorkspace(value: unknown): value is EventWorkspace {
   if (!isRecord(value) || !isEventSummary(value.event) || !isEventRevision(value.etag)
+    || value.quickRound !== undefined && value.quickRound !== true
     || value.eventSkinsSupported !== undefined && value.eventSkinsSupported !== true
     || value.eventSkins !== undefined && !isEventSkinsConfiguration(value.eventSkins)
     || value.testerAccess === true && (value.eventSkins !== undefined || value.eventSkinsSupported !== undefined)

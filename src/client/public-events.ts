@@ -17,8 +17,11 @@ import { isPublicLeaderboardSummary } from '../contracts/public-leaderboard';
 import { isEventSkinsDetails } from '../contracts/event-skins-details';
 import { isPlayerWinningsBreakdown } from '../contracts/winnings-breakdown';
 import { expandSkinsDetails, expandSkinsSummary } from '../contracts/compact-event-skins';
+import { createQuickRoundClient } from './quick-round';
+import type { QuickRoundClient } from './quick-round';
 
 export interface PublicServices {
+  readonly quickRounds?: QuickRoundClient;
   readonly events: Pick<EventsClient, 'list'>;
   readonly setup: SetupClient;
   readonly scores: ScoresClient;
@@ -61,9 +64,19 @@ export function createPublicServices(apiUrl: string, send: typeof fetch = fetch)
       }
       return value;
     },
-    history: denied, saveGames: denied,
+    history: denied,
+    async saveGames(eventId, roundId, games, etag, requestId, signal) {
+      const value = await rawScores.saveGames(eventId, roundId, games, etag, requestId, signal);
+      if (value.round.quickRound !== true || value.round.permissions?.role !== 'public'
+        || !value.round.permissions.canManageGames || !isPublicScoreIdentity(value.change.recordedBy)
+        || value.change.recordedBy.eventId !== eventId) {
+        throw new Error('Quick round game save is uncertain. Keep this draft and retry the same request.');
+      }
+      return value;
+    },
   };
   return {
+    quickRounds: createQuickRoundClient(apiUrl, send),
     setup, scores,
     events: {
       async list(signal, cursor, status = 'active') {

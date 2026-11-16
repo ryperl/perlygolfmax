@@ -87,6 +87,17 @@
   audits use a distinct unverified public-event actor, never a fake account or
   owner row. Preserve event/card concurrency, locks, idempotency and shared
   durable site/event request budgets.
+- New Quick rounds explicitly allow anonymous creation and collaborative
+  setup/game editing, including multiple playing groups. Gate these writes on
+  the authoritative stored Quick-round policy, never a client flag, fake owner
+  or member row. Ordinary events stay protected. Publish only allowlisted
+  course selections and player name/scalar HI/NH; full catalogs/history remain
+  private. Keep one round, shared game validation/capabilities, conditional
+  event checks, immutable retry/audit receipts, staged transports and durable
+  site/event budgets. Hide incomplete creations from discovery. Preserve
+  first-score whole-round captures and locks, drafts/confirmed saves on failures,
+  and explicit conflict review. No public catalog writes, corrections, purse/KP
+  administration, archive/delete or general organizer privileges are granted.
 - Persist only allowlisted public scoring navigation: version/event/round/group/
   hole/view. No scores, drafts, credentials or identities in that record.
   Cold/foreground resume reads fresh server data without resetting place.
@@ -166,7 +177,8 @@
   and selected-group checks. No offline dots, second write or optimistic results.
   Exact USD minor-unit shared-pot settlement is separate from earned standings:
   units `2*d_i - sum(d)/2`, planned pays/collects only, not place-based purse or
-  overall Stableford. Setup/order lock after scoring; owner-only stake edits.
+  overall Stableford. Setup/order lock after scoring; stake edits require owner
+  authority except for explicitly collaborative Quick-round game management.
   The authoritative API defaults on; `CHURCHY_GAME_ENABLED=false` kills all
   Churchy surfaces and specific mutations without erasing saved definitions,
   specials or audits, or blocking ordinary score/other game edits. UI missing

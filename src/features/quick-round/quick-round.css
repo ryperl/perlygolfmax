@@ -1,0 +1,51 @@
+.quick-round {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.quick-round fieldset,
+.quick-group,
+.quick-player,
+.quick-golfer-options {
+  display: grid;
+  gap: .75rem;
+  min-width: 0;
+}
+
+.quick-round label {
+  display: grid;
+  gap: .35rem;
+  min-width: 0;
+}
+
+.quick-round select,
+.quick-round input:not([type="checkbox"]) {
+  width: 100%;
+  min-width: 0;
+}
+
+.quick-golfer-options label,
+.quick-round label:has(> input[type="checkbox"]) {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem;
+}
+
+.quick-group {
+  padding: .75rem;
+  border-inline-start: .25rem solid var(--cp-round-line);
+  background: var(--cp-round-surface);
+}
+
+.quick-round h4,
+.quick-player p {
+  margin: 0;
+}

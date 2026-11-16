@@ -6,7 +6,7 @@ import { EventChangedError } from '../../client/events';
 import type { GameWriteResult, RoundScores } from '../../domain/scoring';
 import type { RoundGameDefinition } from '../../domain/games';
 import type { ScoreLocation, ScoreView } from '../../domain/score-location';
-import { RoundGamesPanel } from '../games';
+import { RoundGamesPanel, canManageRoundGames } from '../games';
 import { RoundLeaderboard } from '../leaderboard';
 import { sameHoleScore, scorePermissions } from '../../domain/scoring';
 import { scoreAccessKey, writablePlayerIds } from './score-access';
@@ -199,11 +199,10 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     return value;
   }
   async function saveGameSettings(games: readonly RoundGameDefinition[], etag: string | null, requestId: string): Promise<GameWriteResult | null> {
-    if (!round || round.eventStatus !== 'active' || scorePermissions(round).role !== 'owner' || !scorePermissions(round).canManageGames) throw new EventChangedError('This round is read-only. Refresh before changing games.');
+    if (!round || round.eventStatus !== 'active' || !canManageRoundGames(round)) throw new EventChangedError('This round is read-only. Refresh before changing games.');
     return run(async (signal) => {
       const current = currentRound();
-      if (!current || current.eventStatus !== 'active' || scorePermissions(current).role !== 'owner'
-        || !scorePermissions(current).canManageGames) throw new EventChangedError('Game permissions changed. Refresh before changing games.');
+      if (!current || current.eventStatus !== 'active' || !canManageRoundGames(current)) throw new EventChangedError('Game permissions changed. Refresh before changing games.');
       const result = await client.saveGames(eventId, roundId, games, etag, requestId, signal);
       signal.throwIfAborted();
       accept(result.round);

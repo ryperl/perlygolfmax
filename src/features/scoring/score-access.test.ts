@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fictionalRoundScores } from '../../client/scoring.test-support';
 import type { ScorePermissions } from '../../domain/scoring';
-import { writablePlayerIds } from './score-access';
+import { scoreAccessKey, writablePlayerIds } from './score-access';
 
 const ids = fictionalRoundScores.cards.map((card) => card.playerId);
 const permissions: ScorePermissions = { role: 'tester', writePlayerIds: ids, canManageGames: false };
@@ -13,6 +13,14 @@ describe('tester score permission targets', () => {
 
   describe('public score permission targets', () => {
     const publicPermissions: ScorePermissions = { ...permissions, role: 'public' };
+    it('allows explicit public Quick game capability without disabling scoring or granting tester management', () => {
+      const round = { ...fictionalRoundScores, quickRound: true as const,
+        permissions: { ...publicPermissions, canManageGames: true } };
+      expect(writablePlayerIds(round)).toEqual(ids);
+      expect(writablePlayerIds({ ...round, permissions: { ...round.permissions, role: 'tester' } })).toEqual([]);
+      expect(writablePlayerIds({ ...round, permissions: { ...round.permissions, writePlayerIds: ids.slice(1) } })).toEqual([]);
+      expect(scoreAccessKey(round)).not.toBe(scoreAccessKey({ ...fictionalRoundScores, permissions: round.permissions }));
+    });
     it('allows exactly the published active card set without management authority', () => {
       expect(writablePlayerIds({ ...fictionalRoundScores, permissions: publicPermissions })).toEqual(ids);
       expect(writablePlayerIds({ ...fictionalRoundScores, permissions: publicPermissions, eventStatus: 'archived' })).toEqual([]);

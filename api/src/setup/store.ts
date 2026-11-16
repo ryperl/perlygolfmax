@@ -38,6 +38,7 @@ import { isRoundGameDefinitions } from '../../../src/contracts/games.js';
 import { gameTeamsMatchRoster, isTeamGameDefinition } from '../../../src/domain/games.js';
 import type { RoundGameDefinition } from '../../../src/domain/games.js';
 import { isHandicapIndex } from '../../../src/contracts/catalog.js';
+import type { PublicScoreIdentity } from '../../../src/domain/public-access.js';
 
 interface WorkspaceHeader {
   readonly eventSkins?: EventSkinsConfiguration;
@@ -214,6 +215,7 @@ export class TableWorkspaceStore {
     // Explicit allowlists keep private profiles, observations and audits out of viewer projections.
     return {
       event: before.summary, location: workspace.location, etag: before.summary.etag,
+      ...(before.event.quickRound === true ? { quickRound: true as const } : {}),
       ...(!before.testerLink ? { eventSkinsSupported: true as const,
         ...(workspace.eventSkins ? { eventSkins: workspace.eventSkins } : {}) } : {}),
       ...(before.summary.role === 'owner' || before.admittedPlayer || before.publicAccess
@@ -560,10 +562,17 @@ export class TableWorkspaceStore {
     return receivePrivateWrite(this.table, identity, id, 'workspace', etag, null, body);
   }
 
-  async save(identity: AccountIdentity, id: string, input: EventSetupInput, etag: string, publication?: StagedPublication): Promise<EventWorkspace> {
-    const access = await this.ownerAccess(identity, id);
+  async save(identity: AccountIdentity | PublicScoreIdentity,
+    id: string, input: EventSetupInput, etag: string, publication?: StagedPublication): Promise<EventWorkspace> {
+    const publicQuick = 'kind' in identity;
+    const access = await this.access(identity, id);
+    if (publicQuick) {
+      if (!access.publicAccess || access.event.quickRound !== true || !publication) throw new ApiError(403, 'QUICK_ROUND_MANAGEMENT_FORBIDDEN');
+    } else {
+      if (access.summary.role !== 'owner' || !access.member) throw new ApiError(403, 'EVENT_MANAGEMENT_FORBIDDEN');
+      requireManager(identity, this.allowed);
+    }
     if (access.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
-    requireManager(identity, this.allowed);
     const receiptKey = publication ? `setup-receipt:${publication.id}` : undefined;
     const receipt = publication ? canonical({ identity, etag, sha256: publication.sha256, input }) : undefined;
     if (receiptKey) {
@@ -575,6 +584,8 @@ export class TableWorkspaceStore {
     }
     if (access.summary.etag !== etag) throw new ApiError(409, 'EVENT_CHANGED');
     if (!isEventSetupInput(input)) throw new ApiError(400, 'INVALID_EVENT_SETUP');
+    if (publicQuick && (input.rounds.length !== 1 || input.overallCompetition !== undefined
+      && input.overallCompetition !== null)) throw new ApiError(400, 'INVALID_QUICK_ROUND_SETUP');
     const effectiveStartDate = input.startDate ?? access.summary.startDate;
     const effectiveEndDate = input.endDate ?? access.summary.endDate;
     if (effectiveStartDate && effectiveEndDate && effectiveEndDate < effectiveStartDate) throw new ApiError(400, 'INVALID_EVENT_DATE_RANGE');
@@ -617,7 +628,7 @@ export class TableWorkspaceStore {
         throw new ApiError(409, 'ROUND_SCORING_STARTED');
       }
     }
-    const profiles = await this.profiles(identity, input.playerIds);
+    const profiles = publicQuick ? await currentRosterProfiles(this.table, input.playerIds) : await this.profiles(identity, input.playerIds);
     const previousRoster = new Map(previous.roster.map((player) => [player.playerId, player]));
     const roster = profiles.map((player) => ({
       playerId: player.id,
@@ -637,7 +648,8 @@ export class TableWorkspaceStore {
         rounds.push({ ...capture, ...(teeTime === undefined ? {} : { teeTime }), ...(startDate === undefined ? {} : { startDate }) });
         continue;
       }
-      const version = await this.courses.getVersion(identity, round.courseId, round.courseVersionId);
+      const version = publicQuick ? await this.courses.readCapturedVersion(round.courseId, round.courseVersionId)
+        : await this.courses.getVersion(identity, round.courseId, round.courseVersionId);
       const teeProfile = version.data.teeProfiles.find((tee) => tee.id === round.teeProfileId);
       if (!teeProfile) throw new ApiError(400, 'TEE_PROFILE_NOT_FOUND');
       if (round.groups.some((group) => group.startingHole !== undefined
@@ -689,11 +701,13 @@ export class TableWorkspaceStore {
     for (const round of rounds) roundContent.set(round.id, await stagePrivateContent(this.table, id, `round:${round.id}`, identity, canonical(round)));
     const actions: TransactionAction[] = [
       ['update', { partitionKey: id, rowKey: 'event', name: input.name,
+        ...(publicQuick ? { quickRoundReady: true } : {}),
         ...(input.startDate === undefined ? {} : { startDate: input.startDate }),
         ...(input.endDate === undefined ? {} : { endDate: input.endDate }) }, 'Merge', { etag }],
-      ['update', {
-        partitionKey: id, rowKey: `member:${identity.objectId}`, tenantId: identity.tenantId, objectId: identity.objectId, role: 'owner',
-      }, 'Merge', { etag: revision(access.member) }],
+      ...(!('kind' in identity) && access.member ? [[
+        'update', { partitionKey: id, rowKey: `member:${identity.objectId}`, tenantId: identity.tenantId, objectId: identity.objectId, role: 'owner' },
+        'Merge', { etag: revision(access.member) },
+      ] satisfies TransactionAction] : []),
       ['upsert', { partitionKey: id, rowKey: 'workspace', content: headerContent }, 'Replace'],
       ...rounds.map((round): TransactionAction => ['upsert', {
         partitionKey: id, rowKey: `round:${round.id}`, content: roundContent.get(round.id),
@@ -701,6 +715,13 @@ export class TableWorkspaceStore {
     ];
     if (receiptKey && receipt) actions.push(['create', { partitionKey: id, rowKey: receiptKey,
       content: await stagePrivateContent(this.table, id, receiptKey, identity, receipt) }]);
+    if (publicQuick && publication) {
+      const key = `quick-setup-change:${publication.id}`;
+      const audit = canonical({ eventId: id, requestId: publication.id, expectedEtag: etag,
+        recordedAt: new Date().toISOString(), recordedBy: identity, input });
+      actions.push(['create', { partitionKey: id, rowKey: key, kind: 'quick-setup-change',
+        content: await stagePrivateContent(this.table, id, key, identity, audit) }]);
+    }
     try { await transaction(this.table, actions, 'EVENT_CHANGED'); }
     catch (error) {
       if (receiptKey) {

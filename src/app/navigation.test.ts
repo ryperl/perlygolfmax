@@ -2,6 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { eventTabHref, isOrganizerRoute, readEventRoute, readPage, readPreviewTab, readSelectedEvent } from './navigation';
 
 describe('readPage', () => {
+  it('routes public Quick setup ahead of event details and rejects ambiguous or invalid scope', () => {
+    const event = '00000000-0000-4000-8000-000000000050';
+    expect(readEventRoute('#events?quick=1')).toBe('quick');
+    expect(readEventRoute(`#events?event=${event}&quick=1`)).toBe(`quick:${event}`);
+    expect(isOrganizerRoute(`#events?event=${event}&quick=1`)).toBe(false);
+    for (const hash of ['#events?quick=2', '#events?quick=1&quick=1', '#events?quick=1&event=bad',
+      `#events?quick=1&event=${event}&event=${event}`, `#events?quick=1&event=${event}&round=${event}`]) {
+      expect(readEventRoute(hash)).toBe('invalid-quick');
+    }
+    expect(readEventRoute(`#events?event=${event}`)).toBe(`event:${event}`);
+  });
   it('keeps event skins on an explicit event route, separate from round cursors and organizer authority', () => {
     const event = '00000000-0000-4000-8000-000000000050';
     const publicRoute = `#event-skins?event=${event}`;

@@ -107,6 +107,9 @@ describe('Stableford configuration runtime contracts', () => {
   it('validates immutable audit before/after snapshots, expected revisions, actor and ISO instant', () => {
     const before = structuredClone(change);
     expect(isGameChange(change)).toBe(true);
+    expect(isGameChange({ ...change, recordedBy: { kind: 'public-score', eventId: change.eventId } })).toBe(true);
+    expect(isGameChange({ ...change, recordedBy: { kind: 'public-score', eventId: id(999) } })).toBe(false);
+    expect(isGameChange({ ...change, recordedBy: { kind: 'public-score', eventId: change.eventId, objectId: id(50) } })).toBe(false);
     expect(change).toEqual(before);
     expect(isGameChange({ ...change, before: [game()], expectedEtag: 'fictional-v1' })).toBe(true);
     expect(isGameChange({ ...change, recordedAt: '2026-01-01T10:00:00.123+01:00' })).toBe(true);

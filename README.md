@@ -108,8 +108,9 @@ The repository contains no real bookings, invitations, scores, handicap indexes,
 or identities. Saved events live separately in the configured environment.
 **Active events are public:** any visitor can view rosters, scores and winnings
 and edit scores. Do not put information in active events that should stay private.
-Only organizer management, raw index observations, audit identities and archives
-remain protected; anonymous score edits cannot be attributed to a verified person.
+Ordinary event management, raw index observations, audit identities and archives
+remain protected. Public Quick rounds additionally allow shared setup and game
+editing; anonymous changes cannot be attributed to a verified person.
 Never commit real trip data, contact details, account identifiers, credentials,
 corporate feed configuration, or secrets to this public repository.
 
@@ -272,9 +273,48 @@ The fictional Preview remains separate from saved scoring and results.
 
 ### Public access and legacy links
 
-Golfers use the ordinary site and public event/round URLs. Course/player catalogs,
-event setup, round/group/tee/game configuration, purse changes and audit history
-still require organizer authority. Archives remain owner-only.
+Golfers use the ordinary site and public event/round URLs. Full course/player
+catalogs, ordinary event setup and game configuration, purse changes and audit
+history still require organizer authority. Archives remain owner-only.
+
+### Public Quick rounds
+
+**Quick round** on Events creates one saved round without sign-in. Choose a
+published saved course/version and tees, select saved players and explicitly
+assign them to one or more playing groups of up to four. Each group can have its
+own starting hole. Optional per-golfer tees must use compatible saved layouts.
+The selection directory publishes course names/versions and player names/current
+scalar HI or NH, never private profiles, observation provenance or histories.
+Whole-directory search waits for all bounded pages; interrupted reads retain
+their cursor and loaded progress.
+
+Quick rounds are explicitly collaborative: **any visitor can edit their setup
+and games**. The public directory identifies them for editing; ordinary saved
+events do not acquire this policy. Expanded setup retains the same draft,
+confirmed event and request identities rather than creating another event.
+Save setup before configuring games through the same shared round-game editor
+and authoritative API capabilities used by ordinary rounds. Scores only is
+valid. Stableford, Skins, Ball Drop and enabled Churchy use their existing rules,
+team validation and settings; new supported game types use the shared path.
+Competition teams are separate from playing groups.
+Churchy's explicit planned cents-per-dot setting is part of shared game editing,
+not permission to manage purse pools or make payments.
+
+Setup, game saves and confirming reads are separate online operations. If a
+later operation fails, the confirmed event remains saved and unconfirmed work
+retains its retry identity in memory. Concurrent changes require explicit
+refresh/review; scoring navigation does not imply a failed game save succeeded.
+No drafts or scores are stored offline. First saved scoring still freezes
+**every golfer's** round handicap inputs and locks setup, even after clearing
+scores. Later global HI edits affect only unstarted rounds.
+
+Public Quick round management does not grant catalog writes, private audits,
+handicap corrections, purse management, KP administration, archives or deletion.
+Public discovery excludes interrupted creations until setup publishes. Existing
+bounded staged transports, event/card revisions, idempotency receipts and durable
+site/event quotas remain enforced. The server persists an explicit Quick-round
+policy so future account-based restrictions can change without replacing the
+scoring model; no owner account or membership is fabricated.
 
 Previously issued tester/admission links open their public event (or its saved
 scoring position), remove the secret fragment and do not request account creation.
@@ -406,7 +446,8 @@ Handicap strokes repeat through stroke-index order; plus handicaps give strokes
 back starting with the highest stroke index. This is game scoring, not WHS
 score posting or automatic adjusted-gross/net-double-bogey processing.
 
-Game settings are owner-only, online, conditional and idempotent, with
+Ordinary event game settings are owner-only; Quick rounds explicitly allow
+public game management. Both are online, conditional and idempotent, with
 before/after audit records. Active-event games can be added or adjusted on
 existing stroke cards; archived events remain read-only. Conflicts preserve
 the draft and require explicit refresh/review. Saved-game removal and a

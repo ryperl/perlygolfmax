@@ -87,6 +87,7 @@ export interface RoundSnapshot {
 }
 
 export interface EventWorkspace {
+  readonly quickRound?: true;
   readonly eventSkinsSupported?: true;
   readonly eventSkins?: EventSkinsConfiguration;
   readonly event: EventSummary;

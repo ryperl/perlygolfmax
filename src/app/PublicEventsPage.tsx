@@ -12,6 +12,7 @@ import type { ScoreLocation } from '../domain/score-location';
 import { groupStartingHole } from '../domain/round-navigation';
 import { OwnerScoresView } from '../features/scoring';
 import { roundToneFor } from '../features/round-theme';
+import { QuickRoundView } from '../features/quick-round';
 import { eventTabHref, isEventTab, readEventRoute } from './navigation';
 import type { EventTab } from './navigation';
 import { SavedEventPage } from './SavedEventPage';
@@ -49,6 +50,9 @@ export function PublicEventsPage({ services: override }: { readonly services?: P
     <p>{configured.error ?? 'Public scoring is not connected in this build. The fictional Preview remains separate.'}</p></section>;
   if (unavailable?.route === current) return <section><p role="alert">{unavailable.message}</p><a href="#events?choose=1">Choose an active event</a></section>;
   const [kind, eventId, roundId] = current.split(':');
+  if (kind === 'quick') return services.quickRounds
+    ? <QuickRoundView key={current} client={services.quickRounds} scores={services.scores} eventId={eventId} />
+    : <section><h1>Quick rounds unavailable</h1><p>This service does not support public Quick round setup.</p><a href="#events?choose=1">Choose an event</a></section>;
   if (kind === 'score' && eventId && roundId) return <PublicRoundPage key={`${eventId}:${roundId}`}
     services={services} eventId={eventId} roundId={roundId} onUnavailable={ended} />;
   if ((kind === 'leaderboard' || kind === 'event-skins') && eventId) return <PublicLeaderboardPage eventSkins={kind === 'event-skins'} client={services.leaderboard} eventId={eventId} onSessionExpired={ended} />;
@@ -83,6 +87,7 @@ function PublicEventDirectory({ services, selection }: { readonly services: Publ
   }, [services, generation]);
   return <section><p className="eyebrow">Golf scoreboard</p><h1>{selection ? 'Choose an event' : 'Events'}</h1>
     <p>Open an event to enter scores, view standings and see winnings.</p>
+    {services.quickRounds && <a className="button-link" href="#events?quick=1">New Quick round</a>}
     <button disabled={!page && !error} onClick={() => { progress.current = undefined; setAttempt((value) => value + 1); }}>Refresh events</button>
     {!page && !error && <p role="status">Loading events…</p>}
     {error && <><p role="alert">{error}</p><button onClick={() => { setAttempt((value) => value + 1); }}>Try again</button></>}
@@ -91,6 +96,7 @@ function PublicEventDirectory({ services, selection }: { readonly services: Publ
       <h2>{event.name}</h2>
       {event.startDate && <p>Start date: <time dateTime={event.startDate}>{eventStartDateLabel(event.startDate)}</time></p>}
       <a href={eventTabHref(selection ?? 'overview', event.id)}>Open {event.name}</a>
+      {event.quickRound === true && services.quickRounds && <a href={`#events?event=${event.id}&quick=1`}>Edit Quick round · {event.name}</a>}
     </li>)}</ul>}
   </section>;
 }
@@ -140,6 +146,8 @@ function PublicRoundPage({ services, eventId, roundId, onUnavailable }: {
     {error && <p role="alert">{error}</p>}
     {!workspace && !error && <p role="status">Loading saved round…</p>}
     {workspace && <>
+      {workspace.quickRound && services.quickRounds && <a aria-disabled={blocked} href={blocked ? undefined : `#events?event=${eventId}&quick=1`}
+        onClick={(event) => { if (blocked) event.preventDefault(); }}>Edit Quick round setup & games</a>}
       <OwnerScoresView client={services.scores} eventId={eventId} roundId={roundId}
         roundTone={roundToneFor(roundId, workspace.rounds)}
         onNavigationBlockedChange={setBlocked}

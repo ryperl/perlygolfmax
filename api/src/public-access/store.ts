@@ -19,6 +19,7 @@ export class TablePublicEventStore {
     const active: EventAccess[] = [];
     for (const row of result.rows) {
       if (!isUuid(row.partitionKey)) throw new ApiError(503, 'INVALID_STORED_EVENT');
+      if (row.quickRound === true && row.quickRoundReady !== true) continue;
       try {
         active.push(await readPublicAccess(this.table, { kind: 'public-score', eventId: row.partitionKey }, row.partitionKey));
       } catch (error) {

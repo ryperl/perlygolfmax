@@ -66,6 +66,11 @@ export function readEventRoute(hash: string): string {
   const query = new URLSearchParams(hash.split('?')[1] ?? '');
   const event = query.get('event');
   const round = query.get('round');
+  if (page === 'events' && query.has('quick')) {
+    if (query.getAll('quick').length !== 1 || query.get('quick') !== '1' || round !== null
+      || query.getAll('event').length > 1 || event !== null && !isUuid(event)) return 'invalid-quick';
+    return event ? `quick:${event}` : 'quick';
+  }
   if (round !== null) return (page === 'events' || page === 'organizer') && query.getAll('event').length === 1 && query.getAll('round').length === 1
     && event && isUuid(event) && isUuid(round) ? `score:${event}:${round}` : 'invalid-score';
   if (event !== null) {

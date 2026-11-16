@@ -53,6 +53,7 @@ export interface PlayerCourseHandicap {
 }
 
 export interface RoundScores {
+  readonly quickRound?: true;
   readonly kpEnabled?: boolean;
   readonly kpCaptureIdentity?: string;
   readonly kp?: KpConfiguration;

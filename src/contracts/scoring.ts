@@ -95,6 +95,7 @@ export function isScorecard(value: unknown): value is Scorecard {
 }
 
 export function isRoundScores(value: unknown): value is RoundScores {
+  if (isRecord(value) && value.quickRound !== undefined && value.quickRound !== true) return false;
   if (isRecord(value) && (value.kpEnabled !== undefined && typeof value.kpEnabled !== 'boolean'
     || value.kpCaptureIdentity !== undefined && (typeof value.kpCaptureIdentity !== 'string' || value.kpCaptureIdentity.length === 0)
     || value.kp !== undefined && !isKpConfiguration(value.kp))) return false;
@@ -152,7 +153,8 @@ export function isRoundScores(value: unknown): value is RoundScores {
       if (permission.viewerPlayerId !== undefined || permission.canManageGames !== (value.eventStatus === 'active')
         || permission.writePlayerIds.length !== (value.eventStatus === 'active' ? cards.length : 0)) return false;
     } else if (permission.role === 'tester' || permission.role === 'public') {
-      if (value.eventStatus !== 'active' || permission.viewerPlayerId !== undefined || permission.canManageGames
+      if (value.eventStatus !== 'active' || permission.viewerPlayerId !== undefined
+        || permission.canManageGames && !(permission.role === 'public' && value.quickRound === true)
         || permission.writePlayerIds.length !== cards.length) return false;
     } else if (permission.role === 'viewer') {
       if (permission.viewerPlayerId !== undefined || permission.writePlayerIds.length || permission.canManageGames) return false;

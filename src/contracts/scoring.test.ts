@@ -30,6 +30,15 @@ const change: ScoreChange = {
 };
 
 describe('owner gross scoring network contracts', () => {
+  it('accepts public game management only with explicit Quick-round capability, never tester promotion', () => {
+    const saved = round();
+    const permission = { role: 'public', writePlayerIds: saved.cards.map((card) => card.playerId), canManageGames: true };
+    expect(isRoundScores({ ...saved, quickRound: true, permissions: permission })).toBe(true);
+    expect(isRoundScores({ ...saved, quickRound: true, permissions: { ...permission, canManageGames: false } })).toBe(true);
+    expect(isRoundScores({ ...saved, permissions: permission })).toBe(false);
+    expect(isRoundScores({ ...saved, quickRound: 'true', permissions: permission })).toBe(false);
+    expect(isRoundScores({ ...saved, quickRound: true, permissions: { ...permission, role: 'tester' } })).toBe(false);
+  });
   it('validates complete unique course handicaps, unavailable reasons and legacy omission', () => {
     const saved = round();
     const courseHandicaps = saved.cards.map((card, index) => ({

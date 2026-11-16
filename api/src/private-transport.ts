@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { HttpRequest } from '@azure/functions';
 import type { TableClient } from '@azure/data-tables';
-import type { AccountIdentity } from '../../src/domain/events.js';
+import type { ScoreActor } from '../../src/domain/test-access.js';
 import {
   isPrivateUpload, isPrivateUploadPart, maximumPrivateValueBytes, privateReadPartCharacters, privateWritePartBytes,
 } from '../../src/contracts/private-values.js';
@@ -21,7 +21,7 @@ function hash(value: string | Buffer): string {
 }
 
 /** Call only after checking current event/grant authority. Each request still consumes its ordinary write quota. */
-export async function receivePrivateWrite(table: TableClient, identity: AccountIdentity, eventId: string, target: string,
+export async function receivePrivateWrite(table: TableClient, identity: ScoreActor, eventId: string, target: string,
   expected: string | null, requestId: string | null, body: unknown): Promise<
     { readonly kind: 'value'; readonly value: unknown; readonly publication?: StagedPublication }
     | { readonly kind: 'part'; readonly id: string; readonly index: number }

@@ -140,13 +140,14 @@ algorithm, fixed issuer/JWKS, API audience, lifetime, tenant, delegated scope,
 SPA client and user object ID. User identity is `(tid, oid)`, never display name,
 email, an ID token or a client-supplied owner ID. CORS is not authentication.
 
-Only the explicitly bootstrapped creator initially creates events. The creator
+Only the explicitly bootstrapped creator creates ordinary organizer events. The creator
 can later appoint owners of specific events; those appointments must not grant
 global creation or directory administration. Event membership is authoritative
 for every private object operation, not a stale listing index or hidden button.
 Public active-event reads and score writes are separately authorized by current
 event state, not membership. Owner appointment remains separate; public actors
-never acquire management authority.
+never acquire owner membership. New Quick rounds separately allow anonymous
+creation and collaborative setup/game editing, as described below.
 
 ### Public scoring and short-visit recovery
 
@@ -155,10 +156,13 @@ and purse/winnings. Organizer tools live separately at `#organizer`; existing
 protected setup/catalog routes remain private. Public startup does not initialize
 identity or acquire a token. API URL configuration alone is sufficient for it.
 
-The `/api/public` namespace exposes only active event discovery, workspace,
+The `/api/public` namespace exposes active event discovery, workspace,
 round scores, per-player hole writes, overall leaderboard and purse reads.
-There are no public catalog, setup/game/purse/access mutation, archive or audit
-history routes. Private management endpoints remain JWT-only. Public projections
+Its Quick-round namespace additionally exposes allowlisted selection reads and
+Quick-only creation/setup writes; public round-game writes require the stored
+Quick-round policy. There are no public global catalog writes, purse/access
+mutations, archive or audit history routes. Private endpoints remain JWT-only.
+Public projections
 exclude raw Handicap Index observations and audit identities. The approved scalar
 display projection includes current roster HI and captured round HI (or explicit
 null for NH), without observation IDs, sources, dates or histories. Legacy private
@@ -176,9 +180,43 @@ authentication, tamper prevention or global ingress protection.
 
 Anyone on the internet can intentionally or accidentally change an active
 score. This exposure was explicitly approved, including public prize amounts.
-Archived events, organizer-only catalogs/configuration and audit records remain
+Archived events, full catalogs, ordinary organizer configuration and audit
+records remain
 protected. A legacy link's expiry/revocation cannot prevent use of the separate
 public website.
+
+### Collaborative Quick-round policy
+
+Quick-round creation reserves a UUID with an immutable input digest, then
+conditionally publishes setup and a public-event audit receipt. Incomplete
+creations are excluded from discovery until that setup transaction sets readiness.
+An interrupted request retries the same UUID/payload, never another event.
+Setup edits bind request ID, payload and expected event revision in immutable
+receipts; conflicting payload reuse fails. Game saves retain the existing
+revision/idempotency and event checks with a public-event audit actor, without
+creating an owner/member row. Both setup and game publication conditionally update
+the authoritative event row, preventing a concurrent archive or first-score
+transaction from being bypassed.
+
+Only events whose server-stored `quickRound` is exactly `true` allow public
+management. The field is assigned by the dedicated creation endpoint, not
+accepted through ordinary setup. Quick setup requires exactly one round, with
+multiple explicit groups supported. It cannot configure an overall competition.
+Shared game editing uses existing definitions/validation and the authoritative
+Churchy capability, including its explicit planned per-dot game stake (not purse
+management or payments). Public Quick projections still have role `viewer`/`public`,
+never a fake owner. Ordinary event writes, global catalog mutations, raw
+observations/history, audited corrections, purse management, KP administration,
+archive/restore and deletion do not become public.
+
+Selection reads are separately allowlisted: course ID/name/published version,
+immutable course layout/tees, and player ID/name/scalar current HI or NH.
+They never return catalog revisions, imports/provenance, private observations
+or audit identities. Public writes consume shared durable site and event
+budgets; selection pages consume shared read budgets. Limits are not protection
+against all intentional vandalism or denial of service. Publicly editable setup
+and games are an explicit initial product policy to revisit before broader
+service adoption, not an authentication substitute.
 
 For eighteen short course visits, only version/event ID/round ID/group/hole/view
 are persisted under `perly-golf-max:last-score-location:v1`. Cold root/home-screen
@@ -873,7 +911,7 @@ are separate trust boundaries.
 | Threat | Current control |
 |--------|-----------------|
 | Forged/wrong API token | Fixed JWT metadata/claims; negative tests |
-| Management escalation | Owner grants; no public management writes |
+| Management escalation | Owner grants; explicit Quick-only public setup/games |
 | Anonymous score changes | Public edits allowed; unverified actor audit |
 | Lost response/replay | UUID idempotency; atomic metadata/owner writes |
 | Oversized writes/reads | Streaming body cap; bounded discovery pages |
