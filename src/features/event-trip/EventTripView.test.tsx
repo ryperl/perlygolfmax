@@ -149,7 +149,7 @@ describe('saved event overview', () => {
     if (!round) throw new Error('Missing fictional round.');
     view.rerender(<EventTripView workspace={{ ...current, rounds: [{ ...round,
       groups: round.groups.map((group) => ({ ...group, startingHole: 7 })) }] }} view="rounds" />);
-    expect(screen.getAllByText('Starting hole: 7')).toHaveLength(round.groups.length);
+    expect(screen.getAllByLabelText('Starting hole: 7')).toHaveLength(round.groups.length);
   });
   it.each(['overview', 'rounds', 'group'] as const)('lets other-event viewers browse %s without inventing a playing group or access management', (view) => {
     const enabled = { ...workspace, canViewScores: true, event: { ...workspace.event, role: 'viewer' as const } };
@@ -231,7 +231,7 @@ describe('saved event rounds', () => {
       .toEqual(['Group 3', 'Group 2', 'Not assigned to a group']);
     const group = first.getByRole('heading', { name: 'Group 3' }).closest('li');
     if (!group) throw new Error('Missing fictional group.');
-    expect(within(group).getAllByRole('listitem').map((item) => item.querySelector('.event-trip-player-name')?.textContent))
+    expect(within(group).getAllByRole('rowheader').map((item) => item.textContent))
       .toEqual(['Fictional Player 3', 'Fictional Player 1']);
     expect(first.getByText('No players assigned.')).toBeVisible();
     const closing = roundCard(secondRound.name);
@@ -268,7 +268,7 @@ describe('saved event group', () => {
     expect(within(roster).getByLabelText('Current Handicap Index: 29.2')).toHaveTextContent('HI 29.2');
     expect(within(roster).getAllByLabelText('No Handicap Index')).toHaveLength(3);
     const captured = roundCard(openingRound.name);
-    expect(captured.getByLabelText('Course handicap: 8')).toHaveTextContent('CH 8');
+    expect(captured.getByLabelText('Course handicap: 8')).toHaveTextContent(/^8$/);
     expect(captured.queryByLabelText('Current Handicap Index: 29.2')).not.toBeInTheDocument();
     expect(captured.getAllByLabelText('No captured Handicap Index')).toHaveLength(3);
   });
@@ -290,12 +290,12 @@ describe('saved event group', () => {
     ] };
     render(<EventTripView workspace={current} view="group" />);
     const opening = roundCard(openingRound.name);
-    expect(opening.getByLabelText('Course handicap: 6')).toHaveTextContent('CH 6');
-    expect(opening.getByLabelText('Course handicap: +1')).toHaveTextContent('CH +1');
-    expect(opening.getByLabelText('Course handicap: 0')).toHaveTextContent('CH 0');
+    expect(opening.getByLabelText('Course handicap: 6')).toHaveTextContent(/^6$/);
+    expect(opening.getByLabelText('Course handicap: +1')).toHaveTextContent(/^\+1$/);
+    expect(opening.getByLabelText('Course handicap: 0')).toHaveTextContent(/^0$/);
     expect(opening.getByRole('heading', { name: 'Not assigned to a group' })).toBeVisible();
     expect(opening.getByLabelText('No captured Handicap Index')).toHaveTextContent('NH');
-    expect(roundCard('Fictional later course').getByLabelText('Course handicap: 7')).toHaveTextContent('CH 7');
+    expect(roundCard('Fictional later course').getByLabelText('Course handicap: 7')).toHaveTextContent(/^7$/);
   });
   it('shows unavailable CH for missing ratings or legacy index projections rather than inferring scratch or NH', () => {
     const current = { ...fictionalWorkspace, rounds: [{ ...openingRound,
@@ -319,7 +319,7 @@ describe('saved event group', () => {
     expect(within(roster).queryByText(/not a list of sign-in accounts or access permissions/)).not.toBeInTheDocument();
     expect(roundCard(firstRound.name).getByRole('heading', { name: 'Group 3' })).toBeVisible();
     expect(roundCard(secondRound.name).getByRole('heading', { name: 'Group 4' })).toBeVisible();
-    expect(screen.queryByText(/handicap|invitation|net score/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/invitation|net score/i)).not.toBeInTheDocument();
   });
 
   it('shows missing roster and round states without inventing players or assignments', () => {

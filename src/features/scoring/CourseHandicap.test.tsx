@@ -21,4 +21,15 @@ describe('shared course handicap display', () => {
     expect(screen.getByLabelText('Course handicap unavailable')).toHaveTextContent('CH —');
     expect(screen.queryByText('NH')).not.toBeInTheDocument();
   });
+  it('omits the repeated CH prefix in labeled columns without changing accessible values or NH semantics', () => {
+    const view = render(<CourseHandicap value={{ playerId: 'fictional-player', courseHandicap: -2 }} className="roster-handicap" compact />);
+    expect(screen.getByLabelText('Course handicap: +2')).toHaveTextContent(/^\+2$/);
+    view.rerender(<CourseHandicap value={{ playerId: 'fictional-player', courseHandicap: 0 }} className="roster-handicap" compact />);
+    expect(screen.getByLabelText('Course handicap: 0')).toHaveTextContent(/^0$/);
+    view.rerender(<CourseHandicap value={{ playerId: 'fictional-player', courseHandicap: null,
+      unavailableReason: 'missing-handicap-index' }} className="roster-handicap" compact />);
+    expect(screen.getByLabelText('No captured Handicap Index')).toHaveTextContent(/^NH$/);
+    view.rerender(<CourseHandicap value={undefined} className="roster-handicap" compact />);
+    expect(screen.getByLabelText('Course handicap unavailable')).toHaveTextContent(/^—$/);
+  });
 });

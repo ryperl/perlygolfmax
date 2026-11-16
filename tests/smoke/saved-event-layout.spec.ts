@@ -3,6 +3,7 @@ import type { EventWorkspace } from '../../src/domain/setup';
 import type { EventEntryProgress } from '../../src/features/event-trip/entry-progress';
 import { renderComponentFixture } from './render-fixture';
 import { stablefordPoints } from '../../src/domain/stableford';
+import { contrastRatio } from './contrast';
 
 const id = (number: number) => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
 const players = Array.from({ length: 8 }, (_, index) => ({
@@ -56,7 +57,7 @@ const progress: EventEntryProgress = Object.fromEntries(workspace.rounds.map((ro
 }]));
 
 for (const view of ['overview', 'rounds', 'group'] as const) {
-  test(`saved event ${view} remains readable and event-specific on narrow screens`, async ({ page }) => {
+  test(`saved event ${view} remains readable and event-specific on narrow screens`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 320, height: 740 });
     await page.goto('/#events');
     await expect(page.getByRole('heading', { name: 'Events', exact: true })).toBeVisible();
@@ -85,7 +86,7 @@ for (const view of ['overview', 'rounds', 'group'] as const) {
       const second = page.locator('.event-trip-round').filter({ has: page.getByRole('heading', { name: 'Fictional round 2', exact: true }) });
       await expect(first.getByLabel('Course handicap: 5', { exact: true })).toHaveCount(2);
       await expect(first.getByLabel('Course handicap: +1', { exact: true })).toHaveCount(2);
-      await expect(second.getByLabel('Course handicap: 6', { exact: true })).toHaveText('CH 6');
+      await expect(second.getByLabel('Course handicap: 6', { exact: true })).toHaveText('6');
       await expect(first.getByText('HI 10.5', { exact: true })).toHaveCount(0);
     }
     if (view === 'group') {
@@ -111,6 +112,27 @@ for (const view of ['overview', 'rounds', 'group'] as const) {
     await expect(page.getByText('No scores yet', { exact: false }).first()).toBeVisible();
     expect(await page.evaluate(() => window.innerWidth)).toBe(320);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    if (view !== 'overview') {
+      for (const theme of ['light', 'dark']) {
+        await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+        for (const table of await page.locator('.event-trip-roster-table').all()) {
+          expect(await table.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+          expect(await table.locator('caption').evaluate((element) => getComputedStyle(element).clipPath)).toBe('inset(50%)');
+          await expect(table.getByRole('columnheader')).toHaveText(['Golfer', 'CH']);
+          for (const cell of await table.locator('tbody td').all()) {
+            expect(await cell.evaluate((element) => getComputedStyle(element).textAlign)).toBe('end');
+          }
+          const colors = await table.evaluate((element) => {
+            const cell = element.querySelector('tbody th');
+            const parent = element.closest('li');
+            if (!cell || !parent) throw new Error('Missing roster card colors');
+            return { text: getComputedStyle(cell).color, background: getComputedStyle(parent).backgroundColor };
+          });
+          expect(contrastRatio(colors.text, colors.background)).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+      await page.screenshot({ path: testInfo.outputPath(`aligned-${view}-cards.png`), fullPage: true });
+    }
     await page.setViewportSize({ width: 1280, height: 900 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await expect(page.getByRole('link', { name: 'Configure event' })).toHaveAttribute('href', `#organizer?event=${id(50)}`);

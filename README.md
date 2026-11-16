@@ -128,6 +128,14 @@ larger events; this does not limit round count. Light/dark variants retain
 high-contrast text, neutral score fields and unchanged warning/status colors.
 Round names remain visible: color is supplementary, never the only identifier.
 
+**Rounds** and **The Group** share the same roster-card presentation. Playing
+groups show a compact header with their saved starting hole and aligned golfer/
+CH rows. Competition teams remain separate cards with their actual members;
+unassigned golfers and stale team warnings stay visible. The CH column omits
+repeated prefixes but retains scratch `0`, plus values, explicit `NH` and
+unavailable `—`, with full accessible labels. Event roster values remain current
+Handicap Index, not round Course Handicap.
+
 The manifest and icons are a PWA foundation, not a guarantee of installation on
 every browser or platform. There is **no service worker**, explicit offline
 cache, offline score storage, synchronization, or update prompt. An already-open
@@ -568,6 +576,17 @@ review. Clear, measured and No measurement edits use the same conditional,
 audited score write as strokes/Churchy, including distance-only edits. Save must
 be acknowledged before advancing; drafts are online-only and never persisted
 in browser storage. Discard clears all local round drafts, not saved entries.
+
+Each KP hole uses a compact pin ticket: the closest saved golfer(s), distance
+and applicable award are visible without repeating the full field.
+**View contenders** expands all measured entries in distance order; its plain
+count and chevron change to **Hide contenders** when open. Ties remain explicit,
+and resolved awards feature the actual selected recipient(s). Open entries show
+leaders, not settled winners. Allocated versus projected amounts stay distinct;
+unknown measurements never become zero, and zero inches remains a hole-in-one.
+Owner tie controls retain their existing conditional-save workflow.
+Once a tie is resolved, its organizer controls remain available under
+**Change tie resolution** instead of occupying the whole ticket.
 
 The organizer explicitly **closes KP entries** to establish final contenders,
 and can reopen for corrections. This does not finalize, lock or unlock ordinary

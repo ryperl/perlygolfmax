@@ -8,8 +8,9 @@ import { eventStartDateLabel, numericEventDateLabel, sortRoundsByStartDate } fro
 import type { EventEntryProgress, RoundEntryProgressState } from './entry-progress';
 import './event-trip.css';
 import { HandicapIndexBadge } from './HandicapIndexBadge';
-import { CourseHandicap, ScoreActionIcon } from '../scoring';
+import { ScoreActionIcon } from '../scoring';
 import { RoundAccent, roundToneFor } from '../round-theme';
+import { RoundRosterTable } from './RoundRosterTable';
 
 interface EventTripViewProps {
   readonly workspace: EventWorkspace;
@@ -59,17 +60,14 @@ function PlayingGroups({ round, handicaps }: {
         <ul className="event-trip-group-list">
           {round.groups.map((group) => (
             <li key={group.number}>
-              <h5>Group {group.number}</h5>
-              <p>Starting hole: {groupStartingHole(group, round.teeProfile.holes)}</p>
+              <header className="event-trip-roster-heading"><h5>Group {group.number}</h5>
+                <span className="event-trip-start" aria-label={`Starting hole: ${String(groupStartingHole(group, round.teeProfile.holes))}`}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true" focusable="false"><path d="M7 21V3l12 4-12 4M3 21h9" /></svg>
+                  Start {groupStartingHole(group, round.teeProfile.holes)}
+                </span>
+              </header>
               {group.playerIds.length === 0 ? <p>No players assigned.</p> : (
-                <ul>
-                  {group.playerIds.map((playerId) => {
-                    const player = round.players.find((entry) => entry.playerId === playerId);
-                    return <li key={playerId}><span className="event-trip-player-name">{player?.displayName ?? 'Player unavailable'}</span>
-                      {player && <> <CourseHandicap value={handicaps.get(playerId)} className="event-trip-index" /></>}
-                    </li>;
-                  })}
-                </ul>
+                <RoundRosterTable round={round} playerIds={group.playerIds} handicaps={handicaps} label={`Group ${String(group.number)}`} />
               )}
             </li>
           ))}
@@ -79,8 +77,7 @@ function PlayingGroups({ round, handicaps }: {
       {unassigned.length > 0 && (
         <div>
           <h5>Not assigned to a group</h5>
-          <ul>{unassigned.map((player) => <li key={player.playerId}><span className="event-trip-player-name">{player.displayName}</span>
-            {' '}<CourseHandicap value={handicaps.get(player.playerId)} className="event-trip-index" /></li>)}</ul>
+          <RoundRosterTable round={round} playerIds={unassigned.map((player) => player.playerId)} handicaps={handicaps} label="Unassigned" />
         </div>
       )}
     </div>
@@ -100,13 +97,9 @@ function CompetitionTeams({ round, state, handicaps }: {
         : <>
           {!gameTeamsMatchRoster(game, round.players.map((player) => player.playerId))
             && <p>Saved team assignments need organizer repair before team results are available.</p>}
-          <ul className="event-trip-group-list">{game.teams.map((team) => <li key={team.id}>
-            <h5>{team.name}</h5><ul>{team.playerIds.map((id) => {
-              const player = round.players.find((entry) => entry.playerId === id);
-              return <li key={id}><span className="event-trip-player-name">{player?.displayName ?? 'Player unavailable'}</span>
-                {player && <> <CourseHandicap value={handicaps.get(id)} className="event-trip-index" /></>}
-              </li>;
-            })}</ul>
+          <ul className="event-trip-group-list event-trip-team-list">{game.teams.map((team) => <li key={team.id}>
+            <header className="event-trip-roster-heading"><h5>{team.name}</h5></header>
+            <RoundRosterTable round={round} playerIds={team.playerIds} handicaps={handicaps} label={team.name} />
           </li>)}</ul>
         </>}
   </section>;
@@ -138,7 +131,7 @@ function SavedRounds({ workspace, showGroups, progress }: {
           {sortRoundsByStartDate(workspace.rounds).map((round) => {
             const handicaps = new Map(publishedCourseHandicaps(round).map((entry) => [entry.playerId, entry]));
             return (
-            <li className="panel event-trip-round" key={round.id}>
+            <li className="panel event-trip-round" key={round.id} data-round-tone={roundToneFor(round.id, workspace.rounds)}>
               <RoundAccent className="event-trip-round-heading" tone={roundToneFor(round.id, workspace.rounds)}>
                 <div>
                   <h3>{round.name}</h3>

@@ -2,6 +2,7 @@ import { test, expect } from './test';
 import { createServer } from 'vite';
 import type { Locator } from '@playwright/test';
 import { controlStyle } from './control-style';
+import { contrastRatio } from './contrast';
 
 test('KP during/afterward, exact tied purse, closure and reopen at 320px / 125% text', async ({ page }, testInfo) => {
   const server = await createServer({
@@ -80,7 +81,19 @@ test('KP during/afterward, exact tied purse, closure and reopen at 320px / 125% 
     await measure('Fictional golfer 2');
     await page.getByRole('button', { name: 'Save KP entries' }).click();
     const second = page.getByRole('article', { name: 'KP hole 2 results' });
-    await expect(second).toContainText('tied, organizer decision required');
+    await expect(second).toContainText('Tied leaders');
+    const expand = second.locator('.kp-ticket-details > summary');
+    await expect(expand).toContainText('View contenders');
+    await expect(expand).toContainText('(2)');
+    expect(await expand.locator('.kp-contender-count').evaluate((element) => getComputedStyle(element).borderWidth)).toBe('0px');
+    expect(await expand.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(48);
+    await expand.focus();
+    await page.keyboard.press('Enter');
+    await expect(expand).toContainText('Hide contenders');
+    await expect(second.getByRole('table', { name: 'Hole 2 measured contenders' })).toBeVisible();
+    expect(await second.locator('.kp-contenders caption').evaluate((element) => getComputedStyle(element).clipPath)).toBe('inset(50%)');
+    await page.keyboard.press('Enter');
+    await expect(expand).toContainText('View contenders');
     await page.getByRole('combobox', { name: 'KP hole', exact: true }).selectOption('3');
     await measure('Fictional golfer 1');
     await page.getByRole('button', { name: 'Save KP entries' }).click();
@@ -108,7 +121,7 @@ test('KP during/afterward, exact tied purse, closure and reopen at 320px / 125% 
     await expect(page.getByRole('status').filter({ hasText: /^Entries closed$/ })).toBeVisible();
     await expect(page.getByText(/Closest on-green ball on each|ordinary golf scoring remains open|Round pot:/)).toHaveCount(0);
     await expect(page.getByRole('article', { name: 'KP hole 1 results' })).toContainText('USD 33.34');
-    await expect(page.getByRole('article', { name: 'KP hole 4 results' })).toContainText('excluded from daily pot shares');
+    await expect(page.getByRole('article', { name: 'KP hole 4 results' })).toContainText('No qualifying measurement');
     const tie = page.getByRole('article', { name: 'KP hole 2 results' });
     const winner = tie.getByRole('combobox', { name: 'Chosen winner', exact: true });
     for (const { theme, styles } of pickerStyles) {
@@ -120,8 +133,28 @@ test('KP during/afterward, exact tied purse, closure and reopen at 320px / 125% 
     await expect(tie.getByRole('button', { name: 'Split tied hole prize' })).toBeDisabled();
     await tie.getByRole('checkbox', { name: 'Extra cent: Fictional golfer 1' }).check();
     await tie.getByRole('button', { name: 'Split tied hole prize' }).click();
-    await expect(tie).toContainText('Fictional golfer 1: USD 16.67 planned award');
-    await expect(tie).toContainText('Fictional golfer 2: USD 16.66 planned award');
+    await expect(tie).toContainText('Tie resolved · Split');
+    const awards = tie.locator('.kp-ticket-awards');
+    await expect(awards).toContainText('Allocated award');
+    await expect(awards.getByText('Fictional golfer 1', { exact: true }).locator('..')).toContainText(/USD\s+16.67/);
+    await expect(awards.getByText('Fictional golfer 2', { exact: true }).locator('..')).toContainText(/USD\s+16.66/);
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+      const colors = await tie.evaluate((element) => {
+        const style = getComputedStyle(element);
+        const heading = element.querySelector('h4');
+        const control = element.querySelector('.kp-ticket-details > summary');
+        if (!heading || !control) throw new Error('Missing KP ticket elements');
+        const button = getComputedStyle(control);
+        return { background: style.backgroundColor, text: getComputedStyle(heading).color,
+          buttonText: button.color, buttonBackground: button.backgroundColor };
+      });
+      expect(contrastRatio(colors.text, colors.background)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(colors.buttonText, colors.buttonBackground)).toBeGreaterThanOrEqual(4.5);
+      expect(await tie.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    }
+    await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
+    await tie.screenshot({ path: testInfo.outputPath('compact-kp-ticket.png') });
     await expect(page.getByText(/Fully allocated planned awards/)).toHaveCount(0);
     await page.getByRole('button', { name: 'Fictional purse' }).click();
     const pool = page.getByText('Fictional daily KP · calculated', { exact: true });

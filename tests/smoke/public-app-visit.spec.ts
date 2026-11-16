@@ -194,8 +194,8 @@ test('the full public app resumes the next hole across eighteen home-screen-styl
     await page.goto(`${origin}/#group?event=${stored.eventId}`);
     const roster = page.getByRole('region', { name: 'Event roster', exact: true });
     await expect(roster.getByLabel('Current Handicap Index: 29.2', { exact: true })).toHaveText('HI 29.2');
-    await expect(page.getByLabel('Course handicap: 19', { exact: true })).toHaveText('CH 19');
-    await expect(page.getByLabel('Course handicap: +2', { exact: true })).toHaveText('CH +2');
+    await expect(page.getByLabel('Course handicap: 19', { exact: true })).toHaveText('19');
+    await expect(page.getByLabel('Course handicap: +2', { exact: true })).toHaveText('+2');
     await expect(roster.getByLabel('No Handicap Index', { exact: true })).toHaveCount(1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     expect(errors).toEqual([]);

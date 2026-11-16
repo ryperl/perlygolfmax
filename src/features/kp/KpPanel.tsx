@@ -5,7 +5,7 @@ import type { RoundScores } from '../../domain/scoring';
 import { scorePermissions } from '../../domain/scoring';
 import { KpEntryButton } from './KpEntryButton';
 import { kpEntryLabel } from './kp-presentation';
-import { formatMoney } from '../purse';
+import { KpHoleCard } from './KpHoleCard';
 
 export function KpPanel({ round, busy, dirty, groupNumber, holeNumber, onGroup, onHole, onEdit, draftFor,
   onSave, onDiscard, onManage, onPendingChange, onReview, onUseSaved }: {
@@ -39,7 +39,6 @@ export function KpPanel({ round, busy, dirty, groupNumber, holeNumber, onGroup, 
   const results = calculateKp(round);
   const eligible = round.layout.filter((hole) => hole.par === 3);
   const payout = round.kpPot ? calculateKpPayout(round, round.kpPot.amountMinor) : null;
-  const money = (amount: number) => round.kpPot ? formatMoney(amount, round.kpPot.currency) : 'Unavailable';
   async function manage(selection?: KpSelection) {
     if (busy || pending || dirty) return;
     if (!attempt.current && selection) attempt.current = { selection, etag: round.kp?.etag ?? null, id: crypto.randomUUID() };
@@ -105,16 +104,7 @@ export function KpPanel({ round, busy, dirty, groupNumber, holeNumber, onGroup, 
             </article>}
             {results.holes.map((hole) => {
               const amount = payout?.holes.find((entry) => entry.number === hole.number)?.amountMinor;
-              return <article key={hole.number} aria-label={`KP hole ${String(hole.number)} results`}>
-                <h3>Hole {hole.number}</h3>
-                <p>{hole.closestPlayerIds.length ? `Closest: ${hole.closestPlayerIds.map((id) => round.cards.find((card) => card.playerId === id)?.displayName ?? 'Unavailable golfer').join(' / ')}${hole.closestPlayerIds.length > 1
-                  ? payout?.shares.some((share) => share.holeNumber === hole.number) ? ' · tie resolved for planned awards' : ' · tied, organizer decision required' : ''}`
-                  : round.kp?.status === 'closed' ? 'No qualifying measurement · excluded from daily pot shares.' : 'No measurement yet · pending.'}</p>
-                <ul>{round.cards.flatMap((card) => {
-                  const entry = card.holes.find((item) => item.number === hole.number)?.score.kp;
-                  return entry ? [<li key={card.playerId}>{card.displayName}: {kpEntryLabel(entry)}</li>] : [];
-                })}</ul>
-                {amount !== undefined && <p>Winning hole share: {money(amount)} · planned, not paid</p>}
+              return <KpHoleCard key={hole.number} round={round} hole={hole} payout={payout}>
                 {owner && round.kp?.status === 'closed' && hole.closestPlayerIds.length > 1 && amount !== undefined && <KpTie
                   key={`${hole.proof}:${String(amount)}`} ids={hole.closestPlayerIds} round={round} amount={amount}
                   disabled={locked} onResolve={(kind, playerIds, extraCentPlayerIds) => {
@@ -125,9 +115,7 @@ export function KpPanel({ round, busy, dirty, groupNumber, holeNumber, onGroup, 
                         && results.holes.some((current) => current.number === entry.holeNumber && current.proof === entry.proof
                           && payout?.holes.some((prize) => prize.number === entry.holeNumber && prize.amountMinor === entry.holeAmountMinor))), decision] });
                   }} />}
-                {payout?.shares.filter((share) => share.holeNumber === hole.number).map((share) =>
-                  <p key={share.playerId}>{round.cards.find((card) => card.playerId === share.playerId)?.displayName}: {money(share.amountMinor)} planned award</p>)}
-              </article>;
+              </KpHoleCard>;
             })}
           </>}
     {error && <><p role="alert">{error}</p><p>Discarding intent does not undo a request that may already have committed. Refresh to review saved state.</p>

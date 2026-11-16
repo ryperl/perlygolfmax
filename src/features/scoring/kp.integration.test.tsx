@@ -35,6 +35,7 @@ describe('atomic KP + raw score drafts and after-round entry', () => {
     await user.click(screen.getByRole('button', { name: 'Refresh saved round' }));
     await user.click(screen.getByRole('button', { name: `Review KP for ${first.displayName}` }));
     await user.click(screen.getByRole('button', { name: 'Save KP entries' }));
+    await user.click(await within(screen.getByRole('article', { name: 'KP hole 1 results' })).findByText('No measurement (1)'));
     expect(await screen.findByText(`${first.displayName}: No measurement`)).toBeVisible();
     expect(store.read().cards[0]?.holes[0]?.score).toEqual({ kind: 'strokes', strokes: 6, kp: { kind: 'no-measurement' } });
   });
@@ -89,6 +90,7 @@ describe('atomic KP + raw score drafts and after-round entry', () => {
     await user.click(screen.getByRole('button', { name: `KP for ${first.displayName}` }));
     await user.click(screen.getByRole('button', { name: 'No measurement' }));
     await user.click(screen.getByRole('button', { name: 'Save KP entries' }));
+    await user.click(await within(screen.getByRole('article', { name: 'KP hole 1 results' })).findByText('No measurement (1)'));
     expect(await screen.findByText(`${first.displayName}: No measurement`)).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Hole 1 · Group 1' })).toBeVisible();
     fireEvent.change(screen.getByLabelText('KP hole'), { target: { value: '2' } });
