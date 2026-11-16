@@ -62,7 +62,7 @@ export function KpPanel({ round, busy, dirty, groupNumber, holeNumber, onGroup, 
       }); }}>Configure KP Competition</button>}<p>KP is not configured. The organizer can enable it without unlocking ordinary scores.</p></>
         : results.status === 'unavailable' ? <p role="alert">Saved KP layout or roster is stale. No entries or payouts can be changed until organizer review.</p>
           : <>
-            <p role="status">{round.kp.status === 'open' ? 'Entries open' : 'Entries closed'}</p>
+            <p role="status" className="kp-panel-state">{round.kp.status === 'open' ? 'Entries open' : 'Entries closed'}</p>
             {!round.kpPot && owner && <p>No KP pot configured.</p>}
             {owner && <button disabled={locked} onClick={() => { if (round.kp) void manage({
               version: 1, context: round.kp.context, status: round.kp.status === 'open' ? 'closed' : 'open',
@@ -78,29 +78,41 @@ export function KpPanel({ round, busy, dirty, groupNumber, holeNumber, onGroup, 
                 {eligible.map((hole) => <option key={hole.number} value={hole.number}>Hole {hole.number}</option>)}
               </select></label>
             </div>
-            {eligible.some((hole) => hole.number === holeNumber) && <article aria-label="KP entry group">
-              <h3>Hole {holeNumber} · Group {groupNumber}</h3>
-              {group?.playerIds.map((playerId) => {
-                const card = round.cards.find((entry) => entry.playerId === playerId);
-                const draft = draftFor(playerId);
-                return card && <div className="kp-player-entry" role="group" aria-label={`${card.displayName} KP entry`} key={playerId}>
-                  <h4>{card.displayName}</h4>
-                  <KpEntryButton name={card.displayName} value={draft.value} draft={draft.dirty}
-                  disabled={busy || round.kp?.status !== 'open' || !permission.writePlayerIds.includes(playerId)}
-                  onChange={(value) => { onEdit(playerId, value); }} />
-                  {draft.conflict && <>
-                    <p role="alert">Hole changed. Saved KP: {kpEntryLabel(draft.savedValue)} · Intended KP: {kpEntryLabel(draft.value)}.
-                      Refresh saved round before reviewing. A distance-only review preserves the current saved strokes.</p>
-                    <button disabled={busy || !draft.canReview} onClick={() => { onReview(playerId); }}>Review KP for {card.displayName}</button>
-                    <button disabled={busy} onClick={() => { onUseSaved(playerId); }}>Use saved hole for {card.displayName}</button>
-                  </>}
-                </div>;
-              })}
-              <div className="kp-actions">
-                <button disabled={busy || !dirty || round.kp.status !== 'open'} onClick={onSave}>Save KP entries</button>
-                <button disabled={busy || !dirty} onClick={onDiscard}>Discard all round drafts</button>
+            {eligible.some((hole) => hole.number === holeNumber) && <article aria-label="KP entry group" className="kp-group-entries">
+              <header className="kp-group-heading">
+                <div className="kp-ticket-pin" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"><path d="M6 21V3l13 4-13 4M3 21h7" /></svg>
+                  <strong>{holeNumber}</strong>
+                </div>
+                <div><h3>Hole {holeNumber} · Group {groupNumber}</h3>
+                  <p>{group?.playerIds.length ?? 0} {group?.playerIds.length === 1 ? 'golfer' : 'golfers'}</p></div>
+              </header>
+              <table className="kp-entry-roster">
+                <caption>Hole {holeNumber}, Group {groupNumber} KP entries</caption>
+                <thead><tr><th scope="col">Golfer</th><th scope="col">Measurement</th></tr></thead>
+                <tbody>{group?.playerIds.map((playerId) => {
+                  const card = round.cards.find((entry) => entry.playerId === playerId);
+                  const draft = draftFor(playerId);
+                  return card && <tr key={playerId}>
+                    <th scope="row">{card.displayName}</th><td>
+                      <KpEntryButton name={card.displayName} value={draft.value} draft={draft.dirty} compact
+                        readOnly={round.kp?.status !== 'open' || !permission.writePlayerIds.includes(playerId)}
+                        disabled={busy || round.kp?.status !== 'open' || !permission.writePlayerIds.includes(playerId)}
+                        onChange={(value) => { onEdit(playerId, value); }} />
+                      {draft.conflict && <div className="kp-entry-conflict">
+                        <p role="alert">Hole changed. Saved KP: {kpEntryLabel(draft.savedValue)} · Intended KP: {kpEntryLabel(draft.value)}.
+                          Refresh saved round before reviewing. A distance-only review preserves the current saved strokes.</p>
+                        <button disabled={busy || !draft.canReview} onClick={() => { onReview(playerId); }}>Review KP for {card.displayName}</button>
+                        <button disabled={busy} onClick={() => { onUseSaved(playerId); }}>Use saved hole for {card.displayName}</button>
+                      </div>}
+                    </td>
+                  </tr>;
+                })}</tbody></table>
+              {dirty && <div className="kp-entry-footer"><div className="kp-actions">
+                <button className="kp-save-entries" disabled={busy || round.kp.status !== 'open'} onClick={onSave}>Save KP entries</button>
+                <button disabled={busy} onClick={onDiscard}>Discard all round drafts</button>
               </div>
-              {dirty && <p role="status">Unsaved round drafts. Save acknowledges score and KP together; nothing is stored offline.</p>}
+              <p role="status">Unsaved round drafts · Saves scores and KP together.</p></div>}
             </article>}
             {results.holes.map((hole) => {
               const amount = payout?.holes.find((entry) => entry.number === hole.number)?.amountMinor;

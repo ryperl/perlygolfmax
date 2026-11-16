@@ -15,7 +15,12 @@ describe('saved skins detail summaries', () => {
     expect(screen.getByRole('combobox', { name: 'Round' })).toBeVisible();
     await userEvent.click(summary);
     const table = within(screen.getByRole('table', { name: 'Hole 1 skins comparison' }));
-    expect(table.getByRole('row', { name: /Fictional golfer 3/ })).toHaveTextContent('beaten by Fictional golfer 1, Fictional golfer 2');
+    expect(table.getAllByRole('columnheader').map((header) => header.textContent)).toEqual(['Player', 'Par', 'Gross', 'Received', 'Net']);
+    const cells = within(table.getByRole('row', { name: /Fictional golfer 3/ })).getAllByRole('cell');
+    expect(cells).toHaveLength(4);
+    expect(cells[1]).toHaveTextContent('6');
+    expect(cells[3]).toHaveTextContent('6');
+    expect(table.queryByText(/won|beaten|covered|tied/i)).not.toBeInTheDocument();
   });
   it('uses the saved final contenders after gross priority, not every golfer sharing the lowest net', () => {
     const f = eventSkinsFixture([2, 2, 3].map((strokes) => ({ kind: 'strokes' as const, strokes })), ['0', '0', '18']);

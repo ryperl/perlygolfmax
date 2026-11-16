@@ -47,4 +47,47 @@ describe('KP measurement dialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(change).toHaveBeenCalledTimes(2);
   });
+  it('uses a compact labeled edit action without changing staging or adding a redundant KP prefix', () => {
+    const change = vi.fn();
+    render(<KpEntryButton name="Fictional golfer" disabled={false} compact draft value={{ kind: 'no-measurement' }} onChange={change} />);
+    const trigger = screen.getByRole('button', { name: 'KP for Fictional golfer' });
+    expect(trigger).toHaveTextContent('No measurement');
+    expect(trigger).toHaveTextContent('unsaved');
+    expect(trigger).not.toHaveTextContent('KP ·');
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole('button', { name: 'Clear KP entry' }));
+    expect(change).toHaveBeenCalledWith(null);
+    expect(trigger).toHaveFocus();
+  });
+  it('shows read-only values instead of disabled edit buttons without losing unknown/zero distinctions', () => {
+    const change = vi.fn();
+    const view = render(<KpEntryButton name="Fictional golfer" disabled={false} compact readOnly onChange={change} />);
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.getByText('Not entered')).toBeVisible();
+    view.rerender(<KpEntryButton name="Fictional golfer" disabled={false} compact readOnly value={{ kind: 'no-measurement' }} onChange={change} />);
+    expect(screen.getByText('No measurement')).toBeVisible();
+    view.rerender(<KpEntryButton name="Fictional golfer" disabled={false} compact readOnly value={{ kind: 'measured', inches: 0, onGreen: true, measurementId: 'fictional-ace' }} onChange={change} />);
+    expect(screen.getByText('Hole-in-one · 0 ft 0 in')).toBeVisible();
+    expect(change).not.toHaveBeenCalled();
+  });
+  it('preserves an open dialog when permission closes, blocks staging and returns focus to the read-only value', () => {
+    const change = vi.fn();
+    const value = { kind: 'no-measurement' as const };
+    const view = render(<KpEntryButton name="Fictional golfer" disabled={false} compact value={value} onChange={change} />);
+    fireEvent.click(screen.getByRole('button', { name: 'KP for Fictional golfer' }));
+    fireEvent.change(screen.getByLabelText('Feet'), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText('Inches (0–11)'), { target: { value: '8' } });
+    fireEvent.click(screen.getByLabelText('Ball finished on the green'));
+    view.rerender(<KpEntryButton name="Fictional golfer" disabled={false} compact readOnly value={value} onChange={change} />);
+    const dialog = within(screen.getByRole('dialog'));
+    expect(dialog.getByLabelText('Feet')).toHaveValue('2');
+    expect(dialog.getByRole('status')).toHaveTextContent('now read-only');
+    expect(dialog.getByRole('button', { name: 'Stage measurement' })).toBeDisabled();
+    expect(dialog.getByRole('button', { name: 'No measurement' })).toBeDisabled();
+    expect(dialog.getByRole('button', { name: 'Clear KP entry' })).toBeDisabled();
+    fireEvent.click(dialog.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByText('No measurement').closest('p')).toHaveFocus();
+    expect(change).not.toHaveBeenCalled();
+  });
 });

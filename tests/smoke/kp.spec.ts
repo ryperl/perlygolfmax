@@ -46,9 +46,12 @@ test('KP during/afterward, exact tied purse, closure and reopen at 320px / 125% 
     }
     await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
     const entryGroup = page.getByRole('article', { name: 'KP entry group', exact: true });
+    const roster = entryGroup.getByRole('table', { name: 'Hole 1, Group 1 KP entries', exact: true });
+    await expect(roster.getByRole('columnheader')).toHaveText(['Golfer', 'Measurement']);
+    await expect(entryGroup.getByRole('button', { name: 'Save KP entries', exact: true })).toHaveCount(0);
     for (const name of ['Fictional golfer 1', 'Fictional golfer 2', 'Fictional golfer 3', 'Fictional golfer 4']) {
-      const row = entryGroup.getByRole('group', { name: `${name} KP entry`, exact: true });
-      await expect(row.getByRole('heading', { name, exact: true })).toBeVisible();
+      const row = entryGroup.getByRole('row', { name: new RegExp(`^${name} `) });
+      await expect(row.getByRole('rowheader', { name, exact: true })).toBeVisible();
       await expect(row.getByRole('button', { name: `KP for ${name}`, exact: true })).toBeVisible();
     }
     await page.getByRole('button', { name: 'Enter scores', exact: true }).click();
@@ -79,7 +82,28 @@ test('KP during/afterward, exact tied purse, closure and reopen at 320px / 125% 
     await page.getByRole('button', { name: 'KP Competition', exact: true }).click();
     await measure('Fictional golfer 1');
     await measure('Fictional golfer 2');
+    await page.getByRole('button', { name: 'KP for Fictional golfer 3', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'No measurement', exact: true }).click();
+    await expect(entryGroup.getByRole('button', { name: 'Save KP entries', exact: true })).toBeEnabled();
+    await expect(page.getByRole('combobox', { name: 'KP hole', exact: true })).toBeDisabled();
+    const measuredLabel = entryGroup.getByRole('button', { name: 'KP for Fictional golfer 1', exact: true }).locator('.kp-entry-value');
+    expect(await measuredLabel.evaluate((element) => element.getBoundingClientRect().height <= Number.parseFloat(getComputedStyle(element).lineHeight) + 1)).toBe(true);
+    for (const [name, word] of [['Fictional golfer 3', 'measurement'], ['Fictional golfer 4', 'entered']] as const) {
+      const label = entryGroup.getByRole('button', { name: `KP for ${name}`, exact: true }).locator('.kp-entry-value');
+      expect(await label.evaluate((element, word) => {
+        const text = element.firstChild;
+        if (!(text instanceof Text)) throw new Error('Missing unknown measurement label');
+        const start = text.data.indexOf(word);
+        if (start < 0) throw new Error('Missing measurement status word');
+        const range = document.createRange();
+        range.setStart(text, start); range.setEnd(text, start + word.length);
+        return range.getClientRects().length;
+      }, word)).toBe(1);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await entryGroup.screenshot({ path: testInfo.outputPath('kp-entry-open-roster.png') });
     await page.getByRole('button', { name: 'Save KP entries' }).click();
+    await expect(entryGroup.getByRole('button', { name: 'Save KP entries', exact: true })).toHaveCount(0);
     const second = page.getByRole('article', { name: 'KP hole 2 results' });
     await expect(second).toContainText('Tied leaders');
     const expand = second.locator('.kp-ticket-details > summary');
@@ -119,6 +143,24 @@ test('KP during/afterward, exact tied purse, closure and reopen at 320px / 125% 
     await page.getByRole('button', { name: 'KP Competition', exact: true }).click();
     await page.getByRole('button', { name: 'Close KP entries' }).click();
     await expect(page.getByRole('status').filter({ hasText: /^Entries closed$/ })).toBeVisible();
+    await expect(entryGroup.getByRole('button')).toHaveCount(0);
+    await page.getByRole('combobox', { name: 'KP hole', exact: true }).selectOption('1');
+    await expect(entryGroup).toContainText('Hole-in-one · 0 ft 0 in');
+    await page.getByRole('combobox', { name: 'KP hole', exact: true }).selectOption('2');
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+      const colors = await entryGroup.evaluate((element) => {
+        const name = element.querySelector('tbody th');
+        const distance = element.querySelector('.kp-entry-value[data-measured]');
+        if (!name || !distance) throw new Error('Missing selected KP roster values');
+        return { background: getComputedStyle(element).backgroundColor, name: getComputedStyle(name).color, distance: getComputedStyle(distance).color };
+      });
+      expect(contrastRatio(colors.name, colors.background)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(colors.distance, colors.background)).toBeGreaterThanOrEqual(4.5);
+      expect(await entryGroup.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    }
+    expect(await entryGroup.locator('caption').evaluate((element) => getComputedStyle(element).clipPath)).toBe('inset(50%)');
+    await entryGroup.screenshot({ path: testInfo.outputPath('kp-entry-closed-roster.png') });
     await expect(page.getByText(/Closest on-green ball on each|ordinary golf scoring remains open|Round pot:/)).toHaveCount(0);
     await expect(page.getByRole('article', { name: 'KP hole 1 results' })).toContainText('USD 33.34');
     await expect(page.getByRole('article', { name: 'KP hole 4 results' })).toContainText('No qualifying measurement');

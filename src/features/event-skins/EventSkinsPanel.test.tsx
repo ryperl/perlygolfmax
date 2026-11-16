@@ -36,7 +36,8 @@ describe('on-demand saved skins details', () => {
     await screen.findByRole('combobox', { name: 'Round' });
     await user.click(screen.getByText(/^Hole 1 ·/));
     const table = within(screen.getByRole('table', { name: 'Hole 1 skins comparison' }));
-    expect(table.getByText(/covered by Fictional golfer 1/)).toBeVisible();
+    expect(table.getByRole('rowheader', { name: 'Fictional golfer 2' })).toBeVisible();
+    expect(table.queryByRole('columnheader', { name: 'Outcome' })).not.toBeInTheDocument();
     expect(table.getByRole('columnheader', { name: 'Received' })).toBeVisible();
     await user.selectOptions(screen.getByRole('combobox', { name: 'Round' }), f.details.rounds[1]?.id ?? '');
     await user.selectOptions(screen.getByRole('combobox', { name: 'Hole' }), '2');

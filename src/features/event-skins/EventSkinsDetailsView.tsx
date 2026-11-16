@@ -26,14 +26,12 @@ export function EventSkinsDetailsView({ value }: { readonly value: EventSkinsDet
       {entry.reason && <p role="status">{entry.reason.replaceAll('-', ' ')}</p>}
       <div className="event-skins-comparisons"><table>
         <caption className="visually-hidden">Hole {entry.number} skins comparison</caption>
-        <thead><tr><th scope="col">Player</th><th scope="col">Par</th><th scope="col">Gross</th><th scope="col">Received</th><th scope="col">Net</th><th scope="col">Outcome</th></tr></thead>
+        <thead><tr><th scope="col">Player</th><th scope="col">Par</th><th scope="col">Gross</th><th scope="col">Received</th><th scope="col">Net</th></tr></thead>
         <tbody>{entry.players.map((player) => <tr key={player.playerId}>
           <th scope="row">{name(player.playerId)}</th><td>{player.par ?? '—'}</td>
           <td>{player.disposition === 'picked-up' ? `X${player.gross === null ? '' : String(player.gross)}`
             : player.disposition === 'did-not-finish' ? 'DNF' : player.gross ?? '—'}</td>
           <td>{player.strokesReceived ?? '—'}</td><td>{player.net ?? '—'}</td>
-          <td>{player.outcome}{(player.outcome === 'covered' || player.outcome === 'beaten')
-            && ` by ${entry.contenderIds.filter((id) => id !== player.playerId).map(name).join(', ')}`}</td>
         </tr>)}</tbody>
       </table></div>
     </details>)}

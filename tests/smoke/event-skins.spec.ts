@@ -62,7 +62,9 @@ test('event skins explicit setup, per-round saved wins, exact pot and readonly a
     }
     await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
     await page.getByText('Hole 1 · Fictional golfer 1', { exact: true }).click();
-    await expect(page.getByRole('table', { name: 'Hole 1 skins comparison' })).toContainText('covered by Fictional golfer 1');
+    const comparison = page.getByRole('table', { name: 'Hole 1 skins comparison' });
+    await expect(comparison.getByRole('columnheader')).toHaveText(['Player', 'Par', 'Gross', 'Received', 'Net']);
+    await expect(comparison.getByRole('rowheader', { name: 'Fictional golfer 2', exact: true })).toBeVisible();
     await page.getByRole('combobox', { name: 'Round', exact: true }).selectOption({ label: 'Fictional Round 3' });
     await page.getByRole('combobox', { name: 'Hole', exact: true }).selectOption('2');
     await expect(page.getByText('Hole 2 · Covered by Fictional golfer 1, Fictional golfer 2 — no skin', { exact: true })).toBeVisible();

@@ -527,10 +527,11 @@ grouped by round with the same configured-order pastel accents as round cards.
 This expansion uses the already-loaded summary and issues no API request.
 Known zero provisional/unavailable golfers retain their explicit state without
 an empty expansion or a fabricated rank. **View skins details** loads a separate
-comparison view on
-demand: select any round/hole to inspect saved gross/net strokes, personal par,
-received strokes and the golfers who covered or beat a score. Shared canonical
-decisions drive both views; details do not introduce carryovers or new tie rules.
+comparison view on demand: select any round/hole to inspect saved gross/net
+strokes, personal par and received strokes. Hole-level summaries retain the
+winner or covering golfers; the table omits repeated per-golfer outcome labels.
+Shared canonical decisions drive both views; details do not introduce carryovers
+or new tie rules.
 Covered-hole summaries name the saved covering golfers without opening the table.
 The public skins page keeps a **Back to event overview** link available while
 loading, after errors and inside details. Round cards use one labeled SVG
@@ -581,6 +582,12 @@ review. Clear, measured and No measurement edits use the same conditional,
 audited score write as strokes/Churchy, including distance-only edits. Save must
 be acknowledged before advancing; drafts are online-only and never persisted
 in browser storage. Discard clears all local round drafts, not saved entries.
+
+Selected-hole KP review uses aligned golfer/measurement rows. Closed or
+read-only entries show plain distances, **No measurement**, or **Not entered**,
+not disabled editing buttons. Open, authorized entries use compact edit
+controls. Save/Discard appears only while round drafts exist; conflict recovery
+and discard remain available if entries close with unconfirmed drafts.
 
 Each KP hole uses a compact pin ticket: the closest saved golfer(s), distance
 and applicable award are visible without repeating the full field.
