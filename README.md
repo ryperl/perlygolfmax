@@ -878,6 +878,8 @@ and arithmetic errors never become invented numeric differentials.
 Missing values display **—**, without per-row explanations. Columns use
 **Adj. Gross / Est. Diff.**, shortened to **A.G / E.D** in narrow containers;
 accessible column names retain their full meaning.
+The small header info icons reveal only **Adjusted Gross** or
+**Estimated Differential** on tap, without adding routine explanation rows.
 
 Adjusted gross caps each numeric hole at net double bogey using the golfer's
 full captured Course Handicap and personal tee. The estimate is

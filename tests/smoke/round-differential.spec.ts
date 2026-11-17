@@ -4,6 +4,7 @@ import { strokeGameFixture, strokeGamesRound } from '../../src/domain/stroke-gam
 import { calculateRoundDifferentials } from '../../src/domain/round-differential';
 import { isRoundScores } from '../../src/contracts/scoring';
 import { contrastRatio } from './contrast';
+import { createServer } from 'vite';
 
 const source = strokeGameFixture(18, 8);
 const snapshot = { ...source.snapshot, teeProfile: { ...source.snapshot.teeProfile,
@@ -16,6 +17,64 @@ const cards = source.cards.map((card, index) => ({ ...card, holes: card.holes.ma
 })) }));
 const round = { ...strokeGamesRound({ ...source, snapshot, cards }),
   roundDifferentials: calculateRoundDifferentials(snapshot, cards), teeStrokeAllocation: true };
+
+test('compact column info reveals only names without reflow and supports touch and keyboard dismissal', async ({ page }, testInfo) => {
+  const server = await createServer({ configFile: false, cacheDir: testInfo.outputPath('help-vite-cache'),
+    server: { host: '127.0.0.1', port: 0, hmr: false }, esbuild: { jsx: 'automatic' },
+    optimizeDeps: { noDiscovery: true, include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'] },
+    logLevel: 'error' });
+  try {
+    await server.listen();
+    const address = server.httpServer?.address();
+    if (!address || typeof address === 'string') throw new Error('Fictional differential help server unavailable.');
+    const origin = `http://127.0.0.1:${String(address.port)}`;
+    await page.route(`${origin}/__help`, (route) => route.fulfill({ contentType: 'text/html',
+      body: '<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="differential-help-fixture"></div><script type="module" src="/tests/smoke/differential-help-fixture.tsx"></script></body></html>' }));
+    await page.goto(`${origin}/__help`);
+    const summary = page.getByRole('region', { name: 'Round differentials', exact: true });
+    await expect(summary).toBeVisible();
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate((value) => {
+        document.documentElement.dataset.theme = value;
+        document.documentElement.style.fontSize = '125%';
+      }, theme);
+      for (const width of [320, 390, 1280]) {
+        await page.setViewportSize({ width, height: 900 });
+        const table = summary.getByRole('table');
+        const before = await table.boundingBox();
+        if (!before) throw new Error('Missing differential table.');
+        for (const name of ['Adjusted Gross', 'Estimated Differential']) {
+          const trigger = summary.getByRole('button', { name: `About ${name}`, exact: true });
+          const target = await trigger.boundingBox();
+          expect(target?.height).toBeGreaterThanOrEqual(44);
+          expect(target?.width).toBeGreaterThanOrEqual(44);
+          await trigger.click();
+          const popup = summary.getByRole('dialog', { name, exact: true });
+          await expect(popup).toHaveText(name);
+          const close = popup.getByRole('button', { name: `Close ${name}`, exact: true });
+          await expect(close).toBeFocused();
+          const bounds = await popup.boundingBox();
+          if (!bounds) throw new Error('Missing column-name popup.');
+          expect(bounds.x).toBeGreaterThanOrEqual(0);
+          expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+          expect((await close.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+          expect(await table.boundingBox()).toEqual(before);
+          await close.click();
+          await expect(trigger).toBeFocused();
+          await trigger.press('Enter');
+          await expect(popup).toBeVisible();
+          await page.keyboard.press('Escape');
+          await expect(popup).not.toBeVisible();
+          await expect(trigger).toBeFocused();
+          await trigger.click();
+          await page.getByRole('button', { name: 'Outside the summary', exact: true }).click();
+          await expect(popup).not.toBeVisible();
+        }
+        await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      }
+    }
+  } finally { await server.close(); }
+});
 
 for (const theme of ['light', 'dark']) {
   test(`saved 18-hole differential estimates show the entire field and personal card in ${theme}`, async ({ page }, testInfo) => {

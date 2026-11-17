@@ -1,5 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
 import type { RoundDifferential } from '../../domain/round-differential';
 import { RoundDifferentials } from './RoundDifferentials';
 
@@ -14,6 +15,31 @@ const available: RoundDifferential = {
 };
 
 describe('RoundDifferentials', () => {
+  it('reveals only the full names and supports keyboard close, focus return and outside dismissal', async () => {
+    const user = userEvent.setup();
+    render(<RoundDifferentials values={[available]} players={players} />);
+    const adjusted = screen.getByRole('button', { name: 'About Adjusted Gross' });
+    const estimated = screen.getByRole('button', { name: 'About Estimated Differential' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await user.click(adjusted);
+    expect(screen.getByRole('dialog', { name: 'Adjusted Gross' })).toHaveTextContent(/^Adjusted Gross$/);
+    expect(screen.getByRole('button', { name: 'Close Adjusted Gross' })).toHaveFocus();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(adjusted).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(adjusted).toHaveAttribute('aria-expanded', 'true');
+    await user.click(estimated);
+    expect(screen.queryByRole('dialog', { name: 'Adjusted Gross' })).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Estimated Differential' })).toHaveTextContent(/^Estimated Differential$/);
+    await user.click(screen.getByRole('button', { name: 'Close Estimated Differential' }));
+    expect(estimated).toHaveFocus();
+    await user.click(estimated);
+    await user.click(screen.getByText('Fictional Aspen'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(estimated).toHaveAttribute('aria-expanded', 'false');
+  });
+
   it('shows every golfer in roster order without ranking, partial totals or fake zeroes', () => {
     const values: readonly RoundDifferential[] = [
       { ...available, playerId: 'fictional-c', status: 'unavailable', adjustedGross: null,
