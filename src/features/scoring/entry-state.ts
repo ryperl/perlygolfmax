@@ -5,6 +5,7 @@ import type { KpEntry } from '../../domain/kp';
 import type { NassauHoleRecord } from '../../domain/nassau';
 import type { WolfHoleRecord } from '../../domain/wolf';
 import type { DotsHoleRecord } from '../../domain/dots';
+import type { ChurchyCountTexts } from '../churchy';
 
 export interface HoleDraft {
   readonly nassau?: readonly NassauHoleRecord[];
@@ -13,6 +14,7 @@ export interface HoleDraft {
   readonly kp?: KpEntry | null;
   readonly rawEdited?: true;
   readonly churchy?: ChurchySpecials;
+  readonly churchyCounts?: ChurchyCountTexts;
   readonly text: string;
   readonly baseEtag: string | null;
   readonly status: 'draft' | 'saving' | 'failed' | 'conflict';
@@ -40,6 +42,7 @@ export function editedDraft(text: string, card: Scorecard, previous?: HoleDraft,
   return {
     text, baseEtag: previous ? previous.baseEtag : card.etag,
     ...(previous?.churchy ? { churchy: previous.churchy } : {}),
+    ...(previous?.churchyCounts ? { churchyCounts: previous.churchyCounts } : {}),
     ...(previous?.kp !== undefined ? { kp: previous.kp } : {}),
     ...(previous?.nassau ? { nassau: previous.nassau } : {}),
     ...(previous?.wolf ? { wolf: previous.wolf } : {}),
@@ -56,6 +59,7 @@ export function conflictedDraft(score: HoleScore, card: Scorecard, refreshVersio
   return {
     text: previous?.text ?? scoreEntryText(score), baseEtag: previous ? previous.baseEtag : card.etag,
     ...(previous?.churchy ?? score.churchy ? { churchy: previous?.churchy ?? score.churchy } : {}),
+    ...(previous?.churchyCounts ? { churchyCounts: previous.churchyCounts } : {}),
     ...(previous?.kp !== undefined ? { kp: previous.kp } : score.kp !== undefined ? { kp: score.kp } : {}),
     ...(previous?.nassau ? { nassau: previous.nassau } : {}),
     ...(previous?.wolf ? { wolf: previous.wolf } : {}),

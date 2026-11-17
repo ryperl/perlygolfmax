@@ -3,6 +3,9 @@ import { useState } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ChurchyDots } from './ChurchyDots';
 import { churchyFixture } from '../../domain/churchy.test-support';
+import type { ChurchyGameDefinition, ChurchySpecials } from '../../domain/churchy';
+import { emptyChurchySpecials } from '../../domain/churchy';
+import type { ChurchyCountTexts } from './churchy-counts';
 
 beforeAll(() => {
   Object.defineProperties(HTMLDialogElement.prototype, {
@@ -15,10 +18,44 @@ afterAll(() => {
   Reflect.deleteProperty(HTMLDialogElement.prototype, 'close');
 });
 describe('compact Churchy dots dialog', () => {
+  it('retains invalid count text through close/reopen, stages repeated Sandy/Other and unrestricted Sticky together', () => {
+    const f = churchyFixture();
+    const game: ChurchyGameDefinition = { ...f.game, version: 2, enabledSpecials: ['sandy', 'sticky', 'birdie', 'eagle'] };
+    const changed = vi.fn();
+    function Harness() {
+      const [value, setValue] = useState(emptyChurchySpecials(game, f.extras.gameEtag));
+      const [counts, setCounts] = useState<ChurchyCountTexts>();
+      return <ChurchyDots name="Fictional golfer" number={1} game={game} value={value} counts={counts} disabled={false}
+        onChange={(next, raw) => { changed(next); setValue(next); if (raw) setCounts(raw); }} />;
+    }
+    render(<Harness />);
+    const trigger = screen.getByRole('button', { name: 'Dots for Fictional golfer' });
+    expect(trigger.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    fireEvent.click(trigger);
+    expect(screen.queryByLabelText(/Murphy called/)).toBeNull();
+    expect(screen.queryByLabelText(/Paree called/)).toBeNull();
+    fireEvent.change(screen.getByLabelText(/Sandy count/), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText('Other dots'), { target: { value: '-1.5' } });
+    expect(screen.getByLabelText('Other dots')).toHaveValue('-1.5');
+    expect(screen.getByLabelText('Other dots')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByRole('alert')).toHaveTextContent('Nothing in this group can save');
+    fireEvent.click(screen.getByRole('button', { name: 'Return to score entry' }));
+    fireEvent.click(trigger);
+    expect(screen.getByLabelText('Other dots')).toHaveValue('-1.5');
+    fireEvent.change(screen.getByLabelText('Other dots'), { target: { value: '3' } });
+    fireEvent.click(screen.getByLabelText(/Sticky confirmed/));
+    expect(changed).toHaveBeenLastCalledWith(expect.objectContaining({
+      version: 2, sandyCount: 2, otherDots: 3, sticky: true,
+    }));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByLabelText(/reason/i)).toBeNull();
+    expect(screen.queryByLabelText(/Birdie/)).toBeNull();
+    expect(screen.queryByLabelText(/Eagle/)).toBeNull();
+  });
   it('opens without a keyboard and stages called specials/ordered team presses, returning focus to Dots', () => {
     const f = churchyFixture();
     function Harness() {
-      const [value, setValue] = useState(f.extras);
+      const [value, setValue] = useState<ChurchySpecials>(f.extras);
       return <ChurchyDots name="Fictional golfer" number={1} value={value} disabled={false} onChange={setValue} />;
     }
     render(<Harness />);

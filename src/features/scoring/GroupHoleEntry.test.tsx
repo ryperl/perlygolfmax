@@ -41,6 +41,25 @@ function typeScore(index: number, value: string) {
 function pause(ms = 900) { act(() => { vi.advanceTimersByTime(ms); }); }
 afterEach(() => { vi.useRealTimers(); });
 describe('pure mobile group hole entry', () => {
+  it('places saved gross progress after Course Handicap without changing draft badges or input focus', () => {
+    const input = props();
+    const player = input.rows[0];
+    if (!player) throw new Error('Missing fictional golfer.');
+    render(<GroupHoleEntry {...input} rows={[{ ...player,
+      courseHandicap: { playerId: player.playerId, courseHandicap: 12 },
+      grossProgress: { holesScored: 6, toPar: 2 },
+      draft: { text: '8', baseEtag: null, status: 'draft' },
+    }]} />);
+    const heading = screen.getByRole('heading', { level: 3 });
+    expect(heading).toHaveTextContent(`${player.displayName} CH 12 Thru 6 +2`);
+    const handicap = heading.querySelector('.entry-handicap');
+    const progress = within(heading).getByText('Thru 6 +2');
+    expect((handicap?.compareDocumentPosition(progress) ?? 0) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(progress).toHaveClass('entry-gross-progress');
+    expect(screen.getByText('Unsaved')).toBeVisible();
+    expect(screen.getByRole('textbox')).toHaveValue('8');
+    expect(screen.getByRole('textbox')).not.toHaveFocus();
+  });
   it.each([
     { courseHandicap: 0, expected: 'CH 0' },
     { courseHandicap: -2, expected: 'CH +2' },

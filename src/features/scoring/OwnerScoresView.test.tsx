@@ -39,6 +39,36 @@ async function loaded(user = userEvent.setup()) {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); document.documentElement.scrollTop = 0; });
 
 describe('hole-first owner scoring', () => {
+  it('shows only acknowledged numeric gross progress on personal tees across drafts, saving and refresh', async () => {
+    const base = mixedTeeRound();
+    const initial: RoundScores = { ...base, cards: base.cards.map((card) => ({
+      ...card, holes: card.holes.map((hole) => ({ ...hole, score: { kind: 'unplayed' } })),
+    })) };
+    const store = memoryScores(initial);
+    const original = vi.mocked(store.client.save).getMockImplementation();
+    if (!original) throw new Error('Missing fictional saver.');
+    mount(store);
+    await loaded();
+    expect(row().getByRole('heading', { level: 3 })).toHaveTextContent('Thru 0 —');
+    await enter(userEvent.setup(), '4');
+    expect(row().getByRole('heading', { level: 3 })).toHaveTextContent('Thru 0 —');
+    const pending = deferred<ScoreWriteResult>();
+    vi.mocked(store.client.save).mockReturnValueOnce(pending.promise);
+    await userEvent.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
+    expect(row().getByRole('heading', { level: 3 })).toHaveTextContent('Thru 0 —');
+    const call = vi.mocked(store.client.save).mock.calls[0];
+    if (!call) throw new Error('Missing fictional write.');
+    await act(async () => { pending.resolve(await original(...call)); });
+    expect(await screen.findByRole('heading', { name: 'Hole 2' })).toBeVisible();
+    expect(row().getByRole('heading', { level: 3 })).toHaveTextContent('Thru 1 -1');
+    store.replace({ ...store.read(), cards: store.read().cards.map((card, index) => index === 0 ? {
+      ...card, holes: card.holes.map((hole) => hole.number === 7 ? { ...hole, score: { kind: 'strokes', strokes: 7 } } : hole),
+    } : card) });
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh saved round' }));
+    await waitFor(() => { expect(row().getByRole('heading', { level: 3 })).toHaveTextContent('Thru 2 +1'); });
+    expect(screen.getByRole('heading', { name: 'Hole 2' })).toBeVisible();
+    expect(store.client.save).toHaveBeenCalledOnce();
+  });
   it('scopes the supplied round tone over scoring controls without remounting drafts or reloading scores', async () => {
     const store = memoryScores();
     const props = { client: store.client, eventId: fictionalRoundScores.eventId, roundId: fictionalRoundScores.roundId,

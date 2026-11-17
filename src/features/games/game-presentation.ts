@@ -21,7 +21,7 @@ export function gameScoringLabel(game: RoundGameDefinition): string {
   if (game.kind === 'wolf') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Wolf${game.allowPig ? ' / PIG' : ''} · ${game.version === 2 ? 'Earned dots' : 'Legacy dot balance'}`;
   if (game.kind === 'nassau') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Nassau · Match play · ${game.variant.replaceAll('-', ' ')}`;
   if (game.kind === 'stroke-play') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Stroke Play · Lowest to personal par${game.basis === 'net' ? ' · 100% Course Handicap' : ''}`;
-  if (game.kind === 'churchy') return 'Churchy Game · Experimental · Rotating partners · Relative Course Handicap · Earned dots';
+  if (game.kind === 'churchy') return `Group ${String(game.groupNumber)} · Rotating partners · Earned dots`;
   if (game.kind === 'ball-drop') return `Ball Drop · ${game.format === 'ball-drop-net-gross' ? '1 Net + 1 Gross'
     : game.format === 'ball-drop-two-net' ? '2 Net' : '2 Gross'} · 4-person teams · Lowest to par${game.basis === 'net' ? ' · 100% Course Handicap' : ''}`;
   if (game.kind === 'skins') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Skins · ${game.carryovers ? 'Carryovers on' : 'Carryovers off'}${game.basis === 'net' ? ' · 100% Course Handicap' : ''}`;

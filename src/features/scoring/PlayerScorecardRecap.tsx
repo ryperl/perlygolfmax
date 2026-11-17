@@ -4,6 +4,7 @@ import { ScorecardNine } from './ScorecardNine';
 import { scorecardGame, scorecardGameWarnings, summarizeCard } from './scorecard-presentation';
 import './scorecard-recap.css';
 import { gameScoringLabel } from '../games';
+import { PlayerDifferential } from '../differentials';
 
 export function PlayerScorecardRecap({ round, card, gameId }: {
   readonly round: RoundScores;
@@ -17,6 +18,7 @@ export function PlayerScorecardRecap({ round, card, gameId }: {
   const summary = summarizeCard(card, layout);
   const game = scorecardGame(round, gameId, [card.playerId]);
   const totalRating = (tee?.ratings ?? round.teeRatings)?.find((rating) => rating.type === 'Total');
+  const differential = round.roundDifferentials?.find((value) => value.playerId === card.playerId);
   return <section className="player-scorecard-recap" aria-label={`${card.displayName} full scorecard`}>
     <header className="recap-heading">
       <div><h3>{card.displayName}</h3><p>{round.roundName} — {round.courseName}</p>
@@ -30,6 +32,7 @@ export function PlayerScorecardRecap({ round, card, gameId }: {
         {!summary.complete && <span>Incomplete</span>}
       </p>
     </header>
+    {differential && <PlayerDifferential value={differential} />}
     {round.games?.configuration.games.some((entry) => entry.kind === 'nassau' && entry.sides.some((side) => side.playerIds.includes(card.playerId)))
       && <p>Nassau match bets and presses are in Games and Leaderboard.</p>}
     {scorecardGameWarnings(game, [card]).map((warning) => <p className="scorecard-game-unavailable" key={warning}>{warning}</p>)}

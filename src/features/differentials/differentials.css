@@ -1,0 +1,38 @@
+.round-differentials, .player-differential {
+  min-width: 0;
+  color: var(--cp-text);
+  background: var(--cp-surface);
+  overflow-wrap: anywhere;
+}
+.round-differentials table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+.round-differentials { container-type: inline-size; }
+.differential-heading-compact { display: none; }
+@container (max-width: 28rem) {
+  .differential-heading-wide { display: none; }
+  .differential-heading-compact { display: inline; }
+}
+.round-differentials caption {
+  text-align: start;
+  font-weight: 650;
+  padding-block: .4rem;
+}
+.round-differentials :is(th, td) {
+  padding: .5rem .35rem;
+  text-align: end;
+  vertical-align: top;
+  border-bottom: 1px solid var(--cp-border);
+  font-variant-numeric: tabular-nums;
+}
+.round-differentials :is(th, td):first-child { text-align: start; width: 32%; }
+.round-differentials thead th { font-size: .75rem; color: var(--cp-text-muted); }
+.round-differentials tbody th { font-weight: 500; }
+.differential-explanation, .differential-state { color: var(--cp-text-muted); font-size: .8rem; }
+.differential-explanation, .player-differential p { margin-block: .35rem; }
+.player-differential strong { font-variant-numeric: tabular-nums; }
+@media (max-width: 380px) {
+  .round-differentials :is(th, td) { padding-inline: .2rem; font-size: .8rem; }
+}

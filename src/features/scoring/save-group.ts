@@ -7,6 +7,8 @@ import { cardFor, conflictedDraft, entryKey, entryScore, savedHole } from './ent
 import type { HoleDraft } from './entry-state';
 import { scoreAccessKey, writablePlayerIds } from './score-access';
 import { isHoleScore } from '../../contracts/scoring';
+import { validChurchyCounts } from '../churchy';
+import { churchySpecialsMatchGame, sameChurchySpecials } from '../../domain/churchy';
 
 export interface GroupWrite {
   readonly playerId: string;
@@ -31,6 +33,14 @@ export function planGroup(round: RoundScores, playerIds: readonly string[], hole
     const card = cardFor(round, playerId);
     const saved = savedHole(card, holeNumber);
     const draft = drafts.get(entryKey(playerId, holeNumber));
+    if (draft?.churchyCounts && !validChurchyCounts(draft.churchyCounts)) { invalid.push(playerId); continue; }
+    if (draft?.churchy && !sameChurchySpecials(draft.churchy, saved.churchy)) {
+      const specials = draft.churchy;
+      const game = round.games?.configuration.games.find((game) => game.kind === 'churchy' && game.id === specials.gameId);
+      if (round.churchyEnabled !== true || game?.kind !== 'churchy'
+        || game.version === 2 && !round.churchyRulesVersions?.includes(2)
+        || !churchySpecialsMatchGame(specials, game)) { invalid.push(playerId); continue; }
+    }
     const entry = draft ? entryScore(draft.text, draft.churchy ?? saved.churchy, draft.kp !== undefined ? draft.kp : saved.kp,
       draft.nassau, draft.wolf, draft.dots) : saved;
     if (!entry || !isHoleScore(entry)) { invalid.push(playerId); continue; }

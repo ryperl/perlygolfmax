@@ -439,8 +439,8 @@ export class TableWorkspaceStore {
         throw new ApiError(409, 'MATCH_SETUP_CHANGED');
       }
     }
-    const churchy = state.games?.games.find((game) => game.kind === 'churchy');
-    if (churchy?.kind === 'churchy') {
+    const churchyGames = state.games?.games.filter((game) => game.kind === 'churchy') ?? [];
+    for (const churchy of churchyGames) {
       const group = updatedRound.groups.find((entry) => entry.number === churchy.groupNumber);
       if (!group || group.playerIds.length !== 4 || group.playerIds.some((id, index) => id !== churchy.playerIds[index])) {
         throw new ApiError(409, 'CHURCHY_SETUP_CHANGED');
@@ -464,7 +464,7 @@ export class TableWorkspaceStore {
         throw new ApiError(400, 'INVALID_GAME_TEAMS');
       }
     }
-    const warnings = this.reviewWarnings(state.round, updatedRound, gamesChanged, churchy?.kind === 'churchy');
+    const warnings = this.reviewWarnings(state.round, updatedRound, gamesChanged, churchyGames.length > 0);
     const withWarnings: RoundSnapshot = { ...updatedRound, ...(warnings.length ? { reviewWarnings: warnings } : { reviewWarnings: [] }) };
     const before = correctionInput(state.round, state.games?.games);
     const after = correctionInput(withWarnings, updatedGames);

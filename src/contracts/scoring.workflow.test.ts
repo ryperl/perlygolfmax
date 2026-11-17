@@ -11,8 +11,53 @@ import { EventChangedError } from '../client/events';
 import { summarizeGross } from '../domain/scoring';
 import { stablefordPoints } from '../domain/stableford';
 import type { RoundGameDefinition } from '../domain/games';
+import type { ChurchyGameDefinitionV2 } from '../domain/churchy';
+import { emptyChurchySpecials } from '../domain/churchy';
 
 describe('owner scoring client/handler/storage workflow', () => {
+  it('acknowledges raw-only v2 Churchy saves and their immutable retries when a peer save conflicts', async () => {
+    const stored = await scoringFixture();
+    const game: ChurchyGameDefinitionV2 = { id: identifier(710), name: 'Churchy Game', kind: 'churchy',
+      version: 2, basis: 'net', groupNumber: 1, playerIds: stored.input.playerIds, currency: 'USD',
+      amountPerDotMinor: 50, enabledSpecials: ['sticky'] };
+    const configured = await stored.scores.saveGames(creator, event.id, stored.roundId, [game], null, identifier(810));
+    const empty = emptyChurchySpecials(game, configured.round.games?.configuration.etag ?? '');
+    if (empty.version !== 2) throw new Error('Expected fictional v2 specials');
+    const churchy = { ...empty, sticky: true, otherDots: 2 };
+    const saved = await stored.scores.write(creator, event.id, stored.roundId, stored.playerId, 1,
+      { kind: 'strokes', strokes: 4, churchy }, null, identifier(811));
+    const api = { scores: stored.scores, verify: vi.fn().mockResolvedValue(creator),
+      limiter: { check: vi.fn().mockResolvedValue(undefined) } };
+    const context = new InvocationContext({ invocationId: 'fictional-churchy-v2-workflow', logHandler: () => undefined });
+    const send = vi.fn<typeof fetch>().mockImplementation(async (target, options) => {
+      const url = typeof target === 'string' ? target : target instanceof URL ? target.href : target.url;
+      const parts = new URL(url).pathname.replace(/^\/api\//, '').split('/').map(decodeURIComponent);
+      const request = new HttpRequest({ url, method: options?.method ?? 'GET',
+        params: { id: parts[1] ?? '', roundId: parts[3] ?? '', playerId: parts[5] ?? '', holeNumber: parts[7] ?? '' },
+        headers: Object.fromEntries(new Headers(options?.headers).entries()),
+        ...(typeof options?.body === 'string' ? { body: { string: options.body } } : {}) });
+      const result = await createScoringHandler(() => api, 'score-hole')(request, context);
+      return new Response(JSON.stringify(result.jsonBody), { status: result.status ?? 200 });
+    });
+    const client = createScoresClient('https://fictional.example.test/api', () => Promise.resolve('fictional-owner'), send);
+    const signal = new AbortController().signal;
+    const etag = saved.round.cards.find((card) => card.playerId === stored.playerId)?.etag ?? null;
+    const first = await client.save(event.id, stored.roundId, stored.playerId, 1,
+      { kind: 'strokes', strokes: 5 }, etag, identifier(812), signal);
+    expect(first.change.after).toEqual({ kind: 'strokes', strokes: 5, churchy });
+    const peerId = stored.input.playerIds[1];
+    if (!peerId) throw new Error('Expected fictional peer');
+    await expect(client.save(event.id, stored.roundId, peerId, 1,
+      { kind: 'strokes', strokes: 4 }, 'fictional-stale-peer', identifier(813), signal)).rejects.toBeInstanceOf(EventChangedError);
+    const replay = await client.save(event.id, stored.roundId, stored.playerId, 1,
+      { kind: 'strokes', strokes: 5 }, etag, identifier(812), signal);
+    expect(replay.change).toEqual(first.change);
+    expect(replay.round.cards.find((card) => card.playerId === peerId)?.etag).toBeNull();
+    const peer = await client.save(event.id, stored.roundId, peerId, 1,
+      { kind: 'strokes', strokes: 4 }, null, identifier(814), signal);
+    expect(peer.round.cards.find((card) => card.playerId === stored.playerId)?.holes[0]?.score.churchy).toEqual(churchy);
+    expect((await stored.scores.history(creator, event.id, stored.roundId, stored.playerId)).changes).toHaveLength(2);
+  });
   it.each([1, 2, 3, 4] as const)('persists audited dispositions and game results for %i golfers without granting nonowner access', async (count) => {
     const stored = await scoringFixture(count);
     const api = {

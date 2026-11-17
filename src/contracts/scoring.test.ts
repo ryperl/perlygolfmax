@@ -7,6 +7,8 @@ import { teamSize } from '../domain/games.js';
 import { aggregateTeamGameResults } from '../domain/team-games.js';
 import { stablefordPoints } from '../domain/stableford.js';
 import { isRoundGamesView } from './games.js';
+import type { ChurchyGameDefinitionV2, ChurchySpecials } from '../domain/churchy.js';
+import { calculateChurchyResults, defaultChurchySpecials, emptyChurchySpecials } from '../domain/churchy.js';
 
 const id = (number: number) => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
 function round(): RoundScores {
@@ -30,6 +32,70 @@ const change: ScoreChange = {
 };
 
 describe('owner gross scoring network contracts', () => {
+  describe('Churchy rules-version and saved declaration contracts', () => {
+    function churchyRound(edit?: (specials: ChurchySpecials) => ChurchySpecials): RoundScores {
+      const base = round();
+      const game: ChurchyGameDefinitionV2 = { id: id(810), name: 'Churchy Game', kind: 'churchy',
+        version: 2, basis: 'net', groupNumber: 1, playerIds: base.cards.map((card) => card.playerId),
+        currency: 'USD', amountPerDotMinor: 50, enabledSpecials: defaultChurchySpecials };
+      const specials = emptyChurchySpecials(game, 'fictional-game-v1');
+      const cards: readonly Scorecard[] = base.cards.map((card, index) => ({ ...card, etag: 'fictional-card-v1',
+        updatedAt: '2026-01-01T00:00:00Z', holes: card.holes.map((hole) => ({ ...hole,
+          score: { kind: 'strokes', strokes: 4, ...(index === 0 && hole.number === 1
+            ? { churchy: edit ? edit(specials) : specials } : {}) } })) }));
+      return { ...base, churchyEnabled: true, churchyRulesVersions: [1, 2], teeStrokeAllocation: true,
+        courseHandicaps: cards.map((card) => ({ playerId: card.playerId, courseHandicap: 0 })),
+        setupLocked: true, lastUpdatedAt: '2026-01-01T00:00:00Z', cards,
+        games: { configuration: { eventId: base.eventId, roundId: base.roundId, etag: 'fictional-game-v1', games: [game] },
+          results: [calculateChurchyResults(game, cards.map((card) => ({
+            playerId: card.playerId, displayName: card.displayName, layout: base.layout, handicap: 0,
+          })), cards)] } };
+    }
+    it('validates explicit versions but retains omission and disabled reads of saved v2 data', () => {
+      const value = churchyRound();
+      expect(isRoundScores(value)).toBe(true);
+      const { churchyRulesVersions: omitted, ...legacyCapability } = value;
+      expect(omitted).toEqual([1, 2]);
+      expect(isRoundScores(legacyCapability)).toBe(true);
+      expect(isRoundScores({ ...legacyCapability, churchyEnabled: false })).toBe(true);
+      expect(isRoundScores({ ...legacyCapability, churchyEnabled: false, churchyRulesVersions: [] })).toBe(true);
+      for (const versions of [null, true, [2, 2], [1, 3], ['2'], 2]) {
+        expect(isRoundScores({ ...value, churchyRulesVersions: versions })).toBe(false);
+      }
+      expect(isRoundScores({ ...value, churchyEnabled: false })).toBe(false);
+    });
+    it('rejects result-version drift, unconfigured declarations and cross-group score bindings', () => {
+      const value = churchyRound();
+      const games = value.games;
+      if (!games) throw new Error('Expected fictional Churchy games');
+      expect(isRoundScores({ ...value, games: { ...games,
+        results: games.results.map((result) => ({ ...result, version: 1 })) } })).toBe(false);
+      const { games: omitted, ...missingConfiguration } = value;
+      expect(omitted).toBe(games);
+      expect(isRoundScores(missingConfiguration)).toBe(false);
+      expect(isRoundScores(churchyRound((specials) => ({ ...specials, gameId: id(899) })))).toBe(false);
+      expect(isRoundScores({ ...value, groups: [
+        { number: 1, playerIds: value.cards.slice(0, 3).map((card) => card.playerId) },
+        { number: 2, playerIds: value.cards.slice(3).map((card) => card.playerId) },
+      ] })).toBe(false);
+      expect(isRoundScores(churchyRound((specials) => ({
+        gameId: specials.gameId, gameEtag: specials.gameEtag, paree: false, murphy: false,
+        murphyPresses: 0, sandy: false, pully: false,
+      })))).toBe(false);
+    });
+    it('rejects disabled named declarations even when unavailable results match the raw cards', () => {
+      const value = churchyRound((specials) => specials.version === 2 ? { ...specials, sticky: true } : specials);
+      const games = value.games;
+      const definition = games?.configuration.games[0];
+      if (!games || definition?.kind !== 'churchy' || definition.version !== 2) throw new Error('Expected fictional v2 definition');
+      const disabled = { ...definition, enabledSpecials: [] };
+      const results = [calculateChurchyResults(disabled, value.cards.map((card) => ({
+        playerId: card.playerId, displayName: card.displayName, layout: value.layout, handicap: 0,
+      })), value.cards)];
+      expect(isRoundScores({ ...value, games: { configuration: { ...games.configuration, games: [disabled] }, results } })).toBe(false);
+      expect(isRoundScores(value)).toBe(true);
+    });
+  });
   it('accepts public game management only with explicit Quick-round capability, never tester promotion', () => {
     const saved = round();
     const permission = { role: 'public', writePlayerIds: saved.cards.map((card) => card.playerId), canManageGames: true };

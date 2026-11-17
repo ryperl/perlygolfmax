@@ -229,20 +229,40 @@
 - Skins leaderboards omit known zero awards from standings/search/pages only.
   Preserve awarded ranks/ties, pending/unavailable displays and underlying
   game/purse results; hidden search controls must not hide refreshed winners.
-- Churchy Game is a separate version-1 experimental game for one saved foursome.
+- Legacy Churchy version 1 retains its original definition, declarations,
+  one-dot Birdie, single Sandy and shared-pot math; never silently convert it.
+  New Churchy version 2 supports one independent game per saved foursome, with
+  distinct configuration, carry, standings and settlement. Named specials are
+  enabled/disabled before scoring at fixed values: Birdie 2, Eagle 4 without
+  Birdie overlap, manual Sticky 1, repeated exact-gross-par Sandy and shared
+  per-hole Other whole counts without required explanations. Sticky is a
+  scorer-decided approach inside flagstick length; no invented score condition.
+  Other is a catch-all, not a round-level adjustment or negative earned dots.
+  Both current teammates receive each source award in full, entered only once.
+  Preserve legacy and new extras on raw-only saves; validate game version,
+  enabled fields, group, revision and counters authoritatively. Keep all setup,
+  capture, concurrency, retry and audit safeguards. Version 2 requires explicit
+  `churchyRulesVersions` support, not just the general Churchy flag.
+  New money uses `(4*d_i - sum(d)) * rateMinor`, source-aware earned dots and
+  net due/owed, points-only at zero, no second settlement or payments. Keep
+  Churchy independent from Dots/Wolf; Ball Drop stays between foursomes.
+  Present compact accessible controls/results without Experimental labels,
+  redundant copy or hidden essential state. The kill switch remains intact.
+- Shared Churchy gameplay retains
   Explicit P1–P4 order rotates partners in three-hole blocks; stakes 1/2/3 repeat.
   Net compares max/min numeric strokes using captured CH minus the foursome's
   lowest CH on each personal tee. High/Low carry independently across the turn;
   sweep is current stake only. Earned dots credit both partners in full, never
   netted. Calls Paree/Murphy are gross par-or-better; Murphy presses are explicit
   initial/opposing/calling stages 1/2/3. Sandy/Pully require confirmed exact par;
-  automatic birdie is exactly one under, never invented eagle dots. Pickup/DNF
+  automatic birdie is exactly one under. Legacy version 1 has no eagle dots.
+  Pickup/DNF
   loses High to an all-numeric pair; remaining numeric Low still competes.
   Unapproved both-pair/no-numeric comparisons are unavailable, never penalties
   or automatic ties. Preserve carry uncertainty and pending versus unavailable.
   Stage specials in the same conditional/audited score write, with game revision
   and selected-group checks. No offline dots, second write or optimistic results.
-  Exact USD minor-unit shared-pot settlement is separate from earned standings:
+  Legacy version-1 USD minor-unit shared-pot settlement is separate from earned standings:
   units `2*d_i - sum(d)/2`, planned pays/collects only, not place-based purse or
   overall Stableford. Setup/order lock after scoring; stake edits require owner
   authority except for explicitly collaborative Quick-round game management.
@@ -259,6 +279,22 @@
   current catalog HI or Churchy earned dots. Use shared allocation math;
   never halve an already-calculated nine-hole CH again. Bound visual counts,
   preserve gross marks/counting badges and surface unavailable allocation.
+- Score-entry headers show saved numeric gross-to-personal-par progress after
+  CH, such as Thru 6 +2/E/-2. Count only acknowledged numeric holes; missing,
+  pickup/X7/DNF never count as par or replace the running total with Incomplete.
+  Keep overall completeness separate, no-scores distinct from even par,
+  drafts out of saved summaries and no new reads merely for this display.
+- Estimated round differentials are server-derived for completed numeric
+  18-hole cards only, using captured personal/default tee ratings, full CH and
+  allocation. Net-double-bogey caps affect derived adjusted gross only; never
+  raw strokes, captures, standings or index history. Label PCC 0 and estimate,
+  not official GHIN or posting. Keep missing, pickup/DNF, NH, missing ratings/
+  allocation and unsafe arithmetic explicit; never guess nine-hole WHS
+  expected-score components or claim incomplete scores are official results.
+  Public summaries allowlist derived values without observation metadata.
+  Keep missing-state reasons in contracts, but show only — in differential
+  cells, without per-row explanations. Use Adj. Gross / Est. Diff. headings
+  and A.G / E.D in narrow containers, retaining full accessible column names.
 - Event Roster retains current HI. Round playing groups, unassigned golfers and
   competition teams show CH using that round's index and each personal/default
   tee through shared domain handicap math, never roster HI or game allowance.

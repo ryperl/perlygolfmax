@@ -14,6 +14,8 @@ import { useState } from 'react';
 import type { RoundGameDefinition } from '../../domain/games';
 import type { RoundScores } from '../../domain/scoring';
 import { calculateGameResults } from '../../domain/stableford';
+import type { ChurchyGameDefinition } from '../../domain/churchy';
+import { defaultChurchySpecials } from '../../domain/churchy';
 
 beforeAll(() => {
   Object.defineProperties(HTMLDialogElement.prototype, {
@@ -26,10 +28,78 @@ afterAll(() => {
   Reflect.deleteProperty(HTMLDialogElement.prototype, 'close');
 });
 describe('Churchy workflow integration', () => {
+  it('keeps invalid v2 counts visible and blocks every group request before saving specials with the ordinary score path', async () => {
+    const f = churchyFixture();
+    const game: ChurchyGameDefinition = { ...f.game, version: 2, enabledSpecials: defaultChurchySpecials };
+    const base = f.round();
+    const initial: RoundScores = { ...base, churchyRulesVersions: [1, 2], games: {
+      configuration: { eventId: base.eventId, roundId: base.roundId, etag: f.extras.gameEtag, games: [game] },
+      results: calculateGameResults([game], f.snapshot, base.cards),
+    } };
+    const store = memoryScores(initial);
+    render(<OwnerScoresView client={store.client} eventId={initial.eventId} roundId={initial.roundId} onSessionExpired={vi.fn()} />);
+    const user = userEvent.setup();
+    await screen.findByRole('heading', { name: 'Round scorecard' });
+    await user.click(screen.getByRole('button', { name: 'Enter scores' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Fictional golfer 2 score' }), { target: { value: '6' } });
+    await user.click(screen.getByRole('button', { name: 'Dots for Fictional golfer 1' }));
+    let dialog = within(screen.getByRole('dialog'));
+    fireEvent.change(dialog.getByLabelText(/Sandy count/), { target: { value: '2' } });
+    fireEvent.change(dialog.getByLabelText('Other dots'), { target: { value: '-1.5' } });
+    expect(dialog.getByLabelText('Other dots')).toHaveValue('-1.5');
+    expect(screen.getByRole('alert')).toHaveTextContent('nonnegative whole numbers');
+    await user.click(screen.getByRole('button', { name: 'Return to score entry' }));
+    await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
+    expect(store.client.save).not.toHaveBeenCalled();
+    expect(screen.getByText(/Nothing sent. Check every intended entry/)).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Hole 1' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Dots for Fictional golfer 1' }));
+    dialog = within(screen.getByRole('dialog'));
+    expect(dialog.getByLabelText('Other dots')).toHaveValue('-1.5');
+    fireEvent.change(dialog.getByLabelText('Other dots'), { target: { value: '3' } });
+    await user.click(dialog.getByLabelText(/Sticky confirmed/));
+    await user.click(screen.getByRole('button', { name: 'Return to score entry' }));
+    await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
+    expect(await screen.findByRole('heading', { name: 'Hole 2' })).toBeVisible();
+    expect(store.client.save).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(store.client.save).mock.calls[0]?.[4]).toMatchObject({ kind: 'strokes', strokes: 4,
+      churchy: { version: 2, sandyCount: 2, otherDots: 3, sticky: true } });
+    expect(vi.mocked(store.client.save).mock.calls[1]?.[4]).toMatchObject({ kind: 'strokes', strokes: 6 });
+  });
+  it('distinguishes two saved Churchy groups and selects the current group result and declaration identity', async () => {
+    const f = churchyFixture();
+    const first: ChurchyGameDefinition = { ...f.game, version: 2, enabledSpecials: defaultChurchySpecials };
+    const second: ChurchyGameDefinition = { ...first, id: '00000000-0000-4000-8000-000000000703',
+      groupNumber: 2, playerIds: f.cards.slice(4).map((card) => card.playerId) };
+    const base = f.round();
+    const games = [first, second];
+    const round: RoundScores = { ...base, churchyRulesVersions: [1, 2], games: {
+      configuration: { eventId: base.eventId, roundId: base.roundId, etag: f.extras.gameEtag, games },
+      results: calculateGameResults(games, f.snapshot, base.cards),
+    } };
+    const store = memoryScores(round);
+    render(<OwnerScoresView client={store.client} eventId={round.eventId} roundId={round.roundId} onSessionExpired={vi.fn()} />);
+    await screen.findByRole('heading', { name: 'Round scorecard' });
+    await userEvent.click(screen.getByRole('button', { name: 'Games' }));
+    expect(screen.getAllByRole('region', { name: 'Churchy Game · Group 1 results' }).length).toBeGreaterThan(0);
+    expect(screen.getByRole('region', { name: 'Churchy Game · Group 2 results' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Edit Churchy Game · Group 1' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Edit Churchy Game · Group 2' })).toBeVisible();
+    await userEvent.click(screen.getByRole('button', { name: 'Enter scores' }));
+    await userEvent.selectOptions(screen.getByLabelText('View group'), '2');
+    const entry = within(screen.getByRole('article', { name: 'Fictional golfer 5 scorecard' }));
+    expect(entry.getByText(/Churchy relative handicap: 0/)).toBeVisible();
+    await userEvent.click(entry.getByRole('button', { name: 'Dots for Fictional golfer 5' }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByLabelText(/Sticky confirmed/));
+    await userEvent.click(screen.getByRole('button', { name: 'Return to score entry' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
+    expect(await screen.findByRole('heading', { name: 'Hole 2' })).toBeVisible();
+    expect(vi.mocked(store.client.save).mock.calls[0]?.[4].churchy).toMatchObject({ gameId: second.id, version: 2, sticky: true });
+  });
   it('creates Churchy as a separate owner game with an explicit saved foursome, swapped order and exact stake, retaining peers', async () => {
     const f = churchyFixture();
     const saved = f.round();
-    const initial: RoundScores = { ...saved, games: { configuration: {
+    const initial: RoundScores = { ...saved, setupLocked: false, churchyRulesVersions: [1, 2], games: { configuration: {
       eventId: saved.eventId, roundId: saved.roundId, etag: f.extras.gameEtag, games: [f.skins],
     }, results: calculateGameResults([f.skins], f.snapshot, f.cards) } };
     const record = vi.fn<(games: readonly RoundGameDefinition[]) => void>();
@@ -115,6 +185,7 @@ describe('Churchy workflow integration', () => {
     expect(screen.getByLabelText('USD per dot')).toHaveValue('1.00');
     expect(screen.queryByLabelText('Points preset')).toBeNull();
     expect(screen.queryByLabelText('Score basis')).toBeNull();
+    fireEvent.click(screen.getByText('Partners and rules'));
     expect(screen.getByText(/Holes 1–3 and 10–12/)).toBeVisible();
     fireEvent.change(screen.getByLabelText('P1'), { target: { value: f.game.playerIds[1] } });
     const draft: unknown = onChange.mock.calls[0]?.[0];

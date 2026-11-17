@@ -101,7 +101,7 @@ describe('persisted independent Dots and earned Wolf authority', () => {
     const churchy = { id: identifier(19204), name: 'Churchy Game', kind: 'churchy' as const, version: 1 as const,
       basis: 'net' as const, groupNumber: 1, playerIds: game.playerIds, amountPerDotMinor: 100, currency: 'USD' as const };
     await expect(fresh.scores.saveGames(fresh.actor, event.id, fresh.roundId, [churchy, game], null, identifier(19205)))
-      .rejects.toMatchObject({ code: 'INCOMPATIBLE_INTERNAL_GAMES' });
+      .rejects.toMatchObject({ code: 'INVALID_GAME_SETUP' });
     const independent = await fresh.scores.saveGames(fresh.actor, event.id, fresh.roundId,
       [wolf(game.playerIds), game], null, identifier(19206));
     expect(independent.round.internalSettlements).toHaveLength(2);

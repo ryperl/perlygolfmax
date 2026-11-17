@@ -2,9 +2,26 @@ import { describe, expect, it } from 'vitest';
 import { fictionalId } from '../../client/catalog.test-support';
 import { maximumExactGamePoints, teamSize } from '../../domain/games';
 import { teamLeaderboardGame, teamLeaderboardRound } from '../../client/leaderboard.test-support';
-import { addBand, buildGame, draftFromGame, newGameDraft, replaceGame, resetTeamAssignments, setFormat, setPreset, teamDraftFeedback } from './game-draft';
+import { addBand, buildGame, draftFromGame, newGameDraft, replaceGame, resetTeamAssignments, setFormat, setGameKind, setPreset, teamDraftFeedback } from './game-draft';
+import { churchyFixture } from '../../domain/churchy.test-support';
+import { defaultChurchySpecials } from '../../domain/churchy';
 
 describe('game drafts', () => {
+  it('creates Churchy v2 defaults without converting saved v1, and retains independent group definitions', () => {
+    const f = churchyFixture();
+    const legacy = draftFromGame(f.game);
+    expect(legacy.churchyVersion).toBe(1);
+    expect(buildGame(legacy, f.game.playerIds)).toEqual(f.game);
+    expect(buildGame(legacy, f.game.playerIds)).not.toHaveProperty('enabledSpecials');
+    const draft = { ...setGameKind(newGameDraft(), 'churchy', f.cards.length),
+      churchyGroup: 2, churchyPlayers: f.cards.slice(4).map((card) => card.playerId), amountPerDotMinor: '.50' };
+    const built = buildGame(draft, f.cards.map((card) => card.playerId));
+    expect(built).toMatchObject({ version: 2, enabledSpecials: defaultChurchySpecials, amountPerDotMinor: 50, groupNumber: 2 });
+    if (!built || built.kind !== 'churchy') throw new Error('Missing fictional v2 game.');
+    expect(buildGame(draftFromGame(built), f.cards.map((card) => card.playerId))).toEqual(built);
+    expect(replaceGame([f.game], built)).toEqual([f.game, built]);
+    expect(replaceGame([f.game], { ...built, groupNumber: 1, playerIds: f.game.playerIds })).toBeNull();
+  });
   it.each([2, 12, 40])('builds exact two-person teams for a %i-golfer full roster without an arbitrary cap', (count) => {
     const ids = Array.from({ length: count }, (_, index) => fictionalId(index + 1));
     const draft = setFormat(newGameDraft(), 'two-net-better-ball', count);

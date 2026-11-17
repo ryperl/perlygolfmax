@@ -29,6 +29,7 @@
 .entry-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .25rem .5rem; }
 .entry-heading h3 { margin: 0; font-size: 1rem; line-height: 1.3; min-width: 0; }
 .entry-handicap { display: inline-block; color: var(--cp-text-muted); font-size: .75rem; font-weight: 500; white-space: nowrap; }
+.entry-gross-progress { display: inline-block; margin-inline-start: .85rem; color: var(--cp-text-muted); font-size: .75rem; font-weight: 500; white-space: nowrap; }
 .score-badge { border: 1px solid var(--cp-border); border-radius: 2rem; padding: .05rem .4rem; font-size: .75rem; line-height: 1.4; white-space: normal; }
 .score-badge-draft, .score-badge-saving { color: var(--cp-accent); border-color: var(--cp-accent); }
 .score-badge-conflict, .score-badge-failed, .entry-error { color: var(--cp-danger); }

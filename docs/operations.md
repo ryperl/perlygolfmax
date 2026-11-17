@@ -111,7 +111,7 @@ catalog, purse-management or settlement-transfer authority is granted.
 New Wolf definitions are version 2; existing Wolf version 1 is never converted,
 including unstarted games. The definition validator requires the version-2 stake
 field explicitly (null is points-only) and rejects a stake field on legacy
-version 1. Churchy's existing settlement expression and stored minor units do
+version 1. Legacy Churchy's settlement expression and stored minor units do
 not change. Dollar-based editing is presentation/parsing only, not a migration.
 
 Deploy the API before the frontend. The server publishes `supportedGameKinds`
@@ -119,7 +119,7 @@ including `dots`, explicit `wolfRulesVersions: [1, 2]`, `internalGamesSupported`
 and narrow `permissions.canManageInternalGames` for eligible active pre-scoring
 views. Missing capabilities do not enable new writes. Legacy testers receive
 neither the new internal capability nor its Dots/Wolf ledgers or declarations.
-The experimental Churchy flag remains authoritative.
+The Churchy flag remains authoritative.
 
 Any visitor may configure Dots, new Wolf or enabled Churchy inside an ordinary
 event before scoring. The game handler compares complete old/new definitions:
@@ -176,7 +176,20 @@ legacy Churchy and event purse sources. No environment setting, role,
 infrastructure, identity provider, storage account or resource creation is
 required by this release.
 
-## Experimental Churchy capability rollout and kill switch
+## Estimated round differentials
+
+The approved differential feature is a derived 18-hole, PCC-zero estimate, not
+GHIN integration or an official handicap result. Calculate from acknowledged
+numeric cards and captured personal/default tee ratings, full Course Handicap
+and stroke allocation. Apply net-double-bogey caps only to the derived adjusted
+gross; never change raw cards, captures, game results or index observations.
+Keep incomplete, pickup/DNF, missing inputs and unsafe arithmetic explicit.
+Do not invent PCC, nine-hole expected scores, posting eligibility or completed
+values. Public projections publish only the allowlisted derived result, never
+raw Handicap Index observation metadata. This uses already-loaded round data,
+with no external request, new secret, GHIN endpoint or infrastructure setting.
+
+## Churchy versions, capability rollout and kill switch
 
 The scoring API (organizer and public runtime) evaluates
 `CHURCHY_GAME_ENABLED` and publishes `churchyEnabled` on each round projection.
@@ -185,6 +198,25 @@ enables explicitly, exact `false` disables, and any other configured value
 fails closed. There is no frontend environment override or new infrastructure.
 Clients require the explicit server capability; an older API without it is
 treated as unsupported even though the new server defaults on.
+
+New Churchy games use version 2, separately advertised through
+`RoundScores.churchyRulesVersions`. A missing version capability must not enable
+version-2 creation, definition edits or special writes. Retain legacy version-1
+reads and unchanged raw-only saves without converting saved games. The new
+version supports independent Churchy configurations per saved foursome, with
+one Churchy game per group rather than one per round. Duplicate-group definitions,
+cross-group declarations, changed rules versions and disabled special claims are
+rejected. Existing whole-round capture/setup locks and authority boundaries remain.
+
+Version 2 fixes Birdie at 2, Eagle at 4 without Birdie overlap, Sticky at 1,
+exact-par Sandy occurrence counts and per-hole shared Other whole units.
+Named specials can be toggled before scoring, never assigned arbitrary prices.
+Manual Sticky/Other have no invented numeric-score qualification.
+The server derives awards and a per-foursome settlement summary from saved
+declarations, raw dispositions and captured inputs, not client-supplied awards.
+Keep special edits in the existing conditional score/audit transaction, preserve
+hidden extras on raw-only clients and retain acknowledged/retry/conflict behavior.
+No new environment setting, transport ceiling or storage account is required.
 
 Deploy the compatible API before the frontend through the existing approved
 test deployment. No new application setting is required for default-on rollout;
@@ -214,8 +246,10 @@ advance declaration or verified team identity.
 Saved earned-dot results derive from captured handicaps, personal layouts and
 raw dispositions, never client awards or current catalog observations. Pending
 carry chains and unresolved incomplete-pair comparisons cannot produce final
-settlement. Planned settlement uses exact USD cents and the separate shared-pot
-formula, not existing place-based purse mechanics. Overflow yields unavailable
+settlement. Version 2 uses exact USD cents and `(4*d_i - sum(d)) * rateMinor`,
+with source-aware earned dots, net due/owed and total positive balances to settle.
+Version 1 retains its separate shared-pot formula `2*d_i - sum(d)/2`.
+Neither is an existing place-based purse source. Overflow yields unavailable
 amounts, never a float approximation or silent zero. See the Churchy section
 in the README for the approved golf rules and explicitly unresolved pickup
 boundaries.

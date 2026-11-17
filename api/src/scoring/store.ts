@@ -28,7 +28,7 @@ import { assertEventAccessUnchanged, readEventAccess } from '../event-access.js'
 import type { EventAccess } from '../event-access.js';
 import { publishedCourseHandicaps, publishedPlayingHandicaps } from '../../../src/domain/playing-handicaps.js';
 import { activeTesterLink, testerLinkKey } from '../test-access/authority.js';
-import { sameChurchySpecials } from '../../../src/domain/churchy.js';
+import { churchySpecialsMatchGame, sameChurchySpecials } from '../../../src/domain/churchy.js';
 import type { KpSelection, KpWriteResult } from '../../../src/domain/kp.js';
 import { calculateKp, calculateKpPayout, kpContext, sameKpEntry } from '../../../src/domain/kp.js';
 import { isKpSelection } from '../../../src/contracts/kp.js';
@@ -42,12 +42,14 @@ import { dotRound, definitionCards, validateInternalGameChanges } from './intern
 import { buildDotAwardAudit } from './dot-audit.js';
 import { groupStartingHole } from '../../../src/domain/round-navigation.js';
 import { calculateInternalSettlements } from '../../../src/domain/internal-games.js';
+import { calculateRoundDifferentials } from '../../../src/domain/round-differential.js';
 
 function withoutMatchDeclarations(score: HoleScore): HoleScore {
   const raw: HoleScore = score.kind === 'strokes' ? { kind: score.kind, strokes: score.strokes }
     : score.kind === 'picked-up' ? { kind: score.kind, ...(score.reportedStrokes !== undefined ? { reportedStrokes: score.reportedStrokes } : {}) }
       : { kind: score.kind };
-  return { ...raw, ...(score.churchy ? { churchy: score.churchy } : {}), ...(score.kp !== undefined ? { kp: score.kp } : {}) };
+  return { ...raw, ...(score.churchy && !('version' in score.churchy) ? { churchy: score.churchy } : {}),
+    ...(score.kp !== undefined ? { kp: score.kp } : {}) };
 }
 
 function matchesScoreIntent(saved: HoleScore, intent: HoleScore): boolean {
@@ -253,7 +255,8 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     const kpProjection = await this.kpProjection(workspace.event.id, round.id, access.event.kpRoundIds);
     const kpPot = access.testerLink || !kpProjection.kp ? undefined : await readKpPot(this.table, workspace.event.id, round.id, access.event.purseConfigured);
     const visibleGames = access.testerLink && games ? games.games.filter((game) =>
-      game.kind !== 'wolf' && game.kind !== 'nassau' && game.kind !== 'dots') : games?.games;
+      game.kind !== 'wolf' && game.kind !== 'nassau' && game.kind !== 'dots'
+      && !(game.kind === 'churchy' && game.version === 2)) : games?.games;
     const projection: RoundScores = {
       ...(access.event.quickRound === true ? { quickRound: true as const } : {}),
       kpEnabled: true,
@@ -261,6 +264,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       ...(access.testerLink && kpProjection.kp ? { kp: { ...kpProjection.kp, decisions: [] } } : kpProjection),
       ...(kpPot ? { kpPot } : {}),
       churchyEnabled: this.churchyEnabled(),
+      ...(!access.testerLink && this.churchyEnabled() ? { churchyRulesVersions: [1, 2] as const } : {}),
       ...(!access.testerLink ? { wolfRulesVersions: [1, 2] as const, internalGamesSupported: true } : {}),
       supportedGameKinds: roundGameKinds.filter((kind) => (kind !== 'churchy' || this.churchyEnabled())
         && (!access.testerLink || kind !== 'wolf' && kind !== 'nassau' && kind !== 'dots')),
@@ -277,6 +281,8 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       ...(capturedRound.inputRevision ? { inputRevision: capturedRound.inputRevision } : {}),
       ...(capturedRound.reviewWarnings?.length ? { reviewWarnings: capturedRound.reviewWarnings } : {}),
       courseHandicaps: publishedCourseHandicaps(capturedRound),
+      ...(!access.testerLink && capturedRound.teeProfile.holes.length === 18
+        ? { roundDifferentials: calculateRoundDifferentials(capturedRound, capturedCards) } : {}),
       permissions: { role: access.publicAccess ? 'public' : access.testerLink ? 'tester' : owner ? 'owner' : viewerPlayerId ? 'player' : 'viewer',
         ...(viewerPlayerId ? { viewerPlayerId } : {}),
         writePlayerIds: !active ? [] : owner || access.testerLink || access.publicAccess ? round.players.map((player) => player.playerId) : ownGroup?.playerIds ?? [],
@@ -424,7 +430,12 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
         if (!previous || !sameGameDefinitions([game], [previous])) throw new ApiError(400, 'INVALID_CHURCHY_GROUP');
       }
       if (state.round.scoringStarted && previous
-        && (previous.groupNumber !== game.groupNumber || previous.playerIds.some((id, index) => id !== game.playerIds[index]))) {
+        && (previous.groupNumber !== game.groupNumber || previous.playerIds.some((id, index) => id !== game.playerIds[index])
+          || previous.version === 2 && game.version === 2
+            && canonical(previous.enabledSpecials) !== canonical(game.enabledSpecials))) {
+        throw new ApiError(409, 'CHURCHY_SETUP_LOCKED');
+      }
+      if (state.round.scoringStarted && !previous && game.version === 2) {
         throw new ApiError(409, 'CHURCHY_SETUP_LOCKED');
       }
     }
@@ -563,6 +574,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     const before = card.holes.find((hole) => hole.number === holeNumber);
     if (!before) throw new ApiError(503, 'INVALID_STORED_SCORECARD');
     // Legacy/raw-only clients never erase hidden specials.
+    if (state.testerLink && score.churchy?.version === 2) throw new ApiError(403, 'MATCH_DECLARATIONS_NOT_ALLOWED');
     let savedScore: HoleScore;
     try { savedScore = preserveScoreExtras(score, before.score); }
     catch (error) {
@@ -678,7 +690,9 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       const extras = savedScore.churchy;
       const game = state.games?.games.find((entry) => entry.kind === 'churchy' && entry.id === extras?.gameId);
       if (!extras || game?.kind !== 'churchy' || state.games?.etag !== extras.gameEtag
-        || !game.playerIds.includes(playerId)) throw new ApiError(409, 'CHURCHY_SETUP_CHANGED');
+        || !game.playerIds.includes(playerId) || !churchySpecialsMatchGame(extras, game)) {
+        throw new ApiError(409, 'CHURCHY_SETUP_CHANGED');
+      }
       const group = state.round.groups.find((entry) => entry.number === game.groupNumber);
       if (!group || group.playerIds.length !== 4 || !group.playerIds.every((id) => game.playerIds.includes(id))) {
         throw new ApiError(409, 'CHURCHY_SETUP_CHANGED');

@@ -8,6 +8,8 @@ import type { NassauSide, NassauVariant } from '../../domain/nassau';
 import type { DotsGameDefinition, DotsSpecialSelection } from '../../domain/dots';
 import { isDotsDefinition } from '../../contracts/dots';
 import { moneyText, parseMoney } from '../../domain/money';
+import type { ChurchySpecialKey } from '../../domain/churchy';
+import { defaultChurchySpecials } from '../../domain/churchy';
 
 export interface GameDraft {
   readonly kind?: 'stableford' | 'ball-drop' | 'skins' | 'churchy' | 'stroke-play' | 'wolf' | 'nassau' | 'dots';
@@ -27,6 +29,8 @@ export interface GameDraft {
   readonly automaticPresses?: boolean;
   readonly churchyGroup?: number;
   readonly churchyPlayers?: readonly string[];
+  readonly churchyVersion?: 1 | 2;
+  readonly churchySpecials?: readonly ChurchySpecialKey[];
   readonly amountPerDotMinor?: string;
   readonly carryovers?: boolean;
   readonly id: string;
@@ -56,7 +60,8 @@ export function draftFromGame(game: RoundGameDefinition): GameDraft {
     nassauStakes: [moneyText(game.stakes.frontMinor), moneyText(game.stakes.backMinor), moneyText(game.stakes.overallMinor)],
     automaticPresses: game.automaticPresses };
   if (game.kind === 'churchy') return { ...newGameDraft(), id: game.id, name: game.name, kind: 'churchy', basis: 'net',
-    churchyGroup: game.groupNumber, churchyPlayers: game.playerIds, amountPerDotMinor: moneyText(game.amountPerDotMinor) };
+    churchyGroup: game.groupNumber, churchyPlayers: game.playerIds, amountPerDotMinor: moneyText(game.amountPerDotMinor),
+    churchyVersion: game.version, ...(game.version === 2 ? { churchySpecials: game.enabledSpecials } : {}) };
   if (!isStablefordGame(game)) return {
     ...newGameDraft(), id: game.id, name: game.name, kind: game.kind, basis: game.basis,
     allowance: '100', allowanceConfigured: true,
@@ -116,7 +121,7 @@ export function setGameKind(draft: GameDraft, kind: NonNullable<GameDraft['kind'
   if (kind === 'nassau') return setNassauVariant({ ...reset, kind, name: 'Nassau', basis: 'net',
     nassauStakes: ['', '', ''], automaticPresses: false }, 'singles');
   if (kind === 'churchy') return { ...reset, kind, name: 'Churchy Game', basis: 'net', amountPerDotMinor: '',
-    churchyPlayers: [] };
+    churchyPlayers: [], churchyVersion: 2, churchySpecials: defaultChurchySpecials };
   return kind === 'ball-drop'
     ? { ...setFormat(reset, 'ball-drop-net-gross', rosterCount), kind, name: 'Ball Drop', allowance: '100' }
     : { ...reset, kind, name: kind === 'skins' ? 'Skins' : kind === 'stroke-play' ? 'Stroke Play' : 'Standard Stableford',
@@ -194,9 +199,10 @@ export function buildGame(draft: GameDraft, playerIds: readonly string[] = []): 
     return isRoundGameDefinition(game) ? game : null;
   }
   if (draft.kind === 'churchy') {
-    const game = { id: draft.id, name: 'Churchy Game', kind: 'churchy', version: 1, basis: 'net',
+    const game = { id: draft.id, name: 'Churchy Game', kind: 'churchy', version: draft.churchyVersion ?? 1, basis: 'net',
       groupNumber: draft.churchyGroup, playerIds: draft.churchyPlayers, currency: 'USD',
-      amountPerDotMinor: parseMoney(draft.amountPerDotMinor ?? '') };
+      amountPerDotMinor: parseMoney(draft.amountPerDotMinor ?? ''),
+      ...(draft.churchyVersion === 2 ? { enabledSpecials: draft.churchySpecials ?? defaultChurchySpecials } : {}) };
     return isRoundGameDefinition(game)
       && game.playerIds.every((id) => playerIds.includes(id)) ? game : null;
   }

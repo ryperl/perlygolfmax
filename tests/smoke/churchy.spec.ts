@@ -1,7 +1,7 @@
 import { test, expect } from './test';
 import { createServer } from 'vite';
 
-test('Churchy dots dialog and acknowledged save work at 320px/125%; explicit off hides every surface', async ({ page }, testInfo) => {
+test('legacy Churchy dialog and acknowledged save retain old rules at 320px/125%; explicit off hides every surface', async ({ page }, testInfo) => {
   const server = await createServer({
     configFile: false, cacheDir: testInfo.outputPath('vite-cache'),
     server: { host: '127.0.0.1', port: 0, hmr: false }, esbuild: { jsx: 'automatic' },
@@ -51,12 +51,12 @@ test('Churchy dots dialog and acknowledged save work at 320px/125%; explicit off
       expect(await select.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
     }
     await page.getByRole('button', { name: 'Games', exact: true }).click();
-    const results = page.getByRole('region', { name: 'Churchy Game results' });
+    const results = page.getByRole('region', { name: 'Churchy Game · Group 1 results', exact: true });
     await expect(results).toBeVisible();
     await expect(results).toContainText('Collects from pot: $3.00');
     await results.getByText('Saved hole receipts', { exact: true }).click();
     await expect(results).toContainText('Murphy made by Fictional golfer 1');
-    await page.getByRole('button', { name: 'Toggle experimental capability' }).click();
+    await page.getByRole('button', { name: 'Toggle game capability' }).click();
     await page.getByRole('button', { name: 'Enter scores', exact: true }).click();
     await expect(page.getByRole('button', { name: /Dots for/ })).toHaveCount(0);
     await page.getByRole('button', { name: 'Games', exact: true }).click();

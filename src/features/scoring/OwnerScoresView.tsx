@@ -21,6 +21,9 @@ import type { HoleDraft } from './entry-state';
 import { planGroup, saveGroupEntries } from './save-group';
 import './scoring.css';
 import type { ChurchySpecials } from '../../domain/churchy';
+import { churchySpecialsMatchGame } from '../../domain/churchy';
+import type { ChurchyCountTexts } from '../churchy';
+import { savedGrossProgress } from './saved-gross-progress';
 import type { KpEntry, KpSelection } from '../../domain/kp';
 import { calculateKp } from '../../domain/kp';
 import { KpPanel } from '../kp';
@@ -137,14 +140,19 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
       ? { text: scoreEntryText(saved), baseEtag: card.etag, status: 'draft', churchy: saved.churchy } : undefined)));
     setNotice(null);
   }
-  function editDots(playerId: string, churchy: ChurchySpecials) {
+  function editDots(playerId: string, churchy: ChurchySpecials, counts?: ChurchyCountTexts) {
     if (!round || !hole || round.churchyEnabled !== true || busy || saving.current || !canEditGroup) return;
+    const game = round.games?.configuration.games.find((entry) => entry.kind === 'churchy' && entry.id === churchy.gameId
+      && entry.groupNumber === group.number && entry.playerIds.includes(playerId));
+    if (game?.kind !== 'churchy' || game.version === 2 && !round.churchyRulesVersions?.includes(2)
+      || !churchySpecialsMatchGame(churchy, game)) return;
     const card = cardFor(round, playerId);
     const key = entryKey(playerId, hole.number);
     const previous = currentDrafts.current.get(key);
     if (currentDrafts.current.size === 0) draftAccess.current = scoreAccessKey(round);
     pauseForEdit();
-    update(key, { ...editedDraft(previous?.text ?? scoreEntryText(savedHole(card, hole.number)), card, previous, false), churchy });
+    update(key, { ...editedDraft(previous?.text ?? scoreEntryText(savedHole(card, hole.number)), card, previous, false), churchy,
+      ...(counts ? { churchyCounts: counts } : {}) });
     setNotice(null);
   }
   function editKp(playerId: string, kp: KpEntry | null) {
@@ -205,6 +213,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
       baseEtag: currentCard.etag, status: 'draft', mustWrite: true,
       ...(local.rawEdited ? { rawEdited: true } : {}),
       ...(local.churchy ? { churchy: local.churchy } : {}), ...(local.kp !== undefined ? { kp: local.kp } : {}),
+      ...(local.churchyCounts ? { churchyCounts: local.churchyCounts } : {}),
       ...(local.nassau ? { nassau: local.nassau.map((record) => ({ ...record, gameEtag: gameEtag ?? record.gameEtag })) } : {}),
       ...(local.dots ? { dots: local.dots.map((record) => ({ ...record, gameEtag: gameEtag ?? record.gameEtag })) } : {}),
       ...(local.wolf ? { wolf: local.wolf.map((record) => ({ ...record,
@@ -241,7 +250,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     if (!round || !group || !hole || busy || saving.current || !canEditGroup) return;
     const plan = planGroup(round, group.playerIds, hole.number, currentDrafts.current);
     if (plan.invalid.length > 0) {
-      setNotice({ kind: 'attention', message: 'Nothing sent. Check every intended entry: use a positive number, X / X7, DNF, or blank for unplayed.' });
+      setNotice({ kind: 'attention', message: 'Nothing sent. Check every intended entry, including Churchy counts. Counts must be nonnegative whole numbers; scores accept a positive number, X / X7, DNF, or blank.' });
       return;
     }
     if (plan.conflicts.length > 0) {
@@ -398,16 +407,20 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
           && game.playerIds.every((id) => group.playerIds.includes(id))) : undefined}
         gameEtag={round.games?.configuration.etag ?? null}
         onDotsEdit={editDots}
+        churchyV2Supported={round.churchyRulesVersions?.includes(2) === true}
         rows={group.playerIds.map((playerId) => {
           const card = cardFor(round, playerId);
           const local = drafts.get(entryKey(playerId, hole.number));
           const personal = scorecardTee(round, playerId);
           const playerHole = scorecardHoles(round, playerId).find((item) => item.number === hole.number);
           const courseHandicap = round.courseHandicaps?.find((entry) => entry.playerId === playerId);
-          const churchyPlayer = round.churchyEnabled === true ? round.games?.results.find((result) =>
-            result.kind === 'churchy')?.players.find((player) => player.playerId === playerId) : undefined;
+          const churchyGame = round.churchyEnabled === true ? round.games?.configuration.games.find((game) =>
+            game.kind === 'churchy' && game.groupNumber === group.number && game.playerIds.includes(playerId)) : undefined;
+          const churchyPlayer = churchyGame ? round.games?.results.find((result) =>
+            result.gameId === churchyGame.id)?.players.find((player) => player.playerId === playerId) : undefined;
           return {
             playerId, displayName: card.displayName, saved: savedHole(card, hole.number),
+            grossProgress: savedGrossProgress(card, scorecardHoles(round, playerId)),
             ...(churchyPlayer ? { churchyRelativeHandicap: churchyPlayer.playingHandicap,
               churchyStrokesReceived: churchyPlayer.holes.find((entry) => entry.number === hole.number)?.strokesReceived ?? null } : {}),
             ...(courseHandicap ? { courseHandicap } : {}),

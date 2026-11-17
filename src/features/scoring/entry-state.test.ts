@@ -40,13 +40,16 @@ describe('hole entry state', () => {
     const f = churchyFixture();
     const card = f.cards[0];
     if (!card) throw new Error('Missing fictional golfer');
-    const original = { ...editedDraft('4', card), churchy: { ...f.extras, murphy: true, murphyPresses: 2 as const } };
+    const original = { ...editedDraft('4', card), churchy: { ...f.extras, murphy: true, murphyPresses: 2 as const },
+      churchyCounts: { sandyCount: '2', otherDots: '-1.5' } };
     const edited = editedDraft('X7', card, original);
     expect(edited.churchy).toEqual(original.churchy);
+    expect(edited.churchyCounts).toEqual(original.churchyCounts);
     const score = entryScore(edited.text, edited.churchy);
     if (!score) throw new Error('Missing fictional disposition');
     expect(score).toMatchObject({ kind: 'picked-up', reportedStrokes: 7, churchy: original.churchy });
     expect(conflictedDraft(score, card, 1, edited).churchy).toEqual(original.churchy);
+    expect(conflictedDraft(score, card, 1, edited).churchyCounts).toEqual(original.churchyCounts);
   });
   it('captures a null baseline once and never silently adopts a later projection during further edits', () => {
     const original = cardFor(fictionalRoundScores, fictionalChange.playerId);

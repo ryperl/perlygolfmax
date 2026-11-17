@@ -9,11 +9,32 @@ import { withGameResults } from '../../client/scoring.test-support';
 import { teamLeaderboardRound } from '../../client/leaderboard.test-support';
 import { gameScoringLabel } from '../games';
 import { strokeGameCards, strokeGameFixture, strokeGamesRound } from '../../domain/stroke-games.test-support';
+import { calculateRoundDifferentials } from '../../domain/round-differential';
 
 function props() {
   return { round: fictionalRoundScores, groupNumber: 1, busy: false, onGroupChange: vi.fn(), onEnterScores: vi.fn() };
 }
 describe('golfer-facing round scorecards', () => {
+  it('shows every golfer across groups and clears server differentials for an older response', async () => {
+    const source = strokeGameFixture(18, 8);
+    const cards = source.cards.map((card, index) => index !== 7 ? card : { ...card,
+      holes: card.holes.map((hole) => hole.number === 18 ? { ...hole, score: { kind: 'unplayed' as const } } : hole) });
+    const base = strokeGamesRound({ ...source, cards });
+    const round = { ...base, roundDifferentials: calculateRoundDifferentials(source.snapshot, cards) };
+    const view = render(<SavedScorecards {...props()} round={round} />);
+    const table = within(screen.getByRole('table', { name: 'Round differentials' }));
+    expect(table.getAllByRole('row')).toHaveLength(9);
+    expect(table.getByRole('row', { name: /Fictional golfer 5/ })).toHaveTextContent('0.0');
+    expect(table.getByRole('row', { name: /Fictional golfer 8/ })).toHaveTextContent('—');
+    expect(screen.getByRole('region', { name: 'Round differentials' })).toHaveTextContent('PCC assumed 0');
+    await userEvent.setup().click(within(screen.getByRole('table', { name: 'Front nine scorecard' }))
+      .getByRole('button', { name: 'Open scorecard for Fictional golfer 1' }));
+    expect(screen.getByRole('group', { name: 'Estimated round differential' })).toHaveTextContent('0.0');
+    view.rerender(<SavedScorecards {...props()} round={base} />);
+    expect(screen.queryByRole('region', { name: 'Round differentials' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Estimated round differential' })).not.toBeInTheDocument();
+  });
+
   it('keeps server Course Handicap beside names across Front/Back/Full Card, game changes and refreshed projections', async () => {
     const { round, games } = scorecardGamesFixture();
     const values = [9, -2, null, null];

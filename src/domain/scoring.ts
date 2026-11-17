@@ -11,6 +11,7 @@ import type { DotAwardAudit } from './dot-audit.js';
 import { mergeDotsRecords, mergeNassauRecords, mergeWolfRecords, sameDotsRecords, sameNassauRecords, sameWolfRecords } from './game-declarations.js';
 import type { PlayerTeeProfile } from './tees.js';
 import type { ChurchySpecials } from './churchy.js';
+import type { RoundDifferential } from './round-differential.js';
 import { sameChurchySpecials } from './churchy.js';
 import type { KpConfiguration, KpEntry } from './kp.js';
 import { sameKpEntry } from './kp.js';
@@ -64,8 +65,10 @@ export interface PlayerCourseHandicap {
 }
 
 export interface RoundScores {
+  readonly roundDifferentials?: readonly RoundDifferential[];
   readonly internalGamesSupported?: boolean;
   readonly wolfRulesVersions?: readonly (1 | 2)[];
+  readonly churchyRulesVersions?: readonly (1 | 2)[];
   readonly internalSettlements?: readonly InternalGameSettlement[];
   readonly supportedGameKinds?: readonly RoundGameKind[];
   readonly gameInputContext?: { readonly courseVersionId: string; readonly teeProfileId: number };

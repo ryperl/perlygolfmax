@@ -275,6 +275,10 @@ export function sameGameDefinitions(left: readonly RoundGameDefinition[], right:
     if (game.kind === 'churchy' || other.kind === 'churchy') {
       return game.kind === 'churchy' && other.kind === 'churchy' && game.id === other.id
         && game.name === other.name && game.groupNumber === other.groupNumber
+        && game.version === other.version
+        && (game.version === 1 || other.version === 2
+          && game.enabledSpecials.length === other.enabledSpecials.length
+          && game.enabledSpecials.every((special) => other.enabledSpecials.includes(special)))
         && game.amountPerDotMinor === other.amountPerDotMinor
         && game.playerIds.length === other.playerIds.length && game.playerIds.every((id, i) => id === other.playerIds[i]);
     }

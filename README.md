@@ -377,6 +377,12 @@ back link returns to that event's overview, not its setup editor.
 Cards include source yardage, par and stroke index, exact hole shorthand and
 recorded totals. Normal score entry has no extra disposition menu or format
 instruction paragraph; blank and X shorthand remain supported.
+Beside each golfer's Course Handicap, entry shows saved gross progress such as
+**Thru 6 +2**, **Thru 6 E** or **Thru 5 -2**. It compares only acknowledged
+numeric scores with that golfer's captured personal/default tee par. Missing,
+pickup and DNF holes do not count as numeric holes or replace the running
+relative score with an incomplete label; they still affect overall completeness.
+Unplayed rounds show **Thru 0 —**. Local drafts never change the saved summary.
 Pickup or missing values keep subtotals/results marked incomplete. The recap
 is available without finalizing a round; no Net or Stableford row is fabricated.
 Internal audit records, actor/request IDs, revisions and raw timestamps are not
@@ -462,7 +468,8 @@ including mathematically negative plus-handicap values. This was checked with
 synthetic boundary cases against the [official R&A calculator](https://www.randa.org/en/course-handicap-calculator).
 Handicap strokes repeat through stroke-index order; plus handicaps give strokes
 back starting with the highest stroke index. This is game scoring, not WHS
-score posting or automatic adjusted-gross/net-double-bogey processing.
+score posting. The separate estimated differential applies net-double-bogey
+caps only to derived adjusted gross, never to these strokes or game results.
 
 Ordinary event-wide game settings are owner-only. Public pre-scoring internal
 game configuration is separately scoped to Dots, new Wolf and enabled Churchy;
@@ -860,13 +867,46 @@ explicit recipient selections. Decisions bind to current measurements and hole
 amounts; edits invalidate stale awards. Unresolved ties cannot claim fully
 allocated money. These are planned winnings, never payments or transfers.
 
-### Churchy Game (experimental)
+### Estimated round differentials
 
-Churchy is a separate version-1 game, enabled by the new API by default.
-The organizer chooses one saved four-person playing group and explicitly
-orders P1–P4. Saved Churchy group/order changes are locked once round scoring
-has started; adding the separate game never unlocks captured round setup.
-Other groups and games are unchanged.
+Round scorecards include an all-golfer differential summary, with an individual
+value on a completed golfer's card. These are **18-hole estimates with PCC 0**,
+not official GHIN results or handicap submissions. A player needs all 18 saved
+numeric scores, usable captured personal-tee ratings/allocation and captured
+handicap inputs. Missing scores remain pending; pickup, X7, DNF, missing inputs
+and arithmetic errors never become invented numeric differentials.
+Missing values display **—**, without per-row explanations. Columns use
+**Adj. Gross / Est. Diff.**, shortened to **A.G / E.D** in narrow containers;
+accessible column names retain their full meaning.
+
+Adjusted gross caps each numeric hole at net double bogey using the golfer's
+full captured Course Handicap and personal tee. The estimate is
+`(adjusted gross - Course Rating) * 113 / Slope Rating`, rounded to one decimal.
+For adjusted gross 88, rating 72.0 and slope 130, it is **13.9**.
+The adjustment is calculated separately; raw strokes and competition results
+are not rewritten.
+
+Official [USGA Rule 5.1a](https://rulesworkshops.usga.org/content/usga/home-page/handicapping/roh/Content/rules/5%201a%20Calculation%20of%20a%20Score%20Differential18Hole.htm)
+also includes the Playing Conditions Calculation, which this app does not fetch.
+[Nine-hole WHS differentials](https://rulesworkshops.usga.org/content/usga/home-page/handicapping/world-handicap-system/2024-revision/2024-treatment-of-9-hole-scores-FAQ.html)
+need an expected-score component; this feature does not guess it or apply the
+18-hole formula to nine-hole cards. It does not update Handicap Indexes,
+determine handicap-posting eligibility or retrieve GHIN records.
+
+### Churchy Game
+
+New Churchy games use **version 2**. Existing version-1 games retain their
+original awards, saved declarations and settlement; editing a saved game does
+not convert it. Each saved foursome can have its own independent Churchy game,
+with separate settings, carries, standings and money. A foursome cannot stack
+Churchy with Wolf or separate Dots. Ball Drop remains a separate
+between-foursomes competition and can coexist with these internal games.
+
+Before scoring, choose the playing group, explicitly order P1–P4 and toggle
+the named specials in play. Their agreed values are fixed, not a custom points
+editor. Public pre-scoring internal-game permissions apply; this does not
+grant general event, catalog or purse management. Saved group, order and special
+settings lock once round scoring starts, without unlocking captured setup.
 Partners are P1/P2 versus P3/P4 on holes 1–3, P1/P3 versus P2/P4 on 4–6,
 and P1/P4 versus P2/P3 on 7–9; these repeat on 10–18. Stakes 1, 2, 3 repeat.
 The group's starting hole changes navigation, never the scoring sequence.
@@ -880,15 +920,22 @@ High/Low carry independently across partner changes and the turn. A sweep
 awards only the current stake; final tied carries remain unawarded.
 Earlier pending scores block subsequent carry awards.
 
-The current-hole **+ Dots** button opens a keyboard-accessible bottom dialog
-without opening the score keyboard. Paree (fairway bunker) and Murphy
+The current-hole Dots action opens a keyboard-accessible dialog without
+opening the score keyboard. Paree (fairway bunker) and Murphy
 (chipping) require explicit calls: gross par or better wins for the calling
 pair, otherwise the opponents win. Murphy stages are initial 1, opposing-team
 press 2, calling-team press-back 3, with no further presses or verified
 individual attribution. Sandy requires confirmed greenside up-and-down at
-exact gross par; Pully requires a confirmed par putt longer than the flagstick.
-These other specials are one dot each and stack. Exact gross birdie is derived
-automatically; eagle dots and Paree presses are not defined.
+exact gross par; multiple qualifying Sandys can be recorded for the same golfer
+on one hole. Pully requires a confirmed par putt longer than the flagstick.
+Enabled exact gross Birdie earns **2** automatically; Eagle earns **4** instead,
+never Eagle plus Birdie. **Sticky** is a scorer-confirmed approach inside the
+flagstick length, worth **1** without extra score qualification or measurement.
+**Other dots** accepts whole-number units per hole, with no required reason.
+Record each source award once: both current partners receive its full units.
+Other dots remain a catch-all rather than a round-level adjustment.
+The existing Paree/Sandy/Pully values and Murphy stages remain fixed.
+Disabled named specials have neither entry controls nor automatic awards.
 
 Both winning partners always earn the full dots, **never netted or negative**.
 Pickup/DNF loses High to an all-numeric pair, while its numeric partner still
@@ -900,15 +947,19 @@ Score and special metadata share the same conditional, idempotent audited
 write. Specials-only changes, retries, discard and navigation guards use the
 existing score-draft workflow; nothing persists offline.
 
-Saved Churchy receipts and four-golfer tied standings show earned dots separately
-from a **planned shared-pot settlement**. Enter USD dollars per dot (`1` means
-$1.00; `0` means no planned money); stored cents and the existing formula remain
-unchanged. For earned totals
-`d_i`, settlement units are `2*d_i - sum(d)/2`, calculated with exact integer
-money. A fictional `[21,21,0,0]` at $1/dot means each winner collects $21
-**total**, each loser pays $21 total, not $42. Pending amounts are projected;
-unavailable inputs/overflow do not become zero. Nothing is collected or paid.
-Churchy is not an overall Stableford selection or a place-based purse source.
+Version-2 standings show earned dots and **net due/owed**, with **Total to
+settle** and an optional opponent-by-opponent explanation. At USD rate `r`
+in integer cents, each golfer's planned balance is `(4*d_i - sum(d)) * r`.
+For `[6,6,1,1]` at $1, balances are `[+10,+10,-10,-10]`; total to settle is
+$20, not the sum of absolute balances. Enter dollars (`1`, `.50`, `1.25`),
+never raw cents; zero means points-only. Pending money remains projected and
+unavailable inputs/overflow never become zero.
+
+Legacy version 1 keeps one-dot exact Birdie, no Eagle/Sticky/Other or repeated
+Sandy fields, and its original shared-pot formula `2*d_i - sum(d)/2`.
+For example, `[21,21,0,0]` at $1/dot still means +$21/+$21/-$21/-$21.
+The cleaner presentation does not rewrite these legacy rules. Neither version
+collects or pays money, supplies overall Stableford or funds place-based purses.
 
 Set API `CHURCHY_GAME_ENABLED=false` to hide all Churchy setup, entry, cards,
 results, standings and settlement and reject Churchy-specific edits. Saved
@@ -917,6 +968,8 @@ game edits still work without erasing hidden data. Absent configuration enables
 the **new API**; only exact `true` explicitly enables, while other configured
 values fail closed. The UI requires an explicit server `churchyEnabled: true`;
 missing capabilities from an older API never authorize new Churchy writes.
+Version-2 creation and edits also require advertised `churchyRulesVersions`
+containing `2`; the general flag alone does not establish version-2 support.
 Deploy the compatible API before exposing the new UI. No live setting or
 deployment is performed by this implementation.
 

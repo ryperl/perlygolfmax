@@ -102,7 +102,10 @@ export function isRoundGameDefinition(value: unknown): value is RoundGameDefinit
 
 export function isRoundGameDefinitions(value: unknown): value is readonly RoundGameDefinition[] {
   return Array.isArray(value) && value.length <= maximumGamesPerRound && value.every(isRoundGameDefinition)
-    && value.filter((game: RoundGameDefinition) => game.kind === 'churchy').length <= 1
+    && value.every((game: RoundGameDefinition, index: number) => game.kind !== 'churchy'
+      || !value.some((other: RoundGameDefinition, otherIndex: number) => otherIndex !== index
+        && (other.kind === 'churchy' || other.kind === 'wolf' || other.kind === 'dots')
+        && other.groupNumber === game.groupNumber))
     && new Set(value.map((game: RoundGameDefinition) => game.id)).size === value.length;
 }
 

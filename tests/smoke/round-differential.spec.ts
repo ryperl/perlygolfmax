@@ -1,0 +1,75 @@
+import { expect, test } from './test';
+import { renderComponentFixture } from './render-fixture';
+import { strokeGameFixture, strokeGamesRound } from '../../src/domain/stroke-games.test-support';
+import { calculateRoundDifferentials } from '../../src/domain/round-differential';
+import { isRoundScores } from '../../src/contracts/scoring';
+import { contrastRatio } from './contrast';
+
+const source = strokeGameFixture(18, 8);
+const snapshot = { ...source.snapshot, teeProfile: { ...source.snapshot.teeProfile,
+  ratings: source.snapshot.teeProfile.ratings.map((rating) => rating.type === 'Total'
+    ? { ...rating, course: 72, slope: 130 } : rating) } };
+const cards = source.cards.map((card, index) => ({ ...card, holes: card.holes.map((hole) => ({
+  ...hole, score: index === 0 ? { kind: 'strokes' as const, strokes: hole.number <= 16 ? 5 : 4 }
+    : index === 2 && hole.number === 18 ? { kind: 'picked-up' as const, reportedStrokes: 7 }
+      : index >= 3 && hole.number === 18 ? { kind: 'unplayed' as const } : hole.score,
+})) }));
+const round = { ...strokeGamesRound({ ...source, snapshot, cards }),
+  roundDifferentials: calculateRoundDifferentials(snapshot, cards), teeStrokeAllocation: true };
+
+for (const theme of ['light', 'dark']) {
+  test(`saved 18-hole differential estimates show the entire field and personal card in ${theme}`, async ({ page }, testInfo) => {
+    expect(isRoundScores(round)).toBe(true);
+    await page.goto('/#events?choose=1');
+    await expect(page.getByRole('heading', { name: 'Events', exact: true })).toBeVisible();
+    const styles = await page.locator('link[rel="stylesheet"]').evaluateAll((elements) =>
+      elements.map((element) => element.getAttribute('href')).filter((href): href is string => href !== null));
+    const group = await renderComponentFixture('/src/features/scoring/SavedScorecards.tsx', 'SavedScorecards', {
+      round, groupNumber: 1, busy: false, onGroupChange: () => undefined, onEnterScores: () => undefined,
+    });
+    const individual = await renderComponentFixture('/src/features/scoring/PlayerScorecardRecap.tsx', 'PlayerScorecardRecap', {
+      round, card: cards[0], gameId: null,
+    });
+    await page.setContent(`<html data-theme="${theme}"><head>${styles.map((href) => `<link rel="stylesheet" href="${href}">`).join('')}</head>
+      <body><div class="app"><main>${group}<section aria-label="Individual example">${individual}</section></main></div></body></html>`);
+    await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
+    const summary = page.getByRole('region', { name: 'Round differentials', exact: true });
+    const table = summary.getByRole('table', { name: 'Round differentials', exact: true });
+    await expect(table.getByRole('row')).toHaveCount(9);
+    await expect(table.getByRole('row', { name: /Fictional golfer 1/ })).toContainText('13.9');
+    await expect(table.getByRole('row', { name: /Fictional golfer 2/ })).toContainText('0.0');
+    for (const number of [3, 8]) {
+      await expect(table.getByRole('row', { name: new RegExp(`Fictional golfer ${String(number)}`) })
+        .getByLabel('Estimated differential unavailable', { exact: true })).toHaveText('—');
+    }
+    await expect(table).not.toContainText(/Pending|Unavailable|numeric hole scores|Pickup or DNF/);
+    await expect(summary).toContainText('PCC assumed 0');
+    await expect(summary).toContainText('Not official');
+    const player = page.getByRole('group', { name: 'Estimated round differential', exact: true });
+    await expect(player).toContainText('13.9');
+    await expect(player).toContainText('Adjusted gross 88');
+    for (const width of [320, 390, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      expect(await table.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+      for (const [label, wide, compact] of [['Adjusted gross', 'Adj. Gross', 'A.G'], ['Estimated differential', 'Est. Diff.', 'E.D']] as const) {
+        const header = table.getByRole('columnheader', { name: label, exact: true });
+        await expect(header.locator(width === 1280 ? '.differential-heading-wide' : '.differential-heading-compact'))
+          .toBeVisible();
+        await expect(header.locator(width === 1280 ? '.differential-heading-wide' : '.differential-heading-compact'))
+          .toHaveText(width === 1280 ? wide : compact);
+      }
+      if (width === 390) expect((await summary.boundingBox())?.height).toBeLessThanOrEqual(800);
+      for (const cell of await table.getByRole('columnheader').all()) {
+        expect(await cell.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+      }
+      const colors = await summary.evaluate((element) => ({
+        ink: getComputedStyle(element).color, background: getComputedStyle(element).backgroundColor,
+      }));
+      expect(contrastRatio(colors.ink, colors.background)).toBeGreaterThanOrEqual(4.5);
+      if (testInfo.project.name === 'desktop-chromium' && width !== 320) {
+        await summary.screenshot({ path: `coverage/round-differentials-${theme}-${width === 390 ? 'phone' : 'desktop'}.png` });
+      }
+    }
+  });
+}

@@ -14,6 +14,10 @@ import './scoring.css';
 import type { RoundGameDefinition } from '../../domain/games';
 import type { ChurchySpecials } from '../../domain/churchy';
 import { ChurchyDots } from '../churchy';
+import type { ChurchyCountTexts } from '../churchy';
+import { emptyChurchySpecials } from '../../domain/churchy';
+import type { SavedGrossProgress } from './saved-gross-progress';
+import { savedGrossProgressLabel } from './saved-gross-progress';
 import { CourseHandicap } from './CourseHandicap';
 import { KpEntryButton } from '../kp';
 import type { KpEntry } from '../../domain/kp';
@@ -33,6 +37,7 @@ export interface GroupHoleEntryRow {
   readonly canReview: boolean;
   readonly hole?: CourseHole;
   readonly teeLabel?: string;
+  readonly grossProgress?: SavedGrossProgress;
 }
 export interface GroupHoleEntryProps {
   readonly gameControls?: ReactNode;
@@ -41,7 +46,8 @@ export interface GroupHoleEntryProps {
   readonly onKpEdit?: (playerId: string, value: KpEntry | null) => void;
   readonly churchy?: RoundGameDefinition | undefined;
   readonly gameEtag?: string | null;
-  readonly onDotsEdit?: (playerId: string, value: ChurchySpecials) => void;
+  readonly onDotsEdit?: (playerId: string, value: ChurchySpecials, counts?: ChurchyCountTexts) => void;
+  readonly churchyV2Supported?: boolean;
   readonly groups: readonly RoundGroup[];
   readonly groupNumber: number;
   readonly layout: readonly CourseHole[];
@@ -64,7 +70,7 @@ export interface GroupHoleEntryProps {
 
 export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, readOnly, unsavedCount, focusHole, feedbackState,
   onGroupChange, onHoleChange, onEdit, onReview, onDiscard, onDiscardAll, onSave, onRefresh, churchy, gameEtag, onDotsEdit,
-  kpEligible, kpClosed, onKpEdit, gameControls }: GroupHoleEntryProps) {
+  kpEligible, kpClosed, onKpEdit, gameControls, churchyV2Supported = false }: GroupHoleEntryProps) {
   const previous = adjacentHole(layout, hole.number, -1);
   const next = adjacentHole(layout, hole.number, 1);
   const last = next?.number === groupStartingHole(groups.find((group) => group.number === groupNumber), layout);
@@ -147,7 +153,8 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
           : row.draft.status === 'saving' ? 'Saving…' : row.draft.status === 'failed' ? 'Failed — retry' : 'Unsaved'
           : row.saved.kind === 'unplayed' ? 'Unplayed' : 'Saved';
         return <article className="player-entry" key={row.playerId} aria-label={`${row.displayName} scorecard`}>
-          <div className="entry-heading"><h3>{row.displayName} <CourseHandicap value={row.courseHandicap} className="entry-handicap" /></h3>
+          <div className="entry-heading"><h3>{row.displayName} <CourseHandicap value={row.courseHandicap} className="entry-handicap" />{' '}
+            {row.grossProgress && <span className="entry-gross-progress">{savedGrossProgressLabel(row.grossProgress)}</span>}</h3>
             <span className={`score-badge score-badge-${row.draft?.status ?? 'saved'}`}>{status}</span></div>
           {row.teeLabel && <p className="entry-tee">{row.teeLabel} · Par {playerHole.par} · {playerHole.length} yards · Stroke index {playerHole.allocation}</p>}
           <div className="entry-value">
@@ -205,11 +212,12 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
           {churchy?.kind === 'churchy' && churchy.playerIds.includes(row.playerId) && gameEtag && onDotsEdit && <>
             <p className="entry-tee">Churchy relative handicap: {row.churchyRelativeHandicap ?? 'unavailable'} · Relative strokes this hole: {
               row.churchyStrokesReceived ?? 'unavailable'}</p>
-            <ChurchyDots name={row.displayName} number={hole.number} disabled={disabled} value={
-              row.draft?.churchy ?? row.saved.churchy ?? {
-                gameId: churchy.id, gameEtag, paree: false, murphy: false, murphyPresses: 0, sandy: false, pully: false,
-              }
-            } onChange={(value) => { cancelMovement(); onDotsEdit(row.playerId, { ...value, gameId: churchy.id, gameEtag }); }} />
+            <ChurchyDots name={row.displayName} number={hole.number} game={churchy}
+              disabled={disabled || churchy.version === 2 && !churchyV2Supported}
+              counts={row.draft?.churchyCounts} value={
+                row.draft?.churchy ?? row.saved.churchy ?? emptyChurchySpecials(churchy, gameEtag)
+              } onChange={(value, counts) => { cancelMovement(); onDotsEdit(row.playerId, { ...value, gameId: churchy.id, gameEtag }, counts); }} />
+            {churchy.version === 2 && !churchyV2Supported && <p className="entry-error">Churchy edits require API rules support. Refresh before editing specials.</p>}
           </>}
           {rows.length === 1 && <div className="quick-scores" aria-label={`Quick scores for ${row.displayName}`}>{quickScores.map((value) => <button type="button" key={value}
             aria-label={`${pickedUp ? 'X' : ''}${String(value)} ${pickedUp ? 'pickup' : 'strokes'} for ${row.displayName}`}

@@ -2,12 +2,13 @@ import type { CourseHole } from './catalog.js';
 import type { GamePlayerResult, GameUnavailableReason, RoundGameResult } from './games.js';
 import type { Scorecard } from './scoring.js';
 import { handicapStrokesForHole } from './stableford.js';
+import { calculateDotSettlement } from './dot-settlement.js';
+import type { InternalGameSettlement } from './dot-settlement.js';
 
-export interface ChurchyGameDefinition {
+interface CommonChurchyGameDefinition {
   readonly id: string;
   readonly name: string;
   readonly kind: 'churchy';
-  readonly version: 1;
   readonly basis: 'net';
   readonly groupNumber: number;
   readonly playerIds: readonly string[];
@@ -20,15 +21,58 @@ export interface ChurchyGameDefinition {
   readonly handicapAllowancePercent?: never;
 }
 
+export type ChurchySpecialKey = 'paree' | 'murphy' | 'sandy' | 'pully' | 'birdie' | 'eagle' | 'sticky' | 'sweep';
+export const defaultChurchySpecials: readonly ChurchySpecialKey[] = [
+  'paree', 'murphy', 'sandy', 'pully', 'birdie', 'eagle', 'sticky', 'sweep',
+];
+export interface ChurchyGameDefinitionV1 extends CommonChurchyGameDefinition {
+  readonly version: 1;
+  readonly enabledSpecials?: never;
+}
+export interface ChurchyGameDefinitionV2 extends CommonChurchyGameDefinition {
+  readonly version: 2;
+  readonly enabledSpecials: readonly ChurchySpecialKey[];
+}
+export type ChurchyGameDefinition = ChurchyGameDefinitionV1 | ChurchyGameDefinitionV2;
+
 /** The revision binds a special edit to the saved game/order, not an award supplied by a client. */
-export interface ChurchySpecials {
+interface CommonChurchySpecials {
   readonly gameId: string;
   readonly gameEtag: string;
   readonly paree: boolean;
   readonly murphy: boolean;
   readonly murphyPresses: 0 | 1 | 2;
-  readonly sandy: boolean;
   readonly pully: boolean;
+}
+export interface ChurchySpecialsV1 extends CommonChurchySpecials {
+  readonly version?: never;
+  readonly sandy: boolean;
+}
+export interface ChurchySpecialsV2 extends CommonChurchySpecials {
+  readonly version: 2;
+  readonly sandyCount: number;
+  readonly sticky: boolean;
+  readonly otherDots: number;
+}
+export type ChurchySpecials = ChurchySpecialsV1 | ChurchySpecialsV2;
+
+export function emptyChurchySpecials(game: ChurchyGameDefinition, gameEtag: string): ChurchySpecials {
+  const common = { gameId: game.id, gameEtag, paree: false, murphy: false, murphyPresses: 0 as const, pully: false };
+  return game.version === 2 ? { ...common, version: 2, sandyCount: 0, sticky: false, otherDots: 0 }
+    : { ...common, sandy: false };
+}
+
+export function churchySpecialsMatchGame(value: ChurchySpecials, game: ChurchyGameDefinition): boolean {
+  if (value.gameId !== game.id || (value.version === 2) !== (game.version === 2)
+    || ![0, 1, 2].includes(value.murphyPresses) || !value.murphy && value.murphyPresses !== 0) return false;
+  if (value.version !== 2 || game.version !== 2) return true;
+  return Number.isSafeInteger(value.sandyCount) && value.sandyCount >= 0
+    && Number.isSafeInteger(value.otherDots) && value.otherDots >= 0
+    && (!value.paree || game.enabledSpecials.includes('paree'))
+    && (!value.murphy || game.enabledSpecials.includes('murphy'))
+    && (!value.pully || game.enabledSpecials.includes('pully'))
+    && (!value.sandyCount || game.enabledSpecials.includes('sandy'))
+    && (!value.sticky || game.enabledSpecials.includes('sticky'));
 }
 
 export type ChurchyPair = readonly [string, string];
@@ -40,7 +84,7 @@ export interface ChurchyLane {
   readonly carry: number | null;
 }
 export interface ChurchyAward {
-  readonly special: 'Paree' | 'Murphy' | 'Sandy' | 'Pully' | 'Birdie' | 'Sweep';
+  readonly special: 'Paree' | 'Murphy' | 'Sandy' | 'Pully' | 'Birdie' | 'Eagle' | 'Sticky' | 'Other' | 'Sweep';
   readonly playerId: string | null;
   readonly outcome: 'made' | 'missed' | 'ineligible';
   readonly winners: readonly string[];
@@ -58,6 +102,7 @@ export interface ChurchyHoleReceipt {
   readonly awards: readonly { readonly playerId: string; readonly dots: number | null }[];
 }
 export interface ChurchyResults {
+  readonly internalSettlement?: InternalGameSettlement;
   readonly holes: readonly ChurchyHoleReceipt[];
   readonly status: 'complete' | 'in-progress' | 'unavailable';
   readonly unawardedHigh: number | null;
@@ -88,7 +133,32 @@ export function churchyPairs(ids: readonly string[], number: number): readonly [
 export function sameChurchySpecials(a: ChurchySpecials | undefined, b: ChurchySpecials | undefined): boolean {
   return a === undefined || b === undefined ? a === b
     : a.gameId === b.gameId && a.gameEtag === b.gameEtag && a.paree === b.paree
-      && a.murphy === b.murphy && a.murphyPresses === b.murphyPresses && a.sandy === b.sandy && a.pully === b.pully;
+      && a.murphy === b.murphy && a.murphyPresses === b.murphyPresses && a.pully === b.pully
+      && (a.version === 2 ? b.version === 2 && a.sandyCount === b.sandyCount && a.sticky === b.sticky
+        && a.otherDots === b.otherDots : b.version !== 2 && a.sandy === b.sandy);
+}
+
+function exactSum(values: readonly number[]): number | null {
+  const total = values.reduce((sum, value) => sum + BigInt(value), 0n);
+  return total <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(total) : null;
+}
+
+export function calculateChurchyInternalSettlement(game: ChurchyGameDefinitionV2,
+  players: readonly GamePlayerResult[], holes: readonly ChurchyHoleReceipt[], status: ChurchyResults['status']): InternalGameSettlement {
+  return calculateDotSettlement({
+    groupNumber: game.groupNumber, gameIds: [game.id], stakeMinor: game.amountPerDotMinor,
+    complete: status === 'complete', unavailable: status === 'unavailable',
+    players: players.map((player) => {
+      const known = holes.filter((hole) => hole.awards.find((award) => award.playerId === player.playerId)?.dots != null
+        || hole.specials.some((award) => award.winners.includes(player.playerId) && award.dots > 0));
+      return { playerId: player.playerId, displayName: player.displayName,
+        baseDots: known.length ? exactSum(known.flatMap((hole) => [
+          hole.high.winners.includes(player.playerId) ? hole.high.dots ?? 0 : 0,
+          hole.low.winners.includes(player.playerId) ? hole.low.dots ?? 0 : 0])) : null,
+        specialDots: known.length ? exactSum(known.flatMap((hole) =>
+          hole.specials.filter((award) => award.winners.includes(player.playerId)).map((award) => award.dots))) : null };
+    }),
+  });
 }
 
 export function churchySettlement(totals: readonly (number | null)[], amount: number): readonly (number | null)[] {
@@ -120,6 +190,8 @@ export function calculateChurchyResults(game: ChurchyGameDefinition, inputs: rea
   let highCarry: number | null = 0;
   let lowCarry: number | null = 0;
   const holes: ChurchyHoleReceipt[] = [];
+  const overflow = new Map<number, Set<string>>();
+  const enabled = (special: ChurchySpecialKey) => game.version === 1 || game.enabledSpecials.includes(special);
   for (const number of numbers) {
     const pairing = churchyPairs(game.playerIds, number);
     if (!pairing) continue;
@@ -135,6 +207,8 @@ export function calculateChurchyResults(game: ChurchyGameDefinition, inputs: rea
         ? BigInt(saved.score.strokes) - BigInt(received) : null };
     });
     const pending = entries.some((entry) => !entry.saved || entry.saved.score.kind === 'unplayed');
+    const invalidSpecials = game.version === 2 && entries.some((entry) => entry.saved?.score.churchy !== undefined
+      && !churchySpecialsMatchGame(entry.saved.score.churchy, game));
     const unavailable = !groupValid || !validHandicaps || relative.size !== 4
       || entries.some((entry) => !entry.hole || relative.get(entry.id) === null);
     const pairEntries = pairs.map((pair) => entries.filter((entry) => pair.includes(entry.id)));
@@ -161,13 +235,14 @@ export function calculateChurchyResults(game: ChurchyGameDefinition, inputs: rea
     highCarry = high.carry;
     lowCarry = low.carry;
     const specials: ChurchyAward[] = [];
-    if (high.status === 'won' && low.status === 'won' && high.winners[0] === low.winners[0]) {
+    if (enabled('sweep') && high.status === 'won' && low.status === 'won' && high.winners[0] === low.winners[0]) {
       specials.push({ special: 'Sweep', playerId: null, outcome: 'made', winners: high.winners, dots: stake });
     }
     for (const entry of entries) {
-      if (!groupValid || !entry.hole || !entry.saved || entry.saved.score.kind === 'unplayed') continue;
+      if (!groupValid || invalidSpecials || !entry.hole || !entry.saved
+        || game.version === 1 && entry.saved.score.kind === 'unplayed') continue;
       const score = entry.saved.score;
-      const extras = score.churchy?.gameId === game.id ? score.churchy : undefined;
+      const extras = score.churchy?.gameId === game.id && (score.churchy.version === 2) === (game.version === 2) ? score.churchy : undefined;
       const own = pairs.find((pair) => pair.includes(entry.id));
       const other = pairs.find((pair) => !pair.includes(entry.id));
       if (!own || !other) continue;
@@ -175,34 +250,53 @@ export function calculateChurchyResults(game: ChurchyGameDefinition, inputs: rea
       function award(special: ChurchyAward['special'], success: boolean, dots = 1) {
         specials.push({ special, playerId: entry.id, outcome: success ? 'made' : 'missed', winners: success ? own ?? [] : other ?? [], dots });
       }
-      if (extras?.paree) award('Paree', gross !== null && gross <= entry.hole.par);
-      if (extras?.murphy) award('Murphy', gross !== null && gross <= entry.hole.par, 1 + extras.murphyPresses);
-      for (const [selected, special] of [[extras?.sandy, 'Sandy'], [extras?.pully, 'Pully']] as const) {
-        if (!selected) continue;
-        if (gross === entry.hole.par) award(special, true);
+      if (extras?.version === 2) {
+        if (enabled('sticky') && extras.sticky) award('Sticky', true);
+        if (extras.otherDots) award('Other', true, extras.otherDots);
+      }
+      if (score.kind === 'unplayed') continue;
+      if (enabled('paree') && extras?.paree) award('Paree', gross !== null && gross <= entry.hole.par);
+      if (enabled('murphy') && extras?.murphy) award('Murphy', gross !== null && gross <= entry.hole.par, 1 + extras.murphyPresses);
+      const sandy = extras?.version === 2 ? extras.sandyCount : extras?.sandy ? 1 : 0;
+      for (const [count, special] of [[enabled('sandy') ? sandy : 0, 'Sandy'], [enabled('pully') && extras?.pully ? 1 : 0, 'Pully']] as const) {
+        if (!count) continue;
+        if (gross === entry.hole.par) award(special, true, count);
         else specials.push({ special, playerId: entry.id, outcome: 'ineligible', winners: [], dots: 0 });
       }
-      if (gross === entry.hole.par - 1) award('Birdie', true);
+      if (enabled('birdie') && gross === entry.hole.par - 1) award('Birdie', true, game.version === 2 ? 2 : 1);
+      if (game.version === 2) {
+        if (enabled('eagle') && gross === entry.hole.par - 2) award('Eagle', true, 4);
+      }
     }
-    const specialStatus = !groupValid || entries.some((entry) => !entry.hole) ? 'unavailable' : pending ? 'pending' : 'complete';
+    const specialStatus = !groupValid || invalidSpecials || entries.some((entry) => !entry.hole) ? 'unavailable' : pending ? 'pending' : 'complete';
     const resolved = high.dots !== null && low.dots !== null && specialStatus === 'complete';
     const knownAwards = high.dots !== null || low.dots !== null || specials.some((award) => award.dots > 0);
     const dotStatus = high.status === 'unavailable' || low.status === 'unavailable' || specialStatus === 'unavailable'
       ? 'unavailable' : resolved ? 'complete' : knownAwards ? 'partial' : 'pending';
     const awards = game.playerIds.map((playerId) => {
-      const dots = (high.winners.includes(playerId) ? high.dots ?? 0 : 0) + (low.winners.includes(playerId) ? low.dots ?? 0 : 0)
-        + specials.filter((award) => award.winners.includes(playerId)).reduce((sum, award) => sum + award.dots, 0);
+      const values = [(high.winners.includes(playerId) ? high.dots ?? 0 : 0), (low.winners.includes(playerId) ? low.dots ?? 0 : 0),
+        ...specials.filter((award) => award.winners.includes(playerId)).map((award) => award.dots)];
+      const dots = game.version === 2 ? exactSum(values) : values.reduce((sum, value) => sum + value, 0);
+      if (dots === null) {
+        const ids = overflow.get(number) ?? new Set<string>();
+        ids.add(playerId);
+        overflow.set(number, ids);
+      }
       const saved = entries.find((entry) => entry.id === playerId)?.saved;
-      return { playerId, dots: resolved || dots > 0 || knownAwards && saved && saved.score.kind !== 'unplayed' ? dots : null };
+      return { playerId, dots: resolved || dots !== null && dots > 0 || knownAwards && saved && saved.score.kind !== 'unplayed' ? dots : null };
     });
-    holes.push({ number, stake, pairs, high, low, specials, specialStatus, dotStatus, awards });
+    holes.push({ number, stake, pairs, high, low, specials, specialStatus,
+      dotStatus: overflow.has(number) ? 'unavailable' : dotStatus, awards });
   }
-  const status = !groupValid || !validHandicaps || holes.some((hole) =>
+  let status: ChurchyResults['status'] = !groupValid || !validHandicaps || holes.some((hole) =>
     hole.high.status === 'unavailable' || hole.low.status === 'unavailable' || hole.specialStatus === 'unavailable')
     ? 'unavailable' : holes.some((hole) => hole.dotStatus !== 'complete') ? 'in-progress' : 'complete';
   function subtotal(id: string, entries: readonly ChurchyHoleReceipt[]) {
+    if (entries.some((hole) => overflow.get(hole.number)?.has(id))) return null;
     const values = entries.flatMap((hole) => hole.awards.filter((award) => award.playerId === id && award.dots !== null));
-    return values.length ? values.reduce((sum, award) => sum + (award.dots ?? 0), 0) : null;
+    const total = values.length ? game.version === 2 ? exactSum(values.map((award) => award.dots ?? 0))
+      : values.reduce((sum, award) => sum + (award.dots ?? 0), 0) : null;
+    return total;
   }
   const players: GamePlayerResult[] = game.playerIds.map((id) => {
     const player = known.find((entry) => entry.playerId === id) ?? { playerId: id, displayName: 'Golfer unavailable', layout: known[0]?.layout ?? inputs[0]?.layout ?? [], handicap: null };
@@ -217,9 +311,15 @@ export function calculateChurchyResults(game: ChurchyGameDefinition, inputs: rea
     backPoints: subtotal(player.playerId, holes.filter((hole) => hole.number > 9)), totalPoints: subtotal(player.playerId, holes),
     };
   });
-  const balances = churchySettlement(players.map((player) => status === 'unavailable' ? null : player.totalPoints), game.amountPerDotMinor);
-  return { gameId: game.id, kind: 'churchy', version: 1, players, churchy: {
+  if (overflow.size > 0 || game.version === 2 && players.some((player) => player.totalPoints === null
+    && holes.some((hole) => hole.awards.some((award) => award.playerId === player.playerId && award.dots !== null)))) status = 'unavailable';
+  const outputPlayers = players.map((player) => ({ ...player, status }));
+  const internalSettlement = game.version === 2 ? calculateChurchyInternalSettlement(game, outputPlayers, holes, status) : undefined;
+  const balances = internalSettlement ? internalSettlement.players.map((player) => player.netMinor)
+    : churchySettlement(players.map((player) => status === 'unavailable' ? null : player.totalPoints), game.amountPerDotMinor);
+  return { gameId: game.id, kind: 'churchy', version: game.version, players: outputPlayers, churchy: {
     holes, status, unawardedHigh: highCarry, unawardedLow: lowCarry,
+    ...(internalSettlement ? { internalSettlement } : {}),
     settlement: players.map((player, index) => ({ playerId: player.playerId,
       paysMinor: balances[index] == null ? null : Math.max(0, -(balances[index] ?? 0)),
       collectsMinor: balances[index] == null ? null : Math.max(0, balances[index] ?? 0) })),

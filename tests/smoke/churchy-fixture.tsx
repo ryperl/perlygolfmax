@@ -49,7 +49,7 @@ export function Fixture() {
   const client = useMemo(() => memoryChurchy(enabled), [enabled]);
   return <div className="app"><main>
     <nav aria-label="Fictional Churchy server controls">
-      <button onClick={() => { setEnabled((value) => !value); setGeneration((value) => value + 1); }}>Toggle experimental capability</button>
+      <button onClick={() => { setEnabled((value) => !value); setGeneration((value) => value + 1); }}>Toggle game capability</button>
       <button onClick={() => { setReady(true); }}>Open fictional saved round</button>
     </nav>
     {ready && <OwnerScoresView key={generation} client={client} eventId={fixture.round().eventId} roundId={fixture.snapshot.id}

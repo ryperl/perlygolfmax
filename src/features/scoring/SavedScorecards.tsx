@@ -4,6 +4,7 @@ import { writablePlayerIds } from './score-access';
 import { visibleGames } from '../../domain/games';
 import { ChurchyResults } from '../churchy';
 import { DotsResults } from '../dots';
+import { RoundDifferentials } from '../differentials';
 import { gameScoringLabel } from '../games';
 import { PlayerScorecardRecap } from './PlayerScorecardRecap';
 import { ScorecardNine } from './ScorecardNine';
@@ -42,6 +43,7 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
       {group.playerIds.some((id) => writablePlayerIds(round).includes(id)) &&
         <button type="button" disabled={busy} onClick={onEnterScores}>Enter scores · Group {group.number}</button>}
     </header>
+    {round.roundDifferentials && <RoundDifferentials values={round.roundDifferentials} players={round.cards} />}
     {round.games?.configuration.games.some((game) => game.kind === 'nassau' && game.groupNumber === group.number)
       && <p>Nassau match bets and presses are in Games and Leaderboard, not individual scorecard points.</p>}
     {games.length > 0 && <section className="scorecard-game-summary" aria-label="Round games">

@@ -23,7 +23,8 @@ import { calculateInternalSettlements } from '../domain/internal-games.js';
 import { calculateStrokeGameResults } from '../domain/stroke-games.js';
 import { sameJsonValue } from './round-context.js';
 import { isChurchySpecials } from './churchy.js';
-import { calculateChurchyResults } from '../domain/churchy.js';
+import { isRoundDifferentials } from './round-differential.js';
+import { calculateChurchyResults, churchySpecialsMatchGame } from '../domain/churchy.js';
 import { isKpConfiguration, isKpEntry } from './kp.js';
 import { purseCurrencies } from '../domain/purse.js';
 
@@ -111,6 +112,11 @@ export function isScorecard(value: unknown): value is Scorecard {
 }
 
 export function isRoundScores(value: unknown): value is RoundScores {
+  if (isRecord(value) && value.churchyRulesVersions !== undefined
+    && (!Array.isArray(value.churchyRulesVersions)
+      || !value.churchyRulesVersions.every((version: unknown) => version === 1 || version === 2)
+      || new Set(value.churchyRulesVersions).size !== value.churchyRulesVersions.length
+      || value.churchyRulesVersions.length > 0 && value.churchyEnabled !== true)) return false;
   if (isRecord(value) && (value.internalGamesSupported !== undefined && typeof value.internalGamesSupported !== 'boolean'
     || value.wolfRulesVersions !== undefined && (!Array.isArray(value.wolfRulesVersions)
       || !value.wolfRulesVersions.every((version: unknown) => version === 1 || version === 2)
@@ -168,6 +174,23 @@ export function isRoundScores(value: unknown): value is RoundScores {
   const ids = cards.map((card) => card.playerId);
   const roster = new Set(ids);
   if (new Set(ids).size !== ids.length || cards.some((card) => card.holes.length !== count)) return false;
+  if (value.roundDifferentials !== undefined) {
+    if (count !== 18 || !isRoundDifferentials(value.roundDifferentials, ids)) return false;
+    for (const result of value.roundDifferentials) {
+      const card = cardsById.get(result.playerId);
+      if (!card) return false;
+      if (result.status === 'available') {
+        if (card.holes.some((hole) => hole.score.kind !== 'strokes')) return false;
+        const gross = card.holes.reduce((total, hole) =>
+          total + BigInt(hole.score.kind === 'strokes' ? hole.score.strokes : 0), 0n);
+        if (BigInt(result.adjustedGross) > gross) return false;
+      } else if (result.status === 'pending'
+        && (!card.holes.some((hole) => hole.score.kind === 'unplayed')
+          || card.holes.some((hole) => hole.score.kind === 'picked-up' || hole.score.kind === 'did-not-finish'))) return false;
+      else if (result.status === 'unavailable' && result.reason === 'non-numeric-score'
+        && !card.holes.some((hole) => hole.score.kind === 'picked-up' || hole.score.kind === 'did-not-finish')) return false;
+    }
+  }
   if (value.permissions !== undefined) {
     const permission = value.permissions;
     if (!isRecord(permission) || typeof permission.role !== 'string'
@@ -251,6 +274,7 @@ export function isRoundScores(value: unknown): value is RoundScores {
       ...(typeof group.startingHole === 'number' ? { startingHole: group.startingHole } : {}) });
   }
   if (groupNumbers.size !== value.groups.length || assigned.length !== ids.length || new Set(assigned).size !== ids.length) return false;
+  if (value.games === undefined && cards.some((card) => card.holes.some((hole) => hole.score.churchy?.version === 2))) return false;
   if (value.games !== undefined) {
     const context: RoundGameScoringContext = { roundId: value.roundId, groups, layout, cards,
       ...(value.playerTees ? { playerTees: value.playerTees } : {}), ...(courseHandicaps ? { courseHandicaps } : {}),
@@ -267,6 +291,18 @@ export function isRoundScores(value: unknown): value is RoundScores {
         return !card || card.displayName !== player.displayName || player.totalHoles !== count
           || !player.holes.every((hole) => card.holes.some((entry) => entry.number === hole.number));
       }))) return false;
+    for (const card of cards) {
+      for (const hole of card.holes) {
+        const extras = hole.score.churchy;
+        if (!extras) continue;
+        const game = value.games.configuration.games.find((entry) => entry.id === extras.gameId);
+        if (extras.version !== 2 && !(game?.kind === 'churchy' && game.version === 2)) continue;
+        if (game?.kind !== 'churchy' || !churchySpecialsMatchGame(extras, game)
+          || !game.playerIds.includes(card.playerId)
+          || !groups.some((group) => group.number === game.groupNumber && group.playerIds.length === 4
+            && group.playerIds.every((id) => game.playerIds.includes(id)))) return false;
+      }
+    }
     if (value.internalSettlements !== undefined && !sameJsonValue(value.internalSettlements,
       calculateInternalSettlements(value.games.configuration.games, value.games.results, context))) return false;
     for (const result of value.games.results) {

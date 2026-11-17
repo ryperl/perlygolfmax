@@ -28,6 +28,25 @@ function fixture() {
 }
 
 describe('individual traditional scorecard recap', () => {
+  it('uses the supplied estimate, then removes a stale completed value when scores become pending', () => {
+    const { round, card } = fixture();
+    const available = { playerId: card.playerId, method: 'estimated-18-hole' as const, pcc: 0 as const,
+      status: 'available' as const, adjustedGross: 72, differentialTenths: 19 };
+    const view = render(<PlayerScorecardRecap round={{ ...round, roundDifferentials: [available] }} card={card} />);
+    const estimate = screen.getByRole('group', { name: 'Estimated round differential' });
+    expect(estimate).toHaveTextContent('1.9');
+    expect(estimate).toHaveTextContent('PCC assumed 0');
+    expect(estimate).toHaveTextContent('Not official');
+    view.rerender(<PlayerScorecardRecap round={{ ...round, roundDifferentials: [{
+      playerId: card.playerId, method: 'estimated-18-hole', pcc: 0,
+      status: 'pending', differentialTenths: null, adjustedGross: null, reason: 'incomplete-card',
+    }] }} card={card} />);
+    expect(within(estimate).getByLabelText('Estimated differential unavailable')).toHaveTextContent('—');
+    expect(estimate).not.toHaveTextContent('1.9');
+    view.rerender(<PlayerScorecardRecap round={round} card={card} />);
+    expect(screen.queryByRole('group', { name: 'Estimated round differential' })).not.toBeInTheDocument();
+  });
+
   it('shows the server-provided Course Handicap on both nines, including strokes-only cards', () => {
     const { round, card } = fixture();
     render(<PlayerScorecardRecap round={{ ...round, courseHandicaps: [{

@@ -16,7 +16,9 @@ const snapshot = {
     holes: source.snapshot.teeProfile.holes.map((hole) => ({ ...hole, allocation: 19 - hole.number })) } }],
 };
 const cards = source.cards.map((card, index) => ({ ...card, holes: card.holes.map((hole) => ({
-  ...hole, score: { kind: 'strokes' as const, strokes: hole.number === 1 ? 3 + index : index === 0 && hole.number === 10 ? 3 : 4 },
+  ...hole, score: { kind: 'strokes' as const, strokes: hole.number === 1 ? 3 + index
+    : index === 1 && hole.number === 2 ? 5 : index === 1 && hole.number === 3 ? 6
+      : index === 1 && hole.number === 4 ? 2 : index === 0 && hole.number === 10 ? 3 : 4 },
 })) }));
 const round = { ...strokeGamesRound({ ...source, snapshot, cards }), teeStrokeAllocation: true };
 
@@ -32,8 +34,16 @@ for (const theme of ['light', 'dark']) {
     const individual = await renderComponentFixture('/src/features/scoring/PlayerScorecardRecap.tsx', 'PlayerScorecardRecap', {
       round, card: cards[0], gameId: null,
     });
+    const boundedCard = cards[1];
+    if (!boundedCard) throw new Error('Missing fictional bounded-count golfer.');
+    const bounded = await renderComponentFixture('/src/features/scoring/ScorecardNine.tsx', 'ScorecardNine', {
+      label: 'Bounded count example', subtotal: 'Out', layout: round.layout.slice(0, 9), fullLayout: round.layout,
+      cards: [boundedCard], courseHandicaps: [{ playerId: boundedCard.playerId, courseHandicap: 72 }],
+      teeStrokeAllocation: true,
+    });
     await page.setContent(`<html data-theme="${theme}"><head>${styles.map((href) => `<link rel="stylesheet" href="${href}">`).join('')}</head>
-      <body><div class="app"><main data-round-tone="sage">${group}<section aria-label="Individual example">${individual}</section></main></div></body></html>`);
+      <body><div class="app"><main data-round-tone="sage">${group}<section aria-label="Individual example">${individual}</section>
+      <section aria-label="Bounded count example">${bounded}</section></main></div></body></html>`);
     await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
     const groupCard = page.getByRole('region', { name: 'Round scorecards', exact: true });
     const front = groupCard.getByRole('region', { name: 'Front nine scorecard', exact: true });
@@ -50,6 +60,8 @@ for (const theme of ['light', 'dark']) {
     await expect(groupCard.locator('.recap-score-row').nth(3).getByRole('img')).toHaveCount(0);
     const personal = page.getByRole('region', { name: 'Fictional golfer 1 full scorecard', exact: true });
     await expect(personal.getByRole('img')).toHaveCount(9);
+    await expect(page.getByRole('region', { name: 'Bounded count example', exact: true })
+      .getByRole('img', { name: 'Hole 3: 4 handicap strokes received (tee Course Handicap)', exact: true })).toContainText('x4');
     await expect(back.locator('.recap-score-row').first().getByLabel('Hole 10: 3, birdie', { exact: true })).toHaveClass(/score-birdie/);
     for (const width of [320, 390, 1280]) {
       await page.setViewportSize({ width, height: 900 });
@@ -62,6 +74,26 @@ for (const theme of ['light', 'dark']) {
       expect(marker.x + marker.width <= badge.x || badge.x + badge.width <= marker.x
         || marker.y + marker.height <= badge.y || badge.y + badge.height <= marker.y).toBe(true);
       expect(marker.x + marker.width).toBeLessThanOrEqual(frame.x + frame.width);
+      const positions = await page.locator('.scorecard-hole-score:has(.score-stroke-dots)').evaluateAll((elements) => elements.map((element) => {
+        const score = element.querySelector<HTMLElement>('.score-mark');
+        const marker = element.querySelector<HTMLElement>('.score-stroke-dots');
+        const cell = element.closest('td');
+        if (!score || !marker || !cell) throw new Error('Missing marked score geometry.');
+        const ink = getComputedStyle(score), scoreBox = score.getBoundingClientRect(), markerBox = marker.getBoundingClientRect();
+        const outline = ink.outlineStyle === 'none' ? 0 : parseFloat(ink.outlineWidth) + parseFloat(ink.outlineOffset);
+        return { label: score.getAttribute('aria-label'), classes: score.className,
+          markerBottom: markerBox.bottom, paintedTop: scoreBox.top - outline,
+          markerTop: markerBox.top, cellTop: cell.getBoundingClientRect().top };
+      }));
+      for (const kind of ['score-birdie', 'score-eagle', 'score-bogey', 'score-double']) {
+        expect(positions.some((position) => position.classes.includes(kind)), `${kind} with stroke dots`).toBe(true);
+      }
+      for (const position of positions) {
+        expect(position.markerTop, position.label ?? '').toBeGreaterThanOrEqual(position.cellTop);
+        if (/score-(?:birdie|eagle|bogey|double)/.test(position.classes)) {
+          expect(position.markerBottom + 2, position.label ?? '').toBeLessThanOrEqual(position.paintedTop);
+        }
+      }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     }
     const colors = await dots.locator('.score-stroke-dot').first().evaluate((element) => {

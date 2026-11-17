@@ -7,6 +7,8 @@ import { newGameDraft, setFormat } from './game-draft';
 import { draftFromGame } from './game-draft';
 import { teamLeaderboardGame, teamLeaderboardRound } from '../../client/leaderboard.test-support';
 import { fictionalId } from '../../client/catalog.test-support';
+import { churchyFixture } from '../../domain/churchy.test-support';
+import { defaultChurchySpecials } from '../../domain/churchy';
 
 function SettingsHarness({ team = false }: { readonly team?: boolean }) {
   const [draft, setDraft] = useState(() => team ? draftFromGame(teamLeaderboardGame) : newGameDraft());
@@ -16,6 +18,27 @@ function SettingsHarness({ team = false }: { readonly team?: boolean }) {
 }
 
 describe('GameSettings', () => {
+  it('uses fixed named v2 toggles and locks group, order and specials after scoring while retaining stake editing', () => {
+    const f = churchyFixture();
+    const draft = draftFromGame({ ...f.game, version: 2 as const, enabledSpecials: defaultChurchySpecials });
+    const onChange = vi.fn();
+    const props = { draft, disabled: false, saveDisabled: false, cancelDisabled: false, retry: false,
+      onChange, onSave: vi.fn(), onCancel: vi.fn(), groups: f.snapshot.groups, roster: f.cards,
+      churchyEnabled: true, churchyV2Supported: true };
+    const view = render(<GameSettings {...props} />);
+    fireEvent.click(screen.getByLabelText('Eagle · 4'));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ churchySpecials: defaultChurchySpecials.filter((key) => key !== 'eagle') }));
+    expect(screen.queryByLabelText(/custom|reason/i)).toBeNull();
+    view.rerender(<GameSettings {...props} setupLocked />);
+    expect(screen.getByLabelText('Churchy playing group')).toBeDisabled();
+    expect(screen.getByLabelText('P1')).toBeDisabled();
+    expect(screen.getByLabelText('Eagle · 4')).toBeDisabled();
+    expect(screen.getByLabelText('USD per dot')).toBeEnabled();
+    view.rerender(<GameSettings {...props} churchyV2Supported={false} />);
+    expect(screen.getByLabelText('USD per dot')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save game' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Cancel editing' })).toBeEnabled();
+  });
   it('pages and searches forty-golfer manual team assignments without losing selections or selected choices', async () => {
     const roster = Array.from({ length: 40 }, (_, index) => ({
       playerId: fictionalId(index + 1), displayName: `Fictional golfer ${String(index + 1).padStart(2, '0')}`,

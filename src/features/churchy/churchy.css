@@ -1,4 +1,7 @@
 .churchy-dots-button {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
   min-height: 44px;
   min-width: 44px;
   justify-self: end;
@@ -46,4 +49,14 @@
 
 .churchy-results {
   overflow-wrap: anywhere;
+}
+
+.churchy-dots-dialog input:not([type="checkbox"]) {
+  width: 5rem;
+  margin-inline-start: auto;
+}
+
+.churchy-dots-dialog summary {
+  cursor: pointer;
+  padding-block: .75rem;
 }
