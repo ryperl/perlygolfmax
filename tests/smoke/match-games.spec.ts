@@ -110,11 +110,12 @@ async function narrowControls(page: Page, scope: Locator) {
       const computed = getComputedStyle(element);
       const label = element.closest('label');
       return { height: element.getBoundingClientRect().height, color: computed.color, background: computed.backgroundColor,
-        fits: label !== null && label.scrollWidth <= label.clientWidth, tag: element.tagName };
+        fits: label !== null && label.scrollWidth <= label.clientWidth, tag: element.tagName,
+        label: label?.firstChild?.textContent, labelWidth: label?.clientWidth, labelScrollWidth: label?.scrollWidth };
     });
     expect(style.tag).toBe('SELECT');
     expect(style.height).toBeGreaterThanOrEqual(44);
-    expect(style.fits).toBe(true);
+    expect(style.fits, JSON.stringify(style)).toBe(true);
     expect(contrastRatio(style.color, style.background)).toBeGreaterThanOrEqual(4.5);
   }
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
