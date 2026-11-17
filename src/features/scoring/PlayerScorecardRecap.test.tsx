@@ -43,12 +43,15 @@ describe('individual traditional scorecard recap', () => {
     const round = mixedTeeRound();
     const card = round.cards[0];
     if (!card) throw new Error('Missing fictional card.');
-    render(<PlayerScorecardRecap round={round} card={card} />);
+    render(<PlayerScorecardRecap round={{ ...round, teeStrokeAllocation: false,
+      courseHandicaps: [{ playerId: card.playerId, courseHandicap: 1 }] }} card={card} />);
     expect(screen.getByText(/Fictional Gold \/ Fictional personal category · Course rating 41 · Slope 130/)).toBeVisible();
     expect(screen.getByLabelText('Hole 1: 4, birdie')).toHaveClass('score-birdie');
     expect(within(screen.getByRole('row', { name: /^Par / })).getAllByRole('cell')[0]).toHaveTextContent('5');
     expect(within(screen.getByRole('row', { name: /^Yards / })).getAllByRole('cell')[0]).toHaveTextContent('210');
     expect(within(screen.getByRole('row', { name: /^Stroke index / })).getAllByRole('cell')[0]).toHaveTextContent('9');
+    expect(screen.getByRole('img', { name: 'Hole 9: 1 handicap stroke received (tee Course Handicap)' })).toBeVisible();
+    expect(screen.queryByRole('img', { name: /^Hole 1:/ })).not.toBeInTheDocument();
   });
 
   it('falls back to the common captured tee and layout for a golfer without an override', () => {

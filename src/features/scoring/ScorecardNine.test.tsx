@@ -11,6 +11,63 @@ import { ballDropFormat, strokeGameCards, strokeGameFixture, strokeGamesRound } 
 const card = fictionalRoundScores.cards[0];
 if (!card) throw new Error('Missing fictional card.');
 describe('traditional scorecard nine', () => {
+  it('marks tee CH strokes before play and keeps them independent of selected net-game allowances', () => {
+    const { round, games } = scorecardGamesFixture();
+    const first = round.cards[0], net = games.find((game) => game.basis === 'net');
+    if (!first || !net) throw new Error('Missing fictional net scorecard.');
+    const updated = withGameResults(round, [{ ...net, handicapAllowancePercent: 1 }], 'fictional-game-v2');
+    const before = structuredClone(updated);
+    const input = { label: 'Front nine', subtotal: 'Out' as const, layout: updated.layout.slice(0, 9),
+      fullLayout: updated.layout, cards: [first], teeStrokeAllocation: true };
+    const view = render(<ScorecardNine {...input} courseHandicaps={[{ playerId: first.playerId, courseHandicap: 20 }]}
+      game={scorecardGame(updated)} />);
+    expect(screen.getByRole('img', { name: 'Hole 1: 2 handicap strokes received (tee Course Handicap)' }).querySelectorAll('.score-stroke-dot')).toHaveLength(2);
+    expect(screen.getByRole('img', { name: 'Hole 2: 2 handicap strokes received (tee Course Handicap)' })).toBeVisible();
+    expect(screen.getByRole('img', { name: 'Hole 9: 1 handicap stroke received (tee Course Handicap)' })).toBeVisible();
+    expect(updated).toEqual(before);
+    view.rerender(<ScorecardNine {...input} courseHandicaps={[{ playerId: first.playerId, courseHandicap: 9 }]} />);
+    expect(screen.getAllByRole('img')).toHaveLength(9);
+    view.rerender(<ScorecardNine {...input} courseHandicaps={[{ playerId: first.playerId, courseHandicap: 8 }]} />);
+    expect(screen.queryByRole('img', { name: /^Hole 9:/ })).not.toBeInTheDocument();
+  });
+
+  it('uses each personal tee stroke index/availability and never substitutes the default tee flag', () => {
+    const round = mixedTeeRound();
+    const personal = round.playerTees?.[0], first = round.cards[0], second = round.cards[1];
+    if (!personal || !first || !second) throw new Error('Missing fictional personal tee.');
+    const input = { label: 'Front nine', subtotal: 'Out' as const, layout: round.layout,
+      fullLayout: round.layout, cards: [first, second], courseHandicaps: [
+        { playerId: first.playerId, courseHandicap: 1 }, { playerId: second.playerId, courseHandicap: 1 },
+      ] };
+    const view = render(<ScorecardNine {...input} playerTees={[personal]} teeStrokeAllocation={false} />);
+    const firstRow = screen.getByRole('rowheader', { name: /Fictional Player 1 Course handicap/ }).closest('tr');
+    const secondRow = screen.getByRole('rowheader', { name: /Fictional Player 2 Course handicap/ }).closest('tr');
+    if (!firstRow || !secondRow) throw new Error('Missing fictional score rows.');
+    expect(within(firstRow).getByRole('img', { name: /^Hole 9:/ })).toBeVisible();
+    expect(within(firstRow).queryByRole('img', { name: /^Hole 1:/ })).not.toBeInTheDocument();
+    expect(within(secondRow).getByText('Stroke dots unavailable')).toBeVisible();
+    view.rerender(<ScorecardNine {...input} playerTees={[{ ...personal, profile: { ...personal.profile, strokeAllocation: false } }]} teeStrokeAllocation />);
+    expect(within(firstRow).queryByRole('img')).not.toBeInTheDocument();
+    expect(within(firstRow).getByText('Stroke dots unavailable')).toBeVisible();
+    expect(within(secondRow).getByRole('img', { name: /^Hole 1:/ })).toBeVisible();
+  });
+
+  it('keeps dots beside unplayed/pickup scores and bounds large counts without changing gross marks', () => {
+    const input = { label: 'Front nine', subtotal: 'Out' as const, layout: fictionalRoundScores.layout,
+      fullLayout: fictionalRoundScores.layout, teeStrokeAllocation: true };
+    const cards = [{ ...card, holes: card.holes.map((hole) => ({ ...hole, score: hole.number === 1
+      ? { kind: 'picked-up' as const, reportedStrokes: 7 } : { kind: 'unplayed' as const } })) }];
+    const view = render(<ScorecardNine {...input} cards={cards} courseHandicaps={[{ playerId: card.playerId, courseHandicap: 72 }]} />);
+    const marker = screen.getByRole('img', { name: 'Hole 1: 8 handicap strokes received (tee Course Handicap)' });
+    expect(marker.querySelectorAll('.score-stroke-dot')).toHaveLength(1);
+    expect(marker).toHaveTextContent('x8');
+    expect(screen.getByLabelText('Hole 1: X7')).not.toHaveClass('score-birdie');
+    expect(screen.getByRole('img', { name: /^Hole 2: 8 handicap strokes/ })).toBeVisible();
+    for (const handicap of [0, -2, null]) {
+      view.rerender(<ScorecardNine {...input} cards={cards} courseHandicaps={[{ playerId: card.playerId, courseHandicap: handicap }]} />);
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    }
+  });
   it('places one Ball Drop line after the foursome and marks the saved combination per hole', () => {
     const f = strokeGameFixture();
     let cards = strokeGameCards(f.cards, 1, [{ kind: 'strokes', strokes: 3 }, { kind: 'strokes', strokes: 4 },
@@ -20,18 +77,21 @@ describe('traditional scorecard nine', () => {
     const round = strokeGamesRound({ ...f, cards });
     const before = structuredClone(round);
     render(<ScorecardNine label="Front nine" subtotal="Out" layout={round.layout} fullLayout={round.layout}
-      cards={round.cards} game={scorecardGame(round)} />);
+      cards={round.cards} game={scorecardGame(round)} teeStrokeAllocation
+      courseHandicaps={round.cards.slice(0, 2).map((card) => ({ playerId: card.playerId, courseHandicap: 9 }))} />);
     const team = screen.getByRole('row', { name: 'Fictional team 1 · Fictional Ball Drop team to par' });
     expect(within(team).getAllByRole('cell').slice(0, 3).map((cell) => cell.textContent)).toEqual(['-1', '+1', '0']);
     expect(team).toBe(team.parentElement?.lastElementChild);
     expect(screen.getAllByRole('row', { name: /team to par$/ })).toHaveLength(1);
-    const first = screen.getByRole('rowheader', { name: 'Fictional golfer 1' }).closest('tr');
-    const second = screen.getByRole('rowheader', { name: 'Fictional golfer 2' }).closest('tr');
-    const third = screen.getByRole('rowheader', { name: 'Fictional golfer 3' }).closest('tr');
+    const first = screen.getByRole('rowheader', { name: /Fictional golfer 1 Course handicap/ }).closest('tr');
+    const second = screen.getByRole('rowheader', { name: /Fictional golfer 2 Course handicap/ }).closest('tr');
+    const third = screen.getByRole('rowheader', { name: /^Fictional golfer 3/ }).closest('tr');
     if (!first || !second || !third) throw new Error('Missing fictional score rows.');
     expect(within(within(first).getAllByRole('cell')[0] ?? first).getByLabelText('Fictional team 1: counting net ball')).toHaveTextContent('N');
     expect(within(within(second).getAllByRole('cell')[0] ?? second).getByLabelText('Fictional team 1: counting gross ball')).toHaveTextContent('G');
     expect(within(first).getAllByRole('cell')[0]).toHaveClass('recap-counting-score');
+    expect(within(first).getByRole('img', { name: /^Hole 1: 1 handicap stroke/ })).toBeVisible();
+    expect(within(team).queryByRole('img')).not.toBeInTheDocument();
     expect(within(first).getByLabelText('Hole 1: 3, birdie')).toHaveClass('score-birdie');
     expect(within(third).getAllByRole('cell')[0]).not.toHaveClass('recap-counting-score');
     expect(within(third).getAllByRole('cell')[1]).toHaveClass('recap-counting-score');

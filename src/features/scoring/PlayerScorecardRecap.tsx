@@ -31,11 +31,13 @@ export function PlayerScorecardRecap({ round, card, gameId }: {
       </p>
     </header>
     {scorecardGameWarnings(game, [card]).map((warning) => <p className="scorecard-game-unavailable" key={warning}>{warning}</p>)}
+    {(round.courseHandicaps?.find((entry) => entry.playerId === card.playerId)?.courseHandicap ?? 0) > 0
+      && <p className="scorecard-stroke-key">Stroke dots: tee Course Handicap.</p>}
     <div className="recap-sections">
       <ScorecardNine label="Front nine" subtotal="Out" layout={front} fullLayout={layout} cards={[card]} game={game}
-        courseHandicaps={round.courseHandicaps ?? []} />
+        courseHandicaps={round.courseHandicaps ?? []} teeStrokeAllocation={tee?.strokeAllocation ?? round.teeStrokeAllocation} />
       {back.length > 0 && <ScorecardNine label="Back nine" subtotal="In" layout={back} fullLayout={layout} cards={[card]} game={game}
-        courseHandicaps={round.courseHandicaps ?? []} />}
+        courseHandicaps={round.courseHandicaps ?? []} teeStrokeAllocation={tee?.strokeAllocation ?? round.teeStrokeAllocation} />}
     </div>
     {(!summary.complete || game?.result?.players.some((player) => player.playerId === card.playerId && player.status === 'in-progress' && player.totalPoints !== null)) &&
       <p className="scorecard-incomplete">{game ? '* Incomplete total.' : '* Incomplete recorded total.'}</p>}

@@ -13,7 +13,7 @@ export default defineConfig({
   projects: [
     { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'mobile-chromium', use: { ...devices['Pixel 7'] } },
-    { name: 'iphone-16-pro-webkit', testMatch: ['**/score-resume.spec.ts', '**/public-app-visit.spec.ts', '**/public-scoring-styles.spec.ts', '**/stroke-games.spec.ts', '**/churchy.spec.ts', '**/kp.spec.ts', '**/event-skins.spec.ts', '**/public-purse.spec.ts', '**/public-leaderboard.spec.ts', '**/corrections.spec.ts', '**/round-theme.spec.ts', '**/saved-event-layout.spec.ts', '**/catalog-workspace.spec.ts', '**/quick-round.spec.ts'],
+    { name: 'iphone-16-pro-webkit', testMatch: ['**/score-resume.spec.ts', '**/public-app-visit.spec.ts', '**/public-scoring-styles.spec.ts', '**/stroke-games.spec.ts', '**/stroke-dots.spec.ts', '**/churchy.spec.ts', '**/kp.spec.ts', '**/event-skins.spec.ts', '**/public-purse.spec.ts', '**/public-leaderboard.spec.ts', '**/corrections.spec.ts', '**/round-theme.spec.ts', '**/saved-event-layout.spec.ts', '**/catalog-workspace.spec.ts', '**/quick-round.spec.ts'],
       use: { browserName: 'webkit', viewport: { width: 402, height: 874 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true } },
   ],
   webServer: {

@@ -29,6 +29,12 @@
 .scorecard-game-unavailable { color: var(--cp-text-muted); font-size: .85rem; }
 .recap-subtotal { background: var(--cp-round-surface, var(--cp-accent-soft)); color: var(--cp-round-ink, var(--cp-accent)); font-weight: 700; }
 .score-mark { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; }
+.scorecard-hole-score { position: relative; display: inline-flex; vertical-align: middle; }
+.score-stroke-dots { position: absolute; top: -.15rem; right: 0; display: inline-flex; align-items: center; gap: .1rem; color: var(--cp-text); white-space: nowrap; line-height: 1; pointer-events: none; }
+.score-stroke-dot { display: block; width: .2rem; height: .2rem; border-radius: 50%; background: currentColor; }
+.score-stroke-count { font-size: .55rem; font-weight: 650; }
+.scorecard-stroke-key, .scorecard-strokes-unavailable { color: var(--cp-text-muted); font-size: .75rem; font-weight: 400; }
+.scorecard-strokes-unavailable { display: block; }
 .score-token { font-size: .75rem; white-space: nowrap; min-width: max-content; }
 .score-birdie, .score-eagle { border: 1px solid var(--cp-accent); border-radius: 50%; color: var(--cp-accent); }
 .score-eagle { outline: 1px solid var(--cp-accent); outline-offset: 3px; }

@@ -69,6 +69,8 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
       <button type="button" className="scorecard-back" onClick={() => { setPlayerId(null); }}>Back to group scorecard</button>
       <PlayerScorecardRecap round={round} card={player} gameId={game?.definition.id ?? null} />
     </> : <>
+      {cards.some((card) => (round.courseHandicaps?.find((entry) => entry.playerId === card.playerId)?.courseHandicap ?? 0) > 0)
+        && <p className="scorecard-stroke-key">Stroke dots: tee Course Handicap.</p>}
       {scorecardGameWarnings(game, cards).map((warning) => <p className="scorecard-game-unavailable" key={warning}>{warning}</p>)}
       {back.length > 0 && <div className="scorecard-nine-picker" role="group" aria-label="Holes to display">
         <button type="button" aria-pressed={nine === 'front'} onClick={() => { setNine('front'); }}>Front 9</button>
@@ -78,9 +80,11 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
       <div className="recap-sections">
         {(nine !== 'back' || back.length === 0) && <ScorecardNine label="Front nine" subtotal="Out" layout={front} fullLayout={layout} cards={cards} game={game}
           courseHandicaps={round.courseHandicaps ?? []}
+          teeStrokeAllocation={round.teeStrokeAllocation}
           playerTees={round.playerTees} defaultTeeLabel={`${round.teeName} / ${round.teeCategory}`} onPlayerSelect={setPlayerId} />}
         {nine !== 'front' && back.length > 0 && <ScorecardNine label="Back nine" subtotal="In" layout={back} fullLayout={layout} cards={cards} game={game}
           courseHandicaps={round.courseHandicaps ?? []}
+          teeStrokeAllocation={round.teeStrokeAllocation}
           playerTees={round.playerTees} defaultTeeLabel={`${round.teeName} / ${round.teeCategory}`} onPlayerSelect={setPlayerId} />}
       </div>
       {(cards.some((card) => !summarizeCard(card, layout).complete) ||

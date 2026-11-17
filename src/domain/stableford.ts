@@ -8,7 +8,7 @@ import type { RoundPlayerSnapshot, RoundSnapshot } from './setup.js';
 import { gameTeamsMatchRoster, isStablefordGame, isTeamGameDefinition } from './games.js';
 import { calculateStrokeGameResults } from './stroke-games.js';
 import { aggregateTeamGameResults } from './team-games.js';
-import { playerTee } from './tees.js';
+import { hasStrokeAllocation, playerTee } from './tees.js';
 import { calculateChurchyResults } from './churchy.js';
 
 export function stablefordPoints(preset: StablefordPreset): StablefordPointsTable {
@@ -83,10 +83,7 @@ export function calculateCourseHandicap(index: string, tee: TeeProfile): number 
 export function calculatePlayingHandicap(index: string, tee: TeeProfile, allowance: number): number | GameUnavailableReason {
   const result = unroundedCourseHandicap(index, tee);
   if (typeof result === 'string') return result;
-  const count = tee.holes.length;
-  if (!tee.strokeAllocation || tee.holes.some((hole) => !Number.isSafeInteger(hole.allocation)
-    || hole.allocation < 1 || hole.allocation > count)
-    || new Set(tee.holes.map((hole) => hole.allocation)).size !== count) return 'missing-stroke-index';
+  if (!hasStrokeAllocation(tee)) return 'missing-stroke-index';
   return Number(rounded(multiply(result, { numerator: BigInt(allowance), denominator: 100n })));
 }
 

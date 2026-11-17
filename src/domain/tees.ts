@@ -10,6 +10,13 @@ export interface PlayerTeeProfile {
   readonly profile: TeeProfile;
 }
 
+export function hasStrokeAllocation(tee: Pick<TeeProfile, 'strokeAllocation' | 'holes'>): boolean {
+  const count = tee.holes.length;
+  return tee.strokeAllocation && tee.holes.every((hole) => Number.isSafeInteger(hole.allocation)
+    && hole.allocation >= 1 && hole.allocation <= count)
+    && new Set(tee.holes.map((hole) => hole.allocation)).size === count;
+}
+
 export function compatibleTeeLayouts(
   common: Pick<TeeProfile, 'holeCount' | 'holes'>, selected: Pick<TeeProfile, 'holeCount' | 'holes'>,
 ): boolean {

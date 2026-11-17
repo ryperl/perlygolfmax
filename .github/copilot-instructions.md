@@ -194,6 +194,11 @@
 - Scoring names show server-derived Course Handicap from captured HI and each
   golfer's captured tee, without game allowance or a stroke-allocation requirement.
   Keep scratch/plus values distinct from NH and other unavailable inputs.
+  Scorecard stroke dots use full server Course Handicap and the captured
+  personal/default tee's complete stroke allocation, never game allowances,
+  current catalog HI or Churchy earned dots. Use shared allocation math;
+  never halve an already-calculated nine-hole CH again. Bound visual counts,
+  preserve gross marks/counting badges and surface unavailable allocation.
 - Event Roster retains current HI. Round playing groups, unassigned golfers and
   competition teams show CH using that round's index and each personal/default
   tee through shared domain handicap math, never roster HI or game allowance.

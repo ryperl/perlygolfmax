@@ -2,7 +2,7 @@ import { scoreEntryText } from '../../contracts/scoring';
 import type { CourseHole } from '../../domain/catalog';
 import type { HoleScore, PlayerCourseHandicap, Scorecard } from '../../domain/scoring';
 import type { PlayerTeeProfile } from '../../domain/tees';
-import { ballDropContribution, ballDropScoreText, cardTotalText, pointsTotalText, scorecardBallDropTeams, scorecardGamePlayer } from './scorecard-presentation';
+import { ballDropContribution, ballDropScoreText, cardTotalText, pointsTotalText, scorecardBallDropTeams, scorecardGamePlayer, scorecardHandicapStrokes } from './scorecard-presentation';
 import type { ScorecardGame } from './scorecard-presentation';
 import { gameUnavailableMessage } from '../games';
 import { gameResultTotal, gameResultUnit } from '../../domain/games';
@@ -17,6 +17,15 @@ function scoreMark(score: HoleScore | undefined, par: number) {
   if (relative === 0) return { className: '', description: 'par' };
   return relative === 1 ? { className: 'score-bogey', description: 'bogey' }
     : { className: 'score-double', description: 'double bogey or more' };
+}
+
+function StrokeDots({ count, holeNumber }: { readonly count: number | undefined; readonly holeNumber: number }) {
+  if (count === undefined || count <= 0) return null;
+  const description = `Hole ${String(holeNumber)}: ${String(count)} handicap stroke${count === 1 ? '' : 's'} received (tee Course Handicap)`;
+  return <span className="score-stroke-dots" role="img" aria-label={description} title={description}>
+    {Array.from({ length: count > 3 ? 1 : count }, (_, index) => <span className="score-stroke-dot" key={index} aria-hidden="true" />)}
+    {count > 3 && <span className="score-stroke-count" aria-hidden="true">x{count}</span>}
+  </span>;
 }
 
 function CourseRows({ layout, fullLayout, showTotal, prefix = '' }: {
@@ -35,7 +44,7 @@ function CourseRows({ layout, fullLayout, showTotal, prefix = '' }: {
   </>;
 }
 
-export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game, onPlayerSelect, playerTees, defaultTeeLabel, courseHandicaps }: {
+export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game, onPlayerSelect, playerTees, defaultTeeLabel, courseHandicaps, teeStrokeAllocation }: {
   readonly label: string;
   readonly subtotal: 'Out' | 'In';
   readonly layout: readonly CourseHole[];
@@ -46,6 +55,7 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
   readonly playerTees?: readonly PlayerTeeProfile[] | undefined;
   readonly defaultTeeLabel?: string;
   readonly courseHandicaps?: readonly PlayerCourseHandicap[];
+  readonly teeStrokeAllocation?: boolean | undefined;
 }) {
   const showTotal = subtotal === 'In' || fullLayout.length === layout.length;
   const mixed = (playerTees?.length ?? 0) > 0;
@@ -65,6 +75,8 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
             const tee = playerTees?.find((entry) => entry.playerId === card.playerId)?.profile;
             const playerFullLayout = tee?.holes ?? fullLayout;
             const playerLayout = layout.map((hole) => playerFullLayout.find((item) => item.number === hole.number) ?? hole);
+            const courseHandicap = courseHandicaps?.find((entry) => entry.playerId === card.playerId);
+            const strokeCounts = scorecardHandicapStrokes(courseHandicap?.courseHandicap, playerFullLayout, tee?.strokeAllocation ?? teeStrokeAllocation);
             const saved = new Map(card.holes.map((hole) => [hole.number, hole.score]));
             const player = ballDrop ? undefined : scorecardGamePlayer(game, card.playerId);
             const holePoints = new Map(player?.strokeGame ? player.strokeGame.holes.map((hole) => [hole.number, hole.value])
@@ -80,16 +92,21 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
               <th scope="row">{onPlayerSelect ? <button type="button" className="scorecard-player-link"
                 aria-label={`Open scorecard for ${card.displayName}`} onClick={() => { onPlayerSelect(card.playerId); }}>{card.displayName}</button> : card.displayName}
                 {courseHandicaps && <> <CourseHandicap className="scorecard-handicap"
-                  value={courseHandicaps.find((entry) => entry.playerId === card.playerId)} /></>}</th>
+                  value={courseHandicap} /></>}
+                {typeof courseHandicap?.courseHandicap === 'number' && courseHandicap.courseHandicap > 0 && !strokeCounts
+                  && <small className="scorecard-strokes-unavailable">Stroke dots unavailable</small>}</th>
               {playerLayout.map((hole) => {
                 const score = saved.get(hole.number);
                 const mark = scoreMark(score, hole.par);
                 const text = score ? scoreEntryText(score) || '—' : '?';
                 const contribution = score?.kind === 'strokes' ? ballDropContribution(game, card.playerId, hole.number) : undefined;
                 const description = contribution ? `${contribution.teamName}: counting ${contribution.basis} ball` : undefined;
-                return <td key={hole.number} className={contribution ? 'recap-counting-score' : undefined}><span className={`score-mark ${mark.className}${text.length > 2 ? ' score-token' : ''}`}
+                return <td key={hole.number} className={contribution ? 'recap-counting-score' : undefined}><span className="scorecard-hole-score">
+                  <span className={`score-mark ${mark.className}${text.length > 2 ? ' score-token' : ''}`}
                   title={mark.description || undefined}
                   aria-label={score ? `Hole ${String(hole.number)}: ${score.kind === 'unplayed' ? 'unplayed' : text}${mark.description ? `, ${mark.description}` : ''}` : `Hole ${String(hole.number)}: score unavailable`}>{text}</span>
+                  <StrokeDots count={strokeCounts?.get(hole.number)} holeNumber={hole.number} />
+                  </span>
                   {contribution && <span className="recap-counting-marker" aria-label={description} title={description}>
                     {contribution.basis === 'net' ? 'N' : 'G'}
                   </span>}

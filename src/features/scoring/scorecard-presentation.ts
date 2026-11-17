@@ -4,6 +4,17 @@ import type { GamePlayerResult, GameTeamResult, RoundGameDefinition, RoundGameRe
 import { gameUnavailableMessage } from '../games';
 import { summarizeGross } from '../../domain/scoring';
 import { visibleGames } from '../../domain/games';
+import { handicapStrokesForHole } from '../../domain/stableford';
+import { hasStrokeAllocation } from '../../domain/tees';
+
+export function scorecardHandicapStrokes(
+  handicap: number | null | undefined, layout: readonly CourseHole[], enabled: boolean | undefined,
+): ReadonlyMap<number, number> | null {
+  if (typeof handicap !== 'number' || !Number.isSafeInteger(handicap) || ![9, 18].includes(layout.length)) return null;
+  if (handicap === 0) return new Map(layout.map((hole) => [hole.number, 0]));
+  if (!hasStrokeAllocation({ holes: layout, strokeAllocation: enabled === true })) return null;
+  return new Map(layout.map((hole) => [hole.number, handicapStrokesForHole(handicap, hole.allocation, layout.length)]));
+}
 
 export function summarizeCard(card: Scorecard, layout: readonly CourseHole[]) {
   const saved = new Map(card.holes.map((hole) => [hole.number, hole]));

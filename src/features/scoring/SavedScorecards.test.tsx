@@ -17,7 +17,7 @@ describe('golfer-facing round scorecards', () => {
   it('keeps server Course Handicap beside names across Front/Back/Full Card, game changes and refreshed projections', async () => {
     const { round, games } = scorecardGamesFixture();
     const values = [9, -2, null, null];
-    const saved = { ...round, courseHandicaps: round.cards.map((card, index) => ({
+    const saved = { ...round, teeStrokeAllocation: true, courseHandicaps: round.cards.map((card, index) => ({
       playerId: card.playerId, courseHandicap: values[index] ?? null,
       ...(index === 2 ? { unavailableReason: 'missing-handicap-index' as const }
         : index === 3 ? { unavailableReason: 'uncaptured-handicap-index' as const } : {}),
@@ -31,6 +31,7 @@ describe('golfer-facing round scorecards', () => {
       expect(table.getByLabelText('Course handicap: +2')).toHaveTextContent('CH +2');
       expect(table.getByLabelText('No captured Handicap Index')).toHaveTextContent('NH');
       expect(table.getByLabelText('Course handicap unavailable')).toHaveTextContent('CH —');
+      expect(table.queryAllByRole('img')).toHaveLength(label === 'Front nine' ? 9 : 0);
     }
     checkNine('Front nine');
     checkNine('Back nine');
@@ -52,6 +53,7 @@ describe('golfer-facing round scorecards', () => {
       index === 0 ? { ...entry, courseHandicap: 7 } : entry) }} />);
     expect(screen.getAllByLabelText('Course handicap: 7')).toHaveLength(2);
     expect(screen.queryByLabelText('Course handicap: 9')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('img')).toHaveLength(7);
   });
 
   it('shows saved Ball Drop team projections and Skins awards on group and individual cards, never fictitious points', async () => {

@@ -360,6 +360,15 @@ Select a golfer for their individual card, or choose **Enter scores** for the
 hole-first editor. Front/back controls and locally scrolling tables with fixed
 player labels support narrow screens. Circles/squares mark raw gross strokes
 relative to source par, not net or handicap-adjusted results.
+Small upper-right dots mark handicap strokes **received**, using the
+server-provided Course Handicap and each golfer's captured tee/stroke index,
+not the selected game's allowance or Churchy earned dots. One dot means one
+stroke, two means two; counts above three use a bounded dot/count label.
+For example, CH9 receives a dot on stroke index9 but not10 on an eighteen-hole
+layout. An already-calculated nine-hole CH9 receives one on every hole; it is
+not halved again. Scratch/plus handicaps have no received-stroke dots. Missing HI
+remains NH/unavailable, and positive CH without usable stroke allocation shows
+an explicit unavailable indicator. Dots do not change strokes, totals or games.
 The round scorecard overview lists its configured games and scoring rules;
 the Game selector chooses saved points, team-to-par or skins shown. The round's
 back link returns to that event's overview, not its setup editor.
