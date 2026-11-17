@@ -23,7 +23,7 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
   if (!group) throw new Error('Saved round has no groups.');
   const game = scorecardGame(round, gameId, group.playerIds);
   const games = visibleGames(round.games?.configuration.games ?? [], round.churchyEnabled).filter((game) =>
-    game.kind !== 'churchy' || group.playerIds.every((id) => game.playerIds.includes(id)));
+    game.kind !== 'nassau' && ((game.kind !== 'churchy' && game.kind !== 'wolf') || group.playerIds.every((id) => game.playerIds.includes(id))));
   const cards = group.playerIds.map((id) => cardFor(round, id));
   const player = cards.find((card) => card.playerId === playerId);
   const layout = [...round.layout].sort((left, right) => left.number - right.number);
@@ -41,6 +41,8 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
       {group.playerIds.some((id) => writablePlayerIds(round).includes(id)) &&
         <button type="button" disabled={busy} onClick={onEnterScores}>Enter scores · Group {group.number}</button>}
     </header>
+    {round.games?.configuration.games.some((game) => game.kind === 'nassau' && game.groupNumber === group.number)
+      && <p>Nassau match bets and presses are in Games and Leaderboard, not individual scorecard points.</p>}
     {games.length > 0 && <section className="scorecard-game-summary" aria-label="Round games">
       <h3>Round games</h3>
       <ul role="list">{games.map((entry) => <li key={entry.id}>

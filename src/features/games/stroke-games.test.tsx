@@ -7,8 +7,69 @@ import { GameSettings } from './GameSettings';
 import { GameResults } from './GameResults';
 import { RoundLeaderboard } from '../leaderboard';
 import { sameGameDefinitions } from '../../domain/games';
+import type { RoundGameDefinition, StrokePlayGameDefinition } from '../../domain/games';
+import { calculateGameResults } from '../../domain/stableford';
+import { gameStandings } from '../leaderboard/standings';
+import { PlayerScorecardRecap } from '../scoring/PlayerScorecardRecap';
 
 describe('Ball Drop and Skins editing and saved presentation', () => {
+  it('selects individual gross/net Stroke Play without Stableford/team controls and builds only its versioned fields', () => {
+    const f = strokeGameFixture();
+    const save = vi.fn<(game: RoundGameDefinition | null) => void>();
+    function Fixture() {
+      const [draft, setDraft] = useState(newGameDraft());
+      return <GameSettings draft={draft} roster={f.cards} supportedGameKinds={['stroke-play']} disabled={false} saveDisabled={false}
+        cancelDisabled={false} retry={false} onChange={setDraft} onSave={() => { save(buildGame(draft)); }} onCancel={vi.fn()} />;
+    }
+    render(<Fixture />);
+    fireEvent.change(screen.getByLabelText('Game type'), { target: { value: 'stroke-play' } });
+    expect(screen.queryByLabelText('Points preset')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Handicap allowance (%)')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Game format')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Carry tied skins forward')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Score basis'), { target: { value: 'net' } });
+    fireEvent.submit(screen.getByRole('form', { name: 'Game settings' }));
+    expect(save.mock.calls[0]?.[0]).toMatchObject({ name: 'Stroke Play', kind: 'stroke-play', version: 1, basis: 'net' });
+    expect(Object.keys(save.mock.calls[0]?.[0] ?? {}).sort()).toEqual(['basis', 'id', 'kind', 'name', 'version']);
+    expect(buildGame(draftFromGame({ id: f.skins.id, name: '', kind: 'stroke-play', version: 1, basis: 'gross' }))).toBeNull();
+  });
+
+  it('shows actual strokes and personal-par ranks independently, including shared ties and unavailable golfers', () => {
+    const f = strokeGameFixture();
+    const game: StrokePlayGameDefinition = { id: f.skins.id, name: 'Fictional Stroke Play', kind: 'stroke-play', version: 1, basis: 'gross' };
+    const snapshot = { ...f.snapshot, playerTees: [{ playerId: f.cards[0]?.playerId ?? '', profile: {
+      ...f.snapshot.teeProfile, totalPar: 45, holes: f.snapshot.teeProfile.holes.map((hole) => ({ ...hole, par: 5 })),
+    } }] };
+    const cards = f.cards.map((card, index) => ({ ...card, holes: card.holes.map((hole) => ({
+      ...hole, score: { kind: 'strokes' as const, strokes: index === 0 ? 5 : 4 },
+    })) }));
+    const base = strokeGamesRound({ ...f, snapshot, cards });
+    if (!base.games) throw new Error('Missing fictional games');
+    const result = calculateGameResults([game], snapshot, cards)[0];
+    const round = { ...base, games: { configuration: { ...base.games.configuration, games: [game] },
+      results: result ? [result] : [] } };
+    const view = render(<><RoundLeaderboard round={round} busy={false} onManageGames={vi.fn()} />
+      <GameResults game={game} result={result} holeNumbers={round.layout.map((hole) => hole.number)} /></>);
+    const standings = within(screen.getByRole('list', { name: 'Standings' })).getAllByRole('listitem');
+    expect(standings[0]).toHaveTextContent('Fictional golfer 1');
+    const leader = standings[0];
+    if (!leader) throw new Error('Missing fictional leader');
+    expect(within(leader).getByLabelText('45 strokes')).toHaveTextContent('0 to par');
+    expect(screen.getAllByLabelText('Tied position 1')).toHaveLength(4);
+    expect(screen.getByRole('columnheader', { name: 'To par' })).toBeVisible();
+    expect(screen.getByRole('region', { name: 'Fictional Stroke Play strokes scorecard' })).toHaveTextContent('Gross strokes');
+    const first = cards[0];
+    if (!first) throw new Error('Missing fictional card');
+    view.rerender(<PlayerScorecardRecap round={round} card={first} gameId={game.id} />);
+    expect(screen.getAllByText('Gross strokes').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Team to par')).not.toBeInTheDocument();
+    const invalidCards = strokeGameCards(cards, 1, [{ kind: 'picked-up', reportedStrokes: 7 }, { kind: 'unplayed' }]);
+    const invalidResult = calculateGameResults([game], snapshot, invalidCards)[0];
+    const ranked = gameStandings(invalidResult?.players ?? [], 1);
+    expect(ranked.ranked.map(({ player }) => player.playerId)).not.toContain(first.playerId);
+    expect(ranked.unavailable).toHaveLength(1);
+    expect(ranked.provisional).toBe(true);
+  });
   it('builds clean versioned definitions and retains foursomes across the three formats', () => {
     const f = strokeGameFixture();
     const roster = f.cards.map((card) => card.playerId);

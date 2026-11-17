@@ -4,8 +4,63 @@ import { calculateEventStandings } from './event-leaderboard.js';
 import { strokeGameCards, strokeGameFixture, strokeGamesRound } from './stroke-games.test-support.js';
 import { purseTestContext } from './purse.test-support.js';
 import type { EventWorkspace } from './setup.js';
+import type { StrokePlayGameDefinition } from './games.js';
+import { calculateGameResults } from './stableford.js';
+import { matchGamesFixture } from './match-games.test-support.js';
 
 describe('stroke-game place awards and overall boundaries', () => {
+  it('uses only the selected Wolf foursome for explicit place prizes, never dot-difference cash settlement or Nassau bets', () => {
+    const f = matchGamesFixture(8);
+    const cards = f.cards.map((card, index) => ({ ...card, holes: card.holes.map((hole) => index === 0 && hole.number === 1
+      ? { ...hole, score: { ...hole.score, wolf: [{ number: 1, choice: {
+        gameId: f.wolf.id, gameEtag: 'fictional-game-revision', mode: 'blind' as const }, outcome: 'wolf' as const }] } } : hole) }));
+    const round = f.round(cards);
+    const base = purseTestContext();
+    const workspace: EventWorkspace = { ...base.workspace, event: { ...base.workspace.event, id: round.eventId },
+      rounds: [f.snapshot], roster: f.snapshot.players };
+    const pool = { ...base.pool, source: { kind: 'round-game' as const, roundId: round.roundId, gameId: f.wolf.id },
+      awardUnit: 'per-golfer' as const, prizes: [{ place: 1, amountMinor: 100 }] };
+    const result = calculatePurse({ ...base.plan, eventId: round.eventId, pools: [pool] }, workspace, [round]).pools[0];
+    expect(result?.status).toBe('projected');
+    expect(result?.shares.map((share) => [share.playerId, share.amountMinor])).toEqual([[f.wolf.playerIds[0], 100]]);
+    const blocked = calculatePurse({ ...base.plan, eventId: round.eventId,
+      pools: [{ ...pool, source: { ...pool.source, gameId: f.nassau.id } }] }, workspace, [round]).pools[0];
+    expect(blocked?.status).toBe('unavailable');
+    expect(blocked?.shares).toEqual([]);
+  });
+  it('awards Stroke Play places by personal relative-to-par, preserves ties, and blocks invalid stroke cards', () => {
+    const f = strokeGameFixture();
+    const game: StrokePlayGameDefinition = {
+      id: f.skins.id, name: 'Fictional Stroke Play', kind: 'stroke-play', version: 1, basis: 'gross',
+    };
+    const snapshot = { ...f.snapshot, playerTees: [{ playerId: f.cards[0]?.playerId ?? '', profile: {
+      ...f.snapshot.teeProfile, totalPar: 45, holes: f.snapshot.teeProfile.holes.map((hole) => ({ ...hole, par: 5 })),
+    } }] };
+    const cards = f.cards.map((card, index) => ({ ...card, holes: card.holes.map((hole) => ({
+      ...hole, score: { kind: 'strokes' as const, strokes: index === 0 ? 5 : 4 },
+    })) }));
+    const baseRound = strokeGamesRound({ ...f, snapshot, cards });
+    if (!baseRound.games) throw new Error('Missing fictional games');
+    const round = { ...baseRound, games: { configuration: { ...baseRound.games.configuration, games: [game] },
+      results: calculateGameResults([game], snapshot, cards) } };
+    const base = purseTestContext();
+    const workspace: EventWorkspace = { ...base.workspace, event: { ...base.workspace.event, id: round.eventId },
+      overallCompetition: { kind: 'stableford', credit: 'individual', roundGames: [{ roundId: round.roundId, gameId: game.id }] },
+      rounds: [snapshot], roster: snapshot.players };
+    const plan = { ...base.plan, eventId: round.eventId, pools: [{ ...base.pool,
+      source: { kind: 'round-game' as const, roundId: round.roundId, gameId: game.id },
+      prizes: [{ place: 1, amountMinor: 100 }] }] };
+    const result = calculatePurse(plan, workspace, [round]);
+    expect(result.pools[0]?.status).toBe('calculated');
+    expect(result.pools[0]?.shares.map((share) => share.amountMinor)).toEqual([25, 25, 25, 25]);
+    expect(calculateEventStandings(workspace, [round]).players.every((player) => player.reason === 'missing-game')).toBe(true);
+    const invalidCards = strokeGameCards(cards, 1, [{ kind: 'picked-up', reportedStrokes: 7 }]);
+    const invalid = { ...round, cards: invalidCards, games: { ...round.games,
+      results: calculateGameResults([game], snapshot, invalidCards) } };
+    const blocked = calculatePurse(plan, workspace, [invalid]).pools[0];
+    expect(blocked?.status).toBe('unavailable');
+    expect(blocked?.shares).toEqual([]);
+  });
   it.each(['ball-drop', 'skins'] as const)('ranks %s metrics without fictitious points and attributes foursome prizes to members', (kind) => {
     const f = strokeGameFixture(9, 8);
     const cards = f.cards.map((card, index) => ({ ...card, holes: card.holes.map((hole) => ({

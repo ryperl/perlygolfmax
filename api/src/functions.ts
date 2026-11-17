@@ -93,6 +93,10 @@ app.http('scoreHole', {
   route: 'events/{id}/rounds/{roundId}/players/{playerId}/holes/{holeNumber}', methods: ['PUT'], authLevel: 'anonymous',
   handler: createScoringHandler(resolveApi, 'score-hole'),
 });
+app.http('scoreGameHole', {
+  route: 'events/{id}/rounds/{roundId}/players/{playerId}/holes/{holeNumber}/games', methods: ['PUT'], authLevel: 'anonymous',
+  handler: createScoringHandler(resolveApi, 'score-game-hole'),
+});
 app.http('scoreHistory', {
   route: 'events/{id}/rounds/{roundId}/players/{playerId}/score-history', methods: ['GET'], authLevel: 'anonymous',
   handler: createScoringHandler(resolveApi, 'score-history'),
@@ -157,6 +161,7 @@ const publicRoutes: readonly { readonly action: PublicAction; readonly route: st
   { action: 'workspace', route: 'public/events/{id}/workspace', method: 'GET' },
   { action: 'scores', route: 'public/events/{id}/rounds/{roundId}/scores', method: 'GET' },
   { action: 'score-hole', route: 'public/events/{id}/rounds/{roundId}/players/{playerId}/holes/{holeNumber}', method: 'PUT' },
+  { action: 'score-game-hole', route: 'public/events/{id}/rounds/{roundId}/players/{playerId}/holes/{holeNumber}/games', method: 'PUT' },
   { action: 'event-leaderboard', route: 'public/events/{id}/leaderboard', method: 'GET' },
   { action: 'purse', route: 'public/events/{id}/purse', method: 'GET' },
   { action: 'games', route: 'public/events/{id}/rounds/{roundId}/games', method: 'PUT' },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { BallDropGameDefinition, RoundGameDefinition, SkinsGameDefinition } from '../../../src/domain/games.js';
+import type { BallDropGameDefinition, RoundGameDefinition, SkinsGameDefinition, StrokePlayGameDefinition } from '../../../src/domain/games.js';
 import { isGameWriteResult, isRoundScores } from '../../../src/contracts/scoring.js';
 import { roundMatchesSnapshot } from '../../../src/contracts/round-context.js';
 import { scoringFixture } from '../../test/scoring-fixtures.js';
@@ -28,7 +28,10 @@ function definitions(playerIds: readonly string[]): readonly RoundGameDefinition
   const skins: SkinsGameDefinition = {
     id: identifier(701), name: 'Fictional Net Skins', kind: 'skins', version: 1, basis: 'net', carryovers: true,
   };
-  return [ball, skins];
+  const strokePlay: StrokePlayGameDefinition = {
+    id: identifier(702), name: 'Fictional Net Stroke Play', kind: 'stroke-play', version: 1, basis: 'net',
+  };
+  return [ball, skins, strokePlay];
 }
 
 describe('persisted stroke games share existing conditional scoring authority', () => {
@@ -124,6 +127,10 @@ describe('persisted stroke games share existing conditional scoring authority', 
     expect(isRoundScores(read)).toBe(true);
     expect(read.games?.results[1]?.players[1]?.strokeGame?.holes[0]?.value).toBe(1);
     expect(read.games?.results[0]?.teams?.[0]?.strokeGame?.holes[0]?.countingPlayerIds).toHaveLength(2);
+    expect(read.games?.results[2]?.players[1]).toMatchObject({
+      holesScored: 1, status: 'in-progress', totalPoints: null,
+      strokeGame: { kind: 'stroke-play', total: 1, relativeToPar: -3 },
+    });
     const workspace = await f.workspace.get(actor, event.id);
     const snapshot = workspace.rounds[0];
     if (!snapshot) throw new Error('Missing fictional round');
@@ -145,7 +152,7 @@ describe('persisted stroke games share existing conditional scoring authority', 
       .rejects.toMatchObject({ code: 'GAMES_CHANGED' });
   });
 
-  it('protects Stableford overall bindings against selection and conversion to either stroke game', async () => {
+  it('protects Stableford overall bindings against selection and conversion to non-Stableford stroke games', async () => {
     const f = await scoringFixture();
     const legacy = { id: identifier(700), name: 'Fictional Stableford', preset: 'standard' as const, basis: 'gross' as const,
       handicapAllowancePercent: 95, points: stablefordPoints('standard') };

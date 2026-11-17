@@ -564,6 +564,74 @@ binding before converting that game to Ball Drop or Skins. Legacy Stableford
 definitions/results remain readable without migration and retain their existing
 points tables and allowances.
 
+### Round Stroke Play, Nassau and Wolf
+
+These version-1 games use the shared saved-round/Quick-round editor, captured
+personal tees and acknowledged online scores. The API advertises
+`supportedGameKinds`; older APIs without an explicit new-kind capability cannot
+authorize new definitions or declarations. No local drafts enter saved results.
+
+**Stroke Play** is individual gross or net, with 100% captured Course Handicap
+for net and no Stableford points/allowance controls. Cards show actual strokes;
+standings rank lowest cumulative relative-to-personal-par, consistent with overall
+Stroke Play when tees have different pars. Pickup, `X7` and DNF invalidate a
+numeric stroke total rather than inventing penalties. Pending holes, missing net
+inputs and arithmetic overflow remain distinct from zero.
+
+**Nassau** is match play over an 18-hole captured layout, with independent front
+1-9, back 10-18 and overall matches. Choose singles 1v1, three-way individuals
+(three separate pairwise Nassaus), 1v2 best ball, or 2v2 best ball/aggregate.
+Select explicit sides within one saved playing group. Net uses 100% captured CH
+off the lowest golfer **within each match**, honoring personal stroke indexes.
+An ineligible numeric side is unavailable; explicitly concede or halve a hole
+without fabricating strokes. Tied bets push, with no carryover.
+
+Enter USD stakes explicitly or choose **No planned money**. Each stake is the
+total per side, not a per-golfer multiplier. Teammates share equally in exact
+minor units; indivisible cents remain unallocated. Amounts are planned, never
+collected or transferred. Nassau has its own bet ledger, not a place-based purse
+metric or overall Stableford source.
+
+Manual presses use acknowledged two-down positions, start on the next hole and
+inherit the parent's ending hole/stake. Optional automatic two-down presses fire
+once per bet, without rearming after recovery; a press may itself be pressed.
+Stage a manual press on its starting hole with the ordinary **Save & Next**
+action. Earlier score/input corrections can make its receipt stale; preserve it
+for review rather than silently accepting changed eligibility or money.
+
+**Wolf / PIG** selects one saved foursome with explicit Wolf order, rotating from
+that group's starting hole. Wolf tees last and selects a partner immediately
+after that golfer's drive, before the next drive. Best ball compares two versus
+two, or the lone Wolf versus three. Net uses 100% captured CH off the lowest
+foursome member. The app uses these custom names and zero-sum transfers.
+Cells list Wolf-side / opponent dots; solo Wolf numbers are totals:
+
+| Declaration | Wolf side wins | Wolf side loses |
+| --- | --- | --- |
+| Partnered | +2 each / -2 each | -2 each / +2 each |
+| Blind Wolf: after drives | +6 / -2 each | -6 / +2 each |
+| PIG: before any tee shots | +9 / -3 each | -9 / +3 each |
+
+Ties earn zero with no carry. Rank by **dot balance**, not Churchy earned dots
+or handicap stroke indicators. There are no birdie bonuses, partner-refusal rule
+or per-dot dollar settlement, and no second pairwise settlement calculation.
+An explicitly configured existing place-based purse prize may rank the saved
+balance; it does not convert ledger dots into cash.
+
+Wolf waits for the foursome's saved dispositions, excludes pickup/DNF from
+numeric best balls and reports a side without a numeric ball as unavailable.
+Explicit match outcomes remain separate from raw strokes. Mode/partner choices
+lock once saved. Timing is honor-system: an initial choice added after existing
+raw scores is permitted for recovery but visibly marked late by the server.
+
+Configure Nassau/Wolf before the round's first saved score; their definitions,
+order, sides, stakes and press settings then lock. Other games remain editable
+while these unchanged definitions are retained. Stale unstarted assignments
+must be repaired before the first score. Declarations share conditional,
+idempotent score/card/event/grant checks and immutable audit receipts. Legacy
+raw-only clients preserve them; legacy tester projections omit these match
+ledgers/declarations and cannot submit new ones.
+
 ### Event-wide skins
 
 The organizer opens **Event-wide skins** from the saved event or event setup

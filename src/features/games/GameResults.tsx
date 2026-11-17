@@ -3,6 +3,8 @@ import type { GamePlayerResult, GameTeamResult, RoundGameDefinition, RoundGameRe
 import { gameResultTotal, gameResultUnit, isTeamGameDefinition } from '../../domain/games';
 import { gameScoringLabel, gameUnavailableMessage } from './game-presentation';
 import { ChurchyResults } from '../churchy';
+import { NassauResults } from '../nassau';
+import { WolfResults } from '../wolf';
 
 function progress(player: GamePlayerResult | GameTeamResult): string {
   return player.status === 'unavailable'
@@ -15,10 +17,11 @@ function handicap(value: number): string {
   return value < 0 ? `+${String(Math.abs(value))}` : String(value);
 }
 
-export function GameResults({ game, result, holeNumbers }: {
+export function GameResults({ game, result, holeNumbers, players }: {
   readonly game: RoundGameDefinition;
   readonly result: RoundGameResult | undefined;
   readonly holeNumbers: readonly number[];
+  readonly players?: readonly { readonly playerId: string; readonly displayName: string }[];
 }) {
   const [nine, setNine] = useState<'front' | 'back'>('front');
   const [query, setQuery] = useState('');
@@ -50,6 +53,8 @@ export function GameResults({ game, result, holeNumbers }: {
   }
 
   if (game.kind === 'churchy') return <ChurchyResults game={game} result={result} />;
+  if (game.kind === 'nassau') return <NassauResults game={game} result={result?.nassau} {...(players ? { players } : {})} />;
+  if (game.kind === 'wolf') return <WolfResults game={game} result={result?.wolf} />;
   return (
     <section className="game-results" aria-label={`${game.name} results`}>
       <h3>{game.name}</h3>
@@ -77,10 +82,11 @@ export function GameResults({ game, result, holeNumbers }: {
         </div>}
         <div className="game-scroll game-card-scroll" role="region" aria-label={`${game.name} ${unit} scorecard`} tabIndex={0} ref={scroll}>
           <table>
-            <caption>{label} · {unit === 'points' ? 'Points' : unit === 'skins' ? 'Skins awarded' : 'Strokes to par'}</caption>
+            <caption>{label} · {unit === 'points' ? 'Points' : unit === 'strokes' ? `${game.basis === 'gross' ? 'Gross' : 'Net'} strokes` : unit === 'skins' ? 'Skins awarded' : 'Strokes to par'}</caption>
             <thead><tr><th scope="col">{teamGame ? 'Team' : 'Player'}</th>
               {visible.map((number) => <th scope="col" key={number}>{number}</th>)}
               <th scope="col">Out</th><th scope="col">In</th><th scope="col">Total</th>
+              {game.kind === 'stroke-play' && <th scope="col">To par</th>}
             </tr></thead>
             <tbody>{matching.slice(page * pageSize, (page + 1) * pageSize).map((player) => <tr key={'teamId' in player ? player.teamId : player.playerId}>
               <th scope="row"><span className="game-player-name">{player.displayName}</span>
@@ -98,7 +104,9 @@ export function GameResults({ game, result, holeNumbers }: {
                   : <span title={counting || undefined}>{points ?? (teamGame ? null : <span aria-label="Pending">—</span>)}</span>}</td>;
               })}
               <td>{(player.strokeGame ? player.strokeGame.frontTotal : player.frontPoints) ?? '—'}</td><td>{(player.strokeGame ? player.strokeGame.backTotal : player.backPoints) ?? '—'}</td>
-              <td>{gameResultTotal(player) ?? '—'}{player.status === 'in-progress' && gameResultTotal(player) !== null && ' (partial)'}</td>
+              <td>{gameResultTotal(player) ?? '—'}{player.status === 'in-progress' && gameResultTotal(player) !== null && ' (partial)'}
+                {game.kind === 'stroke-play' && player.status === 'unavailable' && gameResultTotal(player) !== null && ' (numeric subtotal)'}</td>
+              {game.kind === 'stroke-play' && <td>{player.strokeGame?.relativeToPar ?? '—'}</td>}
             </tr>)}</tbody>
           </table>
         </div>

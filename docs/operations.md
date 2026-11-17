@@ -12,7 +12,8 @@ surfacing as HTTP 500 errors when adding rounds.
 Keep this setting in the infrastructure source and verify its live value during
 future production preparation; application-only deployments do not apply
 infrastructure settings. Workspace, game and purse handlers retain their
-12 KiB transport limits, ordinary endpoints retain 4 KiB limits, and larger
+12 KiB transport limits, as does the dedicated game-declaration score transport.
+Ordinary endpoints retain 4 KiB limits, and larger
 logical private writes still use bounded staging. Authentication, conditional
 writes and durable request budgets remain required. Raising the host ceiling
 does not authorize a larger endpoint payload or bypass application validation.
@@ -62,6 +63,48 @@ The test frontend publication waits for API deployment/readiness. This
 intentionally trades deployment parallelism for compatibility: newly exposed
 initial-index and setup-refresh controls must not reach older handlers that
 ignore or lack their request contract.
+
+## Round Stroke Play, Nassau and Wolf capability rollout
+
+Deploy the API before the frontend. `RoundScores.supportedGameKinds` lists actual
+backend support; absence never enables new Stroke Play/Nassau/Wolf mutations.
+Churchy's independent environment flag remains authoritative. No new environment
+setting, infrastructure or role change is required.
+
+Nassau/Wolf definitions lock after the first round score, including their money,
+sides and order. Identical definitions survive peer-game edits and committed
+creation retries. Invalid unstarted match assignments block the first score
+until repaired. Stroke Play may be added to captured inputs without unlocking
+them. Overall Stableford still rejects all three non-Stableford kinds.
+
+Group-level match declarations live on the saved playing group's first golfer's
+card, not Wolf P1. The server checks group/game revisions, card/event/input
+revisions and the actual account grant or public active-event authority in the
+score transaction. Public writes retain the unverified public-event actor; no
+owner membership is created. Nassau press eligibility uses pre-write saved
+positions. Existing press identities/content are immutable, and earlier
+corrections produce visible stale receipts rather than replacement money.
+Wolf choices lock; a late initial choice is server-marked, never claimed to
+verify real-world tee-shot timing.
+Owner input corrections retain each match's selected group and declaration
+anchor, and Wolf's effective starting hole, so stored choices cannot silently
+move to another golfer or rotation. Handicap/compatible-tee corrections still
+work; their input revision remains attached to score receipts and retries.
+
+`PUT events/{id}/rounds/{roundId}/players/{playerId}/holes/{holeNumber}/games`
+and its `public/` counterpart accept score writes containing Nassau/Wolf edits.
+They reuse 12 KiB bounded part/commit transport and the existing 4 MiB logical
+write budget, preserving exact retry identities and authority checks. Every
+part/commit consumes the normal durable write budget. Ordinary score endpoints
+remain 4 KiB. Large saved cards and score audits use existing digest-bound
+immutable private fragments, activated only by conditional publication; inline
+legacy rows remain readable. The host ceiling remains 12288 bytes.
+
+Raw-only score clients preserve hidden declaration namespaces. Legacy tester
+views omit these match definitions, stakes, ledgers and declaration records;
+their ordinary raw writes still work without erasing stored data. Public active
+readers retain the explicitly approved match views. No new archive, restore,
+catalog, purse-management or settlement-transfer authority is granted.
 
 ## Experimental Churchy capability rollout and kill switch
 

@@ -35,9 +35,11 @@ function isPlayer(value: unknown, game: NewRoundGameDefinition): value is GamePl
   const score = value.strokeGame;
   const reasons = ['missing-score-data', 'missing-handicap-index', 'invalid-handicap-index', 'missing-tee-ratings',
     'missing-stroke-index', 'arithmetic-range', 'invalid-stroke-score'];
-  if (!keys(score, ['kind', 'version', 'holes', 'frontTotal', 'backTotal', 'total'], ['unavailableReason'])
+  if (!keys(score, ['kind', 'version', 'holes', 'frontTotal', 'backTotal', 'total',
+    ...(game.kind === 'stroke-play' ? ['relativeToPar'] : [])], ['unavailableReason'])
     || score.kind !== game.kind || score.version !== 1
     || !nullableInteger(score.frontTotal) || !nullableInteger(score.backTotal) || !nullableInteger(score.total)
+    || game.kind === 'stroke-play' && !nullableInteger(score.relativeToPar)
     || score.unavailableReason !== undefined && (typeof score.unavailableReason !== 'string' || !reasons.includes(score.unavailableReason))
     || value.unavailableReason !== undefined && (typeof value.unavailableReason !== 'string' || !reasons.includes(value.unavailableReason))
     || !Array.isArray(score.holes) || score.holes.length !== value.totalHoles

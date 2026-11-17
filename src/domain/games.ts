@@ -1,6 +1,8 @@
 import type { AccountIdentity } from './events.js';
 import type { PublicScoreIdentity } from './public-access.js';
 import type { ChurchyGameDefinition, ChurchyResults } from './churchy.js';
+import type { WolfGameDefinition, WolfResults } from './wolf.js';
+import type { NassauGameDefinition, NassauResults } from './nassau.js';
 
 export type StablefordPreset = 'standard' | 'modified';
 export type GameScoreBasis = 'gross' | 'net';
@@ -73,9 +75,18 @@ export interface SkinsGameDefinition extends StrokeGameDefinition {
   readonly teams?: never;
 }
 
+export interface StrokePlayGameDefinition extends StrokeGameDefinition {
+  readonly kind: 'stroke-play';
+  readonly basis: GameScoreBasis;
+  readonly format?: never;
+  readonly teams?: never;
+}
+
 export type StablefordGameDefinition = IndividualGameDefinition | TeamGameDefinition;
-export type NewRoundGameDefinition = BallDropGameDefinition | SkinsGameDefinition;
-export type RoundGameDefinition = StablefordGameDefinition | NewRoundGameDefinition | ChurchyGameDefinition;
+export type NewRoundGameDefinition = BallDropGameDefinition | SkinsGameDefinition | StrokePlayGameDefinition;
+export type RoundGameDefinition = StablefordGameDefinition | NewRoundGameDefinition | ChurchyGameDefinition | WolfGameDefinition | NassauGameDefinition;
+export const roundGameKinds = ['stableford', 'ball-drop', 'skins', 'churchy', 'stroke-play', 'wolf', 'nassau'] as const;
+export type RoundGameKind = (typeof roundGameKinds)[number];
 
 export function isStablefordGame(game: RoundGameDefinition): game is StablefordGameDefinition {
   return game.kind === undefined || game.kind === 'stableford';
@@ -135,12 +146,13 @@ export interface StrokeGameHole {
 }
 
 export interface StrokeGameScore {
-  readonly kind: 'ball-drop' | 'skins';
+  readonly kind: 'ball-drop' | 'skins' | 'stroke-play';
   readonly version: 1;
   readonly holes: readonly StrokeGameHole[];
   readonly frontTotal: number | null;
   readonly backTotal: number | null;
   readonly total: number | null;
+  readonly relativeToPar?: number | null;
   readonly unavailableReason?: StrokeGameUnavailableReason;
 }
 
@@ -166,8 +178,10 @@ export interface GamePlayerResult {
 }
 
 export interface RoundGameResult {
-  readonly kind?: 'ball-drop' | 'skins' | 'churchy';
+  readonly kind?: 'ball-drop' | 'skins' | 'churchy' | 'stroke-play' | 'wolf' | 'nassau';
   readonly churchy?: ChurchyResults;
+  readonly wolf?: WolfResults;
+  readonly nassau?: NassauResults;
   readonly version?: 1;
   readonly unawardedSkins?: number;
   readonly pendingSkins?: number;
@@ -228,6 +242,23 @@ export function sameGameDefinitions(left: readonly RoundGameDefinition[], right:
   return left.length === right.length && left.every((game, index) => {
     const other = right[index];
     if (!other) return false;
+    if (game.kind === 'wolf' || other.kind === 'wolf') {
+      return game.kind === 'wolf' && other.kind === 'wolf' && game.id === other.id && game.name === other.name
+        && game.basis === other.basis && game.groupNumber === other.groupNumber && game.allowPig === other.allowPig
+        && game.playerIds.length === other.playerIds.length && game.playerIds.every((id, i) => id === other.playerIds[i]);
+    }
+    if (game.kind === 'nassau' || other.kind === 'nassau') {
+      return game.kind === 'nassau' && other.kind === 'nassau' && game.id === other.id && game.name === other.name
+        && game.basis === other.basis && game.groupNumber === other.groupNumber && game.variant === other.variant
+        && game.automaticPresses === other.automaticPresses
+        && game.stakes.frontMinor === other.stakes.frontMinor && game.stakes.backMinor === other.stakes.backMinor
+        && game.stakes.overallMinor === other.stakes.overallMinor && game.sides.length === other.sides.length
+        && game.sides.every((side, i) => {
+          const counterpart = other.sides[i];
+          return counterpart !== undefined && side.id === counterpart.id && side.name === counterpart.name
+            && side.playerIds.length === counterpart.playerIds.length && side.playerIds.every((id, index) => id === counterpart.playerIds[index]);
+        });
+    }
     if (game.kind === 'churchy' || other.kind === 'churchy') {
       return game.kind === 'churchy' && other.kind === 'churchy' && game.id === other.id
         && game.name === other.name && game.groupNumber === other.groupNumber
@@ -238,7 +269,8 @@ export function sameGameDefinitions(left: readonly RoundGameDefinition[], right:
       return !isStablefordGame(game) && !isStablefordGame(other)
         && game.id === other.id && game.name === other.name && game.kind === other.kind
         && game.basis === other.basis && game.format === other.format
-        && (game.kind === 'skins' && other.kind === 'skins' ? game.carryovers === other.carryovers
+        && (game.kind === 'stroke-play' && other.kind === 'stroke-play' ? true
+          : game.kind === 'skins' && other.kind === 'skins' ? game.carryovers === other.carryovers
           : game.kind === 'ball-drop' && other.kind === 'ball-drop'
             && game.teams.length === other.teams.length && game.teams.every((team, index) => {
               const counterpart = other.teams[index];
@@ -272,12 +304,17 @@ export function gameResultTotal(result: GamePlayerResult | GameTeamResult): numb
   return result.strokeGame ? result.strokeGame.total : result.totalPoints;
 }
 
+export function gameResultRankValue(result: GamePlayerResult | GameTeamResult): number | null {
+  return result.strokeGame?.kind === 'stroke-play' ? result.strokeGame.relativeToPar ?? null : gameResultTotal(result);
+}
+
 export function gameResultDirection(game: RoundGameDefinition): 1 | -1 {
-  return game.kind === 'ball-drop' ? 1 : -1;
+  return game.kind === 'ball-drop' || game.kind === 'stroke-play' ? 1 : -1;
 }
 
 export function gameResultUnit(game: RoundGameDefinition): string {
-  return game.kind === 'churchy' ? 'dots' : game.kind === 'ball-drop' ? 'to par' : game.kind === 'skins' ? 'skins' : 'points';
+  return game.kind === 'churchy' || game.kind === 'wolf' ? 'dots' : game.kind === 'nassau' ? 'matches'
+    : game.kind === 'stroke-play' ? 'strokes' : game.kind === 'ball-drop' ? 'to par' : game.kind === 'skins' ? 'skins' : 'points';
 }
 
 export function visibleGames(games: readonly RoundGameDefinition[], churchyEnabled: boolean | undefined): readonly RoundGameDefinition[] {

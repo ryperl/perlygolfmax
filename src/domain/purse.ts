@@ -1,10 +1,11 @@
 import { calculateEventStandings } from './event-leaderboard.js';
-import { gameResultDirection, gameResultTotal, isTeamGameDefinition, teamSize } from './games.js';
+import { gameResultDirection, gameResultTotal, gameResultRankValue, isTeamGameDefinition, teamSize } from './games.js';
 import type { RoundGameDefinition } from './games.js';
 import type { RoundScores } from './scoring.js';
 import type { EventWorkspace } from './setup.js';
 import { calculateKp, calculateKpPayout } from './kp.js';
 import { calculateEventSkins, calculateEventSkinsPayout } from './event-skins.js';
+import { wolfGroupMatchesRound } from './wolf.js';
 
 export const purseCurrencies = ['USD', 'CAD', 'EUR', 'GBP', 'AUD'] as const;
 export type PurseCurrency = typeof purseCurrencies[number];
@@ -291,7 +292,7 @@ export function validatePursePlanContext(
       if (roundScores !== undefined) {
         const saved = roundScores.filter((round) => round.roundId === source.roundId);
         const games = saved[0]?.games?.configuration.games.filter((game) => game.id === source.gameId) ?? [];
-        if (saved.length !== 1 || games.length !== 1 || games[0]?.kind === 'churchy') issues.push(issue('missing-game', pool.id));
+        if (saved.length !== 1 || games.length !== 1 || games[0]?.kind === 'churchy' || games[0]?.kind === 'nassau') issues.push(issue('missing-game', pool.id));
         const game = games[0];
         const savedRound = saved[0];
         if (savedRound && (savedRound.eventId !== workspace.event.id
@@ -352,10 +353,12 @@ function sourceFor(pool: PurseRankedPool, workspace: EventWorkspace, rounds: rea
   const results = saved.games?.results.filter((result) => result.gameId === source.gameId) ?? [];
   const game = definitions[0];
   const result = results[0];
-  if (!game || game.kind === 'churchy' || !result || definitions.length !== 1 || results.length !== 1) return blocked('missing-game');
+  if (!game || game.kind === 'churchy' || game.kind === 'nassau' || !result || definitions.length !== 1 || results.length !== 1) return blocked('missing-game');
   const roster = snapshot.players.map((player) => player.playerId);
+  if (game.kind === 'wolf' && !wolfGroupMatchesRound(game, saved)) return blocked('team-setup-required');
+  const metricRoster = game.kind === 'wolf' ? game.playerIds : roster;
   if (!sameSet(roster, workspace.roster.map((player) => player.playerId))
-    || !sameSet(result.players.map((player) => player.playerId), roster)) return blocked('roster-context-mismatch');
+    || !sameSet(result.players.map((player) => player.playerId), metricRoster)) return blocked('roster-context-mismatch');
   if (isTeamGameDefinition(game)) {
     if (result.teamSetupRequired || !validTeamConfiguration(game, roster)
       || !sameSet(result.teams?.map((team) => team.teamId) ?? [], game.teams.map((team) => team.id))
@@ -378,17 +381,17 @@ function sourceFor(pool: PurseRankedPool, workspace: EventWorkspace, rounds: rea
     return blocked('missing-score-data');
   }
   // Saved totals are the ranking authority; no strokes, points tables or tee math are reconstructed here.
-  const ranked = entries.filter((entry) => entry.holesScored > 0 && gameResultTotal(entry) !== null)
+  const ranked = entries.filter((entry) => entry.holesScored > 0 && gameResultRankValue(entry) !== null)
     .sort((a, b) => {
-      const left = gameResultTotal(a);
-      const right = gameResultTotal(b);
+      const left = gameResultRankValue(a);
+      const right = gameResultRankValue(b);
       return left === null || right === null || left === right ? 0 : (left < right ? -1 : 1) * gameResultDirection(game);
     });
   return {
     complete: entries.length > 0 && entries.every((entry) => entry.status === 'complete'), issues: [],
     entrants: entries.map((entry) => {
-      const index = gameResultTotal(entry) === null || entry.holesScored === 0 ? -1
-        : ranked.findIndex((other) => gameResultTotal(other) === gameResultTotal(entry));
+      const index = gameResultRankValue(entry) === null || entry.holesScored === 0 ? -1
+        : ranked.findIndex((other) => gameResultRankValue(other) === gameResultRankValue(entry));
       return {
         id: 'teamId' in entry ? entry.teamId : entry.playerId,
         playerIds: 'playerIds' in entry ? entry.playerIds : [entry.playerId],

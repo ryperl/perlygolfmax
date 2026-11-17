@@ -30,6 +30,7 @@ describe('fixed anonymous public namespace registration', () => {
         { route: 'public/events/{id}/workspace', methods: ['GET'], authLevel: 'anonymous' },
         { route: 'public/events/{id}/rounds/{roundId}/scores', methods: ['GET'], authLevel: 'anonymous' },
         { route: 'public/events/{id}/rounds/{roundId}/players/{playerId}/holes/{holeNumber}', methods: ['PUT'], authLevel: 'anonymous' },
+        { route: 'public/events/{id}/rounds/{roundId}/players/{playerId}/holes/{holeNumber}/games', methods: ['PUT'], authLevel: 'anonymous' },
         { route: 'public/events/{id}/leaderboard', methods: ['GET'], authLevel: 'anonymous' },
         { route: 'public/events/{id}/purse', methods: ['GET'], authLevel: 'anonymous' },
         { route: 'public/events/{id}/rounds/{roundId}/games', methods: ['PUT'], authLevel: 'anonymous' },

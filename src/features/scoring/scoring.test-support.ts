@@ -5,7 +5,7 @@ import { fictionalChange, fictionalRoundScores, gameResult, scoreResult } from '
 import type { GameChange, RoundGameDefinition } from '../../domain/games';
 import { sameGameDefinitions } from '../../domain/games';
 import type { HoleScore, RoundScores, ScoreChange } from '../../domain/scoring';
-import { sameHoleScore } from '../../domain/scoring';
+import { sameHoleScore, preserveScoreExtras } from '../../domain/scoring';
 import { cardFor, savedHole } from './entry-state';
 
 export function memoryScores(initial: RoundScores = fictionalRoundScores) {
@@ -20,14 +20,14 @@ export function memoryScores(initial: RoundScores = fictionalRoundScores) {
       score: HoleScore, etag: string | null, id: string) => {
       const replay = receipts.get(id);
       if (replay) {
-        return sameHoleScore(replay.after, score) && replay.expectedEtag === etag
+        return sameHoleScore(replay.after, preserveScoreExtras(score, replay.after)) && replay.expectedEtag === etag
           ? Promise.resolve({ round: stored, change: replay }) : Promise.reject(new EventChangedError('Request identity changed.'));
       }
       const card = cardFor(stored, playerId);
       if (card.etag !== etag) return Promise.reject(new EventChangedError('Card changed. Refresh and review.'));
       const result = scoreResult({
         ...fictionalChange, eventId: stored.eventId, roundId: stored.roundId,
-        playerId, holeNumber, after: score, expectedEtag: etag, id, before: savedHole(card, holeNumber),
+        playerId, holeNumber, after: preserveScoreExtras(score, savedHole(card, holeNumber)), expectedEtag: etag, id, before: savedHole(card, holeNumber),
       }, stored);
       revision++;
       stored = { ...result.round, cards: result.round.cards.map((item) => item.playerId === playerId

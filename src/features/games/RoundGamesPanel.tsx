@@ -3,7 +3,7 @@ import { EventChangedError } from '../../client/events';
 import type { RoundGameDefinition } from '../../domain/games';
 import { maximumGamesPerRound, sameGameDefinitions, visibleGames } from '../../domain/games';
 import type { GameWriteResult, RoundScores } from '../../domain/scoring';
-import { scorePermissions } from '../../domain/scoring';
+import { scorePermissions, supportsRoundGame } from '../../domain/scoring';
 import type { GameDraft } from './game-draft';
 import { buildGame, draftFromGame, newGameDraft, replaceGame } from './game-draft';
 import { GameResults } from './GameResults';
@@ -33,6 +33,7 @@ interface Editor {
   readonly conflict: boolean;
   readonly latest: RoundScores | null;
   readonly roster: RoundScores['cards'];
+  readonly context: RoundScores;
 }
 
 export function RoundGamesPanel({ round, busy, onDirtyChange, onSave, onRefresh }: RoundGamesPanelProps) {
@@ -49,6 +50,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
   const dirtyCallback = useRef(onDirtyChange);
   const games = round.games?.configuration.games ?? [];
   const archived = round.eventStatus === 'archived';
+  const editingRound = editor?.latest ?? editor?.context ?? round;
   const canManage = canManageRoundGames(round) && (!editor?.latest || canManageRoundGames(editor.latest));
   const disabled = busy || working || archived || !canManage;
 
@@ -57,13 +59,14 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
 
   function open(game?: RoundGameDefinition) {
     if (disabled || editor) return;
+    if (game && !supportsRoundGame(round, game.kind ?? 'stableford')) return;
     if (game?.kind === 'churchy' && round.churchyEnabled !== true) return;
     const draft = game ? draftFromGame(game) : newGameDraft();
     onDirtyChange(true);
     setMessage('');
     setEditor({
       draft, base: games, etag: round.games?.configuration.etag ?? null,
-      attempt: null, conflict: false, latest: null, roster: round.cards,
+      attempt: null, conflict: false, latest: null, roster: round.cards, context: round,
     });
   }
 
@@ -75,15 +78,36 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
 
   async function save() {
     if (!editor || disabled || editor.conflict || inFlight.current) return;
+    if (!supportsRoundGame(round, editor.draft.kind ?? 'stableford') || !supportsRoundGame(editingRound, editor.draft.kind ?? 'stableford')) {
+      setMessage('This API does not support editing this game. Your draft is retained.');
+      return;
+    }
+    if ((round.setupLocked || editingRound.setupLocked) && (editor.draft.kind === 'nassau' || editor.draft.kind === 'wolf')) {
+      setMessage('Nassau and Wolf must be configured before the first saved score. Other game settings remain editable.');
+      return;
+    }
     if (editor.draft.kind === 'churchy' && round.churchyEnabled !== true) {
       setMessage('Experimental game disabled. Cancel editing and refresh; ordinary scores and other games remain available.');
       return;
     }
     const game = buildGame(editor.draft, editor.roster.map((card) => card.playerId));
+    if (game?.kind === 'nassau' || game?.kind === 'wolf') {
+      const group = editingRound.groups.find((entry) => entry.number === game.groupNumber);
+      const ids = game.kind === 'wolf' ? game.playerIds : game.sides.flatMap((side) => side.playerIds);
+      if (!group || ids.some((id) => !group.playerIds.includes(id))
+        || game.kind === 'wolf' && group.playerIds.length !== 4
+        || game.kind === 'nassau' && (editingRound.layout.length !== 18 || editingRound.layout.some((hole) => hole.number < 1 || hole.number > 18))) {
+        setMessage('Choose participants from one saved playing group. Wolf requires a foursome; Nassau requires 18 holes.');
+        return;
+      }
+    }
     const intended = game && replaceGame(editor.base, game);
     if (!intended) {
-      setMessage(editor.draft.kind === 'churchy'
+      setMessage(editor.draft.kind === 'wolf' || editor.draft.kind === 'nassau'
+        ? 'Check the game name, saved playing group, distinct participants and order. Nassau requires explicit whole USD cents for all three stakes, or choose No planned money.'
+        : editor.draft.kind === 'churchy'
         ? 'Choose a complete saved foursome, order all four golfers, and enter exact whole USD cents per dot (zero or more). Only one Churchy game is allowed.'
+        : editor.draft.kind === 'stroke-play' ? 'Check the game name (1–100 characters) and gross or net score basis. Net uses 100% captured Course Handicap.'
         : editor.draft.kind === 'ball-drop' || editor.draft.kind === 'skins'
         ? 'Check the game name (1–100 characters), supported format, and complete four-person Ball Drop teams. Skins are individual; net always uses 100% Course Handicap.'
         : 'Check the game name (1–100 characters), whole-number points, net allowance (1–100), and complete team assignments. Values must be safe integers within the supported points range.');
@@ -156,7 +180,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
     setEditor({
       ...editor, base: editor.latest.games?.configuration.games ?? [],
       etag: editor.latest.games?.configuration.etag ?? null, attempt: null, conflict: false, latest: null,
-      roster: editor.latest.cards,
+      roster: editor.latest.cards, context: editor.latest,
     });
     setMessage('Draft reviewed against the latest settings. Other games will be preserved. Save when ready.');
   }
@@ -177,8 +201,11 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
       {games.length === 0 && <p>No games configured for this round.</p>}
       {visibleGames(games, round.churchyEnabled).map((game) => <div className="round-game" key={game.id}>
         <GameResults game={game} result={round.games?.results.find((result) => result.gameId === game.id)}
-          holeNumbers={round.layout.map((hole) => hole.number)} />
-        {canManage && <button type="button" disabled={disabled || editor !== null} onClick={() => { open(game); }}>Edit {game.name}</button>}
+          holeNumbers={round.layout.map((hole) => hole.number)} players={round.cards} />
+        {canManage && <button type="button" disabled={disabled || editor !== null || !supportsRoundGame(round, game.kind ?? 'stableford')
+          || round.setupLocked && (game.kind === 'nassau' || game.kind === 'wolf')} onClick={() => { open(game); }}>Edit {game.name}</button>}
+        {(game.kind === 'nassau' || game.kind === 'wolf') && round.setupLocked && <p>Setup locked by saved scoring; hole choices and results are in score entry.</p>}
+        {!supportsRoundGame(round, game.kind ?? 'stableford') && <p>This API does not advertise support for editing this game.</p>}
       </div>)}
       {!editor && !archived && canManage && <button type="button" disabled={disabled || games.length >= maximumGamesPerRound}
         onClick={() => { open(); }}>Add game</button>}
@@ -196,8 +223,9 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
         </div>}
         <GameSettings draft={editor.draft} disabled={disabled || editor.latest?.eventStatus === 'archived'}
           roster={editor.roster}
-          churchyEnabled={round.churchyEnabled === true} groups={round.groups}
-          setupLocked={round.setupLocked && editor.base.some((game) => game.kind === 'churchy' && game.id === editor.draft.id)}
+          churchyEnabled={round.churchyEnabled === true} groups={editingRound.groups}
+          supportedGameKinds={round.supportedGameKinds?.filter((kind) => supportsRoundGame(editingRound, kind))}
+          setupLocked={round.setupLocked || editingRound.setupLocked}
           allowChurchyCreation={!editor.base.some((game) => game.kind === 'churchy' || game.id === editor.draft.id)}
           saveDisabled={editor.conflict} cancelDisabled={working} retry={editor.attempt !== null}
           onChange={change} onSave={() => { void save(); }} onCancel={() => {

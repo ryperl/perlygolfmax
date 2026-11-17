@@ -8,6 +8,7 @@ import { planGroup, saveGroupEntries } from './save-group';
 import { deferred, memoryScores } from './scoring.test-support';
 import { churchyFixture } from '../../domain/churchy.test-support';
 import { fictionalKpRound } from '../kp/kp.test-support';
+import { matchGamesFixture } from '../../domain/match-games.test-support';
 
 const playerIds = fictionalRoundScores.cards.map((card) => card.playerId);
 function entries() {
@@ -26,6 +27,45 @@ function harness(initial = fictionalRoundScores) {
       plan: planGroup(latest, playerIds, 1, drafts), signal: new AbortController().signal, refreshVersion: 0, ...callbacks }) };
 }
 describe('serialized group save protocol', () => {
+  it('acknowledges anchor declarations and server late metadata once, then retries only the unconfirmed peer with its original identity', async () => {
+    const f = matchGamesFixture();
+    let round = f.round();
+    const store = memoryScores(round);
+    const [anchor, peer] = f.ids;
+    if (!anchor || !peer) throw new Error('Missing fictional golfers');
+    const drafts = new Map<string, HoleDraft>([
+      [entryKey(anchor, 1), { ...editedDraft('4', cardFor(round, anchor), undefined, false),
+        wolf: [{ number: 1, choice: { gameId: f.wolf.id, gameEtag: 'fictional-game-revision', mode: 'blind' } }] }],
+      [entryKey(peer, 1), editedDraft('5', cardFor(round, peer))],
+    ]);
+    const normal = vi.mocked(store.client.save).getMockImplementation();
+    if (!normal) throw new Error('Missing fictional save');
+    let failed = false;
+    vi.mocked(store.client.save).mockImplementation(async (...args) => {
+      if (args[2] === peer && !failed) { failed = true; throw new Error('Fictional peer connection failure'); }
+      const result = await normal(...args);
+      if (args[2] !== anchor) return result;
+      const records = result.change.after.wolf;
+      if (!records) throw new Error('Missing fictional acknowledged choice');
+      const after = { ...result.change.after, wolf: records.map((record) => ({ ...record, recordedLate: true as const })) };
+      const projected = { ...result.round, cards: result.round.cards.map((card) => card.playerId === anchor
+        ? { ...card, holes: card.holes.map((hole) => hole.number === 1 ? { ...hole, score: after } : hole) } : card) };
+      store.replace(projected);
+      return { round: projected, change: { ...result.change, after } };
+    });
+    const save = () => saveGroupEntries({ client: store.client, round, holeNumber: 1,
+      plan: planGroup(round, [anchor, peer], 1, drafts), signal: new AbortController().signal, refreshVersion: 0,
+      onDraft: (key, value) => { if (value) drafts.set(key, value); else drafts.delete(key); },
+      onProjection: (value) => { round = value; } });
+    await expect(save()).rejects.toThrow('Fictional peer connection failure');
+    expect([...drafts.keys()]).toEqual([entryKey(peer, 1)]);
+    await save();
+    const calls = vi.mocked(store.client.save).mock.calls;
+    expect(calls.map((call) => call[2])).toEqual([anchor, peer, peer]);
+    expect(calls[1]?.[6]).toBe(calls[2]?.[6]);
+    expect(drafts.size).toBe(0);
+    expect(cardFor(round, anchor).holes[0]?.score.wolf?.[0]?.recordedLate).toBe(true);
+  });
   it('keeps only unacknowledged KP drafts after a partial group failure, preserving exact retry IDs and blank raw scores', async () => {
     let round = fictionalKpRound();
     const store = memoryScores(round);

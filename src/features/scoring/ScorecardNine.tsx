@@ -117,7 +117,7 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
             {game && !ballDrop && <tr className="recap-game-row" aria-label={`${card.displayName} · ${game.definition.name} ${unit}`}>
               <th scope="row" aria-label={`${card.displayName} game ${unit}`}
                 title={!available ? gameUnavailableMessage(player?.strokeGame?.unavailableReason ?? player?.unavailableReason) : undefined}>
-                {unit === 'dots' ? 'Earned dots' : unit === 'points' ? 'Points' : unit === 'skins' ? 'Skins' : 'Team to par'}
+                {game.definition.kind === 'wolf' ? 'DOT BALANCE' : unit === 'dots' ? 'Earned dots' : unit === 'points' ? 'Points' : unit === 'strokes' ? `${game.definition.basis === 'net' ? 'Net' : 'Gross'} strokes` : unit === 'skins' ? 'Skins' : 'Team to par'}
                 {game.definition.kind === 'churchy' && player && 'playingHandicap' in player
                   && <small>Churchy relative handicap {player.playingHandicap ?? 'unavailable'}</small>}
                 {player && 'teamId' in player && <small>{player.displayName}</small>}{!available && <small>Unavailable</small>}</th>

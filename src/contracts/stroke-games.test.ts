@@ -4,6 +4,7 @@ import { calculateGameResults } from '../domain/stableford.js';
 import { isRoundGameDefinition, isRoundGamesView } from './games.js';
 import { isRoundScores } from './scoring.js';
 import { isStrokeGameResult } from './stroke-games.js';
+import type { StrokePlayGameDefinition } from '../domain/games.js';
 
 const malformedStrings: readonly { readonly name: string; readonly value: unknown }[] = [
   { name: 'null', value: null },
@@ -14,6 +15,35 @@ const malformedStrings: readonly { readonly name: string; readonly value: unknow
 ];
 
 describe('versioned stroke game wire contracts', () => {
+  it('validates Stroke Play definitions and canonical strokes and relative totals, including unavailable and pending cards', () => {
+    const f = strokeGameFixture();
+    const game: StrokePlayGameDefinition = {
+      id: f.skins.id, name: 'Fictional Stroke Play', kind: 'stroke-play', version: 1, basis: 'net',
+    };
+    expect(isRoundGameDefinition(game)).toBe(true);
+    for (const patch of [{ points: {} }, { handicapAllowancePercent: 95 }, { format: 'individual' },
+      { teams: [] }, { version: 2 }, { carryovers: false }, { basis: 'dots' }]) {
+      expect(isRoundGameDefinition({ ...game, ...patch })).toBe(false);
+    }
+    for (const basis of ['gross', 'net'] as const) {
+      const definition = { ...game, basis };
+      for (const score of [{ kind: 'unplayed' }, { kind: 'picked-up', reportedStrokes: 7 },
+        { kind: 'did-not-finish' }, { kind: 'strokes', strokes: 3 }] as const) {
+        const cards = strokeGameCards(f.cards, 1, [score]);
+        const result = calculateGameResults([definition], f.snapshot, cards)[0];
+        expect(isStrokeGameResult(result, definition)).toBe(true);
+        const base = strokeGamesRound(f);
+        const view = { configuration: { ...base.games?.configuration, games: [definition] }, results: [result] };
+        expect(isRoundGamesView(view)).toBe(true);
+        for (const patch of [{ total: 0 }, { relativeToPar: 777 }, { relativeToPar: undefined }, { frontTotal: 0 }]) {
+          expect(isStrokeGameResult({ ...result, players: result?.players.map((player, index) => index ? player
+            : { ...player, strokeGame: { ...player.strokeGame, ...patch } }) }, definition)).toBe(false);
+        }
+      }
+    }
+    const missing = { ...f.snapshot, players: f.snapshot.players.map((player) => ({ ...player, handicapIndex: null })) };
+    expect(isStrokeGameResult(calculateGameResults([game], missing, f.cards)[0], game)).toBe(true);
+  });
   it.each(malformedStrings)('rejects $name stroke-hole and player statuses without throwing', ({ value }) => {
     const f = strokeGameFixture();
     for (const game of [f.ballDrop, f.skins]) {

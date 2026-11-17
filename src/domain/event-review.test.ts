@@ -7,8 +7,26 @@ import { calculateEventStandings } from './event-leaderboard';
 import { eventSkinsFixture } from './event-skins.test-support';
 import { isEventReviewNotices } from '../contracts/event-review';
 import { purseTestId } from './purse.test-support';
+import { matchGamesFixture } from './match-games.test-support';
 
 describe('actionable organizer review notices', () => {
+  it('flags stale Nassau receipts and unavailable Wolf inputs without treating future holes as discrepancies', () => {
+    const f = matchGamesFixture();
+    const pending = f.round();
+    expect(roundReviewNotices(pending, 'Fictional round')).toEqual([]);
+    const unavailable = f.round(f.cards, [{ ...f.wolf, groupNumber: 99 }]);
+    expect(roundReviewNotices(unavailable, 'Fictional round')).toContainEqual({
+      code: 'unavailable-inputs', label: 'Fictional round · Fictional Wolf', contextId: pending.roundId,
+    });
+    const nassau = pending.games?.results.find((result) => result.nassau)?.nassau;
+    if (!nassau) throw new Error('Missing fictional match');
+    const stale = { ...pending, games: { ...pending.games, results: pending.games.results.map((result) => result.nassau
+      ? { ...result, nassau: { ...nassau, stalePresses: [{ id: purseTestId(999), matchId: 'fictional-match',
+        parentBetId: 'fictional-parent', declaredAfterHole: 2, startHole: 3, pressingSide: 'b' as const, proof: 'nassau-v1:[]' }] } } : result) } };
+    expect(roundReviewNotices(stale, 'Fictional round')).toContainEqual({
+      code: 'stale-decision', label: 'Fictional round · Fictional Nassau', contextId: pending.roundId,
+    });
+  });
   it('keeps distinct same-named pools visible rather than merging their discrepancies', () => {
     const value = fictionalPurse();
     const plan = { eventId: value.workspace.event.id, currency: 'USD' as const,

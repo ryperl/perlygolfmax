@@ -34,6 +34,8 @@ export function roundMatchesSnapshot(workspace: EventWorkspace, snapshot: RoundS
     && round.eventStatus === workspace.event.status && round.roundId === snapshot.id && round.roundName === snapshot.name
     && round.courseName === snapshot.course.name && round.teeName === snapshot.teeProfile.name
     && round.teeCategory === snapshot.teeProfile.category
+    && (round.gameInputContext === undefined || sameJsonValue(round.gameInputContext,
+      { courseVersionId: snapshot.courseVersionId, teeProfileId: snapshot.teeProfile.id }))
     && permissionsMatch
     && publishedMatches
     && (round.courseHandicaps === undefined || workspace.event.role !== 'owner'

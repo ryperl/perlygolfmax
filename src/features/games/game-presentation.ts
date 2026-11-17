@@ -8,7 +8,7 @@ const reasons: Record<StrokeGameUnavailableReason, string> = {
   'missing-tee-ratings': 'Tee ratings are unavailable.',
   'missing-stroke-index': 'Hole stroke indexes are unavailable.',
   'missing-score-data': 'Score data is unavailable.',
-  'invalid-stroke-score': 'Not enough eligible numeric saved strokes to calculate this hole.',
+  'invalid-stroke-score': 'Required numeric saved strokes are unavailable or ineligible.',
   'arithmetic-range': 'The stroke total exceeds the exact arithmetic range.',
 };
 
@@ -17,6 +17,9 @@ export function gameUnavailableMessage(reason: StrokeGameUnavailableReason | und
 }
 
 export function gameScoringLabel(game: RoundGameDefinition): string {
+  if (game.kind === 'wolf') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Wolf${game.allowPig ? ' / PIG' : ''} · Dot balance`;
+  if (game.kind === 'nassau') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Nassau · Match play · ${game.variant.replaceAll('-', ' ')}`;
+  if (game.kind === 'stroke-play') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Stroke Play · Lowest to personal par${game.basis === 'net' ? ' · 100% Course Handicap' : ''}`;
   if (game.kind === 'churchy') return 'Churchy Game · Experimental · Rotating partners · Relative Course Handicap · Earned dots';
   if (game.kind === 'ball-drop') return `Ball Drop · ${game.format === 'ball-drop-net-gross' ? '1 Net + 1 Gross'
     : game.format === 'ball-drop-two-net' ? '2 Net' : '2 Gross'} · 4-person teams · Lowest to par${game.basis === 'net' ? ' · 100% Course Handicap' : ''}`;

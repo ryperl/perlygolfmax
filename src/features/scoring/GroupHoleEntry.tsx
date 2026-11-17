@@ -17,6 +17,7 @@ import { ChurchyDots } from '../churchy';
 import { CourseHandicap } from './CourseHandicap';
 import { KpEntryButton } from '../kp';
 import type { KpEntry } from '../../domain/kp';
+import type { ReactNode } from 'react';
 
 // Allow a pause between digits (including 10/12) before moving to another score.
 const scoreTypingPauseMs = 850;
@@ -34,6 +35,7 @@ export interface GroupHoleEntryRow {
   readonly teeLabel?: string;
 }
 export interface GroupHoleEntryProps {
+  readonly gameControls?: ReactNode;
   readonly kpEligible?: boolean;
   readonly kpClosed?: boolean;
   readonly onKpEdit?: (playerId: string, value: KpEntry | null) => void;
@@ -62,7 +64,7 @@ export interface GroupHoleEntryProps {
 
 export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, readOnly, unsavedCount, focusHole, feedbackState,
   onGroupChange, onHoleChange, onEdit, onReview, onDiscard, onDiscardAll, onSave, onRefresh, churchy, gameEtag, onDotsEdit,
-  kpEligible, kpClosed, onKpEdit }: GroupHoleEntryProps) {
+  kpEligible, kpClosed, onKpEdit, gameControls }: GroupHoleEntryProps) {
   const previous = adjacentHole(layout, hole.number, -1);
   const next = adjacentHole(layout, hole.number, 1);
   const last = next?.number === groupStartingHole(groups.find((group) => group.number === groupNumber), layout);
@@ -223,6 +225,7 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
           </div>}
         </article>;
       })}</div>
+      {gameControls && <div onFocusCapture={cancelMovement} onPointerDownCapture={cancelMovement}>{gameControls}</div>}
       <div className="group-save-actions">
         <button ref={primaryAction} className="primary-score-action" disabled={disabled}>{last ? 'Save Hole' : 'Save & Next Hole'}</button>
         <div className="score-secondary-actions">

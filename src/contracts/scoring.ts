@@ -2,7 +2,7 @@ import type {
   GameWriteResult, HoleScore, RoundScores, Scorecard, ScoreChange, ScoreHistoryPage, ScoreWriteResult,
 } from '../domain/scoring.js';
 import { maximumExactHoleStrokes } from '../domain/scoring.js';
-import { boundedText, positiveInteger } from './catalog.js';
+import { boundedText, positiveInteger, isVersionId } from './catalog.js';
 import { isEventRevision, isEventStatus, isRecord, isUuid } from './events.js';
 import { isGameChange, isRoundGamesView } from './games.js';
 import { handicapStrokesForHole, stablefordScorePoints } from '../domain/stableford.js';
@@ -12,7 +12,11 @@ import { isPlayerTeeProfiles } from './tees.js';
 import type { ScoreActor } from '../domain/test-access.js';
 import { isEventTesterIdentity } from './test-access.js';
 import { isPublicScoreIdentity } from './public-access.js';
-import { isStablefordGame } from '../domain/games.js';
+import { isStablefordGame, roundGameKinds } from '../domain/games.js';
+import type { RoundGroup } from '../domain/setup.js';
+import type { RoundGameScoringContext } from '../domain/game-declarations.js';
+import { isNassauHoleRecord } from './nassau.js';
+import { isWolfRecord } from './wolf.js';
 import { calculateStrokeGameResults } from '../domain/stroke-games.js';
 import { sameJsonValue } from './round-context.js';
 import { isChurchySpecials } from './churchy.js';
@@ -48,7 +52,11 @@ export function isHoleScore(value: unknown): value is HoleScore {
   if (!isRecord(value)) return false;
   if (value.churchy !== undefined && !isChurchySpecials(value.churchy)) return false;
   if (value.kp !== undefined && !isKpEntry(value.kp)) return false;
-  const count = Object.keys(value).filter((key) => key !== 'churchy' && key !== 'kp').length;
+  if (value.nassau !== undefined && (!Array.isArray(value.nassau) || !value.nassau.every(isNassauHoleRecord)
+    || new Set(value.nassau.map((record) => record.gameId)).size !== value.nassau.length)) return false;
+  if (value.wolf !== undefined && (!Array.isArray(value.wolf) || !value.wolf.every(isWolfRecord)
+    || new Set(value.wolf.map((record) => record.choice.gameId)).size !== value.wolf.length)) return false;
+  const count = Object.keys(value).filter((key) => !['churchy', 'kp', 'nassau', 'wolf'].includes(key)).length;
   if (value.kind === 'strokes') {
     return count === 2 && positiveInteger(value.strokes, maximumExactHoleStrokes);
   }
@@ -87,7 +95,9 @@ export function isScorecard(value: unknown): value is Scorecard {
     || value.updatedAt !== null && !instant(value.updatedAt)
     || !Array.isArray(value.holes) || ![9, 18].includes(value.holes.length)) return false;
   const count = value.holes.length;
-  if (!value.holes.every((hole: unknown) => isRecord(hole) && positiveInteger(hole.number, count) && isHoleScore(hole.score))) return false;
+  if (!value.holes.every((hole: unknown) => isRecord(hole) && positiveInteger(hole.number, count) && isHoleScore(hole.score)
+    && (hole.score.nassau ?? []).every((record) => record.number === hole.number)
+    && (hole.score.wolf ?? []).every((record) => record.number === hole.number))) return false;
   return new Set(value.holes.map((hole: { readonly number: number }) => hole.number)).size === count
     && (value.etag === null
       ? value.updatedAt === null && value.holes.every((hole: { readonly score: HoleScore }) => hole.score.kind === 'unplayed')
@@ -95,6 +105,13 @@ export function isScorecard(value: unknown): value is Scorecard {
 }
 
 export function isRoundScores(value: unknown): value is RoundScores {
+  if (isRecord(value) && value.supportedGameKinds !== undefined && (!Array.isArray(value.supportedGameKinds)
+    || !value.supportedGameKinds.every((kind: unknown) => roundGameKinds.some((known) => known === kind))
+    || new Set(value.supportedGameKinds).size !== value.supportedGameKinds.length
+    || value.supportedGameKinds.includes('churchy') && value.churchyEnabled !== true)) return false;
+  if (isRecord(value) && value.gameInputContext !== undefined && (!isRecord(value.gameInputContext)
+    || Object.keys(value.gameInputContext).length !== 2 || !isVersionId(value.gameInputContext.courseVersionId)
+    || !positiveInteger(value.gameInputContext.teeProfileId))) return false;
   if (isRecord(value) && value.quickRound !== undefined && value.quickRound !== true) return false;
   if (isRecord(value) && (value.kpEnabled !== undefined && typeof value.kpEnabled !== 'boolean'
     || value.kpCaptureIdentity !== undefined && (typeof value.kpCaptureIdentity !== 'string' || value.kpCaptureIdentity.length === 0)
@@ -205,10 +222,33 @@ export function isRoundScores(value: unknown): value is RoundScores {
   if (value.playerTees !== undefined && !isPlayerTeeProfiles(value.playerTees, { holeCount: count, holes: layout }, ids)) return false;
   const playerLayouts = new Map(value.playerTees?.map((entry) => [entry.playerId, entry.profile.holes]));
   const playerAllocations = new Map(value.playerTees?.map((entry) => [entry.playerId, entry.profile.strokeAllocation]));
+  const assigned: string[] = [];
+  const groupNumbers = new Set<number>();
+  const groups: RoundGroup[] = [];
+  for (const group of value.groups) {
+    if (!isRecord(group) || !positiveInteger(group.number, Number.MAX_SAFE_INTEGER) || !Array.isArray(group.playerIds)
+      || group.startingHole !== undefined && (!positiveInteger(group.startingHole, 18)
+        || !layout.some((hole) => hole.number === group.startingHole))
+      || group.playerIds.length < 1 || group.playerIds.length > 4) return false;
+    const players: unknown[] = group.playerIds;
+    if (!players.every((id): id is string => isUuid(id) && roster.has(id))) return false;
+    assigned.push(...players);
+    groupNumbers.add(group.number);
+    groups.push({ number: group.number, playerIds: players,
+      ...(typeof group.startingHole === 'number' ? { startingHole: group.startingHole } : {}) });
+  }
+  if (groupNumbers.size !== value.groups.length || assigned.length !== ids.length || new Set(assigned).size !== ids.length) return false;
   if (value.games !== undefined) {
-    if (!isRoundGamesView(value.games) || value.games.configuration.eventId !== value.eventId
+    const context: RoundGameScoringContext = { roundId: value.roundId, groups, layout, cards,
+      ...(value.playerTees ? { playerTees: value.playerTees } : {}), ...(courseHandicaps ? { courseHandicaps } : {}),
+      ...(typeof value.teeStrokeAllocation === 'boolean' ? { teeStrokeAllocation: value.teeStrokeAllocation } : {}),
+      ...(isRecord(value.gameInputContext) && typeof value.gameInputContext.courseVersionId === 'string'
+        && typeof value.gameInputContext.teeProfileId === 'number'
+        ? { gameInputContext: { courseVersionId: value.gameInputContext.courseVersionId, teeProfileId: value.gameInputContext.teeProfileId } } : {}),
+      ...(typeof value.inputRevision === 'string' ? { inputRevision: value.inputRevision } : {}) };
+    if (!isRoundGamesView(value.games, context) || value.games.configuration.eventId !== value.eventId
       || value.games.configuration.roundId !== value.roundId
-      || value.games.results.some((result) => (result.kind !== 'churchy' && result.players.length !== cards.length) || result.players.some((player) => {
+      || value.games.results.some((result) => (!['churchy', 'wolf', 'nassau'].includes(result.kind ?? '') && result.players.length !== cards.length) || result.players.some((player) => {
         const card = cardsById.get(player.playerId);
         if (!card && result.kind === 'churchy') return false;
         return !card || card.displayName !== player.displayName || player.totalHoles !== count
@@ -217,6 +257,7 @@ export function isRoundScores(value: unknown): value is RoundScores {
     for (const result of value.games.results) {
       const game = value.games.configuration.games.find((entry) => entry.id === result.gameId);
       if (!game) return false;
+      if (game.kind === 'wolf' || game.kind === 'nassau') continue;
       if (game.kind === 'churchy') {
         const group: unknown = value.groups.find((entry: unknown) => isRecord(entry) && entry.number === game.groupNumber);
         const expected = calculateChurchyResults(game, cards.map((card) => {
@@ -259,19 +300,7 @@ export function isRoundScores(value: unknown): value is RoundScores {
       }
     }
   }
-  const assigned: string[] = [];
-  const groupNumbers = new Set<number>();
-  for (const group of value.groups) {
-    if (!isRecord(group) || !positiveInteger(group.number, Number.MAX_SAFE_INTEGER) || !Array.isArray(group.playerIds)
-      || group.startingHole !== undefined && (!positiveInteger(group.startingHole, 18)
-        || !layout.some((hole) => hole.number === group.startingHole))
-      || group.playerIds.length < 1 || group.playerIds.length > 4) return false;
-    const players: unknown[] = group.playerIds;
-    if (!players.every((id): id is string => isUuid(id) && roster.has(id))) return false;
-    assigned.push(...players);
-    groupNumbers.add(group.number);
-  }
-  return groupNumbers.size === value.groups.length && assigned.length === ids.length && new Set(assigned).size === ids.length;
+  return true;
 }
 
 export function isScoreChange(value: unknown): value is ScoreChange {

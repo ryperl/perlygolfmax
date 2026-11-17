@@ -6,6 +6,7 @@ import type {
 import { gameTeamsMatchRoster } from './games.js';
 import type { Scorecard } from './scoring.js';
 import { handicapStrokesForHole } from './stableford.js';
+import { aggregateStrokePlayResults } from './stroke-play.js';
 
 export interface StrokeGamePlayer {
   readonly playerId: string;
@@ -85,6 +86,7 @@ export function calculateStrokeGameResults(
 export function aggregateStrokeGameResults(
   game: NewRoundGameDefinition, players: readonly GamePlayerResult[],
 ): RoundGameResult {
+  if (game.kind === 'stroke-play') return aggregateStrokePlayResults(game, players);
   const numbers = players[0]?.holes.map((hole) => hole.number) ?? [];
   if (game.kind === 'ball-drop') {
     if (!gameTeamsMatchRoster(game, players.map((player) => player.playerId))) {

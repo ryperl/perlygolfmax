@@ -424,6 +424,17 @@ export class TableWorkspaceStore {
     };
     if (!isRecord(updatedRound) || !isEventWorkspace({ ...state.workspace, rounds: state.workspace.rounds.map((round) =>
       round.id === roundId ? updatedRound : round) })) throw new ApiError(503, 'INVALID_STORED_WORKSPACE');
+    for (const game of state.games?.games ?? []) {
+      if (game.kind !== 'nassau' && game.kind !== 'wolf') continue;
+      const beforeGroup = state.round.groups.find((group) => group.number === game.groupNumber);
+      const afterGroup = updatedRound.groups.find((group) => group.number === game.groupNumber);
+      if (gameAnchorPlayerId(game, state.round.groups) !== gameAnchorPlayerId(game, updatedRound.groups)
+        || (game.kind === 'nassau' ? nassauConfigurationIssues(game, updatedRound).length > 0
+          : !wolfGroupMatchesRound(game, { layout: updatedRound.teeProfile.holes, groups: updatedRound.groups })
+            || groupStartingHole(beforeGroup, state.round.teeProfile.holes) !== groupStartingHole(afterGroup, updatedRound.teeProfile.holes))) {
+        throw new ApiError(409, 'MATCH_SETUP_CHANGED');
+      }
+    }
     const churchy = state.games?.games.find((game) => game.kind === 'churchy');
     if (churchy?.kind === 'churchy') {
       const group = updatedRound.groups.find((entry) => entry.number === churchy.groupNumber);
@@ -733,3 +744,7 @@ export class TableWorkspaceStore {
     return this.get(identity, id);
   }
 }
+import { gameAnchorPlayerId } from '../../../src/domain/game-declarations.js';
+import { nassauConfigurationIssues } from '../../../src/domain/nassau.js';
+import { wolfGroupMatchesRound } from '../../../src/domain/wolf.js';
+import { groupStartingHole } from '../../../src/domain/round-navigation.js';

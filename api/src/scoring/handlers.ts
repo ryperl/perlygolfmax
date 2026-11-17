@@ -21,7 +21,7 @@ export interface ScoringApi {
   readonly scores: TableScoreStore;
 }
 
-export type ScoringAction = 'scores' | 'score-hole' | 'score-history' | 'round-games' | 'round-kp' | 'event-leaderboard' | 'event-skins-config';
+export type ScoringAction = 'scores' | 'score-hole' | 'score-game-hole' | 'score-history' | 'round-games' | 'round-kp' | 'event-leaderboard' | 'event-skins-config';
 
 function uuid(value: unknown): string {
   if (!isUuid(value)) throw new ApiError(400, 'INVALID_REQUEST_ID');
@@ -50,7 +50,7 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
     try {
       const api = resolveApi();
       const identity = await api.verify(request.headers.get('authorization'));
-      const write = action === 'score-hole' || action === 'round-games' || action === 'round-kp' || action === 'event-skins-config';
+      const write = action === 'score-hole' || action === 'score-game-hole' || action === 'round-games' || action === 'round-kp' || action === 'event-skins-config';
       await api.limiter.check(identity, write ? 'scores-write' : 'scores-read');
       if (request.method !== (write ? 'PUT' : 'GET')) return response(405, { code: 'METHOD_NOT_ALLOWED' });
       const eventId = uuid(request.params.id);
@@ -107,8 +107,14 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
       const expectedEtag = precondition(request);
       const rawHole = request.params.holeNumber;
       if (typeof rawHole !== 'string' || !/^(?:[1-9]|1[0-8])$/.test(rawHole)) throw new ApiError(400, 'INVALID_HOLE_NUMBER');
-      const body = await readJson(request);
+      let body = await readJson(request, action === 'score-game-hole' ? maximumGameConfigurationBytes : undefined);
+      if (action === 'score-game-hole') {
+        const received = await api.scores.receiveGameScore(identity, eventId, roundId, playerId, Number(rawHole), body, expectedEtag, requestId);
+        if (received.kind === 'part') return response(200, { privateStaged: { id: received.id, index: received.index } });
+        body = received.value;
+      }
       const parsed = parseScoreWriteBody(body);
+      if (action === 'score-game-hole' && !parsed.score.nassau?.length && !parsed.score.wolf?.length) throw new ApiError(400, 'INVALID_GAME_SCORE');
       return response(200, await api.scores.write(identity, eventId, roundId, playerId, Number(rawHole),
         parsed.score, expectedEtag, requestId, parsed.inputRevision));
     } catch (error) {

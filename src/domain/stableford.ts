@@ -10,6 +10,10 @@ import { calculateStrokeGameResults } from './stroke-games.js';
 import { aggregateTeamGameResults } from './team-games.js';
 import { hasStrokeAllocation, playerTee } from './tees.js';
 import { calculateChurchyResults } from './churchy.js';
+import { calculateWolf } from './wolf.js';
+import { calculateNassau } from './nassau.js';
+import { nassauRecordsFor, wolfRecordsFor, wolfResultPlayers } from './game-declarations.js';
+import { publishedCourseHandicaps } from './playing-handicaps.js';
 
 export function stablefordPoints(preset: StablefordPreset): StablefordPointsTable {
   const points = preset === 'standard' ? [6, 5, 4, 3, 2, 1, 0] : [8, 5, 2, 0, -1, -2];
@@ -155,7 +159,20 @@ export function calculateGameResults(
   games: readonly RoundGameDefinition[], round: RoundSnapshot, cards: readonly Scorecard[],
 ): readonly RoundGameResult[] {
   const layout = [...round.teeProfile.holes].sort((left, right) => left.number - right.number);
+  const courseHandicaps = games.some((game) => game.kind === 'wolf' || game.kind === 'nassau') ? publishedCourseHandicaps(round) : [];
   return games.map((game) => {
+    if (game.kind === 'nassau') return { gameId: game.id, kind: 'nassau', version: 1, players: [],
+      nassau: calculateNassau(game, round, cards, nassauRecordsFor(game, round.groups, cards), { courseHandicaps }) };
+    if (game.kind === 'wolf') {
+      const inputs = { layout, groups: round.groups, players: round.players.map((player) => {
+        const tee = playerTee(round, player.playerId);
+        const handicap = courseHandicaps.find((entry) => entry.playerId === player.playerId);
+        return { playerId: player.playerId, displayName: player.displayName, layout: tee.holes, strokeAllocation: tee.strokeAllocation,
+          handicap: handicap?.courseHandicap ?? handicap?.unavailableReason ?? 'missing-handicap-index' as const };
+      }) };
+      const wolf = calculateWolf(game, inputs, cards, wolfRecordsFor(game, round.groups, cards));
+      return { gameId: game.id, kind: 'wolf', version: 1, wolf, players: wolfResultPlayers(wolf) };
+    }
     if (game.kind === 'churchy') {
       const group = round.groups.find((entry) => entry.number === game.groupNumber);
       return calculateChurchyResults(game, round.players.map((player) => {

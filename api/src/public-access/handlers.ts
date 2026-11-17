@@ -18,7 +18,7 @@ import type { TableQuickRoundStore } from '../quick-round/store.js';
 import { maximumGameConfigurationBytes } from '../../../src/domain/games.js';
 import { isRoundGameDefinitions } from '../../../src/contracts/games.js';
 
-export type PublicAction = 'events' | 'workspace' | 'scores' | 'score-hole' | 'event-leaderboard' | 'purse' | 'games';
+export type PublicAction = 'events' | 'workspace' | 'scores' | 'score-hole' | 'score-game-hole' | 'event-leaderboard' | 'purse' | 'games';
 export interface PublicApi {
   readonly quickRounds?: TableQuickRoundStore;
   readonly publicEvents: TablePublicEventStore;
@@ -59,7 +59,7 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
   return async (request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> => {
     try {
       const api = resolveApi();
-      if (request.method !== (action === 'score-hole' || action === 'games' ? 'PUT' : 'GET')) return response(405, { code: 'METHOD_NOT_ALLOWED' });
+      if (request.method !== (action === 'score-hole' || action === 'score-game-hole' || action === 'games' ? 'PUT' : 'GET')) return response(405, { code: 'METHOD_NOT_ALLOWED' });
       if (action === 'events') {
         const identity = { kind: 'public-browse' as const };
         await api.limiter.check(identity, 'events-read');
@@ -69,7 +69,7 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
       const eventId = request.params.id;
       const identity: PublicScoreIdentity = { kind: 'public-score', eventId };
       if (action === 'games') await api.limiter.check({ kind: 'public-browse' }, 'setup-write');
-      await api.limiter.check(identity, action === 'score-hole' || action === 'games' ? 'scores-write' : action === 'workspace' ? 'setup-read' : 'scores-read');
+      await api.limiter.check(identity, action === 'score-hole' || action === 'score-game-hole' || action === 'games' ? 'scores-write' : action === 'workspace' ? 'setup-read' : 'scores-read');
       if (action === 'workspace') return response(200, privateReadResponse(request, await api.workspace.get(identity, eventId)));
       const chargeRead = (units: number) => api.limiter.check(identity, 'scores-read', units);
       if (action === 'event-leaderboard') {
@@ -111,7 +111,14 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
       const etag = scoreRevision(request);
       const hole = request.params.holeNumber;
       if (typeof hole !== 'string' || !/^(?:[1-9]|1[0-8])$/.test(hole)) throw new ApiError(400, 'INVALID_HOLE_NUMBER');
-      const body = parseScoreWriteBody(await readJson(request));
+      let raw = await readJson(request, action === 'score-game-hole' ? maximumGameConfigurationBytes : undefined);
+      if (action === 'score-game-hole') {
+        const received = await api.scores.receiveGameScore(identity, eventId, roundId, playerId, Number(hole), raw, etag, requestId);
+        if (received.kind === 'part') return response(200, { privateStaged: { id: received.id, index: received.index } });
+        raw = received.value;
+      }
+      const body = parseScoreWriteBody(raw);
+      if (action === 'score-game-hole' && !body.score.nassau?.length && !body.score.wolf?.length) throw new ApiError(400, 'INVALID_GAME_SCORE');
       return response(200, await api.scores.write(identity, eventId, roundId, playerId, Number(hole), body.score, etag, requestId, body.inputRevision));
     } catch (error) {
       const status = error instanceof ApiError ? error.status : 503;

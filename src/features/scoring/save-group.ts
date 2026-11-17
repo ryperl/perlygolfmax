@@ -1,7 +1,8 @@
 import type { ScoresClient } from '../../client/scoring';
 import { EventChangedError } from '../../client/events';
 import type { HoleScore, RoundScores, ScoreChange } from '../../domain/scoring';
-import { sameHoleScore } from '../../domain/scoring';
+import { sameHoleScore, preserveScoreExtras } from '../../domain/scoring';
+import { scoreDeclarationIntent } from '../../domain/game-declarations';
 import { cardFor, conflictedDraft, entryKey, entryScore, savedHole } from './entry-state';
 import type { HoleDraft } from './entry-state';
 import { scoreAccessKey, writablePlayerIds } from './score-access';
@@ -29,8 +30,10 @@ export function planGroup(round: RoundScores, playerIds: readonly string[], hole
     const card = cardFor(round, playerId);
     const saved = savedHole(card, holeNumber);
     const draft = drafts.get(entryKey(playerId, holeNumber));
-    const score = draft ? entryScore(draft.text, draft.churchy ?? saved.churchy, draft.kp !== undefined ? draft.kp : saved.kp) : saved;
-    if (!score) { invalid.push(playerId); continue; }
+    const entry = draft ? entryScore(draft.text, draft.churchy ?? saved.churchy, draft.kp !== undefined ? draft.kp : saved.kp,
+      draft.nassau, draft.wolf) : saved;
+    if (!entry) { invalid.push(playerId); continue; }
+    const score = preserveScoreExtras(entry, saved);
     targets.set(playerId, score);
     if (!draft) continue;
     if (draft.status === 'conflict' || !draft.attempt?.sent && draft.baseEtag !== card.etag) {
@@ -38,7 +41,7 @@ export function planGroup(round: RoundScores, playerIds: readonly string[], hole
     } else if (!draft.attempt?.sent && !draft.mustWrite && sameHoleScore(score, saved)) {
       unchanged.push(entryKey(playerId, holeNumber));
     } else {
-      writes.push({ playerId, draft, score });
+      writes.push({ playerId, draft, score: scoreDeclarationIntent(entry, saved) });
     }
   }
   return { targets, writes, unchanged, invalid, conflicts };
@@ -67,7 +70,8 @@ export async function saveGroupEntries({ client, round, holeNumber, plan, signal
     for (const [playerId, intended] of plan.targets) {
       if (queued.some((write) => write.playerId === playerId) && !acknowledged.has(playerId)) continue;
       const card = cardFor(latest, playerId);
-      if (!sameHoleScore(savedHole(card, holeNumber), intended)) {
+      const expected = acknowledged.get(playerId)?.after ?? intended;
+      if (!sameHoleScore(savedHole(card, holeNumber), expected)) {
         onDraft(entryKey(playerId, holeNumber), conflictedDraft(intended, card, refreshVersion,
           queued.find((write) => write.playerId === playerId)?.draft, acknowledged.get(playerId)));
         changed = true;

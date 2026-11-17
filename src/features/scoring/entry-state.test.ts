@@ -4,6 +4,21 @@ import { cardFor, conflictedDraft, editedDraft, entryKey, entryScore, savedHole,
 import { churchyFixture } from '../../domain/churchy.test-support';
 
 describe('hole entry state', () => {
+  it('retains staged match patches across raw edits and conflicts without copying saved declaration history into commands', () => {
+    const card = cardFor(fictionalRoundScores, fictionalChange.playerId);
+    const wolf = [{ number: 1, choice: { gameId: fictionalChange.id, gameEtag: 'fictional-game-v1', mode: 'blind' as const } }];
+    const nassau = [{ number: 1, gameId: fictionalChange.id, gameEtag: 'fictional-game-v1', outcomes: [], presses: [] }];
+    const original = { ...editedDraft('', card, undefined, false), wolf, nassau };
+    const edited = editedDraft('X7', card, original);
+    expect(edited).toMatchObject({ wolf, nassau, rawEdited: true });
+    const score = entryScore(edited.text, undefined, undefined, edited.nassau, edited.wolf);
+    if (!score) throw new Error('Missing fictional match disposition');
+    expect(score).toEqual({ kind: 'picked-up', reportedStrokes: 7, wolf, nassau });
+    expect(conflictedDraft(score, card, 2, edited)).toMatchObject({ wolf, nassau, status: 'conflict' });
+    const rawOnly = conflictedDraft(score, card, 2);
+    expect(rawOnly.wolf).toBeUndefined();
+    expect(rawOnly.nassau).toBeUndefined();
+  });
   it('retains Churchy selections and press intent when raw strokes change, fail, or need conflict review', () => {
     const f = churchyFixture();
     const card = f.cards[0];

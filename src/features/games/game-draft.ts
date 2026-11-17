@@ -1,10 +1,20 @@
 import { isRoundGameDefinition, isRoundGameDefinitions } from '../../contracts/games';
+import { isNassauDefinition } from '../../contracts/nassau';
+import { isWolfDefinition } from '../../contracts/wolf';
 import type { GameTeam, RoundGameDefinition, StablefordPreset, CompetitionTeamFormat } from '../../domain/games';
 import { defaultHandicapAllowancePercent, defaultTeamHandicapAllowancePercent, gameTeamsMatchRoster, isStablefordGame, isTeamGameDefinition, maximumPointsRows, teamSize } from '../../domain/games';
 import { stablefordPoints } from '../../domain/stableford';
+import type { NassauSide, NassauVariant } from '../../domain/nassau';
 
 export interface GameDraft {
-  readonly kind?: 'stableford' | 'ball-drop' | 'skins' | 'churchy';
+  readonly kind?: 'stableford' | 'ball-drop' | 'skins' | 'churchy' | 'stroke-play' | 'wolf' | 'nassau';
+  readonly groupNumber?: number;
+  readonly wolfPlayers?: readonly string[];
+  readonly allowPig?: boolean;
+  readonly nassauVariant?: NassauVariant;
+  readonly nassauSides?: readonly NassauSide[];
+  readonly nassauStakes?: readonly string[];
+  readonly automaticPresses?: boolean;
   readonly churchyGroup?: number;
   readonly churchyPlayers?: readonly string[];
   readonly amountPerDotMinor?: string;
@@ -24,12 +34,18 @@ export interface GameDraft {
 }
 
 export function draftFromGame(game: RoundGameDefinition): GameDraft {
+  if (game.kind === 'wolf') return { ...newGameDraft(), id: game.id, name: game.name, kind: game.kind,
+    basis: game.basis, groupNumber: game.groupNumber, wolfPlayers: game.playerIds, allowPig: game.allowPig };
+  if (game.kind === 'nassau') return { ...newGameDraft(), id: game.id, name: game.name, kind: game.kind,
+    basis: game.basis, groupNumber: game.groupNumber, nassauVariant: game.variant, nassauSides: game.sides,
+    nassauStakes: [String(game.stakes.frontMinor), String(game.stakes.backMinor), String(game.stakes.overallMinor)],
+    automaticPresses: game.automaticPresses };
   if (game.kind === 'churchy') return { ...newGameDraft(), id: game.id, name: game.name, kind: 'churchy', basis: 'net',
     churchyGroup: game.groupNumber, churchyPlayers: game.playerIds, amountPerDotMinor: String(game.amountPerDotMinor) };
   if (!isStablefordGame(game)) return {
     ...newGameDraft(), id: game.id, name: game.name, kind: game.kind, basis: game.basis,
     allowance: '100', allowanceConfigured: true,
-    ...(game.kind === 'skins' ? { carryovers: game.carryovers } : { format: game.format, teams: game.teams }),
+    ...(game.kind === 'skins' ? { carryovers: game.carryovers } : game.kind === 'ball-drop' ? { format: game.format, teams: game.teams } : {}),
   };
   return {
     id: game.id, name: game.name, preset: game.preset, basis: game.basis,
@@ -77,15 +93,26 @@ export function setFormat(draft: GameDraft, format: CompetitionTeamFormat | unde
   };
 }
 
-export function setGameKind(draft: GameDraft, kind: 'stableford' | 'ball-drop' | 'skins' | 'churchy', rosterCount: number): GameDraft {
+export function setGameKind(draft: GameDraft, kind: NonNullable<GameDraft['kind']>, rosterCount: number): GameDraft {
   if ((draft.kind ?? 'stableford') === kind) return draft;
   const reset = setFormat(draft, undefined, rosterCount);
+  if (kind === 'wolf') return { ...reset, kind, name: 'Wolf', basis: 'net', wolfPlayers: [], allowPig: false };
+  if (kind === 'nassau') return setNassauVariant({ ...reset, kind, name: 'Nassau', basis: 'net',
+    nassauStakes: ['', '', ''], automaticPresses: false }, 'singles');
   if (kind === 'churchy') return { ...reset, kind, name: 'Churchy Game', basis: 'net', amountPerDotMinor: '',
     churchyPlayers: [] };
   return kind === 'ball-drop'
     ? { ...setFormat(reset, 'ball-drop-net-gross', rosterCount), kind, name: 'Ball Drop', allowance: '100' }
-    : { ...reset, kind, name: kind === 'skins' ? 'Skins' : 'Standard Stableford',
+    : { ...reset, kind, name: kind === 'skins' ? 'Skins' : kind === 'stroke-play' ? 'Stroke Play' : 'Standard Stableford',
       ...(kind === 'skins' ? { carryovers: false, allowance: '100' } : {}) };
+}
+
+export function setNassauVariant(draft: GameDraft, variant: NassauVariant): GameDraft {
+  const sizes = variant === 'singles' ? [1, 1] : variant === 'three-way' ? [1, 1, 1]
+    : variant === 'one-v-two' ? [1, 2] : [2, 2];
+  return { ...draft, nassauVariant: variant, nassauSides: sizes.map((size, index) => ({
+    id: crypto.randomUUID(), name: `Side ${String.fromCharCode(65 + index)}`, playerIds: Array.from({ length: size }, () => ''),
+  })) };
 }
 
 export function teamDraftFeedback(draft: GameDraft, playerIds: readonly string[]): string | null {
@@ -121,6 +148,22 @@ function integer(text: string): number | undefined {
 }
 
 export function buildGame(draft: GameDraft, playerIds: readonly string[] = []): RoundGameDefinition | null {
+  if (draft.kind === 'wolf' || draft.kind === 'nassau') {
+    const game = draft.kind === 'wolf'
+      ? { id: draft.id, name: draft.name.trim(), kind: draft.kind, version: 1, basis: draft.basis,
+        groupNumber: draft.groupNumber, playerIds: draft.wolfPlayers, allowPig: draft.allowPig ?? false }
+      : { id: draft.id, name: draft.name.trim(), kind: draft.kind, version: 1, basis: draft.basis,
+        groupNumber: draft.groupNumber, variant: draft.nassauVariant, sides: draft.nassauSides,
+        stakes: { currency: 'USD', frontMinor: integer(draft.nassauStakes?.[0] ?? ''),
+          backMinor: integer(draft.nassauStakes?.[1] ?? ''), overallMinor: integer(draft.nassauStakes?.[2] ?? '') },
+        automaticPresses: draft.automaticPresses ?? false };
+    if (game.kind === 'wolf') return isWolfDefinition(game) && game.playerIds.every((id) => playerIds.includes(id)) ? game : null;
+    return isNassauDefinition(game) && game.sides.flatMap((side) => side.playerIds).every((id) => playerIds.includes(id)) ? game : null;
+  }
+  if (draft.kind === 'stroke-play') {
+    const game = { id: draft.id, name: draft.name.trim(), kind: draft.kind, version: 1, basis: draft.basis };
+    return isRoundGameDefinition(game) ? game : null;
+  }
   if (draft.kind === 'churchy') {
     const game = { id: draft.id, name: 'Churchy Game', kind: 'churchy', version: 1, basis: 'net',
       groupNumber: draft.churchyGroup, playerIds: draft.churchyPlayers, currency: 'USD',

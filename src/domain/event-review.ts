@@ -20,6 +20,11 @@ function distinct(notices: readonly EventReviewNotice[]): readonly EventReviewNo
 export function roundReviewNotices(round: RoundScores, name: string, kpAmountMinor?: number): readonly EventReviewNotice[] {
   const notices: EventReviewNotice[] = [];
   for (const result of round.games?.results ?? []) {
+    const gameName = round.games?.configuration.games.find((game) => game.id === result.gameId)?.name ?? 'Game';
+    if (result.nassau?.status === 'unavailable' || result.wolf?.status === 'unavailable') {
+      notices.push({ code: 'unavailable-inputs', label: `${name} · ${gameName}` });
+    }
+    if (result.nassau?.stalePresses.length) notices.push({ code: 'stale-decision', label: `${name} · ${gameName}` });
     if (result.teamSetupRequired) notices.push({ code: 'stale-teams', label: name });
     if (result.players.some((player) => player.status === 'unavailable'
       && player.unavailableReason !== undefined)) {

@@ -2,7 +2,10 @@ import type { CourseHole, CourseRating } from './catalog.js';
 import type { EventStatus } from './events.js';
 import type { ScoreActor } from './test-access.js';
 import type { RoundGroup } from './setup.js';
-import type { GameChange, GameUnavailableReason, RoundGamesView } from './games.js';
+import type { GameChange, GameUnavailableReason, RoundGamesView, RoundGameKind } from './games.js';
+import type { NassauHoleRecord } from './nassau.js';
+import type { WolfHoleRecord } from './wolf.js';
+import { mergeNassauRecords, mergeWolfRecords, sameNassauRecords, sameWolfRecords } from './game-declarations.js';
 import type { PlayerTeeProfile } from './tees.js';
 import type { ChurchySpecials } from './churchy.js';
 import { sameChurchySpecials } from './churchy.js';
@@ -15,7 +18,10 @@ export type HoleScore = (
   | { readonly kind: 'unplayed' }
   | { readonly kind: 'strokes'; readonly strokes: number }
   | { readonly kind: 'picked-up'; readonly reportedStrokes?: number }
-  | { readonly kind: 'did-not-finish' }) & { readonly churchy?: ChurchySpecials; readonly kp?: KpEntry | null };
+  | { readonly kind: 'did-not-finish' }) & {
+    readonly churchy?: ChurchySpecials; readonly kp?: KpEntry | null;
+    readonly nassau?: readonly NassauHoleRecord[]; readonly wolf?: readonly WolfHoleRecord[];
+  };
 
 export interface ScoredHole {
   readonly number: number;
@@ -53,6 +59,8 @@ export interface PlayerCourseHandicap {
 }
 
 export interface RoundScores {
+  readonly supportedGameKinds?: readonly RoundGameKind[];
+  readonly gameInputContext?: { readonly courseVersionId: string; readonly teeProfileId: number };
   readonly quickRound?: true;
   readonly kpEnabled?: boolean;
   readonly kpCaptureIdentity?: string;
@@ -87,6 +95,11 @@ export function scorePermissions(round: RoundScores): ScorePermissions {
   return round.permissions ?? { role: 'viewer', writePlayerIds: [], canManageGames: false };
 }
 
+export function supportsRoundGame(round: Pick<RoundScores, 'supportedGameKinds' | 'churchyEnabled'>, kind: RoundGameKind): boolean {
+  if (kind === 'churchy' && round.churchyEnabled !== true) return false;
+  return round.supportedGameKinds !== undefined ? round.supportedGameKinds.includes(kind)
+    : kind === 'churchy' || kind === 'stableford' || kind === 'ball-drop' || kind === 'skins';
+}
 export interface ScoreChange {
   readonly id: string;
   readonly eventId: string;
@@ -134,6 +147,8 @@ export function sameHoleScore(left: HoleScore, right: HoleScore): boolean {
   return left.kind === right.kind
     && sameChurchySpecials(left.churchy, right.churchy)
     && sameKpEntry(left.kp, right.kp)
+    && sameNassauRecords(left.nassau, right.nassau)
+    && sameWolfRecords(left.wolf, right.wolf)
     && (left.kind !== 'strokes' || right.kind === 'strokes' && left.strokes === right.strokes)
     && (left.kind !== 'picked-up' || right.kind === 'picked-up' && left.reportedStrokes === right.reportedStrokes);
 }
@@ -143,6 +158,10 @@ export function preserveScoreExtras(score: HoleScore, saved: HoleScore): HoleSco
   return { ...score,
     ...(score.churchy === undefined && saved.churchy ? { churchy: saved.churchy } : {}),
     ...(score.kp === undefined && saved.kp !== undefined ? { kp: saved.kp } : {}),
+    ...(score.nassau !== undefined ? { nassau: mergeNassauRecords(score.nassau, saved.nassau) }
+      : saved.nassau ? { nassau: saved.nassau } : {}),
+    ...(score.wolf !== undefined ? { wolf: mergeWolfRecords(score.wolf, saved.wolf) }
+      : saved.wolf ? { wolf: saved.wolf } : {}),
   };
 }
 

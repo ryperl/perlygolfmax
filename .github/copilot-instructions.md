@@ -166,6 +166,25 @@
   repeat the team score under every player. N/G cell markers use saved ordered
   counting IDs, not a new client calculation; retain gross score marks, pending/
   unavailable states and actual team identity when playing groups differ.
+- Round Stroke Play is gross/net with 100% captured CH, actual strokes and
+  personal-to-par ranking; pickup/X7/DNF never acquire invented stroke totals.
+  Nassau is separate 18-hole match play: singles, three pairwise individuals,
+  1v2 best ball or 2v2 best ball/aggregate, net off the match's lowest captured CH.
+  Explicit per-side USD stakes split equally, leaving indivisible cents
+  unallocated. Ties push. Manual presses use acknowledged two-down positions;
+  automatic presses fire once per bet and may themselves be pressed. Keep
+  immutable/stale receipts and independent bet money, not a place-purse metric.
+- Wolf uses explicit foursome order and group starting hole, best ball and net
+  off lowest captured CH. Partnered wins/losses transfer +/-2 each; Blind Wolf
+  (after drives) transfers +/-6 versus +/-2 each; pre-drive PIG +/-9 versus +/-3
+  each. Signed balance ranks, zero sum per hole; ties zero/no carry. No second
+  settlement or per-dot cash rate. Preserve saved choices, server-marked late
+  recovery and honest honor-system timing. Nassau/Wolf setup locks after first
+  score; unchanged peers survive other edits. Store declarations on canonical
+  group-first cards through conditional saves, preserve raw-only extras and
+  require authoritative supported kinds. Legacy testers cannot see or author
+  these match ledgers/declarations. Ordinary score transports stay 4 KiB;
+  dedicated declaration parts reuse 12 KiB staging and immutable fragments.
 - Skins leaderboards omit known zero awards from standings/search/pages only.
   Preserve awarded ranks/ties, pending/unavailable displays and underlying
   game/purse results; hidden search controls must not hide refreshed winners.

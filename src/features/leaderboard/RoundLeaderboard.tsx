@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { GamePlayerResult, GameTeamResult } from '../../domain/games';
 import { gameResultDirection, gameResultTotal, gameResultUnit, isTeamGameDefinition, visibleGames } from '../../domain/games';
 import { ChurchyResults } from '../churchy';
+import { NassauResults } from '../nassau';
 import type { RoundScores } from '../../domain/scoring';
 import { scorePermissions } from '../../domain/scoring';
 import { scorecardTee } from '../../domain/tees';
@@ -30,6 +31,7 @@ function PlayerStanding({ player, position, tied = false, members, unit }: {
     <div className="leaderboard-player"><h4>{player.displayName}</h4>{members && <p>{members}</p>}<p>{detail}</p></div>
     <div className="leaderboard-points" aria-label={points === null ? `No ranked ${unit}` : `${String(points)} ${unit}`}>
       <strong>{points ?? '—'}</strong><small>{unit}</small>
+      {player.strokeGame?.kind === 'stroke-play' && <small>{position === undefined ? '—' : player.strokeGame.relativeToPar} to par</small>}
     </div>
   </li>;
 }
@@ -50,7 +52,7 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
   const rows: readonly (GamePlayerResult | GameTeamResult)[] = (teamGame ? result?.teams : result?.players) ?? [];
   const standings = result && !result.teamSetupRequired && gameStandings(rows, gameResultDirection(game));
   const ranked = standings ? standings.ranked.filter((entry) => game.kind !== 'skins' || gameResultTotal(entry.player) !== 0) : [];
-  const unit = game ? gameResultUnit(game) : 'points';
+  const unit = game?.kind === 'wolf' ? 'dot balance' : game ? gameResultUnit(game) : 'points';
   function members(player: GamePlayerResult | GameTeamResult): string | undefined {
     function teeLabel(id: string) {
       const tee = scorecardTee(round, id);
@@ -84,7 +86,8 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
         {games.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} · {gameScoringLabel(entry)}</option>)}
       </select></label>
       <p className="leaderboard-format">{gameScoringLabel(game)}</p>
-      {game.kind === 'churchy' ? <ChurchyResults game={game} result={result} /> : teamGame && result?.teamSetupRequired ? <>
+      {game.kind === 'nassau' ? <NassauResults game={game} result={result?.nassau} players={round.cards} />
+        : game.kind === 'churchy' ? <ChurchyResults game={game} result={result} /> : teamGame && result?.teamSetupRequired ? <>
         <p>Update team assignments. Team standings are unavailable until the teams match this round&apos;s golfers.</p>
         {canManage && <button type="button" disabled={busy} onClick={onManageGames}>Update team assignments</button>}
       </> : !result || !standings || rows.length === 0 ? <p>Leaderboard results are unavailable. Refresh the saved round to retry.</p> : <>

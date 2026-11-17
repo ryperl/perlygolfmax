@@ -5,6 +5,7 @@ import type { RoundGameDefinition } from '../domain/games';
 import { maximumGameConfigurationBytes, sameGameDefinitions } from '../domain/games';
 import type { GameWriteResult, HoleScore, RoundScores, ScoreHistoryPage, ScoreWriteResult } from '../domain/scoring';
 import { preserveScoreExtras, sameHoleScore } from '../domain/scoring';
+import { scoreMatchesIntent } from '../domain/game-declarations';
 import type { KpSelection } from '../domain/kp';
 import { isKpSelection } from '../contracts/kp';
 import { isRecord } from '../contracts/events';
@@ -55,15 +56,19 @@ export function createScoresClient(apiUrl: string, getToken: () => Promise<strin
       if (!isUuid(playerId) || !Number.isInteger(holeNumber) || holeNumber < 1 || holeNumber > 18
         || !isHoleScore(score) || etag !== null && !isEventRevision(etag) || !isUuid(requestId)
         || inputRevision !== undefined && inputRevision !== null && !isUuid(inputRevision)) throw new Error('Invalid hole save request. Nothing was sent.');
-      const value = await request(`${base}/players/${encodeURIComponent(playerId)}/holes/${String(holeNumber)}`, signal, {
+      const hasDeclarations = Boolean(score.nassau?.length || score.wolf?.length);
+      const target = `${base}/players/${encodeURIComponent(playerId)}/holes/${String(holeNumber)}${hasDeclarations ? '/games' : ''}`;
+      const options = {
         method: 'PUT', body: { score, ...(inputRevision === undefined ? {} : { inputRevision }) }, requestId, ...(etag === null ? { createOnly: true } : { etag }),
-      });
+      } as const;
+      const value = hasDeclarations ? await writePrivateValue(gameRequest, target, signal, options, maximumGameConfigurationBytes)
+        : await request(target, signal, options);
       if (!isScoreWriteResult(value) || value.round.permissions === undefined || value.round.eventId !== eventId || value.round.roundId !== roundId
         || value.change.eventId !== eventId || value.change.roundId !== roundId || value.change.playerId !== playerId
         || value.change.holeNumber !== holeNumber || value.change.id !== requestId
         || value.change.expectedEtag !== etag
         || value.change.expectedInputRevision !== (inputRevision ?? undefined)
-        || !sameHoleScore(value.change.after, preserveScoreExtras(score, value.change.after))
+        || !scoreMatchesIntent(value.change.after, score) || !sameHoleScore(value.change.after, preserveScoreExtras(score, value.change.after))
         || !value.round.setupLocked || value.round.lastUpdatedAt === null
         || !value.round.cards.some((card) => card.playerId === playerId && card.etag !== null)) {
         throw new Error('Invalid save acknowledgement. The outcome is uncertain; retain this draft and request ID and refresh to review.');

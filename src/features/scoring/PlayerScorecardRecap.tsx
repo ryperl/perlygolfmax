@@ -22,7 +22,7 @@ export function PlayerScorecardRecap({ round, card, gameId }: {
       <div><h3>{card.displayName}</h3><p>{round.roundName} — {round.courseName}</p>
         <p>{tee?.name ?? round.teeName} / {tee?.category ?? round.teeCategory}{totalRating ? ` · Course rating ${String(totalRating.course)} · Slope ${String(totalRating.slope)}` : ''}
           {(round.playerTees?.length ?? 0) > 0 ? tee ? ' · personal tee' : ' · default tee' : ''}</p>
-        {game && <p className="scorecard-game-context">{game.definition.name} · {game.definition.kind === 'ball-drop' || game.definition.kind === 'skins' || game.definition.kind === 'churchy'
+        {game && <p className="scorecard-game-context">{game.definition.name} · {game.definition.kind === 'ball-drop' || game.definition.kind === 'skins' || game.definition.kind === 'churchy' || game.definition.kind === 'stroke-play' || game.definition.kind === 'wolf'
           ? gameScoringLabel(game.definition) : `${game.definition.basis === 'net' ? 'Net' : 'Gross'} points`}</p>}
       </div>
       <p className="recap-total">{summary.complete ? 'Gross total' : 'Recorded total'}:
@@ -30,6 +30,8 @@ export function PlayerScorecardRecap({ round, card, gameId }: {
         {!summary.complete && <span>Incomplete</span>}
       </p>
     </header>
+    {round.games?.configuration.games.some((entry) => entry.kind === 'nassau' && entry.sides.some((side) => side.playerIds.includes(card.playerId)))
+      && <p>Nassau match bets and presses are in Games and Leaderboard.</p>}
     {scorecardGameWarnings(game, [card]).map((warning) => <p className="scorecard-game-unavailable" key={warning}>{warning}</p>)}
     {(round.courseHandicaps?.find((entry) => entry.playerId === card.playerId)?.courseHandicap ?? 0) > 0
       && <p className="scorecard-stroke-key">Stroke dots: tee Course Handicap.</p>}

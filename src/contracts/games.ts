@@ -11,6 +11,11 @@ import { isEventRevision, isRecord, isUuid } from './events.js';
 import { isStrokeGameResult } from './stroke-games.js';
 import { isChurchyDefinition, isChurchyResult } from './churchy.js';
 import { isPublicScoreIdentity } from './public-access.js';
+import { isWolfDefinition, isWolfResults } from './wolf.js';
+import { isNassauDefinition, isNassauResults } from './nassau.js';
+import { nassauContextFromScores, nassauRecordsFor, wolfInputFromScores, wolfRecordsFor, wolfResultPlayers } from '../domain/game-declarations.js';
+import type { RoundGameScoringContext } from '../domain/game-declarations.js';
+import { sameJsonValue } from './round-context.js';
 
 function keys(value: Record<string, unknown>, required: readonly string[], optional: readonly string[] = []): boolean {
   return required.every((key) => Object.hasOwn(value, key))
@@ -39,10 +44,13 @@ function pointsTable(value: unknown, maximum: number): boolean {
 }
 
 export function isRoundGameDefinition(value: unknown): value is RoundGameDefinition {
+  if (isRecord(value) && value.kind === 'wolf') return isWolfDefinition(value);
+  if (isRecord(value) && value.kind === 'nassau') return isNassauDefinition(value);
   if (isRecord(value) && value.kind === 'churchy') return isChurchyDefinition(value);
-  if (isRecord(value) && (value.kind === 'ball-drop' || value.kind === 'skins')) {
+  if (isRecord(value) && (value.kind === 'ball-drop' || value.kind === 'skins' || value.kind === 'stroke-play')) {
     if (!isUuid(value.id) || !boundedText(value.name) || value.version !== 1
       || value.basis !== 'gross' && value.basis !== 'net') return false;
+    if (value.kind === 'stroke-play') return keys(value, ['id', 'name', 'kind', 'version', 'basis']);
     if (value.kind === 'skins') return keys(value, ['id', 'name', 'kind', 'version', 'basis', 'carryovers'])
       && typeof value.carryovers === 'boolean';
     if (!keys(value, ['id', 'name', 'kind', 'version', 'basis', 'format', 'teams'])
@@ -184,7 +192,7 @@ function matchesTeamResult(value: unknown, expected: GameTeamResult): boolean {
       && hole.number === expected.holes[index]?.number && hole.points === expected.holes[index]?.points);
 }
 
-export function isRoundGamesView(value: unknown): value is RoundGamesView {
+export function isRoundGamesView(value: unknown, context?: RoundGameScoringContext): value is RoundGamesView {
   if (!isRecord(value) || !keys(value, ['configuration', 'results']) || !isGameConfiguration(value.configuration)
     || !Array.isArray(value.results) || value.results.length !== value.configuration.games.length) return false;
   const seen = new Set<string>();
@@ -195,6 +203,23 @@ export function isRoundGamesView(value: unknown): value is RoundGamesView {
   for (const result of value.results) {
     if (!isRecord(result) || !isUuid(result.gameId) || seen.has(result.gameId)) return false;
     const game = value.configuration.games.find((candidate) => candidate.id === result.gameId);
+    if (game?.kind === 'nassau') {
+      const round = context && nassauContextFromScores(context);
+      if (!context || !round || !keys(result, ['gameId', 'kind', 'version', 'players', 'nassau'])
+        || result.kind !== 'nassau' || result.version !== 1 || !Array.isArray(result.players) || result.players.length
+        || !isNassauResults(result.nassau, game, round, context.cards,
+          nassauRecordsFor(game, context.groups, context.cards), { courseHandicaps: context.courseHandicaps ?? [] })) return false;
+      seen.add(result.gameId);
+      continue;
+    }
+    if (game?.kind === 'wolf') {
+      if (!keys(result, ['gameId', 'kind', 'version', 'players', 'wolf']) || result.kind !== 'wolf' || result.version !== 1
+        || !isWolfResults(result.wolf, game, context ? { round: wolfInputFromScores(context), cards: context.cards,
+          records: wolfRecordsFor(game, context.groups, context.cards) } : undefined)
+        || !sameJsonValue(result.players, wolfResultPlayers(result.wolf))) return false;
+      seen.add(result.gameId);
+      continue;
+    }
     if (game?.kind === 'churchy') {
       if (!isChurchyResult(result, game)) return false;
       seen.add(result.gameId);
