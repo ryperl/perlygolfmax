@@ -14,6 +14,22 @@ const json = (value: unknown, status = 200) => new Response(JSON.stringify(value
 const receipt = (requestId = eventId) => ({ eventId, requestId, workspaceEtag: workspace.etag });
 
 describe('anonymous Quick round transport', () => {
+  it('archives with an exact conditional retry identity and accepts only the matching minimal acknowledgement', async () => {
+    const requestId = fictionalId(960);
+    const send = vi.fn<typeof fetch>().mockImplementationOnce(() => Promise.resolve(json({ eventId, requestId, status: 'archived' })))
+      .mockImplementationOnce(() => Promise.resolve(json({ eventId, requestId: fictionalId(961), status: 'archived' })));
+    const archive = createQuickRoundClient('https://fictional.example.test/api', send).archive;
+    if (!archive) throw new Error('Missing archive adapter');
+    await expect(archive(eventId, workspace.etag, requestId, signal)).resolves.toBeUndefined();
+    const [url, options] = send.mock.calls[0] ?? [];
+    expect(url).toBe(`https://fictional.example.test/api/public/quick-rounds/${eventId}/archive`);
+    expect(options).toMatchObject({ method: 'PUT', body: '{}', credentials: 'omit', cache: 'no-store' });
+    const headers = new Headers(options?.headers);
+    expect(headers.get('Authorization')).toBeNull();
+    expect(headers.get('If-Match')).toBe(workspace.etag);
+    expect(headers.get('Idempotency-Key')).toBe(requestId);
+    await expect(archive(eventId, workspace.etag, requestId, signal)).rejects.toThrow('Archive is not confirmed');
+  });
   it('creates then loads a confirmed public setup without tokens/cookies and sends conditional stable edit identities', async () => {
     const operation = fictionalId(950);
     const send = vi.fn<typeof fetch>()

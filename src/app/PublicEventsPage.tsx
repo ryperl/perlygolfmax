@@ -12,7 +12,7 @@ import type { ScoreLocation } from '../domain/score-location';
 import { groupStartingHole } from '../domain/round-navigation';
 import { OwnerScoresView } from '../features/scoring';
 import { roundToneFor } from '../features/round-theme';
-import { QuickRoundView } from '../features/quick-round';
+import { QuickRoundArchive, QuickRoundView } from '../features/quick-round';
 import { eventTabHref, isEventTab, readEventRoute } from './navigation';
 import type { EventTab } from './navigation';
 import { SavedEventPage } from './SavedEventPage';
@@ -87,16 +87,30 @@ function PublicEventDirectory({ services, selection }: { readonly services: Publ
   }, [services, generation]);
   return <section><p className="eyebrow">Golf scoreboard</p><h1>{selection ? 'Choose an event' : 'Events'}</h1>
     <p>Open an event to enter scores, view standings and see winnings.</p>
-    {services.quickRounds && <a className="button-link" href="#events?quick=1">New Quick round</a>}
-    <button disabled={!page && !error} onClick={() => { progress.current = undefined; setAttempt((value) => value + 1); }}>Refresh events</button>
+    <div className="event-actions public-event-actions">
+      {services.quickRounds && <a className="button-link" href="#events?quick=1">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" focusable="false">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+        New Quick round
+      </a>}
+      <button disabled={!page && !error} onClick={() => { progress.current = undefined; setAttempt((value) => value + 1); }}>Refresh events</button>
+    </div>
     {!page && !error && <p role="status">Loading events…</p>}
     {error && <><p role="alert">{error}</p><button onClick={() => { setAttempt((value) => value + 1); }}>Try again</button></>}
     {page?.events.length === 0 && <p>No active events.</p>}
     {page && <ul className="round-list" aria-label="Active events">{page.events.map((event) => <li className="panel" key={event.id}>
       <h2>{event.name}</h2>
       {event.startDate && <p>Start date: <time dateTime={event.startDate}>{eventStartDateLabel(event.startDate)}</time></p>}
-      <a href={eventTabHref(selection ?? 'overview', event.id)}>Open {event.name}</a>
-      {event.quickRound === true && services.quickRounds && <a href={`#events?event=${event.id}&quick=1`}>Edit Quick round · {event.name}</a>}
+      <div className="event-card-actions">
+        <a href={eventTabHref(selection ?? 'overview', event.id)}>Open {event.name}</a>
+        {event.quickRound === true && services.quickRounds && <>
+          <a href={`#events?event=${event.id}&quick=1`}>Edit Quick round · {event.name}</a>
+          <QuickRoundArchive client={services.quickRounds} event={event}
+            onArchived={() => { progress.current = undefined; setAttempt((value) => value + 1); }}
+            onRefresh={() => { progress.current = undefined; setAttempt((value) => value + 1); }} />
+        </>}
+      </div>
     </li>)}</ul>}
   </section>;
 }

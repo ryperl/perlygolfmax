@@ -1,5 +1,5 @@
 import type { HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
-import { isEventRevision, isUuid } from '../../../src/contracts/events.js';
+import { isEventRevision, isRecord, isUuid } from '../../../src/contracts/events.js';
 import { maximumEventSetupBytes } from '../../../src/domain/setup.js';
 import { ApiError } from '../errors.js';
 import { readCursor, readJson, response } from '../http.js';
@@ -7,7 +7,7 @@ import { privateReadResponse } from '../private-transport.js';
 import type { RequestLimiter } from '../limits.js';
 import type { TableQuickRoundStore } from './store.js';
 
-export type QuickRoundAction = 'courses' | 'players' | 'version' | 'create' | 'workspace';
+export type QuickRoundAction = 'courses' | 'players' | 'version' | 'create' | 'workspace' | 'archive';
 export interface QuickRoundApi {
   readonly limiter: RequestLimiter;
   readonly quickRounds?: TableQuickRoundStore;
@@ -18,16 +18,17 @@ export function createQuickRoundHandler(resolve: () => QuickRoundApi, action: Qu
     try {
       const { limiter, quickRounds: store } = resolve();
       if (!store) throw new ApiError(503, 'SERVICE_NOT_CONFIGURED');
-      const writing = action === 'create' || action === 'workspace' && request.method === 'PUT';
+      const writing = action === 'create' || action === 'archive' || action === 'workspace' && request.method === 'PUT';
       if (request.method !== (writing ? 'PUT' : 'GET')) return response(405, { code: 'METHOD_NOT_ALLOWED' });
-      await limiter.check({ kind: 'public-browse' }, writing ? action === 'create' ? 'events-create' : 'setup-write' : 'setup-read');
+      await limiter.check({ kind: 'public-browse' }, action === 'archive' ? 'events-manage'
+        : writing ? action === 'create' ? 'events-create' : 'setup-write' : 'setup-read');
       if (action === 'courses') return response(200, await store.courses(readCursor(request)));
       if (action === 'players') return response(200, await store.players(readCursor(request)));
       if (action === 'version') return response(200, privateReadResponse(request,
         await store.version(request.params.courseId ?? '', request.params.versionId ?? '')));
       const id = request.params.id;
       if (!isUuid(id)) throw new ApiError(400, 'INVALID_REQUEST_ID');
-      await limiter.check({ kind: 'public-score', eventId: id }, writing ? 'setup-write' : 'setup-read');
+      await limiter.check({ kind: 'public-score', eventId: id }, action === 'archive' ? 'events-manage' : writing ? 'setup-write' : 'setup-read');
       if (!writing) return response(200, privateReadResponse(request, await store.load(id)));
       const requestId = request.headers.get('Idempotency-Key');
       if (!isUuid(requestId) || action === 'create' && requestId !== id) throw new ApiError(400, 'INVALID_REQUEST_ID');
@@ -35,6 +36,11 @@ export function createQuickRoundHandler(resolve: () => QuickRoundApi, action: Qu
       const none = request.headers.get('If-None-Match');
       if (action === 'create' ? match !== null || none !== '*' : !isEventRevision(match) || match.includes(',') || none !== null) {
         throw new ApiError(400, 'EVENT_REVISION_REQUIRED');
+      }
+      if (action === 'archive') {
+        const body = await readJson(request);
+        if (!isRecord(body) || Object.keys(body).length) throw new ApiError(400, 'INVALID_ARCHIVE_REQUEST');
+        return response(200, await store.archive(id, match ?? '', requestId));
       }
       const body = await store.receive(id, match, requestId, await readJson(request, maximumEventSetupBytes));
       if (body.kind === 'part') return response(200, { privateStaged: { id: body.id, index: body.index } });

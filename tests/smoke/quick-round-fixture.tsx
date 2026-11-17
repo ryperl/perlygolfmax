@@ -13,14 +13,17 @@ const players = Array.from({ length: 5 }, (_, index) => ({
 }));
 let workspace: EventWorkspace | undefined;
 let interrupted = false;
+let archived = false;
 let setupInput: EventSetupInput | undefined;
+const listedEvent = { id: '00000000-0000-4000-8000-000000000050', name: 'Fictional Quick round',
+  role: 'viewer' as const, status: 'active' as const, quickRound: true as const, etag: 'quick-v1', createdAt: '2026-01-01T00:00:00Z' };
 function confirm(eventId: string, input: EventSetupInput): EventWorkspace {
   const round = input.rounds[0];
   if (!round) throw new Error('Missing fictional round');
   setupInput = input;
   workspace = {
     quickRound: true, publicAccess: true, canViewScores: true,
-    event: { id: eventId, name: input.name, role: 'viewer', status: 'active', etag: 'quick-v1', createdAt: '2026-01-01T00:00:00Z' },
+    event: { id: eventId, name: input.name, role: 'viewer', status: 'active', quickRound: true, etag: 'quick-v1', createdAt: '2026-01-01T00:00:00Z' },
     location: input.location, etag: 'quick-v1', allowPerGolferTees: input.allowPerGolferTees ?? false,
     roster: input.playerIds.map((playerId) => ({ playerId, displayName: players.find((player) => player.id === playerId)?.displayName ?? 'Fictional golfer', handicapIndexValue: '0' })),
     rounds: [{ ...fictionalCapturedRound, ...round, scoringStarted: false,
@@ -29,6 +32,7 @@ function confirm(eventId: string, input: EventSetupInput): EventWorkspace {
   return workspace;
 }
 const quick: QuickRoundClient = {
+  archive: () => { archived = true; return Promise.resolve(); },
   courses: () => Promise.resolve({ items: [{ id: fictionalCapturedRound.courseId, name: fictionalCapturedRound.course.name, latestVersionId: fictionalCapturedRound.courseVersionId }] }),
   players: () => Promise.resolve({ items: players }),
   version: () => Promise.resolve({ id: fictionalCapturedRound.courseVersionId, courseId: fictionalCapturedRound.courseId,
@@ -54,4 +58,6 @@ const scores: ScoresClient = {
 };
 const root = document.getElementById('quick-round-fixture');
 if (!root) throw new Error('Missing fictional Quick round fixture');
-createRoot(root).render(<main><PublicEventsPage services={{ ...base, scores, quickRounds: quick }} /></main>);
+createRoot(root).render(<main><PublicEventsPage services={{ ...base, scores, quickRounds: quick,
+  events: { list: () => Promise.resolve({ events: archived ? [] : [workspace?.event ?? listedEvent] }) },
+}} /></main>);

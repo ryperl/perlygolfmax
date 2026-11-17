@@ -176,6 +176,7 @@ const quickRoutes: readonly { readonly action: QuickRoundAction; readonly route:
   { action: 'version', route: 'public/quick-rounds/courses/{courseId}/versions/{versionId}', methods: ['GET'] },
   { action: 'create', route: 'public/quick-rounds/{id}', methods: ['PUT'] },
   { action: 'workspace', route: 'public/quick-rounds/{id}/workspace', methods: ['GET', 'PUT'] },
+  { action: 'archive', route: 'public/quick-rounds/{id}/archive', methods: ['PUT'] },
 ];
 for (const item of quickRoutes) app.http(`quickRound-${item.action}`, {
   route: item.route, methods: item.methods, authLevel: 'anonymous', handler: createQuickRoundHandler(resolvePublicApi, item.action),

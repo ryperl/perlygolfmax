@@ -5,6 +5,7 @@ import type { EventSetupInput, RoundSetupInput } from '../../domain/setup';
 import type { PlayerCourseHandicap } from '../../domain/scoring';
 import { compatibleTeeLayouts } from '../../domain/tees';
 import { calculateCourseHandicap } from '../../domain/stableford';
+import { comparePlayerNames } from '../../domain/player-order';
 import { CourseHandicap } from '../scoring';
 
 export function QuickSetupFields({ draft, courses, players, profiles, courseHandicaps, locked, disabled, full, onChange }: {
@@ -26,7 +27,7 @@ export function QuickSetupFields({ draft, courses, players, profiles, courseHand
   if (!round) return null;
   const common = profiles.find((profile) => profile.id === round.teeProfileId);
   const compatible = common ? profiles.filter((profile) => compatibleTeeLayouts(common, profile)) : [];
-  const matches = players.filter((player) => player.displayName.toLowerCase().includes(playerQuery.trim().toLowerCase()));
+  const matches = players.filter((player) => player.displayName.toLowerCase().includes(playerQuery.trim().toLowerCase())).sort(comparePlayerNames);
   const last = Math.max(0, Math.ceil(matches.length / 12) - 1);
   const visible = matches.slice(Math.min(page, last) * 12, (Math.min(page, last) + 1) * 12);
   const selected = draft.playerIds.map((id) => players.find((player) => player.id === id));

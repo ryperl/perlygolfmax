@@ -42,6 +42,7 @@ describe('fixed anonymous public namespace registration', () => {
         { route: 'public/quick-rounds/courses/{courseId}/versions/{versionId}', methods: ['GET'], authLevel: 'anonymous' },
         { route: 'public/quick-rounds/{id}', methods: ['PUT'], authLevel: 'anonymous' },
         { route: 'public/quick-rounds/{id}/workspace', methods: ['GET', 'PUT'], authLevel: 'anonymous' },
+        { route: 'public/quick-rounds/{id}/archive', methods: ['PUT'], authLevel: 'anonymous' },
       ]);
     const context = new InvocationContext({ invocationId: 'fictional-public-routes', logHandler: () => undefined });
     for (const action of ['events', 'workspace']) {

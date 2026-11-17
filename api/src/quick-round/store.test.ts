@@ -31,6 +31,39 @@ async function fixture() {
 }
 
 describe('public Quick round authority and persistence', () => {
+  it('archives only a ready Quick round, retaining cards/captures and an idempotent public audit without exposing archives', async () => {
+    const f = await fixture();
+    await f.quick.create(f.id, f.input);
+    await f.scores.write(f.actor, f.id, f.roundId, f.peerId, 1, { kind: 'strokes', strokes: 4 }, null, identifier(8200));
+    const current = await f.quick.load(f.id);
+    const cards = new Map([...f.rows].filter(([key]) => key.startsWith(`${f.id}|score-`) || key.startsWith(`${f.id}|index-capture:`)));
+    const result = await f.quick.archive(f.id, current.etag, identifier(8201));
+    expect(result).toEqual({ eventId: f.id, requestId: identifier(8201), status: 'archived' });
+    for (const [key, row] of cards) expect(f.rows.get(key)).toEqual(row);
+    const rows = new Map(f.rows);
+    expect(await f.quick.archive(f.id, current.etag, identifier(8201))).toEqual(result);
+    expect(f.rows).toEqual(rows);
+    expect(JSON.parse(String(f.rows.get(`${f.id}|quick-archive:${identifier(8201)}`)?.content)))
+      .toMatchObject({ recordedBy: f.actor, before: 'active', after: 'archived' });
+    expect((await f.publicEvents.list({ kind: 'public-browse' })).events.some((entry) => entry.id === f.id)).toBe(false);
+    await expect(f.quick.load(f.id)).rejects.toMatchObject({ code: 'PUBLIC_EVENT_NOT_AVAILABLE' });
+    await expect(f.scores.get(f.actor, f.id, f.roundId)).rejects.toMatchObject({ code: 'PUBLIC_EVENT_NOT_AVAILABLE' });
+    await expect(f.quick.archive(event.id, f.saved.etag, identifier(8202))).rejects.toMatchObject({ code: 'QUICK_ROUND_MANAGEMENT_FORBIDDEN' });
+    await expect(f.quick.archive(f.id, 'different-revision', identifier(8201))).rejects.toMatchObject({ code: 'QUICK_ARCHIVE_REQUEST_CONFLICT' });
+  });
+
+  it('refuses stale archiving when a score commits concurrently, without publishing an archive audit', async () => {
+    const f = await fixture();
+    const saved = await f.quick.create(f.id, f.input);
+    f.submit.mockImplementationOnce(async (actions) => {
+      await f.scores.write(f.actor, f.id, f.roundId, f.peerId, 1, { kind: 'strokes', strokes: 4 }, null, identifier(8210));
+      f.apply(actions);
+      return { status: 202, subResponses: [], getResponseForEntity: () => undefined };
+    });
+    await expect(f.quick.archive(f.id, saved.etag, identifier(8211))).rejects.toMatchObject({ code: 'EVENT_CHANGED' });
+    expect((await f.quick.load(f.id)).event.status).toBe('active');
+    expect(f.rows.has(`${f.id}|quick-archive:${identifier(8211)}`)).toBe(false);
+  });
   it('keeps interrupted creation out of discovery and resumes the same event without publishing a partial setup', async () => {
     const f = await fixture();
     f.submit.mockRejectedValueOnce(new Error('Fictional interrupted publication'));
@@ -194,6 +227,25 @@ describe('public Quick round authority and persistence', () => {
 });
 
 describe('Quick round HTTP boundary', () => {
+  it('charges shared site/event archive budgets, requires an empty conditional request and returns no archived data', async () => {
+    const f = await fixture();
+    const saved = await f.quick.create(f.id, f.input);
+    const limiter = { check: vi.fn().mockResolvedValue(undefined) };
+    const context = new InvocationContext({ invocationId: 'fictional-public-archive', logHandler: () => undefined });
+    const invoke = (body: unknown) => createQuickRoundHandler(() => ({ quickRounds: f.quick, limiter }), 'archive')(new HttpRequest({
+      method: 'PUT', url: `https://fictional.example.test/api/public/quick-rounds/${f.id}/archive`, params: { id: f.id },
+      headers: { 'Content-Type': 'application/json', 'If-Match': saved.etag, 'Idempotency-Key': identifier(8220) },
+      body: { string: JSON.stringify(body) },
+    }), context);
+    expect((await invoke({ status: 'active' })).status).toBe(400);
+    limiter.check.mockClear();
+    const result = await invoke({});
+    expect(result.status).toBe(200);
+    expect(result.jsonBody).toEqual({ eventId: f.id, requestId: identifier(8220), status: 'archived' });
+    expect(limiter.check).toHaveBeenNthCalledWith(1, { kind: 'public-browse' }, 'events-manage');
+    expect(limiter.check).toHaveBeenNthCalledWith(2, f.actor, 'events-manage');
+    expect(JSON.stringify(result.jsonBody)).not.toMatch(/name|roster|scores|recordedBy|etag/);
+  });
   it('serves shared game writes only for a Quick round, preserving private history denial and bounded bodies', async () => {
     const f = await fixture();
     await f.quick.create(f.id, f.input);

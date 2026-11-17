@@ -308,8 +308,15 @@ No drafts or scores are stored offline. First saved scoring still freezes
 **every golfer's** round handicap inputs and locks setup, even after clearing
 scores. Later global HI edits affect only unstarted rounds.
 
+Any visitor can **Archive** a Quick round from its event card or saved setup,
+after explicit confirmation. Archiving conditionally checks the event revision,
+retains an immutable public-event receipt and preserves scores, captures and
+history. It removes the round from public discovery and stops public reads and
+writes. Unconfirmed archive attempts retain the same retry identity; conflicts
+require refresh/review. There is no public restore or permanent deletion action.
+
 Public Quick round management does not grant catalog writes, private audits,
-handicap corrections, purse management, KP administration, archives or deletion.
+handicap corrections, purse management, KP administration or archived-data access.
 Public discovery excludes interrupted creations until setup publishes. Existing
 bounded staged transports, event/card revisions, idempotency receipts and durable
 site/event quotas remain enforced. The server persists an explicit Quick-round
@@ -826,6 +833,13 @@ not zero, and plus-index notation is preserved without calculating handicaps.
 An optional starting index can be entered when creating a player; the player
 and first audited observation are saved together. **Add player** starts with a
 name and optional HI; date/source fields appear only when an HI is supplied.
+Catalog and Quick-round player lists sort by last name before pagination;
+full setup keeps selected players first and sorts each selection list by surname.
+Profiles store one display name, so sorting uses the final name component
+(or an explicit `Last, First` prefix), ignoring common generational suffixes.
+Single names sort as written; full name and ID break ties. Compound surnames
+cannot be inferred reliably without structured names. This is display ordering
+only, never a change to saved roster, playing-group or scoring order.
 The focused player editor has separate **Profile**, **Handicap** and **History**
 sections. Name and handicap edits remain separate conditional saves; section
 changes retain drafts, and closing an edited player requires explicit discard.

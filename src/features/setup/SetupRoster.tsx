@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { PlayerProfile } from '../../domain/catalog';
 import type { EventRosterPlayer } from '../../domain/setup';
 import { SetupPager } from './SetupPager';
+import { comparePlayerNames } from '../../domain/player-order';
 
 export function SetupRoster({ players, selectedIds, savedRoster, locked, onChange }: {
   readonly players: readonly PlayerProfile[];
@@ -14,8 +15,8 @@ export function SetupRoster({ players, selectedIds, savedRoster, locked, onChang
   const [selectedPage, setSelectedPage] = useState(0);
   const [availablePage, setAvailablePage] = useState(0);
   const term = query.trim().toLowerCase();
-  const selected = players.filter((player) => selectedIds.includes(player.id));
-  const available = players.filter((player) => !selectedIds.includes(player.id) && player.displayName.toLowerCase().includes(term));
+  const selected = players.filter((player) => selectedIds.includes(player.id)).sort(comparePlayerNames);
+  const available = players.filter((player) => !selectedIds.includes(player.id) && player.displayName.toLowerCase().includes(term)).sort(comparePlayerNames);
   const pageSize = 12;
   const selectedOffset = Math.min(selectedPage, Math.max(0, Math.ceil(selected.length / pageSize) - 1));
   const availableOffset = Math.min(availablePage, Math.max(0, Math.ceil(available.length / pageSize) - 1));

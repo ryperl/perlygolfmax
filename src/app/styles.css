@@ -65,6 +65,12 @@ button:hover { border-color: var(--cp-accent); }
 button:disabled { opacity: 0.6; cursor: wait; }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
 .event-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-bottom: 20px; }
+.public-event-actions { margin-top: 16px; }
+.public-event-actions > button { margin: 0; }
+.button-link { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 16px; border: 1px solid var(--cp-accent); border-radius: 0.625rem; background: var(--cp-accent); color: var(--cp-accent-fg); text-decoration: none; font-weight: 600; }
+.button-link:hover { background: var(--cp-accent-hover); border-color: var(--cp-accent-hover); color: var(--cp-accent-fg); }
+.button-link:focus { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
+.button-link svg { flex: none; }
 .event-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
 .event-card-actions a { min-width: 0; overflow-wrap: anywhere; }
 .event-form { display: grid; gap: 12px; margin-top: 24px; max-width: 560px; }

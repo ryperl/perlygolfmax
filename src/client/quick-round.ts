@@ -11,6 +11,7 @@ import { groupStartingHole } from '../domain/round-navigation';
 import { sameTeeSelections } from '../domain/tees';
 
 export interface QuickRoundClient {
+  readonly archive?: (eventId: string, etag: string, requestId: string, signal: AbortSignal) => Promise<void>;
   readonly courses: (signal: AbortSignal, cursor?: string) => Promise<QuickPage<QuickCourse>>;
   readonly players: (signal: AbortSignal, cursor?: string) => Promise<QuickPage<QuickPlayer>>;
   readonly version: (courseId: string, versionId: string, signal: AbortSignal) => Promise<QuickCourseVersion>;
@@ -74,6 +75,15 @@ export function createQuickRoundClient(apiUrl: string, send: typeof fetch = fetc
   }
   return {
     load,
+    async archive(eventId, etag, requestId, signal) {
+      id(eventId);
+      if (!isEventRevision(etag) || !isUuid(requestId)) throw new Error('Invalid Quick round archive request. Nothing was sent.');
+      const value = await request(`${eventId}/archive`, signal, { method: 'PUT', body: {}, etag, requestId });
+      if (!isRecord(value) || Object.keys(value).length !== 3 || value.eventId !== eventId
+        || value.requestId !== requestId || value.status !== 'archived') {
+        throw new Error('Archive is not confirmed. Retain the same request and refresh before retrying.');
+      }
+    },
     create: (eventId, input, signal) => write(eventId, null, eventId, input, signal),
     save: (eventId, etag, requestId, input, signal) => write(eventId, etag, requestId, input, signal),
     async courses(signal, cursor) {

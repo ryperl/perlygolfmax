@@ -18,6 +18,16 @@ function renderRoster(selectedIds: readonly string[] = [], players: readonly Pla
 }
 
 describe('setup roster selection', () => {
+  it('sorts each selected/available list by surname without rewriting selected roster order', async () => {
+    const players = ['Amy Zulu', 'Zoe Adams', 'Chris Baker'].map((displayName, index) => ({
+      ...fictionalPlayers[0], id: fictionalId(index + 1), displayName, currentIndex: null, etag: 'v1', createdAt: '2026-01-01',
+    }));
+    const changed = renderRoster([fictionalId(1), fictionalId(3)], players);
+    expect(screen.getAllByRole('checkbox').map((checkbox) => checkbox.parentElement?.textContent))
+      .toEqual(['Chris Baker — HI Unknown', 'Amy Zulu — HI Unknown', 'Zoe Adams — HI Unknown']);
+    await userEvent.setup().click(screen.getByLabelText('Zoe Adams — HI Unknown'));
+    expect(changed).toHaveBeenLastCalledWith([fictionalId(1), fictionalId(3), fictionalId(2)]);
+  });
   it('describes the one-player minimum without implying selection grants access', async () => {
     const changed = renderRoster();
     expect(screen.getByText('Choose one or more saved players. Selecting players does not invite them or assign playing groups.')).toBeVisible();

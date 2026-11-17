@@ -161,7 +161,8 @@ round scores, per-player hole writes, overall leaderboard and purse reads.
 Its Quick-round namespace additionally exposes allowlisted selection reads and
 Quick-only creation/setup writes; public round-game writes require the stored
 Quick-round policy. There are no public global catalog writes, purse/access
-mutations, archive or audit history routes. Private endpoints remain JWT-only.
+mutations, ordinary-event archive or audit history routes. Quick rounds have a
+separate public archive operation; private endpoints remain JWT-only.
 Public projections
 exclude raw Handicap Index observations and audit identities. The approved scalar
 display projection includes current roster HI and captured round HI (or explicit
@@ -207,7 +208,18 @@ Churchy capability, including its explicit planned per-dot game stake (not purse
 management or payments). Public Quick projections still have role `viewer`/`public`,
 never a fake owner. Ordinary event writes, global catalog mutations, raw
 observations/history, audited corrections, purse management, KP administration,
-archive/restore and deletion do not become public.
+ordinary-event archive/restore and deletion do not become public.
+
+Any visitor can archive an active, fully published Quick round after UI
+confirmation. `PUT /api/public/quick-rounds/<id>/archive` requires an empty body,
+an exact event revision and UUID idempotency key. It consumes durable site and
+event management budgets, atomically changes only event status and creates an
+immutable public-event audit receipt. A concurrent setup, game, score or archive
+write conflicts rather than overwriting the newer event. Matching retries return
+only event ID/request ID/archived status, never archived data. Scores, captures,
+receipts and other history remain untouched. No public read, restore or delete
+endpoint is introduced for archived rounds. Ordinary organizer archive/restore
+still checks both event and owner-grant revisions.
 
 Selection reads are separately allowlisted: course ID/name/published version,
 immutable course layout/tees, and player ID/name/scalar current HI or NH.

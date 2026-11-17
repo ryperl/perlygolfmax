@@ -5,9 +5,9 @@ import type { PublicScoreIdentity } from '../../../src/domain/public-access.js';
 import type { QuickCourse, QuickCourseVersion, QuickPage, QuickPlayer } from '../../../src/domain/quick-round.js';
 import { isCourseCatalogEntry, isCourseId, isPlayerProfile, isVersionId } from '../../../src/contracts/catalog.js';
 import { isEventSetupInput } from '../../../src/contracts/setup.js';
-import { isEventRevision, isUuid } from '../../../src/contracts/events.js';
+import { isEventRevision, isRecord, isUuid } from '../../../src/contracts/events.js';
 import { TableCourseCatalog } from '../catalog/courses.js';
-import { decode, digest, isConflict, optionalRow, page } from '../catalog/entities.js';
+import { canonical, decode, digest, isConflict, optionalRow, page, revision, transaction } from '../catalog/entities.js';
 import { ApiError } from '../errors.js';
 import { readPublicAccess } from '../public-access/authority.js';
 import { receivePrivateWrite } from '../private-transport.js';
@@ -88,4 +88,47 @@ export class TableQuickRoundStore {
       { id: requestId, sha256: digest(input) });
   }
 
+  async archive(eventId: string, etag: string, requestId: string) {
+    if (!isUuid(eventId) || !isUuid(requestId) || !isEventRevision(etag)) throw new ApiError(400, 'INVALID_REQUEST_ID');
+    const actor: PublicScoreIdentity = { kind: 'public-score', eventId };
+    const binding = { eventId, requestId, expectedEtag: etag, recordedBy: actor };
+    const key = `quick-archive:${requestId}`;
+    const acknowledgement = { eventId, requestId, status: 'archived' as const };
+    const receipt = async () => {
+      const row = await optionalRow(this.table, eventId, key);
+      if (!row) return false;
+      const saved = decode(row.content, isRecord);
+      if (row.partitionKey !== eventId || row.rowKey !== key || row.kind !== 'quick-archive'
+        || !isRecord(saved.request) || saved.before !== 'active' || saved.after !== 'archived'
+        || !isRecord(saved.recordedBy) || canonical(saved.recordedBy) !== canonical(actor)
+        || typeof saved.recordedAt !== 'string' || !Number.isFinite(Date.parse(saved.recordedAt))) {
+        throw new ApiError(503, 'INVALID_STORED_QUICK_ARCHIVE');
+      }
+      if (canonical(saved.request) !== canonical(binding)) throw new ApiError(409, 'QUICK_ARCHIVE_REQUEST_CONFLICT');
+      return true;
+    };
+    const event = await optionalRow(this.table, eventId, 'event');
+    if (!event || event.partitionKey !== eventId || event.rowKey !== 'event'
+      || event.quickRound !== true || event.quickRoundReady !== true) throw new ApiError(403, 'QUICK_ROUND_MANAGEMENT_FORBIDDEN');
+    if (await receipt()) {
+      if (event.status !== 'archived') throw new ApiError(409, 'EVENT_CHANGED');
+      return acknowledgement;
+    }
+    if (event.status === 'archived') throw new ApiError(404, 'PUBLIC_EVENT_NOT_AVAILABLE');
+    if (event.status !== 'active') throw new ApiError(503, 'INVALID_STORED_EVENT');
+    if (revision(event) !== etag) throw new ApiError(409, 'EVENT_CHANGED');
+    const recordedAt = new Date().toISOString();
+    try {
+      await transaction(this.table, [
+        ['update', { partitionKey: eventId, rowKey: 'event', status: 'archived', archivedAt: recordedAt }, 'Merge', { etag }],
+        ['create', { partitionKey: eventId, rowKey: key, kind: 'quick-archive',
+          content: canonical({ request: binding, recordedAt, recordedBy: actor, before: 'active', after: 'archived' }) }],
+      ], 'EVENT_CHANGED');
+    } catch (error) {
+      const current = await optionalRow(this.table, eventId, 'event');
+      if (current?.quickRound === true && current.status === 'archived' && await receipt()) return acknowledgement;
+      throw error;
+    }
+    return acknowledgement;
+  }
 }

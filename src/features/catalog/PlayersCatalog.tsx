@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CatalogClient, ManualIndexInput } from '../../client/catalog';
 import type { PlayerProfile } from '../../domain/catalog';
+import { comparePlayerNames } from '../../domain/player-order';
 import { useOperation } from './useOperation';
 import { PlayerEditor } from './PlayerEditor';
 import { catalogDirectoryProgress, readCatalogDirectory } from './catalog-directory';
@@ -70,7 +71,8 @@ function PlayersCatalogSession({ client }: { readonly client: CatalogClient }) {
   const selected = players?.find((player) => player.id === selectedId);
   const creationBlocked = busy || initialPending || !catalogComplete || players === null || editorBusy;
   const hasCreateDraft = name !== '' || initialValue !== '';
-  const matches = catalogComplete ? players?.filter((player) => player.displayName.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())) : players;
+  const matches = catalogComplete ? players?.filter((player) => player.displayName.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+    .sort(comparePlayerNames) : players;
   return <section className="catalog-view">
     <header className="catalog-heading"><div><p className="catalog-eyebrow">Organizer catalog</p><h1>Players</h1></div>
       <div className="catalog-toolbar">

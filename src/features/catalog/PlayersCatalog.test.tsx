@@ -15,6 +15,20 @@ const observation = {
 };
 
 describe('manager player catalog', () => {
+  it('orders the complete directory and search results by last name across page boundaries', async () => {
+    const client = fakeCatalog();
+    const players = ['Amy Zulu', 'Chris Baker', 'Zoe Adams'].map((displayName, index) => ({
+      ...player, id: fictionalId(index + 1), displayName,
+    }));
+    vi.mocked(client.players).mockResolvedValueOnce({ players: players.slice(0, 2), continuationToken: 'next' })
+      .mockResolvedValueOnce({ players: players.slice(2) });
+    render(<PlayersCatalog client={client} />);
+    await screen.findByText('3 of 3 players');
+    const names = () => within(screen.getByRole('list', { name: 'Saved players' })).getAllByRole('heading').map((heading) => heading.textContent);
+    expect(names()).toEqual(['Zoe Adams', 'Chris Baker', 'Amy Zulu']);
+    await userEvent.setup().type(screen.getByRole('searchbox', { name: 'Search players' }), 'a');
+    expect(names()).toEqual(['Zoe Adams', 'Chris Baker', 'Amy Zulu']);
+  });
   it('resumes incomplete pages before enabling whole-catalog search or creation', async () => {
     const client = fakeCatalog();
     vi.mocked(client.players).mockResolvedValueOnce({ players: fictionalPlayers.slice(0, 2), continuationToken: 'next' })
@@ -154,7 +168,7 @@ describe('manager player catalog', () => {
     expect(screen.getByLabelText('Player display name')).toHaveValue('Fictional Optional Player');
   });
 
-  it('opens a nonfirst player editor inline, focuses once ready, preserves card order through updates and restores Edit focus on close', async () => {
+  it('keeps a nonfirst editor stable while renamed rows re-sort and restores Edit focus on close', async () => {
     const client = fakeCatalog();
     let finish: ((history: PlayerIndexHistory) => void) | undefined;
     const initial = new Promise<PlayerIndexHistory>((resolve) => { finish = resolve; });
@@ -184,7 +198,7 @@ describe('manager player catalog', () => {
     await screen.findByText(/Player name saved/);
     expect(heading).not.toHaveFocus();
     expect(screen.getAllByRole('heading', { level: 2 }).map((item) => item.textContent)).toEqual([
-      'Fictional Player 1', 'Fictional Player 2', 'Fictional Third Revised', 'Fictional Player 4',
+      'Fictional Player 1', 'Fictional Player 2', 'Fictional Player 4', 'Fictional Third Revised',
     ]);
     expect(screen.getByRole('region', { name: 'Player editor' })).toBe(editor);
     await user.click(within(editor).getByRole('button', { name: 'Close player editor' }));

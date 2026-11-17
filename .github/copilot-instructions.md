@@ -65,6 +65,9 @@
   filter a complete search. Preserve import/creation drafts, publish approval,
   conditional revisions and retry identities independently of presentation.
   Course Update publishes an immutable version, never an in-place scored edit.
+  Sort player catalog/selection lists by surname before paging through shared
+  display-name ordering; preserve selected-first sections and saved group/order
+  identities. Display-name surname parsing is presentation, not profile data.
   Event ownership is not catalog authority. Use allowlisted member projections,
   immutable course versions and captured round inputs. Active unstarted rounds
   use current catalog HI; atomically freeze all indexes with the first saved
@@ -97,7 +100,11 @@
   site/event budgets. Hide incomplete creations from discovery. Preserve
   first-score whole-round captures and locks, drafts/confirmed saves on failures,
   and explicit conflict review. No public catalog writes, corrections, purse/KP
-  administration, archive/delete or general organizer privileges are granted.
+  administration, archived-data reads, restore/delete or general organizer
+  privileges are granted. Any visitor may archive a ready active Quick round
+  after confirmation: exact event revision, immutable public-event receipt,
+  stable retry identity and durable site/event budgets. Keep all saved scores,
+  captures and history; ordinary event archive/restore stays owner-protected.
 - Persist only allowlisted public scoring navigation: version/event/round/group/
   hole/view. No scores, drafts, credentials or identities in that record.
   Cold/foreground resume reads fresh server data without resetting place.

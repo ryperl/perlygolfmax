@@ -11,6 +11,7 @@ import { RoundAccent } from '../round-theme';
 import { QuickSetupFields } from './QuickSetupFields';
 import { useQuickDirectory } from './use-quick-directory';
 import './quick-round.css';
+import { QuickRoundArchive } from './QuickRoundArchive';
 
 interface SaveAttempt {
   readonly input: EventSetupInput;
@@ -300,6 +301,10 @@ export function QuickRoundView({ client, scores, eventId: existingId }: {
         <button type="button" disabled={!canStart} onClick={() => {
           if (canStart && savedRound) window.location.hash = `#events?event=${eventId}&round=${savedRound.id}`;
         }}>Start scoring</button>
+        <QuickRoundArchive client={client} event={workspace.event}
+          disabled={working || gameDirty || changed || Boolean(attempt) || conflict || Boolean(setupRefreshError)}
+          onBusyChange={setWorking}
+          onArchived={() => { window.location.hash = '#events?choose=1'; }} onRefresh={() => { void refresh(); }} />
       </>}
     </>}
   </RoundAccent>;

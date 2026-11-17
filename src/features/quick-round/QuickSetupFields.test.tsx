@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fictionalId, fictionalPlayers, fictionalProfile, fictionalSetup } from '../../client/catalog.test-support';
 import { QuickSetupFields } from './QuickSetupFields';
 
@@ -15,6 +15,21 @@ function Fixture() {
 }
 
 describe('Quick round setup selections', () => {
+  it('sorts golfer choices by surname before paging without changing assignment identities', () => {
+    const players = Array.from({ length: 13 }, (_, index) => ({
+      id: fictionalId(index + 1), displayName: index === 12 ? 'Zoe Adams' : `Fictional Zulu${String(index).padStart(2, '0')}`,
+      handicapIndexValue: null,
+    }));
+    const changed = vi.fn();
+    render(<QuickSetupFields draft={{ ...fictionalSetup, playerIds: [], rounds: fictionalSetup.rounds.map((round) => ({ ...round, groups: [] })) }}
+      courses={[]} players={players} profiles={[fictionalProfile]} full={false} locked={false} disabled={false} onChange={changed} />);
+    expect(screen.getAllByRole('checkbox')[0]).toHaveAccessibleName('Zoe Adams');
+    fireEvent.click(screen.getByLabelText('Zoe Adams'));
+    expect(changed).toHaveBeenLastCalledWith(expect.objectContaining({ playerIds: [fictionalId(13)] }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next golfers' }));
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    expect(screen.getByRole('checkbox')).toHaveAccessibleName('Fictional Zulu11');
+  });
   it('retains selected golfers through search and refuses overfull groups without losing assignments', () => {
     render(<Fixture />);
     fireEvent.click(screen.getByLabelText('Fictional fifth golfer', { exact: true }));

@@ -8,9 +8,27 @@ import type { RoundScores } from '../domain/scoring';
 import { PrivateRequestError } from '../client/private-request';
 import type { EventPage } from '../domain/events';
 import { quickSource } from '../features/quick-round/quick-round.test-support';
+import type { QuickRoundClient } from '../client/quick-round';
 
 beforeEach(() => { window.history.replaceState(null, '', '#events?choose=1'); });
 describe('public directory date order', () => {
+  it('archives a Quick round only after confirmation and refreshes the directory without changing ordinary events', async () => {
+    const base = fakePublicServices(), source = quickSource();
+    const archive = vi.fn<NonNullable<QuickRoundClient['archive']>>().mockResolvedValue(undefined);
+    const quick = { ...fictionalPublicWorkspace.event, quickRound: true as const };
+    const normal = { ...fictionalPublicWorkspace.event, id: fictionalId(55), name: 'Fictional ordinary event' };
+    vi.mocked(base.events.list).mockResolvedValueOnce({ events: [quick, normal] }).mockResolvedValueOnce({ events: [normal] });
+    render(<PublicEventsPage services={{ ...base, quickRounds: { ...source.client, archive } }} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: `Archive Quick round: ${quick.name}` }));
+    expect(archive).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Archive Quick round: Fictional ordinary event' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Archive round' }));
+    await waitFor(() => { expect(screen.queryByRole('heading', { name: quick.name })).not.toBeInTheDocument(); });
+    expect(await screen.findByRole('heading', { name: normal.name })).toBeVisible();
+    expect(archive).toHaveBeenCalledWith(quick.id, quick.etag, expect.any(String), expect.any(AbortSignal));
+    expect(base.events.list).toHaveBeenCalledTimes(2);
+  });
   it('offers creation and edit only for the authoritative Quick round directory marker without workspace scans', async () => {
     const base = fakePublicServices();
     const source = quickSource();
@@ -20,12 +38,18 @@ describe('public directory date order', () => {
       { ...fictionalPublicWorkspace.event, id: fictionalId(55), name: 'Fictional ordinary event' },
     ] });
     render(<PublicEventsPage services={services} />);
-    expect(await screen.findByRole('link', { name: 'New Quick round' })).toHaveAttribute('href', '#events?quick=1');
+    const create = await screen.findByRole('link', { name: 'New Quick round' });
+    expect(create).toHaveAttribute('href', '#events?quick=1');
     expect(await screen.findByRole('link', { name: `Edit Quick round · ${fictionalPublicWorkspace.event.name}` }))
       .toHaveAttribute('href', `#events?event=${fictionalPublicWorkspace.event.id}&quick=1`);
     expect(screen.queryByRole('link', { name: 'Edit Quick round · Fictional ordinary event' })).not.toBeInTheDocument();
     expect(source.client.load).not.toHaveBeenCalled();
     expect(services.setup.load).not.toHaveBeenCalled();
+    const user = userEvent.setup();
+    await user.tab();
+    expect(create).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Refresh events' })).toHaveFocus();
   });
   it('opens Quick setup before ordinary event details and keeps older services explicit', async () => {
     window.history.replaceState(null, '', '#events?quick=1');

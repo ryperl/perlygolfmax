@@ -62,3 +62,8 @@
 .quick-player p {
   margin: 0;
 }
+
+.quick-archive { display: grid; gap: .75rem; min-width: 0; max-width: 100%; }
+.quick-archive > button { justify-self: start; margin: 0; }
+.quick-archive-confirmation { display: grid; gap: .75rem; max-width: 32rem; padding: 1rem; border: 1px solid var(--cp-border-strong); border-radius: .625rem; background: var(--cp-surface); overflow-wrap: anywhere; }
+.quick-archive-confirmation h3 { margin: 0; }
