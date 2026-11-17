@@ -59,7 +59,7 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
 }) {
   const showTotal = subtotal === 'In' || fullLayout.length === layout.length;
   const mixed = (playerTees?.length ?? 0) > 0;
-  const unit = game ? gameResultUnit(game.definition) : 'points';
+  const unit = game?.definition.kind === 'dots' ? 'dots' : game ? gameResultUnit(game.definition) : 'points';
   const ballDrop = game?.definition.kind === 'ball-drop';
   const teams = scorecardBallDropTeams(game, cards);
   return <section className="recap-nine">
@@ -117,7 +117,8 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
             {game && !ballDrop && <tr className="recap-game-row" aria-label={`${card.displayName} · ${game.definition.name} ${unit}`}>
               <th scope="row" aria-label={`${card.displayName} game ${unit}`}
                 title={!available ? gameUnavailableMessage(player?.strokeGame?.unavailableReason ?? player?.unavailableReason) : undefined}>
-                {game.definition.kind === 'wolf' ? 'DOT BALANCE' : unit === 'dots' ? 'Earned dots' : unit === 'points' ? 'Points' : unit === 'strokes' ? `${game.definition.basis === 'net' ? 'Net' : 'Gross'} strokes` : unit === 'skins' ? 'Skins' : 'Team to par'}
+                {game.definition.kind === 'wolf' && game.definition.version === 1 ? 'DOT BALANCE' : unit === 'dots' ? 'Earned dots' : unit === 'points' ? 'Points' : unit === 'strokes' ? `${game.definition.basis === 'net' ? 'Net' : 'Gross'} strokes` : unit === 'skins' ? 'Skins' : 'Team to par'}
+                {game.definition.kind === 'dots' && <small>Total includes round bonuses</small>}
                 {game.definition.kind === 'churchy' && player && 'playingHandicap' in player
                   && <small>Churchy relative handicap {player.playingHandicap ?? 'unavailable'}</small>}
                 {player && 'teamId' in player && <small>{player.displayName}</small>}{!available && <small>Unavailable</small>}</th>

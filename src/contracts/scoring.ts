@@ -17,6 +17,9 @@ import type { RoundGroup } from '../domain/setup.js';
 import type { RoundGameScoringContext } from '../domain/game-declarations.js';
 import { isNassauHoleRecord } from './nassau.js';
 import { isWolfRecord } from './wolf.js';
+import { isDotsHoleRecord } from './dots.js';
+import { isDotAwardAudit } from './dot-audit.js';
+import { calculateInternalSettlements } from '../domain/internal-games.js';
 import { calculateStrokeGameResults } from '../domain/stroke-games.js';
 import { sameJsonValue } from './round-context.js';
 import { isChurchySpecials } from './churchy.js';
@@ -56,7 +59,9 @@ export function isHoleScore(value: unknown): value is HoleScore {
     || new Set(value.nassau.map((record) => record.gameId)).size !== value.nassau.length)) return false;
   if (value.wolf !== undefined && (!Array.isArray(value.wolf) || !value.wolf.every(isWolfRecord)
     || new Set(value.wolf.map((record) => record.choice.gameId)).size !== value.wolf.length)) return false;
-  const count = Object.keys(value).filter((key) => !['churchy', 'kp', 'nassau', 'wolf'].includes(key)).length;
+  if (value.dots !== undefined && (!Array.isArray(value.dots) || !value.dots.every(isDotsHoleRecord)
+    || new Set(value.dots.map((record) => record.gameId)).size !== value.dots.length)) return false;
+  const count = Object.keys(value).filter((key) => !['churchy', 'kp', 'nassau', 'wolf', 'dots'].includes(key)).length;
   if (value.kind === 'strokes') {
     return count === 2 && positiveInteger(value.strokes, maximumExactHoleStrokes);
   }
@@ -97,7 +102,8 @@ export function isScorecard(value: unknown): value is Scorecard {
   const count = value.holes.length;
   if (!value.holes.every((hole: unknown) => isRecord(hole) && positiveInteger(hole.number, count) && isHoleScore(hole.score)
     && (hole.score.nassau ?? []).every((record) => record.number === hole.number)
-    && (hole.score.wolf ?? []).every((record) => record.number === hole.number))) return false;
+    && (hole.score.wolf ?? []).every((record) => record.number === hole.number)
+    && (hole.score.dots ?? []).every((record) => record.number === hole.number))) return false;
   return new Set(value.holes.map((hole: { readonly number: number }) => hole.number)).size === count
     && (value.etag === null
       ? value.updatedAt === null && value.holes.every((hole: { readonly score: HoleScore }) => hole.score.kind === 'unplayed')
@@ -105,6 +111,10 @@ export function isScorecard(value: unknown): value is Scorecard {
 }
 
 export function isRoundScores(value: unknown): value is RoundScores {
+  if (isRecord(value) && (value.internalGamesSupported !== undefined && typeof value.internalGamesSupported !== 'boolean'
+    || value.wolfRulesVersions !== undefined && (!Array.isArray(value.wolfRulesVersions)
+      || !value.wolfRulesVersions.every((version: unknown) => version === 1 || version === 2)
+      || new Set(value.wolfRulesVersions).size !== value.wolfRulesVersions.length))) return false;
   if (isRecord(value) && value.supportedGameKinds !== undefined && (!Array.isArray(value.supportedGameKinds)
     || !value.supportedGameKinds.every((kind: unknown) => roundGameKinds.some((known) => known === kind))
     || new Set(value.supportedGameKinds).size !== value.supportedGameKinds.length
@@ -162,10 +172,13 @@ export function isRoundScores(value: unknown): value is RoundScores {
     const permission = value.permissions;
     if (!isRecord(permission) || typeof permission.role !== 'string'
       || !['owner', 'player', 'viewer', 'tester', 'public'].includes(permission.role)
-      || !Object.keys(permission).every((key) => ['role', 'viewerPlayerId', 'writePlayerIds', 'canManageGames'].includes(key))
+      || !Object.keys(permission).every((key) => ['role', 'viewerPlayerId', 'writePlayerIds', 'canManageGames', 'canManageInternalGames'].includes(key))
       || !Array.isArray(permission.writePlayerIds) || !permission.writePlayerIds.every((id: unknown) => isUuid(id) && roster.has(id))
       || new Set(permission.writePlayerIds).size !== permission.writePlayerIds.length
-      || typeof permission.canManageGames !== 'boolean') return false;
+      || typeof permission.canManageGames !== 'boolean'
+      || permission.canManageInternalGames !== undefined && (typeof permission.canManageInternalGames !== 'boolean'
+        || permission.canManageInternalGames && (value.eventStatus !== 'active' || value.internalGamesSupported !== true
+          || permission.role !== 'owner' && permission.role !== 'public'))) return false;
     if (permission.role === 'owner') {
       if (permission.viewerPlayerId !== undefined || permission.canManageGames !== (value.eventStatus === 'active')
         || permission.writePlayerIds.length !== (value.eventStatus === 'active' ? cards.length : 0)) return false;
@@ -248,16 +261,18 @@ export function isRoundScores(value: unknown): value is RoundScores {
       ...(typeof value.inputRevision === 'string' ? { inputRevision: value.inputRevision } : {}) };
     if (!isRoundGamesView(value.games, context) || value.games.configuration.eventId !== value.eventId
       || value.games.configuration.roundId !== value.roundId
-      || value.games.results.some((result) => (!['churchy', 'wolf', 'nassau'].includes(result.kind ?? '') && result.players.length !== cards.length) || result.players.some((player) => {
+      || value.games.results.some((result) => (!['churchy', 'wolf', 'nassau', 'dots'].includes(result.kind ?? '') && result.players.length !== cards.length) || result.players.some((player) => {
         const card = cardsById.get(player.playerId);
         if (!card && result.kind === 'churchy') return false;
         return !card || card.displayName !== player.displayName || player.totalHoles !== count
           || !player.holes.every((hole) => card.holes.some((entry) => entry.number === hole.number));
       }))) return false;
+    if (value.internalSettlements !== undefined && !sameJsonValue(value.internalSettlements,
+      calculateInternalSettlements(value.games.configuration.games, value.games.results, context))) return false;
     for (const result of value.games.results) {
       const game = value.games.configuration.games.find((entry) => entry.id === result.gameId);
       if (!game) return false;
-      if (game.kind === 'wolf' || game.kind === 'nassau') continue;
+      if (game.kind === 'wolf' || game.kind === 'nassau' || game.kind === 'dots') continue;
       if (game.kind === 'churchy') {
         const group: unknown = value.groups.find((entry: unknown) => isRecord(entry) && entry.number === game.groupNumber);
         const expected = calculateChurchyResults(game, cards.map((card) => {
@@ -300,7 +315,8 @@ export function isRoundScores(value: unknown): value is RoundScores {
       }
     }
   }
-  return true;
+  return value.games !== undefined || value.internalSettlements === undefined
+    || Array.isArray(value.internalSettlements) && value.internalSettlements.length === 0;
 }
 
 export function isScoreChange(value: unknown): value is ScoreChange {
@@ -309,6 +325,7 @@ export function isScoreChange(value: unknown): value is ScoreChange {
     && isHoleScore(value.before) && isHoleScore(value.after)
     && (value.expectedEtag === null || isEventRevision(value.expectedEtag))
     && (value.expectedInputRevision === undefined || isUuid(value.expectedInputRevision))
+    && (value.dotAwardAudit === undefined || Array.isArray(value.dotAwardAudit) && value.dotAwardAudit.every(isDotAwardAudit))
     && instant(value.recordedAt) && isScoreActor(value.recordedBy)
     && (!('kind' in value.recordedBy) || value.recordedBy.eventId === value.eventId);
 }

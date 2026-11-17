@@ -6,7 +6,7 @@ import { NassauResults } from '../nassau';
 import type { RoundScores } from '../../domain/scoring';
 import { scorePermissions } from '../../domain/scoring';
 import { scorecardTee } from '../../domain/tees';
-import { gameScoringLabel, gameUnavailableMessage } from '../games';
+import { canManageRoundGames, gameScoringLabel, gameUnavailableMessage } from '../games';
 import { gameStandings } from './standings';
 import './leaderboard.css';
 
@@ -45,14 +45,15 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
   const [query, setQuery] = useState('');
   const [pageIndex, setPageIndex] = useState(0);
   const games = visibleGames(round.games?.configuration.games ?? [], round.churchyEnabled);
-  const canManage = round.eventStatus === 'active' && scorePermissions(round).role === 'owner' && scorePermissions(round).canManageGames;
+  const canManage = round.eventStatus === 'active' && canManageRoundGames(round);
   const game = games.find((entry) => entry.id === gameId) ?? games[0];
   const result = game && round.games?.results.find((entry) => entry.gameId === game.id);
   const teamGame = game !== undefined && isTeamGameDefinition(game);
   const rows: readonly (GamePlayerResult | GameTeamResult)[] = (teamGame ? result?.teams : result?.players) ?? [];
   const standings = result && !result.teamSetupRequired && gameStandings(rows, gameResultDirection(game));
   const ranked = standings ? standings.ranked.filter((entry) => game.kind !== 'skins' || gameResultTotal(entry.player) !== 0) : [];
-  const unit = game?.kind === 'wolf' ? 'dot balance' : game ? gameResultUnit(game) : 'points';
+  const unit = game?.kind === 'wolf' ? game.version === 2 ? 'earned dots' : 'dot balance'
+    : game?.kind === 'dots' ? 'earned dots' : game ? gameResultUnit(game) : 'points';
   function members(player: GamePlayerResult | GameTeamResult): string | undefined {
     function teeLabel(id: string) {
       const tee = scorecardTee(round, id);

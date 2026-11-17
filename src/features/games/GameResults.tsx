@@ -5,6 +5,7 @@ import { gameScoringLabel, gameUnavailableMessage } from './game-presentation';
 import { ChurchyResults } from '../churchy';
 import { NassauResults } from '../nassau';
 import { WolfResults } from '../wolf';
+import { DotsResults } from '../dots';
 
 function progress(player: GamePlayerResult | GameTeamResult): string {
   return player.status === 'unavailable'
@@ -55,6 +56,7 @@ export function GameResults({ game, result, holeNumbers, players }: {
   if (game.kind === 'churchy') return <ChurchyResults game={game} result={result} />;
   if (game.kind === 'nassau') return <NassauResults game={game} result={result?.nassau} {...(players ? { players } : {})} />;
   if (game.kind === 'wolf') return <WolfResults game={game} result={result?.wolf} />;
+  if (game.kind === 'dots') return <DotsResults game={game} result={result?.dots} />;
   return (
     <section className="game-results" aria-label={`${game.name} results`}>
       <h3>{game.name}</h3>

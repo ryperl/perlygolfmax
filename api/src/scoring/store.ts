@@ -37,6 +37,11 @@ import { GameDeclarationConflictError, gameAnchorPlayerId, nassauRecordsFor, sam
 import { nassauConfigurationIssues, validateNassauManualPress } from '../../../src/domain/nassau.js';
 import { nassauRecordsMatchGame } from '../../../src/contracts/nassau.js';
 import { wolfForHole, wolfGroupMatchesRound } from '../../../src/domain/wolf.js';
+import { dotsDefinitionMatchesRound, dotsRecordsMatchGame } from '../../../src/contracts/dots.js';
+import { dotRound, definitionCards, validateInternalGameChanges } from './internal-games.js';
+import { buildDotAwardAudit } from './dot-audit.js';
+import { groupStartingHole } from '../../../src/domain/round-navigation.js';
+import { calculateInternalSettlements } from '../../../src/domain/internal-games.js';
 
 function withoutMatchDeclarations(score: HoleScore): HoleScore {
   const raw: HoleScore = score.kind === 'strokes' ? { kind: score.kind, strokes: score.strokes }
@@ -65,11 +70,12 @@ function isStoredCard(value: unknown): value is StoredCard {
   return isRecord(value) && !('etag' in value) && isScorecard({ ...value, etag: 'validation-only' });
 }
 
-function projectChange(change: ScoreChange): ScoreChange {
+function projectChange(change: ScoreChange, includeAudit = true): ScoreChange {
   return {
     id: change.id, eventId: change.eventId, roundId: change.roundId, playerId: change.playerId,
     holeNumber: change.holeNumber, before: change.before, after: change.after, expectedEtag: change.expectedEtag,
     recordedAt: change.recordedAt, ...(change.expectedInputRevision ? { expectedInputRevision: change.expectedInputRevision } : {}),
+    ...(includeAudit && change.dotAwardAudit ? { dotAwardAudit: change.dotAwardAudit } : {}),
     recordedBy: scoreActor(change.recordedBy),
   };
 }
@@ -183,9 +189,10 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     await assertEventAccessUnchanged(this.table, identity, eventId, before);
   }
 
-  private writer(state: EventAccess & { readonly round: RoundSnapshot }, playerId?: string, manageGames = false) {
+  private writer(state: EventAccess & { readonly round: RoundSnapshot }, playerId?: string, manageGames = false,
+    validatedInternalGames = false) {
     if (state.publicAccess) {
-      if (!playerId && !(manageGames && state.event.quickRound === true)) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
+      if (!playerId && !(manageGames && (state.event.quickRound === true || validatedInternalGames))) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
       return { etag: state.summary.etag, role: 'public' as const };
     }
     if (state.testerLink) {
@@ -246,16 +253,17 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     const kpProjection = await this.kpProjection(workspace.event.id, round.id, access.event.kpRoundIds);
     const kpPot = access.testerLink || !kpProjection.kp ? undefined : await readKpPot(this.table, workspace.event.id, round.id, access.event.purseConfigured);
     const visibleGames = access.testerLink && games ? games.games.filter((game) =>
-      game.kind !== 'wolf' && game.kind !== 'nassau') : games?.games;
-    return {
+      game.kind !== 'wolf' && game.kind !== 'nassau' && game.kind !== 'dots') : games?.games;
+    const projection: RoundScores = {
       ...(access.event.quickRound === true ? { quickRound: true as const } : {}),
       kpEnabled: true,
       kpCaptureIdentity: kpCaptureIdentity(capturedRound),
       ...(access.testerLink && kpProjection.kp ? { kp: { ...kpProjection.kp, decisions: [] } } : kpProjection),
       ...(kpPot ? { kpPot } : {}),
       churchyEnabled: this.churchyEnabled(),
+      ...(!access.testerLink ? { wolfRulesVersions: [1, 2] as const, internalGamesSupported: true } : {}),
       supportedGameKinds: roundGameKinds.filter((kind) => (kind !== 'churchy' || this.churchyEnabled())
-        && (!access.testerLink || kind !== 'wolf' && kind !== 'nassau')),
+        && (!access.testerLink || kind !== 'wolf' && kind !== 'nassau' && kind !== 'dots')),
       gameInputContext: { courseVersionId: capturedRound.courseVersionId, teeProfileId: capturedRound.teeProfile.id },
       teeStrokeAllocation: round.teeProfile.strokeAllocation,
       eventId: workspace.event.id, eventName: workspace.event.name, eventStatus: workspace.event.status,
@@ -272,13 +280,17 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       permissions: { role: access.publicAccess ? 'public' : access.testerLink ? 'tester' : owner ? 'owner' : viewerPlayerId ? 'player' : 'viewer',
         ...(viewerPlayerId ? { viewerPlayerId } : {}),
         writePlayerIds: !active ? [] : owner || access.testerLink || access.publicAccess ? round.players.map((player) => player.playerId) : ownGroup?.playerIds ?? [],
-        canManageGames: active && (owner || access.publicAccess === true && access.event.quickRound === true) },
+        canManageGames: active && (owner || access.publicAccess === true && access.event.quickRound === true),
+        ...(!access.testerLink ? { canManageInternalGames: active && !round.scoringStarted && (owner || access.publicAccess === true) } : {}) },
       ...(competition?.kind === 'stroke-play' && competition.basis === 'net'
         ? { overallHandicaps: publishedPlayingHandicaps(round, competition.handicapAllowancePercent) } : {}),
       lastUpdatedAt: timestamps.at(-1) ?? null,
       ...(games && visibleGames ? { games: { configuration: { ...games, games: visibleGames,
         etag: visibleGames.length ? games.etag : null }, results: calculateGameResults(visibleGames, round, cards) } } : {}),
     };
+    return visibleGames && projection.games && !access.testerLink
+      ? { ...projection, internalSettlements: calculateInternalSettlements(visibleGames, projection.games.results, projection) }
+      : projection;
   }
 
   private async cards(eventId: string, round: RoundSnapshot, lock: StoredScoringLock | undefined): Promise<readonly Scorecard[]> {
@@ -375,15 +387,17 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       throw new ApiError(413, 'REQUEST_TOO_LARGE');
     }
     const state = await this.snapshot(identity, eventId, roundId);
-    if (state.summary.role !== 'owner' && !(state.publicAccess && state.event.quickRound === true)) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
-    const grant = this.writer(state, undefined, true);
+    if (state.summary.role !== 'owner' && !state.publicAccess) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
     if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     const replay = await this.replayGames(identity, eventId, roundId, games, expectedEtag, requestId);
     if (replay) return replay;
-    const previousMatches = state.games?.games.filter((game) => game.kind === 'nassau' || game.kind === 'wolf') ?? [];
+    validateInternalGameChanges(state.games?.games ?? [], games, state.round,
+      state.publicAccess === true && state.event.quickRound !== true);
+    const grant = this.writer(state, undefined, true, true);
+    const previousMatches = state.games?.games.filter((game) => game.kind === 'nassau' || game.kind === 'wolf' || game.kind === 'dots') ?? [];
     if (state.round.scoringStarted && (
       previousMatches.some((previous) => !games.some((game) => sameGameDefinitions([game], [previous])))
-      || games.some((game) => (game.kind === 'nassau' || game.kind === 'wolf')
+      || games.some((game) => (game.kind === 'nassau' || game.kind === 'wolf' || game.kind === 'dots')
         && !previousMatches.some((previous) => sameGameDefinitions([game], [previous]))))) {
       throw new ApiError(409, 'MATCH_SETUP_LOCKED');
     }
@@ -469,9 +483,13 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     eventId: string, roundId: string, body: unknown, expected: string | null, requestId: string) {
     if (!isUuid(roundId) || !isUuid(requestId)) throw new ApiError(400, 'INVALID_REQUEST_ID');
     const state = await this.access(identity, eventId);
-    if (state.summary.role !== 'owner' && !(state.publicAccess && state.event.quickRound === true)) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
+    if (state.summary.role !== 'owner' && !state.publicAccess) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
     if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     if (!await optionalRow(this.table, eventId, `round:${roundId}`)) throw new ApiError(404, 'ROUND_NOT_FOUND');
+    if (state.publicAccess && state.event.quickRound !== true) {
+      const current = await this.snapshot(identity, eventId, roundId);
+      if (!current.round.groups.some((group) => group.playerIds.length === 4)) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
+    }
     // Parts are inactive. Check the head revision without repeatedly decoding a large configuration.
     // The final save validates the complete captured workspace and games again.
     const head = await optionalRow(this.table, eventId, gameConfigurationKey(roundId));
@@ -498,8 +516,10 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
         const round = await this.get(identity, change.eventId, change.roundId);
         const target = round.cards.find((card) => card.playerId === change.playerId);
         if (!target || target.etag === null || !round.setupLocked) throw new ApiError(503, 'INVALID_STORED_SCORECARD');
+        const publicChange = projectChange(change, false);
         return { round, change: round.permissions?.role === 'tester'
-          ? { ...change, before: withoutMatchDeclarations(change.before), after: withoutMatchDeclarations(change.after) } : change };
+          ? { ...publicChange, before: withoutMatchDeclarations(change.before), after: withoutMatchDeclarations(change.after) }
+          : round.permissions?.role === 'owner' ? change : publicChange };
       } catch (error) {
         if (attempt < 2 && error instanceof ApiError && error.code === 'EVENT_CHANGED') continue;
         throw error;
@@ -546,16 +566,19 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     let savedScore: HoleScore;
     try { savedScore = preserveScoreExtras(score, before.score); }
     catch (error) {
-      if (error instanceof GameDeclarationConflictError) throw new ApiError(409, 'NASSAU_PRESS_CONFLICT');
+      if (error instanceof GameDeclarationConflictError) throw new ApiError(409, error.code);
       throw error;
     }
     if (!state.lock && state.games?.games.some((game) => game.kind === 'nassau'
       ? nassauConfigurationIssues(game, state.round).length > 0
-      : game.kind === 'wolf' && !wolfGroupMatchesRound(game, { layout: state.round.teeProfile.holes, groups: state.round.groups }))) {
+      : game.kind === 'dots' ? !dotsDefinitionMatchesRound(game, dotRound(state.round, definitionCards(state.round)))
+        : game.kind === 'wolf' && !wolfGroupMatchesRound(game, { layout: state.round.teeProfile.holes, groups: state.round.groups }))) {
       throw new ApiError(409, 'MATCH_SETUP_CHANGED');
     }
     const nassauChanged = !sameNassauRecords(savedScore.nassau, before.score.nassau);
     const wolfChanged = !sameWolfRecords(savedScore.wolf, before.score.wolf);
+    const dotsChanged = canonical(savedScore.dots ?? []) !== canonical(before.score.dots ?? []);
+    if (score.dots !== undefined && state.testerLink) throw new ApiError(403, 'MATCH_DECLARATIONS_NOT_ALLOWED');
     if ((nassauChanged || wolfChanged) && state.testerLink) throw new ApiError(403, 'MATCH_DECLARATIONS_NOT_ALLOWED');
     for (const record of nassauChanged ? score.nassau ?? [] : []) {
       const game = state.games?.games.find((entry) => entry.id === record.gameId);
@@ -580,13 +603,33 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       for (const record of score.wolf ?? []) {
         const game = state.games?.games.find((entry) => entry.id === record.choice.gameId);
         const previous = before.score.wolf?.find((entry) => entry.choice.gameId === record.choice.gameId);
+        const results = game?.kind === 'wolf' && game.version === 2
+          ? calculateGameResults(state.games?.games ?? [], state.round, cards) : [];
+        const currentWolf = results.find((result) => result.gameId === game?.id)?.wolf;
+        const wolfId = game?.kind === 'wolf' && game.version === 2
+          ? currentWolf?.holes.find((hole) => hole.number === holeNumber)?.wolfId
+          : game?.kind === 'wolf' ? wolfForHole(game, { layout: state.round.teeProfile.holes, groups: state.round.groups }, holeNumber) : null;
         if (game?.kind !== 'wolf' || record.choice.gameEtag !== state.games?.etag || record.number !== holeNumber
           || gameAnchorPlayerId(game, state.round.groups) !== playerId
           || !wolfGroupMatchesRound(game, { layout: state.round.teeProfile.holes, groups: state.round.groups })
           || record.choice.mode === 'pig' && !game.allowPig
-          || record.choice.mode === 'partner' && (record.choice.partnerId === wolfForHole(game, {
-            layout: state.round.teeProfile.holes, groups: state.round.groups }, holeNumber) || !game.playerIds.includes(record.choice.partnerId))) {
+          || game.version === 1 && record.comeback !== undefined
+          || game.version === 2 && record.outcome !== undefined && record.outcome !== 'scores'
+          || record.choice.mode === 'partner' && (!wolfId || record.choice.partnerId === wolfId || !game.playerIds.includes(record.choice.partnerId))) {
           throw new ApiError(409, 'MATCH_SETUP_CHANGED');
+        }
+        if (game.version === 2) {
+          const layout = [...state.round.teeProfile.holes].sort((a, b) => a.number - b.number);
+          const group = state.round.groups.find((entry) => entry.number === game.groupNumber);
+          const start = layout.findIndex((hole) => hole.number === groupStartingHole(group, layout));
+          const prefix = [...layout.slice(start), ...layout.slice(0, start)].slice(0, -2).map((hole) => hole.number);
+          const comeback = currentWolf?.comeback;
+          if (record.comeback !== undefined && (prefix.includes(holeNumber) || !comeback?.receipt
+            || canonical(record.comeback) !== canonical(comeback.receipt))
+            || !prefix.includes(holeNumber) && comeback?.status !== 'saved'
+              && (comeback?.status !== 'available' || record.comeback === undefined)) {
+            throw new ApiError(409, 'WOLF_COMEBACK_CHANGED');
+          }
         }
         if (previous && (previous.choice.mode !== record.choice.mode || previous.choice.partnerId !== record.choice.partnerId)) {
           throw new ApiError(409, 'WOLF_CHOICE_LOCKED');
@@ -597,10 +640,30 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
           .some((hole) => hole.number === holeNumber && hole.score.kind !== 'unplayed'));
         if (stored) {
           wolf[index] = { number: stored.number, choice: stored.choice, ...(stored.outcome ? { outcome: stored.outcome } : {}),
+            ...(stored.comeback ? { comeback: stored.comeback } : {}),
             ...(late ? { recordedLate: true as const } : {}) };
         }
       }
       savedScore = { ...savedScore, wolf };
+    }
+    if (dotsChanged) {
+      const nextCards = cards.map((entry) => entry.playerId === playerId ? { ...entry,
+        holes: entry.holes.map((hole) => hole.number === holeNumber ? { ...hole, score: savedScore } : hole) } : entry);
+      const results = calculateGameResults(state.games?.games ?? [], state.round, nextCards);
+      for (const record of score.dots ?? []) {
+        const game = state.games?.games.find((entry) => entry.id === record.gameId);
+        if (game?.kind !== 'dots' || record.gameEtag !== state.games?.etag || record.number !== holeNumber
+          || state.round.groups.find((group) => group.number === game.groupNumber)?.playerIds[0] !== playerId) {
+          throw new ApiError(409, 'DOTS_SETUP_CHANGED');
+        }
+        const records = nextCards.find((entry) => entry.playerId === playerId)?.holes
+          .flatMap((hole) => hole.score.dots?.filter((item) => item.gameId === game.id) ?? []) ?? [];
+        const contexts = game.mode === 'linked'
+          ? results.find((result) => result.gameId === game.linkedGameId)?.wolf?.contexts ?? [] : [];
+        if (!dotsRecordsMatchGame(records, game, dotRound(state.round, nextCards), contexts)) {
+          throw new ApiError(409, 'DOTS_SETUP_CHANGED');
+        }
+      }
     }
     if (!sameKpEntry(savedScore.kp, before.score.kp)) {
       const { kp } = await this.kpProjection(eventId, roundId, state.event.kpRoundIds);
@@ -623,9 +686,14 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     }
     const recordedAt = new Date().toISOString();
     const actor = scoreActor(identity);
+    const nextCards = cards.map((entry) => entry.playerId === playerId ? { ...entry,
+      holes: entry.holes.map((hole) => hole.number === holeNumber ? { ...hole, score: savedScore } : hole) } : entry);
+    const dotAwardAudit = buildDotAwardAudit(state.games?.games ?? [], state.round, state.round,
+      cards, nextCards, state.games?.etag ?? null);
     const change: ScoreChange = {
       id: requestId, eventId, roundId, playerId, holeNumber, before: before.score, after: savedScore,
       expectedEtag, ...(state.round.inputRevision ? { expectedInputRevision: state.round.inputRevision } : {}), recordedAt, recordedBy: actor,
+      ...(dotAwardAudit.length ? { dotAwardAudit } : {}),
     };
     const updated: StoredCard = {
       playerId: card.playerId, displayName: card.displayName, updatedAt: recordedAt,

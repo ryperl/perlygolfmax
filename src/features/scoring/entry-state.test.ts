@@ -2,8 +2,25 @@ import { describe, expect, it } from 'vitest';
 import { fictionalChange, fictionalRoundScores, scoreResult } from '../../client/scoring.test-support';
 import { cardFor, conflictedDraft, editedDraft, entryKey, entryScore, savedHole, scoreLabel } from './entry-state';
 import { churchyFixture } from '../../domain/churchy.test-support';
+import type { DotsHoleRecord } from '../../domain/dots';
+import { fictionalId } from '../../client/catalog.test-support';
 
 describe('hole entry state', () => {
+  it('retains explicit Dots replacement and stable calls across raw edits and conflicts without copying hidden saved extras', () => {
+    const card = cardFor(fictionalRoundScores, fictionalChange.playerId);
+    const dots: readonly DotsHoleRecord[] = [{ number: 1, gameId: fictionalChange.id, gameEtag: 'fictional-game-v1',
+      players: [{ playerId: card.playerId, counts: { sandy: 2 }, calls: [{ id: fictionalId(982), kind: 'paree', result: 'failure' }] }],
+      contests: [] }];
+    const original = { ...editedDraft('', card, undefined, false), dots };
+    const edited = editedDraft('X7', card, original);
+    expect(edited.dots).toEqual(dots);
+    const score = entryScore(edited.text, undefined, undefined, undefined, undefined, edited.dots);
+    if (!score) throw new Error('Missing fictional Dots disposition');
+    expect(score).toEqual({ kind: 'picked-up', reportedStrokes: 7, dots });
+    expect(conflictedDraft(score, card, 2, edited)).toMatchObject({ dots, status: 'conflict' });
+    expect(conflictedDraft(score, card, 2).dots).toBeUndefined();
+    expect(entryScore('', undefined, undefined, undefined, undefined, [])).toEqual({ kind: 'unplayed', dots: [] });
+  });
   it('retains staged match patches across raw edits and conflicts without copying saved declaration history into commands', () => {
     const card = cardFor(fictionalRoundScores, fictionalChange.playerId);
     const wolf = [{ number: 1, choice: { gameId: fictionalChange.id, gameEtag: 'fictional-game-v1', mode: 'blind' as const } }];

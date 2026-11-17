@@ -51,7 +51,7 @@ describe('Churchy workflow integration', () => {
     await user.click(screen.getByRole('button', { name: 'Add game' }));
     await user.selectOptions(screen.getByLabelText('Game type'), 'churchy');
     await user.selectOptions(screen.getByLabelText('Churchy playing group'), '1');
-    await user.type(screen.getByLabelText('USD cents per dot'), '100');
+    await user.type(screen.getByLabelText('USD per dot'), '1.00');
     const second = f.game.playerIds[1];
     if (!second) throw new Error('Missing fictional group member');
     await user.selectOptions(screen.getByLabelText('P1'), second);
@@ -107,12 +107,12 @@ describe('Churchy workflow integration', () => {
     expect(screen.getByRole('button', { name: 'Edit Fictional Skins' })).toBeVisible();
     expect(round.games?.configuration.games[0]).toEqual(f.game);
   });
-  it('builds explicit owner group/order and exact cents without Stableford/Skins controls', () => {
+  it('builds explicit owner group/order and exact dollar entry without Stableford/Skins controls', () => {
     const f = churchyFixture();
     const onChange = vi.fn();
     render(<GameSettings draft={draftFromGame(f.game)} churchyEnabled groups={f.snapshot.groups} roster={f.cards}
       disabled={false} saveDisabled={false} cancelDisabled={false} retry={false} onChange={onChange} onSave={vi.fn()} onCancel={vi.fn()} />);
-    expect(screen.getByLabelText('USD cents per dot')).toHaveValue('100');
+    expect(screen.getByLabelText('USD per dot')).toHaveValue('1.00');
     expect(screen.queryByLabelText('Points preset')).toBeNull();
     expect(screen.queryByLabelText('Score basis')).toBeNull();
     expect(screen.getByText(/Holes 1–3 and 10–12/)).toBeVisible();

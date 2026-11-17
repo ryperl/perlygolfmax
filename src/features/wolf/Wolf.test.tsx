@@ -15,6 +15,45 @@ function fixture() {
 }
 
 describe('Wolf declarations and ledger', () => {
+  it('stages an authoritative available comeback receipt for earned Wolf without exposing proof or legacy conceded outcomes', () => {
+    const { f, game: legacy, wolfId } = fixture();
+    const game: WolfGameDefinition = { ...legacy, version: 2, stakeMinor: null };
+    const onChange = vi.fn<(record: WolfHoleRecord) => void>();
+    const receipt = { wolfId, afterHoles: [1, 2, 3, 4, 5, 6, 7],
+      totals: game.playerIds.map((playerId) => ({ playerId, dots: 1 })), proof: 'private-proof-not-player-copy' };
+    const props = { game, wolfId, holeNumber: 8, etag: 'current', saved: undefined, draft: undefined,
+      players: f.cards, disabled: false, onChange,
+      comeback: { status: 'available' as const, receipt, changed: false } };
+    const view = render(<WolfHoleControls {...props} />);
+    expect(screen.queryByLabelText('Wolf match outcome')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Wolf declaration'), { target: { value: 'blind' } });
+    expect(onChange.mock.lastCall?.[0]).toEqual({ number: 8, choice: { gameId: game.id, gameEtag: 'current', mode: 'blind' }, comeback: receipt });
+    expect(view.container).not.toHaveTextContent(receipt.proof);
+    view.rerender(<WolfHoleControls {...props} holeNumber={9} comeback={{ status: 'saved', receipt, changed: true }} />);
+    fireEvent.change(screen.getByLabelText('Wolf declaration'), { target: { value: 'pig' } });
+    expect(onChange.mock.lastCall?.[0].comeback).toBeUndefined();
+    expect(screen.getByRole('status')).toHaveTextContent('chosen Wolf remains unchanged');
+    view.rerender(<WolfHoleControls {...props} wolfId={null} comeback={{ status: 'pending', receipt: null, changed: false }} />);
+    expect(screen.getByLabelText('Wolf declaration')).toBeDisabled();
+    expect(screen.getByText(/Wolf selection is pending authoritative/)).toBeVisible();
+  });
+
+  it('shows V2 nonnegative earned totals and separate High/Low outcomes, preserving the legacy ledger test separately', () => {
+    const { f, game: legacy } = fixture();
+    const game: WolfGameDefinition = { ...legacy, version: 2, stakeMinor: 50 };
+    const result = calculateWolf(game, { layout: f.snapshot.teeProfile.holes, groups: f.snapshot.groups,
+      players: f.cards.map((card) => ({ playerId: card.playerId, displayName: card.displayName,
+        layout: f.snapshot.teeProfile.holes, strokeAllocation: true, handicap: 0 })) }, f.cards,
+    [{ number: 1, choice: { gameId: game.id, gameEtag: 'fictional-game-revision', mode: 'partner', partnerId: game.playerIds[1] ?? '' } }]);
+    const view = render(<WolfResults game={game} result={result} />);
+    expect(screen.getByRole('columnheader', { name: 'Earned dots' })).toBeVisible();
+    expect(screen.queryByRole('columnheader', { name: 'Lost' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Dot balance' })).not.toBeInTheDocument();
+    expect(view.container).not.toHaveTextContent('No dollar settlement');
+    expect(view.container).toHaveTextContent('High');
+    expect(view.container).toHaveTextContent('Low');
+    expect(view.container).not.toHaveTextContent('fictional-game-revision');
+  });
   it('records honor-system PIG/partner choices and explicit outcomes without independent saves', () => {
     const { f, game, wolfId } = fixture();
     const onChange = vi.fn<(record: WolfHoleRecord) => void>();

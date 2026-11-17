@@ -17,7 +17,8 @@ export function gameUnavailableMessage(reason: StrokeGameUnavailableReason | und
 }
 
 export function gameScoringLabel(game: RoundGameDefinition): string {
-  if (game.kind === 'wolf') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Wolf${game.allowPig ? ' / PIG' : ''} · Dot balance`;
+  if (game.kind === 'dots') return 'Dots · Separate earned specials';
+  if (game.kind === 'wolf') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Wolf${game.allowPig ? ' / PIG' : ''} · ${game.version === 2 ? 'Earned dots' : 'Legacy dot balance'}`;
   if (game.kind === 'nassau') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Nassau · Match play · ${game.variant.replaceAll('-', ' ')}`;
   if (game.kind === 'stroke-play') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Stroke Play · Lowest to personal par${game.basis === 'net' ? ' · 100% Course Handicap' : ''}`;
   if (game.kind === 'churchy') return 'Churchy Game · Experimental · Rotating partners · Relative Course Handicap · Earned dots';

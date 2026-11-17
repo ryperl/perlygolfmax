@@ -3,6 +3,7 @@ import type { RoundGroup } from './setup.js';
 import type { GameTeam } from './games.js';
 import type { PlayerTeeSelection } from './tees.js';
 import type { AccountIdentity } from './events.js';
+import type { DotAwardAudit } from './dot-audit.js';
 
 export type RoundReviewWarningCode =
   | 'kp-review-required'
@@ -71,6 +72,7 @@ export interface RoundCorrectionReadModel {
 }
 
 export interface RoundCorrectionReceipt {
+  readonly dotAwardAudit?: readonly DotAwardAudit[];
   readonly id: string;
   readonly eventId: string;
   readonly roundId: string;

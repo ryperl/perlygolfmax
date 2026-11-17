@@ -5,6 +5,7 @@ import type {
 import { boundedText, isHandicapIndex, isIndexObservation, isTeeProfile } from './catalog.js';
 import { isEventRevision, isRecord, isUuid } from './events.js';
 import { isPlayerTeeSelections } from './tees.js';
+import { isDotAwardAudit } from './dot-audit.js';
 
 const warningCodes: readonly RoundReviewWarningCode[] = [
   'kp-review-required',
@@ -94,6 +95,7 @@ export function isRoundCorrectionReceipt(value: unknown): value is RoundCorrecti
     && isExpected(value.expected) && isRoundCorrectionInput(value.before) && isRoundCorrectionInput(value.after)
     && boundedText(value.reason, 240) && (value.reviewSummary === undefined || boundedText(value.reviewSummary, 500))
     && Array.isArray(value.warnings) && value.warnings.every(isWarning)
+    && (value.dotAwardAudit === undefined || Array.isArray(value.dotAwardAudit) && value.dotAwardAudit.every(isDotAwardAudit))
     && typeof value.recordedAt === 'string' && Number.isFinite(Date.parse(value.recordedAt))
     && isRecord(value.recordedBy) && isUuid(value.recordedBy.tenantId) && isUuid(value.recordedBy.objectId);
 }

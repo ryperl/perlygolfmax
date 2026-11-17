@@ -12,6 +12,9 @@ import { publicLeaderboardSummary } from '../domain/public-leaderboard';
 import { calculateEventSkinsDetails } from '../domain/event-skins';
 import { playerWinningsBreakdown } from '../domain/winnings-breakdown';
 import { compactSkinsDetails, compactSkinsSummary } from '../contracts/compact-event-skins';
+import { matchGamesFixture } from '../domain/match-games.test-support';
+import type { DotsGameDefinition } from '../domain/dots';
+import { strokeGameId } from '../domain/stroke-games.test-support';
 
 const signal = new AbortController().signal;
 function fixture(value: unknown, status = 200) {
@@ -19,6 +22,27 @@ function fixture(value: unknown, status = 200) {
   return { send, services: createPublicServices('https://fictional.example.test/api', send) };
 }
 describe('unsigned public event transport', () => {
+  it('acknowledges ordinary public internal-game changes without requiring general Quick-round authority', async () => {
+    const source = matchGamesFixture();
+    const game: DotsGameDefinition = { id: strokeGameId(9300), name: 'Fictional specials', kind: 'dots', version: 1,
+      mode: 'individual', groupNumber: 1, playerIds: source.ids, stakeMinor: 50, specials: [{ kind: 'sandy', units: 1 }] };
+    const games = [source.skins, game];
+    const base = source.round(source.cards, games);
+    const round = { ...base, internalGamesSupported: true,
+      permissions: { role: 'public' as const, writePlayerIds: source.ids, canManageGames: false, canManageInternalGames: false } };
+    const change = { id: strokeGameId(9301), eventId: round.eventId, roundId: round.roundId,
+      expectedEtag: 'fictional-base', before: [source.skins], after: games, recordedAt: '2026-01-01T00:00:00Z',
+      recordedBy: { kind: 'public-score' as const, eventId: round.eventId } };
+    const response = { round, change };
+    const f = fixture(response);
+    expect(await f.services.scores.saveGames(round.eventId, round.roundId, games, change.expectedEtag, change.id, signal)).toEqual(response);
+    expect(new Headers(f.send.mock.calls[0]?.[1]?.headers).get('authorization')).toBeNull();
+    const privateEdit = [{ ...source.skins, name: 'Forbidden protected rename' }, game];
+    const invalid = fixture({ round: { ...round, games: source.round(source.cards, privateEdit).games },
+      change: { ...change, after: privateEdit } });
+    await expect(invalid.services.scores.saveGames(round.eventId, round.roundId, privateEdit,
+      change.expectedEtag, change.id, signal)).rejects.toThrow('uncertain');
+  });
   it('fetches strict skins comparisons and one player breakdown only through their on-demand public queries', async () => {
     const full = publicLeaderboardFixture();
     const details = calculateEventSkinsDetails(full.workspace, full.roundScores);

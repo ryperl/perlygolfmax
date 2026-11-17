@@ -108,9 +108,11 @@ The repository contains no real bookings, invitations, scores, handicap indexes,
 or identities. Saved events live separately in the configured environment.
 **Active events are public:** any visitor can view rosters, scores and winnings
 and edit scores. Do not put information in active events that should stay private.
-Ordinary event management, raw index observations, audit identities and archives
-remain protected. Public Quick rounds additionally allow shared setup and game
-editing; anonymous changes cannot be attributed to a verified person.
+General ordinary-event management, raw index observations, audit identities and
+archives remain protected. Any visitor may configure a foursome's internal
+games before scoring, including in an ordinary event. Public Quick rounds
+additionally allow shared event setup and other supported game editing.
+Anonymous changes cannot be attributed to a verified person.
 Never commit real trip data, contact details, account identifiers, credentials,
 corporate feed configuration, or secrets to this public repository.
 
@@ -297,7 +299,7 @@ and authoritative API capabilities used by ordinary rounds. Scores only is
 valid. Stableford, Skins, Ball Drop and enabled Churchy use their existing rules,
 team validation and settings; new supported game types use the shared path.
 Competition teams are separate from playing groups.
-Churchy's explicit planned cents-per-dot setting is part of shared game editing,
+Churchy's explicit planned dollars-per-dot setting is part of shared game editing,
 not permission to manage purse pools or make payments.
 
 Setup, game saves and confirming reads are separate online operations. If a
@@ -462,8 +464,11 @@ Handicap strokes repeat through stroke-index order; plus handicaps give strokes
 back starting with the highest stroke index. This is game scoring, not WHS
 score posting or automatic adjusted-gross/net-double-bogey processing.
 
-Ordinary event game settings are owner-only; Quick rounds explicitly allow
-public game management. Both are online, conditional and idempotent, with
+Ordinary event-wide game settings are owner-only. Public pre-scoring internal
+game configuration is separately scoped to Dots, new Wolf and enabled Churchy;
+it cannot change protected peer games, general event setup or purse settings.
+Quick rounds retain their other supported public game management. Saves are
+online, conditional and idempotent, with
 before/after audit records. Active-event games can be added or adjusted on
 existing stroke cards; archived events remain read-only. Conflicts preserve
 the draft and require explicit refresh/review. Saved-game removal and a
@@ -566,7 +571,7 @@ points tables and allowances.
 
 ### Round Stroke Play, Nassau and Wolf
 
-These version-1 games use the shared saved-round/Quick-round editor, captured
+Stroke Play, Nassau and legacy Wolf version 1 use the shared round editor, captured
 personal tees and acknowledged online scores. The API advertises
 `supportedGameKinds`; older APIs without an explicit new-kind capability cannot
 authorize new definitions or declarations. No local drafts enter saved results.
@@ -599,7 +604,8 @@ Stage a manual press on its starting hole with the ordinary **Save & Next**
 action. Earlier score/input corrections can make its receipt stale; preserve it
 for review rather than silently accepting changed eligibility or money.
 
-**Wolf / PIG** selects one saved foursome with explicit Wolf order, rotating from
+**Legacy Wolf / PIG (version 1)** selects one saved foursome with explicit
+Wolf order, rotating from
 that group's starting hole. Wolf tees last and selects a partner immediately
 after that golfer's drive, before the next drive. Best ball compares two versus
 two, or the lone Wolf versus three. Net uses 100% captured CH off the lowest
@@ -631,6 +637,106 @@ must be repaired before the first score. Declarations share conditional,
 idempotent score/card/event/grant checks and immutable audit receipts. Legacy
 raw-only clients preserve them; legacy tester projections omit these match
 ledgers/declarations and cannot submit new ones.
+
+### Independent Dots and earned Wolf
+
+**New Wolf games use version 2. Existing version-1 games are not converted**,
+even when unstarted. Their saved choices, signed transfer balances and old
+results keep their meaning. Dots is a separate version-1 game, not a Wolf preset
+or an extension of Churchy. The two engines consume a neutral hole-side context
+only when explicitly linked.
+
+New Wolf uses **earned dots**, never negative transfers. In partnered play,
+Low compares each side's lower net ball and High its higher net ball; each
+winning teammate earns 1 for each contest. Split High/Low gives everyone 1.
+Ties earn zero with no carry. Pickup/DNF loses High to an all-numeric opposing
+pair, while its remaining numeric partner can compete for Low. Unsupported
+no-numeric comparisons stay unavailable, never invented penalties.
+
+Blind Wolf after the drives is one solo best-ball contest, earning **2 per
+winning-side golfer**. Pre-drive PIG earns **3 per winning-side golfer**.
+There is no High contest for a solo hole or multiplication by opponent count.
+Net uses 100% captured CH off the lowest foursome member and personal tees.
+
+The trailing golfer becomes Wolf for both final played holes: select after
+16 played holes in an eighteen-hole round, or 7 in a nine-hole round. Use
+Wolf plus explicitly linked prefix specials, with the next printed rotation
+position breaking ties. Follow the actual starting-hole circuit: starting on
+10 means choosing after 7 for holes 8/9. Freeze the acknowledged decision when
+the final-hole declaration is saved. Earlier corrections update totals and flag
+changed evidence but never rewrite the saved Wolf role. The most-turns
+alternative is not implemented.
+
+**Dots** supports standalone individual or fixed-partner play at x1, or an
+explicit link to earned Wolf. Without a link, it keeps its own selected context
+and settlement; creating another game does not silently attach it. Linked
+specials use the current Wolf sides and x1/x2/x3 multiplier for both sides.
+Each golfer's achievement shares its full award with current teammates;
+Walk, selected Pickup and failed called challenges award opponents instead.
+Individual-play opponents are the other three golfers.
+
+Select enabled specials and whole-dot units before scoring. Defaults are 1,
+except Birdie 2 and Eagle 5. All of these rules use gross qualifications:
+
+- Hogan, Seve, Sandy, called Paree, called Murphy, Haz Par and Chippy allow
+  par or better. Hogan/Seve use GIR/missed green on par 3s, without a fairway
+  condition; par 4s/5s retain the fairway condition.
+- Count each qualifying fairway or greenside bunker separately. Three bunkers
+  can earn three Sandys. A separately called Paree can additionally award for
+  the same fairway bunker. Called Paree/Murphy/Pully Murphy have pending,
+  successful and failed outcomes; failed calls award the opposing side.
+- Pully/Pully Murphy specifically require their long gross par putt. Pully
+  Murphy needs its own call and may stack with Pully/Murphy. SuperDime replaces
+  Dime. Gorilla is a personal par-5 green in two regardless of final score.
+- Birdie, Eagle and streaks derive from saved scores. Eagle does not also earn
+  Birdie. String starts on the third exact gross par; BirdyString starts on
+  the third birdie-or-better. Continue through the actual playing circuit,
+  including across the turn, without inventing results through missing scores.
+- Dots KP uses par 3s; Blue Plate and Long Drive use par 5s. Select a qualifying
+  winner or explicitly no qualifier on each eligible hole, never Skip.
+  Categories carry independently to their next eligible played hole, with
+  the eventual winner's current teammates and multiplier. Final unclaimed
+  units stay unawarded, not paid retroactively or rolled into another round.
+- King is an individual x1 round-end bonus per category. One golfer must own
+  every eligible hole's award directly or through carry; final unclaimed
+  awards prevent that category's King. Actual layout counts determine coverage.
+  Assassin needs both closest qualifiers in a 2-v-2 side. Sweep needs actual
+  linked High and Low wins by the same pair; neither is invented for unsupported
+  standalone/individual contexts.
+
+Thief, reusable presets and new Sixes engines are deferred. Dots cannot stack
+with Churchy. A foursome chooses only one of the currently supported Wolf or
+Churchy internal base games; different foursomes remain independent. Ball Drop
+continues between four-person competition teams, not as pooled internal dots.
+
+Game money inputs use **dollars and cents**: `1` means $1.00; `.50` or `0.50`
+means $0.50. Existing stored cents are preserved exactly. New internal games
+use USD; blank or zero means points-only, never an implicit positive stake.
+Special unit counts are points, not money.
+
+For four golfers with individual combined dots `d_i`, total `S` and a configured
+minor-unit rate `r`, planned net money is **`(4*d_i - S) * r`**. This already
+compares every opponent; do not settle it twice. At $1, `[6,6,1,1]` produces
+`[+10,+10,-10,-10]`. Total to settle is the sum of positive balances, not total
+dots or absolute net balances. Explicitly linked Wolf/Dots shares one rate and
+one settlement, with separate base/special breakdowns. Incomplete money remains
+provisional; nothing is collected, transferred or marked paid.
+
+Counts, calls and category decisions stage below raw scores and save through
+the same acknowledged conditional score write. Dots records live on the saved
+group's first golfer card, not Wolf P1. Raw-only clients preserve hidden records.
+Saved explanations include qualifying golfer, score/par, source holes, units,
+count, multiplier and recipients. Immutable private score/correction receipts
+retain original and replacement award snapshots; public explanation views show
+current awards, not protected historical actors or a historical audit browser.
+
+The API advertises `wolfRulesVersions`, `internalGamesSupported` and narrow
+`canManageInternalGames` permission. Missing capability does not enable writes.
+Public internal configuration in ordinary events remains pre-scoring and
+cannot edit protected peer games or promote a public actor to organizer.
+Legacy tester views omit these game ledgers and cannot author their declarations.
+Archives remain owner-only read-only. No infrastructure or authentication
+configuration changes are required.
 
 ### Event-wide skins
 
@@ -795,8 +901,9 @@ write. Specials-only changes, retries, discard and navigation guards use the
 existing score-draft workflow; nothing persists offline.
 
 Saved Churchy receipts and four-golfer tied standings show earned dots separately
-from a **planned shared-pot settlement**. The organizer explicitly enters whole
-USD cents per dot (100 means $1; 0 means no planned money). For earned totals
+from a **planned shared-pot settlement**. Enter USD dollars per dot (`1` means
+$1.00; `0` means no planned money); stored cents and the existing formula remain
+unchanged. For earned totals
 `d_i`, settlement units are `2*d_i - sum(d)/2`, calculated with exact integer
 money. A fictional `[21,21,0,0]` at $1/dot means each winner collects $21
 **total**, each loser pays $21 total, not $42. Pending amounts are projected;

@@ -58,7 +58,10 @@ describe('shared match game setup and presentation', () => {
     expect(buildGame(draftFromGame(nassau), ids)).toEqual(nassau);
     expect(buildGame(draftFromGame(wolf), ids)).toEqual(wolf);
     expect(buildGame({ ...draftFromGame(nassau), nassauStakes: ['', '0', '0'] }, ids)).toBeNull();
-    expect(buildGame({ ...draftFromGame(nassau), nassauStakes: ['0.1', '0', '0'] }, ids)).toBeNull();
+    expect(buildGame({ ...draftFromGame(nassau), nassauStakes: ['0.001', '0', '0'] }, ids)).toBeNull();
+    expect(buildGame({ ...draftFromGame(nassau), nassauStakes: ['.50', '1.25', '0'] }, ids)).toMatchObject({
+      stakes: { currency: 'USD', frontMinor: 50, backMinor: 125, overallMinor: 0 },
+    });
     expect(buildGame({ ...draftFromGame(nassau), nassauSides: nassau.sides.map((side) => ({ ...side, playerIds: ids.slice(0, 2) })) }, ids)).toBeNull();
     expect(setNassauVariant(draftFromGame(nassau), 'three-way').nassauSides?.map((side) => side.playerIds)).toEqual([[''], [''], ['']]);
     expect(setGameKind(newGameDraft(), 'wolf', 4)).toMatchObject({ name: 'Wolf', wolfPlayers: [], allowPig: false });
@@ -97,7 +100,7 @@ describe('shared match game setup and presentation', () => {
     expect(screen.getByRole('button', { name: 'Edit Fictional Nassau' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Add game' }));
     expect(screen.getByRole('option', { name: 'Stroke Play' })).toBeDisabled();
-    expect(screen.getByRole('option', { name: 'Wolf / PIG' })).toBeDisabled();
+    expect(screen.getByRole('option', { name: 'Wolf / PIG · Earned dots' })).toBeDisabled();
     expect(screen.getByRole('option', { name: 'Nassau · Match play' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel editing' }));
     view.rerender(<RoundGamesPanel {...props} round={{ ...round, setupLocked: true,

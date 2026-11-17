@@ -6,6 +6,7 @@ import { scoreDeclarationIntent } from '../../domain/game-declarations';
 import { cardFor, conflictedDraft, entryKey, entryScore, savedHole } from './entry-state';
 import type { HoleDraft } from './entry-state';
 import { scoreAccessKey, writablePlayerIds } from './score-access';
+import { isHoleScore } from '../../contracts/scoring';
 
 export interface GroupWrite {
   readonly playerId: string;
@@ -31,8 +32,8 @@ export function planGroup(round: RoundScores, playerIds: readonly string[], hole
     const saved = savedHole(card, holeNumber);
     const draft = drafts.get(entryKey(playerId, holeNumber));
     const entry = draft ? entryScore(draft.text, draft.churchy ?? saved.churchy, draft.kp !== undefined ? draft.kp : saved.kp,
-      draft.nassau, draft.wolf) : saved;
-    if (!entry) { invalid.push(playerId); continue; }
+      draft.nassau, draft.wolf, draft.dots) : saved;
+    if (!entry || !isHoleScore(entry)) { invalid.push(playerId); continue; }
     const score = preserveScoreExtras(entry, saved);
     targets.set(playerId, score);
     if (!draft) continue;

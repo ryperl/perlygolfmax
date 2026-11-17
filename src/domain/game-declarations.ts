@@ -5,11 +5,37 @@ import type { HoleScore, RoundScores, Scorecard } from './scoring.js';
 import type { RoundGroup } from './setup.js';
 import type { GamePlayerResult } from './games.js';
 import type { WolfResults } from './wolf.js';
+import type { DotsGameDefinition, DotsHoleRecord } from './dots.js';
+import type { DotRoundInput } from './dot-context.js';
+
+function sameValue(left: unknown, right: unknown): boolean {
+  if (Array.isArray(left)) return Array.isArray(right) && left.length === right.length
+    && left.every((value: unknown, index: number) => sameValue(value, right[index]));
+  if (left !== null && typeof left === 'object') {
+    if (right === null || typeof right !== 'object' || Array.isArray(right)) return false;
+    const entries = Object.entries(left), other = Object.entries(right);
+    return entries.length === other.length && entries.every(([key, value]) => other.some(([name, entry]) => name === key && sameValue(value, entry)));
+  }
+  return left === right;
+}
+
+export function sameDotsRecords(a: readonly DotsHoleRecord[] | undefined, b: readonly DotsHoleRecord[] | undefined): boolean {
+  return (a?.length ?? 0) === (b?.length ?? 0) && (a ?? []).every((record) =>
+    sameValue(record, b?.find((other) => other.gameId === record.gameId)));
+}
+
+export function mergeDotsRecords(edits: readonly DotsHoleRecord[], saved: readonly DotsHoleRecord[] = []): readonly DotsHoleRecord[] {
+  const result = new Map(saved.map((record) => [record.gameId, record]));
+  for (const edit of edits) result.set(edit.gameId, edit);
+  return [...result.values()];
+}
 
 export type RoundGameScoringContext = Pick<RoundScores, 'roundId' | 'layout' | 'groups' | 'cards' | 'playerTees'
   | 'courseHandicaps' | 'teeStrokeAllocation' | 'gameInputContext' | 'inputRevision'>;
 
-export class GameDeclarationConflictError extends Error {}
+export class GameDeclarationConflictError extends Error {
+  constructor(message: string, readonly code: 'NASSAU_PRESS_CONFLICT' | 'WOLF_COMEBACK_CONFLICT' = 'NASSAU_PRESS_CONFLICT') { super(message); }
+}
 
 function samePress(a: NassauManualPress, b: NassauManualPress): boolean {
   return a.id === b.id && a.parentBetId === b.parentBetId && a.matchId === b.matchId
@@ -35,6 +61,7 @@ export function sameWolfRecords(a: readonly WolfHoleRecord[] | undefined, b: rea
     const other = b?.find((entry) => entry.choice.gameId === record.choice.gameId);
     return other !== undefined && record.number === other.number && record.outcome === other.outcome
       && record.recordedLate === other.recordedLate
+      && sameValue(record.comeback, other.comeback)
       && sameWolfChoice(record.choice, other.choice);
   });
 }
@@ -64,9 +91,13 @@ export function mergeWolfRecords(edits: readonly WolfHoleRecord[], saved: readon
   const result = new Map(saved.map((record) => [record.choice.gameId, record]));
   for (const edit of edits) {
     const previous = result.get(edit.choice.gameId);
+    if (previous?.comeback && edit.comeback && !sameValue(previous.comeback, edit.comeback)) {
+      throw new GameDeclarationConflictError('A saved Wolf comeback selection cannot be replaced.', 'WOLF_COMEBACK_CONFLICT');
+    }
     const outcome = edit.outcome ?? previous?.outcome;
     result.set(edit.choice.gameId, { number: edit.number, choice: edit.choice,
       ...(previous?.recordedLate || edit.recordedLate ? { recordedLate: true as const } : {}),
+      ...(previous?.comeback || edit.comeback ? { comeback: previous?.comeback ?? edit.comeback } : {}),
       ...(outcome && outcome !== 'scores' ? { outcome } : {}) });
   }
 
@@ -76,15 +107,26 @@ export function mergeWolfRecords(edits: readonly WolfHoleRecord[], saved: readon
 export function scoreMatchesIntent(saved: HoleScore, intent: HoleScore): boolean {
   try {
     return sameNassauRecords(mergeNassauRecords(intent.nassau ?? [], saved.nassau), saved.nassau)
-      && sameWolfRecords(mergeWolfRecords(intent.wolf ?? [], saved.wolf), saved.wolf);
+      && sameWolfRecords(mergeWolfRecords(intent.wolf ?? [], saved.wolf), saved.wolf)
+      && sameDotsRecords(mergeDotsRecords(intent.dots ?? [], saved.dots), saved.dots);
   } catch (error) {
     if (error instanceof GameDeclarationConflictError) return false;
     throw error;
   }
 }
 
-export function gameAnchorPlayerId(game: WolfGameDefinition | NassauGameDefinition, groups: readonly RoundGroup[]): string | undefined {
+export function gameAnchorPlayerId(game: WolfGameDefinition | NassauGameDefinition | DotsGameDefinition, groups: readonly RoundGroup[]): string | undefined {
   return groups.find((group) => group.number === game.groupNumber)?.playerIds[0];
+}
+
+export function dotsRecordsFor(game: DotsGameDefinition, groups: readonly RoundGroup[], cards: readonly Scorecard[]): readonly DotsHoleRecord[] {
+  return cards.find((card) => card.playerId === gameAnchorPlayerId(game, groups))?.holes
+    .flatMap((hole) => hole.score.dots?.filter((record) => record.gameId === game.id) ?? []) ?? [];
+}
+
+export function dotsInputFromScores(round: RoundGameScoringContext): DotRoundInput {
+  return { layout: round.layout, groups: round.groups, cards: round.cards,
+    ...(round.playerTees?.length ? { playerLayouts: round.playerTees.map((entry) => ({ playerId: entry.playerId, layout: entry.profile.holes })) } : {}) };
 }
 
 export function nassauRecordsFor(game: NassauGameDefinition, groups: readonly RoundGroup[], cards: readonly Scorecard[]): readonly NassauHoleRecord[] {
@@ -133,9 +175,10 @@ export function wolfResultPlayers(wolf: WolfResults): readonly GamePlayerResult[
 
 /** Unchanged namespaces need not be echoed into bounded raw-score requests. */
 export function scoreDeclarationIntent(score: HoleScore, saved: HoleScore): HoleScore {
-  const { nassau, wolf, ...raw } = score;
+  const { nassau, wolf, dots, ...raw } = score;
   return { ...raw,
     ...(nassau && !sameNassauRecords(mergeNassauRecords(nassau, saved.nassau), saved.nassau) ? { nassau } : {}),
     ...(wolf && !sameWolfRecords(mergeWolfRecords(wolf, saved.wolf), saved.wolf) ? { wolf } : {}),
+    ...(dots && !sameDotsRecords(mergeDotsRecords(dots, saved.dots), saved.dots) ? { dots } : {}),
   };
 }

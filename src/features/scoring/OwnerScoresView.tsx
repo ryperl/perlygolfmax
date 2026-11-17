@@ -158,10 +158,10 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     update(key, { ...editedDraft(previous?.text ?? scoreEntryText(savedHole(card, hole.number)), card, previous, false), kp });
     setNotice(null);
   }
-  function editMatch(patch: Pick<HoleDraft, 'nassau' | 'wolf'>) {
+  function editMatch(patch: Pick<HoleDraft, 'nassau' | 'wolf' | 'dots'>) {
     const playerId = group?.playerIds[0];
     if (!round || !hole || !playerId || busy || saving.current || !canEditGroup
-      || !supportsRoundGame(round, patch.nassau !== undefined ? 'nassau' : 'wolf')) return;
+      || !supportsRoundGame(round, patch.nassau !== undefined ? 'nassau' : patch.dots !== undefined ? 'dots' : 'wolf')) return;
     const card = cardFor(round, playerId);
     const key = entryKey(playerId, hole.number);
     const previous = currentDrafts.current.get(key);
@@ -190,20 +190,23 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     if (!local || local.status !== 'conflict' || local.conflictAt === undefined || refreshVersion <= local.conflictAt) return;
     const currentCard = cardFor(round, playerId);
     const gameEtag = round.games?.configuration.etag;
-    if ((local.nassau?.length || local.wolf?.length) && (!gameEtag
+    if ((local.nassau?.length || local.wolf?.length || local.dots?.length) && (!gameEtag
       || local.nassau?.some((record) => !supportsRoundGame(round, 'nassau')
         || !round.games?.configuration.games.some((game) => game.kind === 'nassau' && game.id === record.gameId))
       || local.wolf?.some((record) => !supportsRoundGame(round, 'wolf')
-        || !round.games?.configuration.games.some((game) => game.kind === 'wolf' && game.id === record.choice.gameId)))) {
+        || !round.games?.configuration.games.some((game) => game.kind === 'wolf' && game.id === record.choice.gameId))
+      || local.dots?.some((record) => !supportsRoundGame(round, 'dots')
+        || !round.games?.configuration.games.some((game) => game.kind === 'dots' && game.id === record.gameId)))) {
       setNotice({ kind: 'attention', message: 'A staged game is no longer available. Use the saved value or discard its drafts before continuing.' });
       return;
     }
-    update(key, { text: (local.kp !== undefined || local.nassau !== undefined || local.wolf !== undefined) && !local.rawEdited
+    update(key, { text: (local.kp !== undefined || local.nassau !== undefined || local.wolf !== undefined || local.dots !== undefined) && !local.rawEdited
       ? scoreEntryText(savedHole(currentCard, hole.number)) : local.text,
       baseEtag: currentCard.etag, status: 'draft', mustWrite: true,
       ...(local.rawEdited ? { rawEdited: true } : {}),
       ...(local.churchy ? { churchy: local.churchy } : {}), ...(local.kp !== undefined ? { kp: local.kp } : {}),
       ...(local.nassau ? { nassau: local.nassau.map((record) => ({ ...record, gameEtag: gameEtag ?? record.gameEtag })) } : {}),
+      ...(local.dots ? { dots: local.dots.map((record) => ({ ...record, gameEtag: gameEtag ?? record.gameEtag })) } : {}),
       ...(local.wolf ? { wolf: local.wolf.map((record) => ({ ...record,
         choice: { ...record.choice, gameEtag: gameEtag ?? record.choice.gameEtag } })) } : {}) });
     setNotice(null);
@@ -213,7 +216,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     if (!value) return null;
     for (const [key, local] of currentDrafts.current) {
       const playerId = key.slice(0, key.lastIndexOf(':'));
-      const score = entryScore(local.text, local.churchy, local.kp, local.nassau, local.wolf);
+      const score = entryScore(local.text, local.churchy, local.kp, local.nassau, local.wolf, local.dots);
       const card = cardFor(value, playerId);
       if (score && local.status !== 'conflict' && !local.attempt?.sent && card.etag !== local.baseEtag) {
         update(key, conflictedDraft(score, card, refreshVersion, local));
@@ -245,7 +248,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
       for (const playerId of plan.conflicts) {
         const key = entryKey(playerId, hole.number);
         const local = currentDrafts.current.get(key);
-        const score = local && entryScore(local.text, local.churchy, local.kp, local.nassau, local.wolf);
+        const score = local && entryScore(local.text, local.churchy, local.kp, local.nassau, local.wolf, local.dots);
         if (local && score && local.status !== 'conflict') update(key, conflictedDraft(score, cardFor(round, playerId), refreshVersion, local));
       }
       setNotice({ kind: 'attention', message: 'Nothing sent. Refresh saved round and review each conflict before saving this group.' });
@@ -301,7 +304,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
   }
   function selectGroup(number: number) {
     if (busy || [...currentDrafts.current.values()].some((draft) =>
-      draft.churchy !== undefined || draft.kp !== undefined || draft.nassau !== undefined || draft.wolf !== undefined)) {
+      draft.churchy !== undefined || draft.kp !== undefined || draft.nassau !== undefined || draft.wolf !== undefined || draft.dots !== undefined)) {
       setNotice({ kind: 'attention', message: 'Save or discard all unsaved scores and dots before changing groups.' });
       return;
     }
@@ -385,6 +388,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
           draft={drafts.get(entryKey(group.playerIds[0], hole.number))}
           disabled={busy || !canEditGroup || drafts.get(entryKey(group.playerIds[0], hole.number))?.status === 'conflict'}
           onNassauChange={(records) => { editMatch({ nassau: records }); }}
+          onSpecialDotsChange={(records) => { editMatch({ dots: records }); }}
           onWolfChange={(records) => { editMatch({ wolf: records }); }} />}
         kpEligible={round.kpEnabled === true && calculateKp(round).status !== 'unavailable' && hole.par === 3}
         kpClosed={round.kp?.status === 'closed'}
@@ -419,7 +423,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
         onGroupChange={selectGroup}
         onHoleChange={(number) => {
           if ([...currentDrafts.current.values()].some((draft) =>
-            draft.churchy !== undefined || draft.kp !== undefined || draft.nassau !== undefined || draft.wolf !== undefined)) {
+            draft.churchy !== undefined || draft.kp !== undefined || draft.nassau !== undefined || draft.wolf !== undefined || draft.dots !== undefined)) {
             setNotice({ kind: 'attention', message: 'Save or discard unsaved scores and game choices before changing holes.' });
           }
           else { setHoleNumber(number); setNotice(null); }

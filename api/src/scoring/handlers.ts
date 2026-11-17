@@ -114,7 +114,8 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
         body = received.value;
       }
       const parsed = parseScoreWriteBody(body);
-      if (action === 'score-game-hole' && !parsed.score.nassau?.length && !parsed.score.wolf?.length) throw new ApiError(400, 'INVALID_GAME_SCORE');
+      if (action === 'score-game-hole' && !parsed.score.nassau?.length && !parsed.score.wolf?.length
+        && !parsed.score.dots?.length) throw new ApiError(400, 'INVALID_GAME_SCORE');
       return response(200, await api.scores.write(identity, eventId, roundId, playerId, Number(rawHole),
         parsed.score, expectedEtag, requestId, parsed.inputRevision));
     } catch (error) {

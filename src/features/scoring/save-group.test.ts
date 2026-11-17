@@ -9,6 +9,8 @@ import { deferred, memoryScores } from './scoring.test-support';
 import { churchyFixture } from '../../domain/churchy.test-support';
 import { fictionalKpRound } from '../kp/kp.test-support';
 import { matchGamesFixture } from '../../domain/match-games.test-support';
+import { dotsFixture } from '../dots/dots.test-support';
+import type { DotsHoleRecord } from '../../domain/dots';
 
 const playerIds = fictionalRoundScores.cards.map((card) => card.playerId);
 function entries() {
@@ -27,6 +29,38 @@ function harness(initial = fictionalRoundScores) {
       plan: planGroup(latest, playerIds, 1, drafts), signal: new AbortController().signal, refreshVersion: 0, ...callbacks }) };
 }
 describe('serialized group save protocol', () => {
+  it('sends only explicit Dots game replacements, retaining hidden peer records and retrying an unconfirmed call once', async () => {
+    const f = dotsFixture();
+    const anchor = f.ids[0];
+    if (!anchor) throw new Error('Missing fictional anchor');
+    const saved: DotsHoleRecord = { number: 1, gameId: f.game.id, gameEtag: 'fictional-game-revision',
+      players: [{ playerId: anchor, counts: { sandy: 1 }, calls: [] }], contests: [] };
+    const hidden = { ...saved, gameId: fictionalId(981), players: [] };
+    let round: RoundScores = { ...f.round, cards: f.round.cards.map((card) => card.playerId === anchor
+      ? { ...card, holes: card.holes.map((hole) => hole.number === 1 ? { ...hole, score: { ...hole.score, dots: [saved, hidden] } } : hole) } : card) };
+    const store = memoryScores(round);
+    const patch: DotsHoleRecord = { ...saved, players: [{ playerId: anchor, counts: { sandy: 2 },
+      calls: [{ id: fictionalId(982), kind: 'paree', result: 'failure' }] }] };
+    const drafts = new Map<string, HoleDraft>([[entryKey(anchor, 1), { ...editedDraft('4', cardFor(round, anchor), undefined, false), dots: [patch] }]]);
+    const plan = planGroup(round, [anchor], 1, drafts);
+    expect(plan.writes[0]?.score.dots).toEqual([patch]);
+    expect(plan.targets.get(anchor)?.dots).toEqual([patch, hidden]);
+    const normal = vi.mocked(store.client.save).getMockImplementation();
+    if (!normal) throw new Error('Missing fictional save');
+    vi.mocked(store.client.save).mockRejectedValueOnce(new Error('Fictional interrupted Dots save')).mockImplementation(normal);
+    const save = () => saveGroupEntries({ client: store.client, round, holeNumber: 1,
+      plan: planGroup(round, [anchor], 1, drafts), signal: new AbortController().signal, refreshVersion: 0,
+      onDraft: (key, value) => { if (value) drafts.set(key, value); else drafts.delete(key); },
+      onProjection: (value) => { round = value; } });
+    await expect(save()).rejects.toThrow('Fictional interrupted Dots save');
+    expect(drafts.get(entryKey(anchor, 1))).toMatchObject({ dots: [patch], status: 'failed' });
+    await save();
+    const calls = vi.mocked(store.client.save).mock.calls;
+    expect(calls[1]?.[6]).toBe(calls[0]?.[6]);
+    expect(calls[1]?.[4].dots).toEqual([patch]);
+    expect(cardFor(round, anchor).holes.find((hole) => hole.number === 1)?.score.dots).toEqual([patch, hidden]);
+    expect(drafts.size).toBe(0);
+  });
   it('acknowledges anchor declarations and server late metadata once, then retries only the unconfirmed peer with its original identity', async () => {
     const f = matchGamesFixture();
     let round = f.round();

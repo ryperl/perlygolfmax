@@ -16,6 +16,8 @@ import { isNassauDefinition, isNassauResults } from './nassau.js';
 import { nassauContextFromScores, nassauRecordsFor, wolfInputFromScores, wolfRecordsFor, wolfResultPlayers } from '../domain/game-declarations.js';
 import type { RoundGameScoringContext } from '../domain/game-declarations.js';
 import { sameJsonValue } from './round-context.js';
+import { isDotsDefinition } from './dots.js';
+import { calculateInternalGameResults } from '../domain/internal-games.js';
 
 function keys(value: Record<string, unknown>, required: readonly string[], optional: readonly string[] = []): boolean {
   return required.every((key) => Object.hasOwn(value, key))
@@ -44,6 +46,7 @@ function pointsTable(value: unknown, maximum: number): boolean {
 }
 
 export function isRoundGameDefinition(value: unknown): value is RoundGameDefinition {
+  if (isRecord(value) && value.kind === 'dots') return isDotsDefinition(value);
   if (isRecord(value) && value.kind === 'wolf') return isWolfDefinition(value);
   if (isRecord(value) && value.kind === 'nassau') return isNassauDefinition(value);
   if (isRecord(value) && value.kind === 'churchy') return isChurchyDefinition(value);
@@ -200,9 +203,15 @@ export function isRoundGamesView(value: unknown, context?: RoundGameScoringConte
   const names = new Map<string, string>();
   let expectedIds: string | undefined;
   let totalHoles: number | undefined;
+  const internal = context ? calculateInternalGameResults(value.configuration.games, context) : undefined;
   for (const result of value.results) {
     if (!isRecord(result) || !isUuid(result.gameId) || seen.has(result.gameId)) return false;
     const game = value.configuration.games.find((candidate) => candidate.id === result.gameId);
+    if (game?.kind === 'dots' || game?.kind === 'wolf' && game.version === 2) {
+      if (!context || !sameJsonValue(result, internal?.get(game.id))) return false;
+      seen.add(result.gameId);
+      continue;
+    }
     if (game?.kind === 'nassau') {
       const round = context && nassauContextFromScores(context);
       if (!context || !round || !keys(result, ['gameId', 'kind', 'version', 'players', 'nassau'])

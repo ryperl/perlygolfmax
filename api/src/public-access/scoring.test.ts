@@ -90,7 +90,8 @@ describe('active event public scoring authority', () => {
     const round = await f.scores.get(f.actor, event.id, f.roundId);
     expect(isRoundScores(round)).toBe(true);
     expect(round.cards).toHaveLength(8);
-    expect(round.permissions).toEqual({ role: 'public', writePlayerIds: f.input.playerIds, canManageGames: false });
+    expect(round.permissions).toEqual({ role: 'public', writePlayerIds: f.input.playerIds,
+      canManageGames: false, canManageInternalGames: true });
     const snapshot = workspace.rounds[0];
     if (!snapshot) throw new Error('Missing fictional public round');
     expect(roundMatchesSnapshot(workspace, snapshot, round)).toBe(true);

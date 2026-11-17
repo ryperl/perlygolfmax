@@ -5,10 +5,11 @@ import { maximumGamesPerRound, sameGameDefinitions, visibleGames } from '../../d
 import type { GameWriteResult, RoundScores } from '../../domain/scoring';
 import { scorePermissions, supportsRoundGame } from '../../domain/scoring';
 import type { GameDraft } from './game-draft';
-import { buildGame, draftFromGame, newGameDraft, replaceGame } from './game-draft';
+import { buildGame, draftFromGame, newGameDraft, replaceGame, setGameKind } from './game-draft';
 import { GameResults } from './GameResults';
 import { GameSettings } from './GameSettings';
-import { canManageRoundGames } from './game-permissions';
+import { canManageAllRoundGames, canManageGame, canManageRoundGames } from './game-permissions';
+import { InternalSettlement } from '../dots';
 import './games.css';
 
 export interface RoundGamesPanelProps {
@@ -59,9 +60,11 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
 
   function open(game?: RoundGameDefinition) {
     if (disabled || editor) return;
+    if (game && !canManageGame(round, game)) return;
     if (game && !supportsRoundGame(round, game.kind ?? 'stableford')) return;
     if (game?.kind === 'churchy' && round.churchyEnabled !== true) return;
-    const draft = game ? draftFromGame(game) : newGameDraft();
+    const draft = game ? draftFromGame(game) : canManageAllRoundGames(round) ? newGameDraft()
+      : setGameKind(newGameDraft(), 'dots', round.cards.length);
     onDirtyChange(true);
     setMessage('');
     setEditor({
@@ -82,8 +85,8 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
       setMessage('This API does not support editing this game. Your draft is retained.');
       return;
     }
-    if ((round.setupLocked || editingRound.setupLocked) && (editor.draft.kind === 'nassau' || editor.draft.kind === 'wolf')) {
-      setMessage('Nassau and Wolf must be configured before the first saved score. Other game settings remain editable.');
+    if ((round.setupLocked || editingRound.setupLocked) && (editor.draft.kind === 'nassau' || editor.draft.kind === 'wolf' || editor.draft.kind === 'dots')) {
+      setMessage('Dots, Nassau and Wolf must be configured before the first saved score. Other game settings remain editable.');
       return;
     }
     if (editor.draft.kind === 'churchy' && round.churchyEnabled !== true) {
@@ -91,22 +94,45 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
       return;
     }
     const game = buildGame(editor.draft, editor.roster.map((card) => card.playerId));
-    if (game?.kind === 'nassau' || game?.kind === 'wolf') {
+    const previousGame = editor.base.find((entry) => entry.id === editor.draft.id);
+    if (game && (!canManageGame(round, game) || !canManageGame(editingRound, game)
+      || !canManageAllRoundGames(editingRound) && previousGame !== undefined
+        && (!canManageGame(editingRound, previousGame) || previousGame.kind !== game.kind))) {
+      setMessage('This game is not editable with the current permission or API capability. Your draft is retained.');
+      return;
+    }
+    if (game?.kind === 'nassau' || game?.kind === 'wolf' || game?.kind === 'dots') {
       const group = editingRound.groups.find((entry) => entry.number === game.groupNumber);
-      const ids = game.kind === 'wolf' ? game.playerIds : game.sides.flatMap((side) => side.playerIds);
+      const ids = game.kind === 'nassau' ? game.sides.flatMap((side) => side.playerIds) : game.playerIds;
       if (!group || ids.some((id) => !group.playerIds.includes(id))
-        || game.kind === 'wolf' && group.playerIds.length !== 4
+        || (game.kind === 'wolf' || game.kind === 'dots') && group.playerIds.length !== 4
         || game.kind === 'nassau' && (editingRound.layout.length !== 18 || editingRound.layout.some((hole) => hole.number < 1 || hole.number > 18))) {
-        setMessage('Choose participants from one saved playing group. Wolf requires a foursome; Nassau requires 18 holes.');
+        setMessage('Choose participants from one saved playing group. Wolf and Dots require a foursome; Nassau requires 18 holes.');
+        return;
+      }
+    }
+    if (game?.kind === 'dots' || game?.kind === 'wolf' || game?.kind === 'churchy') {
+      const peers = editor.base.filter((entry) => entry.id !== game.id);
+      if (peers.some((peer) => (peer.kind === 'churchy' || peer.kind === 'wolf' || peer.kind === 'dots')
+        && peer.groupNumber === game.groupNumber && (game.kind === 'churchy' || peer.kind === 'churchy'
+          || game.kind === 'wolf' && peer.kind === 'wolf'))) {
+        setMessage('Choose one internal base game per foursome. Churchy cannot accompany Wolf or Dots; Ball Drop remains separate.');
+        return;
+      }
+      if (game.kind === 'dots' && game.mode === 'linked' && !peers.some((peer) => peer.kind === 'wolf'
+        && peer.version === 2 && peer.id === game.linkedGameId && peer.groupNumber === game.groupNumber
+        && peer.playerIds.every((id) => game.playerIds.includes(id)))) {
+        setMessage('Link Dots to an earned Wolf game in this saved foursome, or choose standalone individual or fixed partners.');
         return;
       }
     }
     const intended = game && replaceGame(editor.base, game);
     if (!intended) {
       setMessage(editor.draft.kind === 'wolf' || editor.draft.kind === 'nassau'
-        ? 'Check the game name, saved playing group, distinct participants and order. Nassau requires explicit whole USD cents for all three stakes, or choose No planned money.'
+        ? 'Check the game name, saved playing group, distinct participants and order. Enter USD dollars and cents, or choose No planned money.'
+        : editor.draft.kind === 'dots' ? 'Choose a saved foursome, compatible mode and game, enabled specials with positive whole units, and a valid optional USD rate with at most two decimal places.'
         : editor.draft.kind === 'churchy'
-        ? 'Choose a complete saved foursome, order all four golfers, and enter exact whole USD cents per dot (zero or more). Only one Churchy game is allowed.'
+        ? 'Choose a complete saved foursome, order all four golfers, and enter USD dollars and cents per dot (zero or more). Only one Churchy game is allowed.'
         : editor.draft.kind === 'stroke-play' ? 'Check the game name (1–100 characters) and gross or net score basis. Net uses 100% captured Course Handicap.'
         : editor.draft.kind === 'ball-drop' || editor.draft.kind === 'skins'
         ? 'Check the game name (1–100 characters), supported format, and complete four-person Ball Drop teams. Skins are individual; net always uses 100% Course Handicap.'
@@ -202,11 +228,14 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
       {visibleGames(games, round.churchyEnabled).map((game) => <div className="round-game" key={game.id}>
         <GameResults game={game} result={round.games?.results.find((result) => result.gameId === game.id)}
           holeNumbers={round.layout.map((hole) => hole.number)} players={round.cards} />
-        {canManage && <button type="button" disabled={disabled || editor !== null || !supportsRoundGame(round, game.kind ?? 'stableford')
-          || round.setupLocked && (game.kind === 'nassau' || game.kind === 'wolf')} onClick={() => { open(game); }}>Edit {game.name}</button>}
-        {(game.kind === 'nassau' || game.kind === 'wolf') && round.setupLocked && <p>Setup locked by saved scoring; hole choices and results are in score entry.</p>}
+        {canManage && (canManageAllRoundGames(round) || canManageGame(round, game)) && <button type="button"
+          disabled={disabled || editor !== null || !supportsRoundGame(round, game.kind ?? 'stableford') || !canManageGame(round, game)}
+          onClick={() => { open(game); }}>Edit {game.name}</button>}
+        {(game.kind === 'nassau' || game.kind === 'wolf' || game.kind === 'dots') && round.setupLocked && <p>Setup locked by saved scoring; hole choices and results are in score entry.</p>}
         {!supportsRoundGame(round, game.kind ?? 'stableford') && <p>This API does not advertise support for editing this game.</p>}
       </div>)}
+      {round.internalSettlements?.map((settlement) => <InternalSettlement key={`${String(settlement.groupNumber)}:${settlement.gameIds.join(':')}`}
+        settlement={settlement} gameNames={settlement.gameIds.map((id) => games.find((game) => game.id === id)?.name ?? 'Game unavailable')} />)}
       {!editor && !archived && canManage && <button type="button" disabled={disabled || games.length >= maximumGamesPerRound}
         onClick={() => { open(); }}>Add game</button>}
       {games.length >= maximumGamesPerRound && <p>This round has reached the 16-game limit.</p>}
@@ -225,6 +254,9 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
           roster={editor.roster}
           churchyEnabled={round.churchyEnabled === true} groups={editingRound.groups}
           supportedGameKinds={round.supportedGameKinds?.filter((kind) => supportsRoundGame(editingRound, kind))}
+          games={editor.base} internalOnly={!canManageAllRoundGames(editingRound)}
+          existing={editor.base.some((game) => game.id === editor.draft.id)}
+          wolfV2Supported={round.wolfRulesVersions?.includes(2) === true && editingRound.wolfRulesVersions?.includes(2) === true}
           setupLocked={round.setupLocked || editingRound.setupLocked}
           allowChurchyCreation={!editor.base.some((game) => game.kind === 'churchy' || game.id === editor.draft.id)}
           saveDisabled={editor.conflict} cancelDisabled={working} retry={editor.attempt !== null}

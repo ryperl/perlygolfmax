@@ -4,6 +4,7 @@ import type { RoundGameDefinition } from '../../src/domain/games';
 import type { RoundScores } from '../../src/domain/scoring';
 import type { EventWorkspace } from '../../src/domain/setup';
 import { calculateGameResults } from '../../src/domain/stableford';
+import { calculateInternalSettlements } from '../../src/domain/internal-games';
 import { strokeGameFixture, strokeGameId, strokeGamesRound } from '../../src/domain/stroke-games.test-support';
 
 export const matchFixture = strokeGameFixture(18);
@@ -20,10 +21,11 @@ export const nassau: NassauGameDefinition = {
 };
 
 export function withMatchResults(round: RoundScores, games: readonly RoundGameDefinition[] = round.games?.configuration.games ?? []): RoundScores {
+  const results = calculateGameResults(games, matchFixture.snapshot, round.cards);
   return { ...round, games: {
     configuration: { eventId: round.eventId, roundId: round.roundId, etag: games.length === 0 ? null : round.games?.configuration.etag ?? 'fictional-games-v1', games },
-    results: calculateGameResults(games, matchFixture.snapshot, round.cards),
-  } };
+    results,
+  }, internalSettlements: calculateInternalSettlements(games, results, round) };
 }
 
 export function matchRound(late = false): RoundScores {
@@ -38,6 +40,7 @@ export function matchRound(late = false): RoundScores {
   const round: RoundScores = { ...initial, quickRound: true, setupLocked: late, cards,
     lastUpdatedAt: late ? '2026-01-01T00:00:00Z' : null,
     supportedGameKinds: ['stableford', 'ball-drop', 'skins', 'stroke-play', 'wolf', 'nassau'],
+    wolfRulesVersions: [1, 2],
     teeStrokeAllocation: true,
     gameInputContext: { courseVersionId: matchFixture.snapshot.courseVersionId, teeProfileId: matchFixture.snapshot.teeProfile.id },
     permissions: { role: 'public', writePlayerIds: cards.map((card) => card.playerId), canManageGames: true },

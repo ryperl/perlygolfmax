@@ -93,7 +93,9 @@
 - New Quick rounds explicitly allow anonymous creation and collaborative
   setup/game editing, including multiple playing groups. Gate these writes on
   the authoritative stored Quick-round policy, never a client flag, fake owner
-  or member row. Ordinary events stay protected. Publish only allowlisted
+  or member row. General ordinary-event setup stays protected; narrow public
+  pre-scoring internal-game configuration is separately allowed below.
+  Publish only allowlisted
   course selections and player name/scalar HI/NH; full catalogs/history remain
   private. Keep one round, shared game validation/capabilities, conditional
   event checks, immutable retry/audit receipts, staged transports and durable
@@ -174,7 +176,8 @@
   unallocated. Ties push. Manual presses use acknowledged two-down positions;
   automatic presses fire once per bet and may themselves be pressed. Keep
   immutable/stale receipts and independent bet money, not a place-purse metric.
-- Wolf uses explicit foursome order and group starting hole, best ball and net
+- Legacy Wolf version 1 uses explicit foursome order and group starting hole,
+  best ball and net
   off lowest captured CH. Partnered wins/losses transfer +/-2 each; Blind Wolf
   (after drives) transfers +/-6 versus +/-2 each; pre-drive PIG +/-9 versus +/-3
   each. Signed balance ranks, zero sum per hole; ties zero/no carry. No second
@@ -185,6 +188,44 @@
   require authoritative supported kinds. Legacy testers cannot see or author
   these match ledgers/declarations. Ordinary score transports stay 4 KiB;
   dedicated declaration parts reuse 12 KiB staging and immutable fragments.
+- New Wolf is version 2, never an automatic conversion of saved version 1.
+  Partnered High/Low each earns 1 per winning teammate, no deductions/carry.
+  Solo Blind Wolf earns 2 per winning-side player; PIG earns 3. No opponent-count
+  multiplier. Use the actual playing circuit and captured personal inputs.
+  Lowest combined Wolf plus explicitly linked prefix specials chooses both
+  final played holes after 16/7 in 18/9 holes. Persist the pre-write candidate
+  receipt, use the next printed rotation for ties, and preserve the chosen Wolf
+  after final holes start even when earlier corrections change standings.
+- Dots is an independent version-1 game: individual, fixed partners, or explicit
+  linked neutral contexts, never a Wolf-owned special subsystem. Standalone
+  contexts stay independent until explicitly linked. Each qualifying occurrence
+  shares with current teammates; Walk, manual Pickup and failed called
+  Paree/Murphy/Pully Murphy award opponents (other three in individual play).
+  Count repeated fairway/greenside Sandys, including a separately called Paree.
+  Hogan/Seve/Sandy/Paree/Murphy/Haz Par/Chippy allow gross par or better;
+  par-3 Hogan/Seve omit fairway conditions. Pully/Pully Murphy require their long
+  par putt. SuperDime replaces Dime; Eagle never also earns Birdie. Derive
+  streaks from acknowledged scores and actual play order, not drafts.
+  Category carries resolve independently in actual order; final unclaimed stays
+  unawarded. King requires every eligible category-hole award owned directly or
+  through carry, individual x1 only after complete inputs. No fixed hole counts.
+  Assassin needs both approach qualifiers in a 2-v-2 side; Sweep needs real linked
+  High/Low outcomes, not fabricated standalone contests. Thief/presets/Sixes
+  engines remain deferred. Dots cannot stack with Churchy.
+- Public pre-scoring internal-game setup in ordinary active events is explicitly
+  allowed for Dots, new Wolf and enabled Churchy only. Check both old/new game
+  scope, unchanged protected peers, actual saved groups, version and setup locks.
+  No legacy Wolf conversion, protected game-ID conversion, owner promotion,
+  general setup, catalog, Ball Drop administration, purse or archive authority.
+  Keep old tester projections unchanged and omit internal ledgers/declarations.
+- Internal USD settlement is `(4*d_i - sum(d)) * rateMinor`, once per explicitly
+  linked combination/foursome, with separate sources. Blank/zero is points-only.
+  User money input is dollars (`1`, `.50`), storage stays exact integer cents;
+  dot units remain whole points. Preserve all legacy Churchy math/saved values.
+  Total to settle sums positive net balances, never absolute balances or dots.
+  Immutable private score/correction receipts retain changed award snapshots
+  with rule/input bindings; public views explain current awards without private
+  actors or claiming a historical audit browser. No payment transfers.
 - Skins leaderboards omit known zero awards from standings/search/pages only.
   Preserve awarded ranks/ties, pending/unavailable displays and underlying
   game/purse results; hidden search controls must not hide refreshed winners.

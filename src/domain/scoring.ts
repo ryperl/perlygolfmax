@@ -5,7 +5,10 @@ import type { RoundGroup } from './setup.js';
 import type { GameChange, GameUnavailableReason, RoundGamesView, RoundGameKind } from './games.js';
 import type { NassauHoleRecord } from './nassau.js';
 import type { WolfHoleRecord } from './wolf.js';
-import { mergeNassauRecords, mergeWolfRecords, sameNassauRecords, sameWolfRecords } from './game-declarations.js';
+import type { DotsHoleRecord } from './dots.js';
+import type { InternalGameSettlement } from './dot-settlement.js';
+import type { DotAwardAudit } from './dot-audit.js';
+import { mergeDotsRecords, mergeNassauRecords, mergeWolfRecords, sameDotsRecords, sameNassauRecords, sameWolfRecords } from './game-declarations.js';
 import type { PlayerTeeProfile } from './tees.js';
 import type { ChurchySpecials } from './churchy.js';
 import { sameChurchySpecials } from './churchy.js';
@@ -21,6 +24,7 @@ export type HoleScore = (
   | { readonly kind: 'did-not-finish' }) & {
     readonly churchy?: ChurchySpecials; readonly kp?: KpEntry | null;
     readonly nassau?: readonly NassauHoleRecord[]; readonly wolf?: readonly WolfHoleRecord[];
+    readonly dots?: readonly DotsHoleRecord[];
   };
 
 export interface ScoredHole {
@@ -41,6 +45,7 @@ export interface ScorePermissions {
   readonly viewerPlayerId?: string;
   readonly writePlayerIds: readonly string[];
   readonly canManageGames: boolean;
+  readonly canManageInternalGames?: boolean;
 }
 
 export interface OverallHandicaps {
@@ -59,6 +64,9 @@ export interface PlayerCourseHandicap {
 }
 
 export interface RoundScores {
+  readonly internalGamesSupported?: boolean;
+  readonly wolfRulesVersions?: readonly (1 | 2)[];
+  readonly internalSettlements?: readonly InternalGameSettlement[];
   readonly supportedGameKinds?: readonly RoundGameKind[];
   readonly gameInputContext?: { readonly courseVersionId: string; readonly teeProfileId: number };
   readonly quickRound?: true;
@@ -101,6 +109,7 @@ export function supportsRoundGame(round: Pick<RoundScores, 'supportedGameKinds' 
     : kind === 'churchy' || kind === 'stableford' || kind === 'ball-drop' || kind === 'skins';
 }
 export interface ScoreChange {
+  readonly dotAwardAudit?: readonly DotAwardAudit[];
   readonly id: string;
   readonly eventId: string;
   readonly roundId: string;
@@ -149,6 +158,7 @@ export function sameHoleScore(left: HoleScore, right: HoleScore): boolean {
     && sameKpEntry(left.kp, right.kp)
     && sameNassauRecords(left.nassau, right.nassau)
     && sameWolfRecords(left.wolf, right.wolf)
+    && sameDotsRecords(left.dots, right.dots)
     && (left.kind !== 'strokes' || right.kind === 'strokes' && left.strokes === right.strokes)
     && (left.kind !== 'picked-up' || right.kind === 'picked-up' && left.reportedStrokes === right.reportedStrokes);
 }
@@ -162,6 +172,8 @@ export function preserveScoreExtras(score: HoleScore, saved: HoleScore): HoleSco
       : saved.nassau ? { nassau: saved.nassau } : {}),
     ...(score.wolf !== undefined ? { wolf: mergeWolfRecords(score.wolf, saved.wolf) }
       : saved.wolf ? { wolf: saved.wolf } : {}),
+    ...(score.dots !== undefined ? { dots: mergeDotsRecords(score.dots, saved.dots) }
+      : saved.dots ? { dots: saved.dots } : {}),
   };
 }
 

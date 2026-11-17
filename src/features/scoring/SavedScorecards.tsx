@@ -3,6 +3,7 @@ import type { RoundScores } from '../../domain/scoring';
 import { writablePlayerIds } from './score-access';
 import { visibleGames } from '../../domain/games';
 import { ChurchyResults } from '../churchy';
+import { DotsResults } from '../dots';
 import { gameScoringLabel } from '../games';
 import { PlayerScorecardRecap } from './PlayerScorecardRecap';
 import { ScorecardNine } from './ScorecardNine';
@@ -23,7 +24,7 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
   if (!group) throw new Error('Saved round has no groups.');
   const game = scorecardGame(round, gameId, group.playerIds);
   const games = visibleGames(round.games?.configuration.games ?? [], round.churchyEnabled).filter((game) =>
-    game.kind !== 'nassau' && ((game.kind !== 'churchy' && game.kind !== 'wolf') || group.playerIds.every((id) => game.playerIds.includes(id))));
+    game.kind !== 'nassau' && ((game.kind !== 'churchy' && game.kind !== 'wolf' && game.kind !== 'dots') || group.playerIds.every((id) => game.playerIds.includes(id))));
   const cards = group.playerIds.map((id) => cardFor(round, id));
   const player = cards.find((card) => card.playerId === playerId);
   const layout = [...round.layout].sort((left, right) => left.number - right.number);
@@ -94,5 +95,6 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
         <p className="scorecard-incomplete">{game ? '* Incomplete total.' : '* Incomplete recorded total.'}</p>}
     </>}
     {game?.definition.kind === 'churchy' && <ChurchyResults game={game.definition} result={game.result} />}
+    {game?.definition.kind === 'dots' && <DotsResults game={game.definition} result={game.result?.dots} />}
   </section>;
 }

@@ -39,6 +39,9 @@ import { gameTeamsMatchRoster, isTeamGameDefinition } from '../../../src/domain/
 import type { RoundGameDefinition } from '../../../src/domain/games.js';
 import { isHandicapIndex } from '../../../src/contracts/catalog.js';
 import type { PublicScoreIdentity } from '../../../src/domain/public-access.js';
+import { dotsDefinitionMatchesRound } from '../../../src/contracts/dots.js';
+import { definitionCards, dotRound } from '../scoring/internal-games.js';
+import { buildDotAwardAudit, correctionAuditCards } from '../scoring/dot-audit.js';
 
 interface WorkspaceHeader {
   readonly eventSkins?: EventSkinsConfiguration;
@@ -294,7 +297,7 @@ export class TableWorkspaceStore {
     if (!lock) throw new ApiError(503, 'INVALID_STORED_SCORE_LOCK');
     const configuredRounds = configuredGameRounds(access.event.gameRoundIds);
     const games = await readGameConfiguration(this.table, eventId, roundId, configuredRounds);
-    return { access, workspace, round, roundRow, games };
+    return { access, workspace, round, roundRow, games, lock };
   }
 
   private reviewWarnings(before: RoundSnapshot, after: RoundSnapshot, gamesChanged: boolean, churchyPresent: boolean): readonly RoundReviewWarning[] {
@@ -425,12 +428,13 @@ export class TableWorkspaceStore {
     if (!isRecord(updatedRound) || !isEventWorkspace({ ...state.workspace, rounds: state.workspace.rounds.map((round) =>
       round.id === roundId ? updatedRound : round) })) throw new ApiError(503, 'INVALID_STORED_WORKSPACE');
     for (const game of state.games?.games ?? []) {
-      if (game.kind !== 'nassau' && game.kind !== 'wolf') continue;
+      if (game.kind !== 'nassau' && game.kind !== 'wolf' && game.kind !== 'dots') continue;
       const beforeGroup = state.round.groups.find((group) => group.number === game.groupNumber);
       const afterGroup = updatedRound.groups.find((group) => group.number === game.groupNumber);
-      if (gameAnchorPlayerId(game, state.round.groups) !== gameAnchorPlayerId(game, updatedRound.groups)
+      if (beforeGroup?.playerIds[0] !== afterGroup?.playerIds[0]
         || (game.kind === 'nassau' ? nassauConfigurationIssues(game, updatedRound).length > 0
-          : !wolfGroupMatchesRound(game, { layout: updatedRound.teeProfile.holes, groups: updatedRound.groups })
+          : (game.kind === 'dots' ? !dotsDefinitionMatchesRound(game, dotRound(updatedRound, definitionCards(updatedRound)))
+            : !wolfGroupMatchesRound(game, { layout: updatedRound.teeProfile.holes, groups: updatedRound.groups }))
             || groupStartingHole(beforeGroup, state.round.teeProfile.holes) !== groupStartingHole(afterGroup, updatedRound.teeProfile.holes))) {
         throw new ApiError(409, 'MATCH_SETUP_CHANGED');
       }
@@ -467,11 +471,16 @@ export class TableWorkspaceStore {
     if (canonical(before) === canonical(after) && warnings.length === (state.round.reviewWarnings?.length ?? 0)) {
       return { applied: false, model: await this.correctionModel(identity, eventId, roundId) };
     }
+    const auditCards = state.games?.games.some((game) => game.kind === 'dots' || game.kind === 'wolf' && game.version === 2)
+      ? await correctionAuditCards(this.table, eventId, state.round, state.lock) : [];
+    const dotAwardAudit = buildDotAwardAudit(updatedGames, state.round, withWarnings,
+      auditCards, auditCards, state.games?.etag ?? null);
     const receipt: RoundCorrectionReceipt = {
       id: requestId, eventId, roundId, expected: body.expected, before, after, reason: body.reason,
       ...(body.reviewSummary ? { reviewSummary: body.reviewSummary } : {}),
       warnings, recordedAt,
       recordedBy: { tenantId: identity.tenantId, objectId: identity.objectId },
+      ...(dotAwardAudit.length ? { dotAwardAudit } : {}),
     };
     const roundContent = await stagePrivateContent(this.table, eventId, `round:${roundId}`, identity, canonical(withWarnings));
     const actions: TransactionAction[] = [
@@ -744,7 +753,6 @@ export class TableWorkspaceStore {
     return this.get(identity, id);
   }
 }
-import { gameAnchorPlayerId } from '../../../src/domain/game-declarations.js';
 import { nassauConfigurationIssues } from '../../../src/domain/nassau.js';
 import { wolfGroupMatchesRound } from '../../../src/domain/wolf.js';
 import { groupStartingHole } from '../../../src/domain/round-navigation.js';

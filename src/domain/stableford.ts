@@ -10,10 +10,12 @@ import { calculateStrokeGameResults } from './stroke-games.js';
 import { aggregateTeamGameResults } from './team-games.js';
 import { hasStrokeAllocation, playerTee } from './tees.js';
 import { calculateChurchyResults } from './churchy.js';
-import { calculateWolf } from './wolf.js';
 import { calculateNassau } from './nassau.js';
-import { nassauRecordsFor, wolfRecordsFor, wolfResultPlayers } from './game-declarations.js';
+import { nassauRecordsFor } from './game-declarations.js';
+import { calculateInternalGameResults } from './internal-games.js';
 import { publishedCourseHandicaps } from './playing-handicaps.js';
+import { handicapStrokesForHole } from './handicap-strokes.js';
+export { handicapStrokesForHole } from './handicap-strokes.js';
 
 export function stablefordPoints(preset: StablefordPreset): StablefordPointsTable {
   const points = preset === 'standard' ? [6, 5, 4, 3, 2, 1, 0] : [8, 5, 2, 0, -1, -2];
@@ -91,12 +93,6 @@ export function calculatePlayingHandicap(index: string, tee: TeeProfile, allowan
   return Number(rounded(multiply(result, { numerator: BigInt(allowance), denominator: 100n })));
 }
 
-export function handicapStrokesForHole(handicap: number, allocation: number, count: number): number {
-  const quotient = Math.floor(handicap / count);
-  const remainder = handicap - quotient * count;
-  return quotient + (allocation <= remainder ? 1 : 0);
-}
-
 export function stablefordScorePoints(table: StablefordPointsTable, scoreToPar: number): number {
   const first = table.rows[0];
   if (!first || scoreToPar < first.scoreToPar) return table.betterScorePoints;
@@ -160,19 +156,18 @@ export function calculateGameResults(
 ): readonly RoundGameResult[] {
   const layout = [...round.teeProfile.holes].sort((left, right) => left.number - right.number);
   const courseHandicaps = games.some((game) => game.kind === 'wolf' || game.kind === 'nassau') ? publishedCourseHandicaps(round) : [];
+  const internal = calculateInternalGameResults(games, { roundId: round.id, layout, groups: round.groups, cards,
+    courseHandicaps: games.some((game) => game.kind === 'wolf') ? courseHandicaps : [],
+    teeStrokeAllocation: round.teeProfile.strokeAllocation,
+    ...(round.playerTees ? { playerTees: round.playerTees } : {}) });
   return games.map((game) => {
+    if (game.kind === 'dots' || game.kind === 'wolf') {
+      const result = internal.get(game.id);
+      if (!result) throw new Error('Internal game calculation is missing its configured result.');
+      return result;
+    }
     if (game.kind === 'nassau') return { gameId: game.id, kind: 'nassau', version: 1, players: [],
       nassau: calculateNassau(game, round, cards, nassauRecordsFor(game, round.groups, cards), { courseHandicaps }) };
-    if (game.kind === 'wolf') {
-      const inputs = { layout, groups: round.groups, players: round.players.map((player) => {
-        const tee = playerTee(round, player.playerId);
-        const handicap = courseHandicaps.find((entry) => entry.playerId === player.playerId);
-        return { playerId: player.playerId, displayName: player.displayName, layout: tee.holes, strokeAllocation: tee.strokeAllocation,
-          handicap: handicap?.courseHandicap ?? handicap?.unavailableReason ?? 'missing-handicap-index' as const };
-      }) };
-      const wolf = calculateWolf(game, inputs, cards, wolfRecordsFor(game, round.groups, cards));
-      return { gameId: game.id, kind: 'wolf', version: 1, wolf, players: wolfResultPlayers(wolf) };
-    }
     if (game.kind === 'churchy') {
       const group = round.groups.find((entry) => entry.number === game.groupNumber);
       return calculateChurchyResults(game, round.players.map((player) => {

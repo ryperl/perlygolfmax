@@ -6,6 +6,8 @@ import type { GameDraft } from './game-draft';
 import { addBand, buildGame, resetTeamAssignments, setFormat, setGameKind, setNassauVariant, setPreset, teamDraftFeedback } from './game-draft';
 import type { RoundGroup } from '../../domain/setup';
 import { churchyPairs } from '../../domain/churchy';
+import type { RoundGameDefinition } from '../../domain/games';
+import { DotsSettings } from '../dots';
 
 interface GameSettingsProps {
   readonly draft: GameDraft;
@@ -22,6 +24,10 @@ interface GameSettingsProps {
   readonly setupLocked?: boolean;
   readonly allowChurchyCreation?: boolean;
   readonly supportedGameKinds?: readonly RoundGameKind[] | undefined;
+  readonly games?: readonly RoundGameDefinition[];
+  readonly internalOnly?: boolean;
+  readonly wolfV2Supported?: boolean;
+  readonly existing?: boolean;
 }
 
 function scoreLabel(value: number): string {
@@ -37,11 +43,12 @@ function scoreLabel(value: number): string {
 export function GameSettings({
   draft, disabled, saveDisabled, cancelDisabled, retry, onChange, onSave, onCancel, roster = [],
   churchyEnabled = false, groups = [], setupLocked = false, allowChurchyCreation = false, supportedGameKinds,
+  games = [], internalOnly = false, wolfV2Supported = false, existing = false,
 }: GameSettingsProps) {
   const allowanceHint = useId();
   const stableford = draft.kind === undefined || draft.kind === 'stableford';
   const matchGame = draft.kind === 'nassau' || draft.kind === 'wolf';
-  const matchLocked = matchGame && setupLocked;
+  const matchLocked = (matchGame || draft.kind === 'dots') && setupLocked;
   const churchyLocked = setupLocked && !allowChurchyCreation;
   const [teamQuery, setTeamQuery] = useState('');
   const [golferQuery, setGolferQuery] = useState('');
@@ -65,16 +72,20 @@ export function GameSettings({
         <label>Game name
           <input value={draft.name} disabled={draft.kind === 'churchy'} maxLength={100} onChange={(event) => { onChange({ ...draft, name: event.target.value }); }} />
         </label>
-        <label>Game type<select value={draft.kind ?? 'stableford'} disabled={draft.kind === 'churchy'} onChange={(event) => {
+        <label>Game type<select value={draft.kind ?? 'stableford'}
+          disabled={draft.kind === 'churchy' || existing && (internalOnly || draft.kind === 'wolf' && draft.wolfVersion !== 2)} onChange={(event) => {
           const kind = event.target.value;
-          if (kind === 'stableford' || kind === 'ball-drop' || kind === 'skins'
-            || (kind === 'stroke-play' || kind === 'wolf' || kind === 'nassau') && supportedGameKinds?.includes(kind)
+          if ((!internalOnly && (kind === 'stableford' || kind === 'ball-drop' || kind === 'skins'))
+            || (kind === 'wolf' && (existing || wolfV2Supported)
+              || !internalOnly && (kind === 'stroke-play' || kind === 'nassau')) && supportedGameKinds?.includes(kind)
+            || kind === 'dots' && supportedGameKinds?.includes('dots')
             || kind === 'churchy' && churchyEnabled && allowChurchyCreation) onChange(setGameKind(draft, kind, roster.length));
         }}>
-          <option value="stableford">Stableford</option><option value="ball-drop">Ball Drop</option><option value="skins">Skins</option>
+          {!internalOnly && <><option value="stableford">Stableford</option><option value="ball-drop">Ball Drop</option><option value="skins">Skins</option>
           <option value="stroke-play" disabled={!supportedGameKinds?.includes('stroke-play')}>Stroke Play</option>
-          <option value="wolf" disabled={setupLocked || !supportedGameKinds?.includes('wolf')}>Wolf / PIG</option>
-          <option value="nassau" disabled={setupLocked || !supportedGameKinds?.includes('nassau')}>Nassau · Match play</option>
+          <option value="nassau" disabled={setupLocked || !supportedGameKinds?.includes('nassau')}>Nassau · Match play</option></>}
+          <option value="wolf" disabled={setupLocked || !supportedGameKinds?.includes('wolf') || !existing && !wolfV2Supported}>Wolf / PIG · Earned dots</option>
+          <option value="dots" disabled={setupLocked || !supportedGameKinds?.includes('dots')}>Dots · Separate specials</option>
           {churchyEnabled && (draft.kind === 'churchy' || allowChurchyCreation && !churchyLocked) && <option value="churchy">Churchy Game · Experimental</option>}
         </select></label>
         {stableford && <label>Points preset
@@ -87,7 +98,7 @@ export function GameSettings({
             <option value="modified">Modified Stableford</option>
           </select>
         </label>}
-        {!matchGame && draft.kind !== 'skins' && draft.kind !== 'churchy' && draft.kind !== 'stroke-play' && <label>Game format
+        {!matchGame && draft.kind !== 'dots' && draft.kind !== 'skins' && draft.kind !== 'churchy' && draft.kind !== 'stroke-play' && <label>Game format
           <select value={draft.format ?? 'individual'} onChange={(event) => {
             const value = event.target.value;
             if (value === 'individual' || value === 'two-net-better-ball' || value === 'two-net-aggregate' || value === 'four-two-net'
@@ -104,7 +115,7 @@ export function GameSettings({
             </>}
           </select>
         </label>}
-        {draft.kind !== 'churchy' && <label>Score basis
+        {draft.kind !== 'churchy' && draft.kind !== 'dots' && <label>Score basis
           <select value={draft.basis} disabled={draft.format !== undefined} onChange={(event) => {
             if (event.target.value === 'gross' || event.target.value === 'net') {
               onChange({ ...draft, basis: event.target.value });
@@ -130,13 +141,24 @@ export function GameSettings({
           {draft.kind === 'wolf' ? <>
             <p>Wolf tees last; choose a partner immediately after their drive, before the next drive, or pass all.
               Blind Wolf passes all after seeing drives (double); PIG is declared before any tee shots (triple).
-              Timing is honor-system. Ties award zero; no carry or dollar settlement.</p>
+              Timing is honor-system. Ties award zero; no carry.
+              {draft.wolfVersion === 2 ? ' Partnered High and Low earn one dot each per winning teammate. Solo Blind Wolf earns two, PIG three, per winning golfer.'
+                : ' Legacy transfer-balance rules are preserved; no dollar settlement.'}</p>
             {(draft.wolfPlayers ?? []).map((id, index) => <label key={index}>Wolf P{index + 1}<select value={id} onChange={(event) => {
               const ids = [...(draft.wolfPlayers ?? [])], other = ids.indexOf(event.target.value);
               if (other >= 0) { ids[other] = id; ids[index] = event.target.value; onChange({ ...draft, wolfPlayers: ids }); }
             }}>{groups.find((group) => group.number === draft.groupNumber)?.playerIds.map((playerId) =>
               <option key={playerId} value={playerId}>{roster.find((entry) => entry.playerId === playerId)?.displayName ?? 'Golfer unavailable'}</option>)}</select></label>)}
             <p>P1–P4 rotate from the saved group&apos;s starting hole.</p>
+            {draft.wolfVersion === 2 && <>
+              <p>Final two holes: the lowest earned total after the opening 7 or 16 holes chooses Wolf, including explicitly linked Dots.
+                Ties use the next printed rotation. Saved selection survives later corrections.</p>
+              <label>USD per dot difference<span>$ <input aria-label="USD per dot difference" inputMode="decimal" value={draft.stake ?? ''}
+                onChange={(event) => { onChange({ ...draft, stake: event.target.value }); }} /></span></label>
+              <small>Optional dollars and cents. Blank or 0 means points-only; one individual settlement per opponent.</small>
+              {!wolfV2Supported && <p>This API does not advertise earned Wolf editing support.</p>}
+            </>}
+            {draft.wolfVersion !== 2 && <p>Legacy Wolf · This game will not convert to earned-dot rules.</p>}
             <label>Allow PIG<input type="checkbox" checked={draft.allowPig ?? false} onChange={(event) => { onChange({ ...draft, allowPig: event.target.checked }); }} /></label>
           </> : <>
             <p>18 holes only. Front 1–9, back 10–18 and overall are independent match bets. Ties push; no carry.</p>
@@ -158,16 +180,18 @@ export function GameSettings({
                     {roster.find((entry) => entry.playerId === playerId)?.displayName ?? 'Golfer unavailable'}</option>)}
               </select></label>)}
             </fieldset>)}
-            {['Front', 'Back', 'Overall'].map((label, index) => <label key={label}>{label} stake per side · USD cents<input inputMode="numeric"
+            {['Front', 'Back', 'Overall'].map((label, index) => <label key={label}>{label} stake per side · USD $<input inputMode="decimal"
               value={draft.nassauStakes?.[index] ?? ''} onChange={(event) => { onChange({ ...draft,
                 nassauStakes: [0, 1, 2].map((position) => position === index ? event.target.value : draft.nassauStakes?.[position] ?? '') }); }} /></label>)}
             <button type="button" onClick={() => { onChange({ ...draft, nassauStakes: ['0', '0', '0'] }); }}>No planned money</button>
-            <small>Enter whole cents, including explicit 0. No default stake or payment. Presses inherit their parent&apos;s stake and end hole.</small>
+            <small>Enter dollars and cents, including explicit 0. No default stake or payment. Presses inherit their parent&apos;s stake and end hole.</small>
             <label>Automatic two-down presses<input type="checkbox" checked={draft.automaticPresses ?? false}
               onChange={(event) => { onChange({ ...draft, automaticPresses: event.target.checked }); }} /></label>
             <p>Manual presses are available from saved results. Each bet may automatically press once; nested presses may do the same, starting next hole.</p>
           </>}
         </section>}
+        {draft.kind === 'dots' && <DotsSettings draft={draft} groups={groups} players={roster}
+          wolves={games.filter((game) => game.kind === 'wolf')} onChange={(patch) => { onChange({ ...draft, ...patch }); }} />}
         {draft.kind === 'churchy' && <section aria-label="Churchy setup">
           <p>Only one saved foursome plays. Order P1–P4 determines partners, independent of the group&apos;s starting hole.
             Lowest captured Course Handicap plays 0; the other three receive relative strokes on their own captured stroke indexes.</p>
@@ -189,10 +213,10 @@ export function GameSettings({
             pair.map((id) => roster.find((entry) => entry.playerId === id)?.displayName ?? 'Golfer unavailable').join(' + ')).join(' vs ') ?? 'Choose a foursome'}</p>)}
           <p>High and Low carry independently across all holes. Stakes 1, 2, 3 repeat; sweep adds only the current stake.
             Both partners earn the full dots, never netted. Unresolved pickup comparisons cannot settle.</p>
-          <label>USD cents per dot<input inputMode="numeric" value={draft.amountPerDotMinor ?? ''} onChange={(event) => {
+          <label>USD per dot · $<input aria-label="USD per dot" inputMode="decimal" value={draft.amountPerDotMinor ?? ''} onChange={(event) => {
             onChange({ ...draft, amountPerDotMinor: event.target.value });
           }} /></label>
-          <small>Exact whole cents: 100 = $1 per dot; 0 = no planned money. Planned shared pot only, no payments.</small>
+          <small>Dollars and cents: 1.00 = $1 per dot; 0 = no planned money. Planned shared pot only, no payments.</small>
           {churchyLocked && <p>Saved scoring locks foursome and order; the organizer can still edit the planned amount per dot.</p>}
         </section>}
         {draft.kind === 'skins' && <label>Carry tied skins forward
@@ -200,7 +224,7 @@ export function GameSettings({
             onChange({ ...draft, carryovers: event.target.checked });
           }} />
         </label>}
-        {!stableford && !matchGame && draft.kind !== 'churchy' && <p>Net uses 100% of captured Course Handicap. Numeric saved strokes only; pickup and DNF are ineligible.
+        {!stableford && !matchGame && draft.kind !== 'churchy' && draft.kind !== 'dots' && <p>Net uses 100% of captured Course Handicap. Numeric saved strokes only; pickup and DNF are ineligible.
           {draft.kind === 'stroke-play' ? ' Lowest score relative to personal par ranks first. Totals remain partial until all holes have numeric scores; pickup or DNF makes a valid stroke total unavailable.'
             : draft.kind === 'skins' ? ' All golfers must save a disposition before a hole is awarded. Final unclaimed skins remain unawarded.'
             : ' The lowest valid two-ball combination counts, from two different golfers. Par is 0, birdie −1, bogey +1. Lowest team total wins.'}</p>}
@@ -295,7 +319,7 @@ export function GameSettings({
         </div>
         <p className="game-hint">Pickup and DNF receive the lowest configured points. Enter strokes on the scorecard.</p></>}
       </fieldset>
-      {matchLocked && <p>Saved scoring locks Nassau and Wolf setup. Other games can still be edited.</p>}
+      {matchLocked && <p>Saved scoring locks Dots, Nassau and Wolf setup. Other games can still be edited.</p>}
       {supportedGameKinds === undefined && <p>This API does not advertise Stroke Play, Wolf or Nassau support. Refresh after an API upgrade to configure these games.</p>}
       <div className="game-actions">
         <button type="submit" disabled={disabled || matchLocked || saveDisabled || draft.format !== undefined && !buildGame(draft, rosterIds)}>{retry ? 'Retry save' : 'Save game'}</button>

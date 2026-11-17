@@ -6,6 +6,15 @@ import { scoreAccessKey, writablePlayerIds } from './score-access';
 const ids = fictionalRoundScores.cards.map((card) => card.playerId);
 const permissions: ScorePermissions = { role: 'tester', writePlayerIds: ids, canManageGames: false };
 describe('tester score permission targets', () => {
+  it('does not interrupt a group score save when the first acknowledged score ends internal setup authority', () => {
+    const before = { ...fictionalRoundScores, internalGamesSupported: true,
+      permissions: { role: 'public' as const, writePlayerIds: ids, canManageGames: false, canManageInternalGames: true } };
+    const after = { ...before, setupLocked: true, permissions: { ...before.permissions, canManageInternalGames: false } };
+    expect(scoreAccessKey(after)).toBe(scoreAccessKey(before));
+    expect(writablePlayerIds(after)).toEqual(ids);
+    expect(scoreAccessKey({ ...after, inputRevision: 'fictional-input-correction' })).not.toBe(scoreAccessKey(before));
+    expect(scoreAccessKey({ ...after, permissions: { ...after.permissions, writePlayerIds: ids.slice(1) } })).not.toBe(scoreAccessKey(before));
+  });
   it('permits every explicitly published card in the active event, without owner promotion', () => {
     expect(writablePlayerIds({ ...fictionalRoundScores, permissions })).toEqual(ids);
     expect(permissions.role).toBe('tester');

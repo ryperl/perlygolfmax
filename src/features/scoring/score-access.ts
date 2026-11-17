@@ -19,5 +19,7 @@ export function writablePlayerIds(round: RoundScores): readonly string[] {
 }
 
 export function scoreAccessKey(round: RoundScores): string {
-  return JSON.stringify([scorePermissions(round), round.quickRound === true, round.eventStatus, round.groups, round.inputRevision ?? null]);
+  const { canManageInternalGames: management, ...scoring } = scorePermissions(round);
+  void management;
+  return JSON.stringify([scoring, round.quickRound === true, round.eventStatus, round.groups, round.inputRevision ?? null]);
 }

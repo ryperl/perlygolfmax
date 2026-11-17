@@ -148,7 +148,7 @@ for (const theme of ['light', 'dark']) {
         await editor.getByRole('combobox', { name: `Side ${index < 2 ? 'A' : 'B'} golfer ${String(index % 2 + 1)}`, exact: true }).selectOption(playerId);
       }
       await editor.getByRole('button', { name: 'No planned money', exact: true }).click();
-      await editor.getByLabel('Front stake per side · USD cents', { exact: true }).fill('101');
+      await editor.getByLabel('Front stake per side · USD $', { exact: true }).fill('1.01');
       await narrowControls(page, editor);
       await editor.getByRole('button', { name: 'Save game', exact: true }).click();
       await expect(page.getByText('Game settings saved.', { exact: true })).toBeVisible();
@@ -168,10 +168,11 @@ for (const theme of ['light', 'dark']) {
       expect(fixture.counters().writes).toBe(0);
       await page.getByRole('button', { name: 'Games', exact: true }).click();
       const wolfResults = page.getByRole('region', { name: 'Wolf results', exact: true });
-      await expect(wolfResults.getByRole('cell', { name: '9', exact: true })).toHaveCount(0);
+      await expect(wolfResults.getByRole('cell', { name: '3', exact: true })).toHaveCount(0);
       await expect(page.getByRole('region', { name: 'Nassau matchboard', exact: true })).toContainText('0 resolved / 9 remaining');
       await page.getByRole('button', { name: 'Refresh saved round', exact: true }).click();
-      await expect(wolfResults.getByRole('columnheader', { name: 'Dot balance', exact: true })).toBeVisible();
+      await expect(wolfResults.getByRole('columnheader', { name: 'Earned dots', exact: true })).toBeVisible();
+      await expect(wolfResults.getByRole('columnheader', { name: 'Lost', exact: true })).toHaveCount(0);
       expect(fixture.counters().writes).toBe(0);
       await page.getByRole('button', { name: 'Enter scores', exact: true }).click();
       await expect(form.getByRole('combobox', { name: 'Wolf declaration', exact: true })).toHaveValue('pig');
@@ -184,16 +185,16 @@ for (const theme of ['light', 'dark']) {
       expect(fixture.counters().targets.filter((path) => path.endsWith('/games'))).toHaveLength(1);
       await page.getByRole('button', { name: 'Previous hole', exact: true }).click();
       await expect(form.getByRole('combobox', { name: 'Wolf declaration', exact: true })).toBeDisabled();
-      await expect(form.getByRole('combobox', { name: 'Wolf match outcome', exact: true })).toBeEnabled();
+      await expect(form.getByRole('combobox', { name: 'Wolf match outcome', exact: true })).toHaveCount(0);
       await page.getByRole('button', { name: 'Games', exact: true }).click();
-      await expect(wolfResults.getByRole('cell', { name: '9', exact: true })).toHaveCount(0);
+      await expect(wolfResults.getByRole('cell', { name: '3', exact: true })).toHaveCount(0);
       fixture.resolveSavedHole();
-      await expect(wolfResults.getByRole('cell', { name: '9', exact: true })).toHaveCount(0);
+      await expect(wolfResults.getByRole('cell', { name: '3', exact: true })).toHaveCount(0);
       await page.getByRole('button', { name: 'Refresh saved round', exact: true }).click();
-      await expect(wolfResults.getByRole('cell', { name: '9', exact: true })).toHaveCount(2);
+      await expect(wolfResults.getByRole('cell', { name: '3', exact: true })).toHaveCount(1);
       await page.getByRole('button', { name: 'Leaderboard', exact: true }).click();
       await page.getByRole('combobox', { name: 'Leaderboard game', exact: true }).selectOption({ index: 0 });
-      await expect(page.getByLabel('9 dot balance', { exact: true })).toBeVisible();
+      await expect(page.getByLabel('3 earned dots', { exact: true })).toBeVisible();
       await narrowControls(page, page.getByRole('region', { name: 'Round leaderboard', exact: true }));
     } finally { await fixture.close(); }
   });

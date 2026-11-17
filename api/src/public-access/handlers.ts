@@ -118,7 +118,8 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
         raw = received.value;
       }
       const body = parseScoreWriteBody(raw);
-      if (action === 'score-game-hole' && !body.score.nassau?.length && !body.score.wolf?.length) throw new ApiError(400, 'INVALID_GAME_SCORE');
+      if (action === 'score-game-hole' && !body.score.nassau?.length && !body.score.wolf?.length
+        && !body.score.dots?.length) throw new ApiError(400, 'INVALID_GAME_SCORE');
       return response(200, await api.scores.write(identity, eventId, roundId, playerId, Number(hole), body.score, etag, requestId, body.inputRevision));
     } catch (error) {
       const status = error instanceof ApiError ? error.status : 503;

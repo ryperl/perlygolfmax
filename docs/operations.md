@@ -106,6 +106,76 @@ their ordinary raw writes still work without erasing stored data. Public active
 readers retain the explicitly approved match views. No new archive, restore,
 catalog, purse-management or settlement-transfer authority is granted.
 
+## Independent Dots and earned Wolf rollout
+
+New Wolf definitions are version 2; existing Wolf version 1 is never converted,
+including unstarted games. The definition validator requires the version-2 stake
+field explicitly (null is points-only) and rejects a stake field on legacy
+version 1. Churchy's existing settlement expression and stored minor units do
+not change. Dollar-based editing is presentation/parsing only, not a migration.
+
+Deploy the API before the frontend. The server publishes `supportedGameKinds`
+including `dots`, explicit `wolfRulesVersions: [1, 2]`, `internalGamesSupported`
+and narrow `permissions.canManageInternalGames` for eligible active pre-scoring
+views. Missing capabilities do not enable new writes. Legacy testers receive
+neither the new internal capability nor its Dots/Wolf ledgers or declarations.
+The experimental Churchy flag remains authoritative.
+
+Any visitor may configure Dots, new Wolf or enabled Churchy inside an ordinary
+event before scoring. The game handler compares complete old/new definitions:
+protected peers retain identity, values and relative order, and a protected
+game ID cannot be repurposed as an internal game. Stored groups, not submitted
+membership, determine the foursome. General workspace/catalog/purse/KP/access,
+Ball Drop/event-wide game administration, archives and raw audit history remain
+protected. Public writes retain their unverified event actor and never create
+or promote a member row. Quick rounds retain their other explicit management
+policy; it does not become a blanket ordinary-event grant.
+
+Internal game definitions lock with round scoring. Score authority does not end
+when the first score ends setup authority: the serialized group-save access key
+ignores only the new setup-only grant and continues checking scoring targets,
+role, event status, saved groups and corrected input revision.
+
+Dots and Wolf have separate rule engines and versioned definitions. The
+composition module supplies neutral hole-side/multiplier/contest context only
+when the link is explicit. Standalone Dots does not require Wolf. Creating Wolf
+beside standalone Dots must not silently attach it or make an explicit later
+link impossible. Independent games retain named source-specific settlement
+views; a link produces one combined settlement without double counting.
+
+The comeback proof uses resolved saved prefix results, not current-hole drafts:
+after 16 played holes (18-hole layout) or 7 (nine-hole layout), choose the lowest
+combined linked total, with printed next-rotation ties. The first accepted
+final-hole declaration carries an exact pre-write candidate receipt.
+Once saved, this receipt is immutable and shared across the final two roles.
+Earlier score/input changes may mark it changed, but never silently replace
+the golfer who actually played Wolf. Raw-only late recovery remains explicit.
+
+Dots adds another namespaced declaration to the existing dedicated
+`.../holes/{holeNumber}/games` transport. The host/part ceiling stays 12288 bytes,
+ordinary score routes stay 4096 bytes, logical writes retain their existing
+bounded staging and scores/audits use immutable fragments when needed.
+Counts, distinct called outcomes and category decisions share the same card,
+event/input/grant transaction and retry identity as raw scores. Omission by
+older clients preserves hidden namespaces. A public staging upload cannot
+publish partial scores or bypass the final authority/revision check.
+
+Automatic results are server-derived. Changed Dots/Wolf-v2 awards are persisted
+as `dotAwardAudit` before/after snapshots on immutable private score receipts,
+binding the game definition/version, game revision and input revision.
+Owner correction receipts retain corresponding award changes without rewriting
+raw cards. Public/tester acknowledgements omit this private audit payload.
+Current public explanations use allowlisted award reasons, score/par evidence,
+source holes, units/count/multiplier and recipients, not private actor IDs,
+call UUIDs or raw timestamps. They are not a historical audit browser.
+
+Money uses exact minor units and the agreed per-opponent formula
+`(4*d_i - sum(d)) * rateMinor`. Blank/zero is points-only; positive incomplete
+amounts are projected, never final payments. New settlement is separate from
+legacy Churchy and event purse sources. No environment setting, role,
+infrastructure, identity provider, storage account or resource creation is
+required by this release.
+
 ## Experimental Churchy capability rollout and kill switch
 
 The scoring API (organizer and public runtime) evaluates
@@ -202,8 +272,10 @@ identity or acquire a token. API URL configuration alone is sufficient for it.
 The `/api/public` namespace exposes active event discovery, workspace,
 round scores, per-player hole writes, overall leaderboard and purse reads.
 Its Quick-round namespace additionally exposes allowlisted selection reads and
-Quick-only creation/setup writes; public round-game writes require the stored
-Quick-round policy. There are no public global catalog writes, purse/access
+Quick-only creation/setup writes. Ordinary-event game writes have only the
+separately approved pre-scoring internal-game scope; other public game changes
+require the stored Quick-round policy. There are no public global catalog
+writes, purse/access
 mutations, ordinary-event archive or audit history routes. Quick rounds have a
 separate public archive operation; private endpoints remain JWT-only.
 Public projections

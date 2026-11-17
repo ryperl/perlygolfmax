@@ -16,7 +16,7 @@ describe('admitted playing-group score authority', () => {
     expect(isRoundScores(read)).toBe(true);
     expect(read.cards).toHaveLength(8);
     expect(read.permissions).toEqual({ role: 'player', viewerPlayerId: f.boundPlayerId,
-      writePlayerIds: [204, 205, 206, 207].map(identifier), canManageGames: false });
+      writePlayerIds: [204, 205, 206, 207].map(identifier), canManageGames: false, canManageInternalGames: false });
     const saved = await f.scores.write(member, event.id, f.roundId, f.peerId, 1,
       { kind: 'strokes', strokes: 4 }, null, identifier(910));
     expect(saved.change.recordedBy).toEqual(member);
@@ -56,7 +56,7 @@ describe('admitted playing-group score authority', () => {
     expect(workspace.viewerPlayerId).toBeUndefined();
     expect(JSON.stringify(workspace)).not.toContain('handicapIndex');
     const cards = await f.scores.get(member, otherEvent, otherRound);
-    expect(cards.permissions).toEqual({ role: 'viewer', writePlayerIds: [], canManageGames: false });
+    expect(cards.permissions).toEqual({ role: 'viewer', writePlayerIds: [], canManageGames: false, canManageInternalGames: false });
     await expect(f.scores.write(member, otherEvent, otherRound, f.peerId, 1,
       { kind: 'strokes', strokes: 4 }, null, identifier(910))).rejects.toMatchObject({ status: 403 });
     const game = { id: identifier(920), name: 'Fictional game', preset: 'standard' as const, basis: 'gross' as const,
@@ -86,7 +86,7 @@ describe('admitted playing-group score authority', () => {
     expect(workspace.canViewScores).toBe(true);
     const cards = await f.scores.get(member, event.id, f.roundId);
     expect(isRoundScores(cards)).toBe(true);
-    expect(cards.permissions).toEqual({ role: 'viewer', writePlayerIds: [], canManageGames: false });
+    expect(cards.permissions).toEqual({ role: 'viewer', writePlayerIds: [], canManageGames: false, canManageInternalGames: false });
     await expect(f.scores.write(member, event.id, f.roundId, f.peerId, 1,
       { kind: 'strokes', strokes: 4 }, null, identifier(923))).rejects.toMatchObject({ status: 403 });
   });
@@ -158,7 +158,7 @@ describe('admitted playing-group score authority', () => {
     await expect(f.scores.get(member, event.id, f.roundId)).rejects.toMatchObject({ status: 404 });
     await expect(f.workspace.get(member, event.id)).rejects.toMatchObject({ status: 404 });
     expect((await f.scores.get(creator, event.id, f.roundId)).permissions).toEqual({
-      role: 'owner', writePlayerIds: [], canManageGames: false,
+      role: 'owner', writePlayerIds: [], canManageGames: false, canManageInternalGames: false,
     });
   });
 });
