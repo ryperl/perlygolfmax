@@ -4,13 +4,16 @@ import type { RoundGroup } from './setup.js';
 import type { Scorecard } from './scoring.js';
 import { groupStartingHole } from './round-navigation.js';
 import { hasStrokeAllocation } from './tees.js';
-import { handicapStrokesForHole } from './stableford.js';
+import { handicapStrokesForHole } from './handicap-strokes.js';
+import { calculateEarnedWolf } from './wolf-earned.js';
+import type { DotAward, DotHoleContext, DotPrefixPoints } from './dot-context.js';
 
 export interface WolfGameDefinition {
   readonly id: string;
   readonly name: string;
   readonly kind: 'wolf';
-  readonly version: 1;
+  readonly version: 1 | 2;
+  readonly stakeMinor?: number | null;
   readonly basis: GameScoreBasis;
   readonly groupNumber: number;
   readonly playerIds: readonly string[];
@@ -36,6 +39,26 @@ export interface WolfHoleRecord {
   readonly choice: WolfHoleChoice;
   readonly outcome?: WolfHoleOutcome;
   readonly recordedLate?: true;
+  readonly comeback?: WolfComebackReceipt;
+}
+export interface WolfComebackReceipt {
+  readonly wolfId: string;
+  readonly afterHoles: readonly number[];
+  readonly totals: readonly { readonly playerId: string; readonly dots: number }[];
+  readonly proof: string;
+}
+export interface WolfComebackState {
+  readonly status: 'pending' | 'available' | 'saved' | 'unavailable';
+  readonly receipt: WolfComebackReceipt | null;
+  readonly changed: boolean;
+  readonly reason?: string;
+}
+export interface WolfContestResult {
+  readonly kind: 'high' | 'low';
+  readonly status: 'won' | 'tied' | 'pending' | 'unavailable';
+  readonly winner: 'wolf' | 'opponents' | null;
+  readonly wolfScore: number | null;
+  readonly opponentScore: number | null;
 }
 export type WolfUnavailableReason = GameUnavailableReason | 'uncaptured-handicap-index'
   | 'invalid-wolf-group' | 'invalid-wolf-choice' | 'arithmetic-range' | 'missing-numeric-ball' | 'invalid-stroke-score';
@@ -50,6 +73,8 @@ export interface WolfRoundInput {
   readonly layout: readonly CourseHole[];
   readonly groups: readonly RoundGroup[];
   readonly players: readonly WolfPlayerInput[];
+  readonly comebackPoints?: readonly DotPrefixPoints[];
+  readonly comebackRequired?: boolean;
 }
 export interface WolfHoleResult {
   readonly number: number;
@@ -66,6 +91,7 @@ export interface WolfHoleResult {
   readonly stake: 1 | 2 | 3 | null;
   readonly transfers: readonly { readonly playerId: string; readonly dots: number }[];
   readonly recordedLate?: true;
+  readonly contests?: readonly WolfContestResult[];
 }
 export interface WolfPlayerLedger {
   readonly playerId: string;
@@ -83,6 +109,10 @@ export interface WolfResults {
   readonly reason?: WolfUnavailableReason;
   readonly holes: readonly WolfHoleResult[];
   readonly players: readonly WolfPlayerLedger[];
+  readonly rulesVersion?: 2;
+  readonly awards?: readonly DotAward[];
+  readonly contexts?: readonly DotHoleContext[];
+  readonly comeback?: WolfComebackState;
 }
 
 export function sameWolfChoice(left: WolfHoleChoice | undefined, right: WolfHoleChoice | undefined): boolean {
@@ -130,6 +160,7 @@ export function wolfTransfers(
 export function calculateWolf(
   game: WolfGameDefinition, round: WolfRoundInput, cards: readonly Scorecard[], records: readonly WolfHoleRecord[],
 ): WolfResults {
+  if (game.version === 2) return calculateEarnedWolf(game, round, cards, records);
   const layout = [...round.layout].sort((a, b) => a.number - b.number);
   const group = round.groups.find((entry) => entry.number === game.groupNumber);
   const players = game.playerIds.flatMap((id) => {

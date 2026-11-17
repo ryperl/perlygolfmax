@@ -40,6 +40,7 @@ describe('Wolf and PIG transfer ledger', () => {
     expect(result.players.reduce((sum, player) => sum + (player.balance ?? 0), 0)).toBe(0);
     expect(result.players.every((player) => player.holesScored === 1)).toBe(true);
     expect(result.status).toBe('in-progress');
+    expect(Object.keys(result)).toEqual(['status', 'holes', 'players']);
     expect(isWolfResults(result, f.game, { round: f.input, cards, records })).toBe(true);
     expect({ game: f.game, input: f.input, cards, records }).toEqual(before);
   });

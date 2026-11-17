@@ -4,7 +4,7 @@ import { calculateWolf } from '../domain/wolf.js';
 import { wolfInputFromScores } from '../domain/game-declarations.js';
 import { isHoleScore, isRoundScores } from './scoring.js';
 import { isRoundGameDefinition, isRoundGamesView } from './games.js';
-import { isWolfChoice, isWolfDefinition, isWolfRecord, isWolfResults } from './wolf.js';
+import { isWolfChoice, isWolfComebackReceipt, isWolfDefinition, isWolfRecord, isWolfResults, wolfRecordMatchesGame } from './wolf.js';
 import { strokeGameId } from '../domain/stroke-games.test-support.js';
 
 describe('Wolf network contracts', () => {
@@ -54,5 +54,61 @@ describe('Wolf network contracts', () => {
       result.kind === 'wolf' ? { ...result, players: [] } : result) } })).toBe(false);
     expect(isRoundScores({ ...round, gameInputContext: { ...round.gameInputContext, handicapIndex: 'private' } })).toBe(false);
     expect(isRoundScores({ ...round, supportedGameKinds: ['wolf', 'unknown-game'] })).toBe(false);
+  });
+
+  it('requires an explicit nullable stake for version 2 and forbids stakes on legacy games', () => {
+    const f = matchGamesFixture();
+    expect(isWolfDefinition({ ...f.wolf, version: 2, stakeMinor: null })).toBe(true);
+    expect(isWolfDefinition({ ...f.wolf, version: 2, stakeMinor: 125 })).toBe(true);
+    for (const stakeMinor of [-1, 0.1, Number.MAX_SAFE_INTEGER + 1, '100', undefined]) {
+      expect(isWolfDefinition({ ...f.wolf, version: 2, stakeMinor })).toBe(false);
+    }
+    expect(isWolfDefinition({ ...f.wolf, version: 2 })).toBe(false);
+    expect(isWolfDefinition({ ...f.wolf, stakeMinor: null })).toBe(false);
+  });
+
+  it('recomputes earned results including contest evidence, contexts, awards and comeback', () => {
+    const f = matchGamesFixture(), game = { ...f.wolf, version: 2 as const, stakeMinor: null };
+    const round = wolfInputFromScores(f.round());
+    const records = [{ number: 1, choice: { gameId: game.id, gameEtag: 'fictional-game-revision', mode: 'pig' as const } }];
+    const context = { round, cards: f.cards, records }, result = calculateWolf(game, round, f.cards, records);
+    expect(isWolfResults(result, game, context)).toBe(true);
+    expect(isWolfResults(result, game)).toBe(false);
+    for (const value of [
+      { ...result, rulesVersion: 1 }, { ...result, awards: [{ id: 'invented' }] },
+      { ...result, contexts: [] }, { ...result, comeback: { status: 'available', changed: false, receipt: null } },
+      { ...result, holes: result.holes.map((hole) => hole.number === 1 ? { ...hole, contests: [] } : hole) },
+      { ...result, players: result.players.map((player) => ({ ...player, balance: 99 })) },
+    ]) expect(isWolfResults(value, game, context)).toBe(false);
+  });
+
+  it('checks strict public comeback receipts and contextual final-hole writes while retaining legacy concessions', () => {
+    const f = matchGamesFixture(), game = { ...f.wolf, version: 2 as const, stakeMinor: null };
+    const round = wolfInputFromScores(f.round());
+    const records = round.layout.slice(0, -2).map((hole) => ({ number: hole.number,
+      choice: { gameId: game.id, gameEtag: 'fictional-game-revision', mode: 'pig' as const } }));
+    const receipt = calculateWolf(game, round, f.cards, records).comeback?.receipt;
+    if (!receipt) throw new Error('Missing fictional comeback');
+    expect(isWolfComebackReceipt(receipt)).toBe(true);
+    expect(isWolfRecord({ ...records[0], comeback: receipt })).toBe(true);
+    for (const invalid of [{ ...receipt, actorId: f.ids[0] }, { ...receipt, proof: '' },
+      { ...receipt, totals: receipt.totals.map((entry) => ({ ...entry, dots: -1 })) },
+      { ...receipt, afterHoles: receipt.afterHoles.slice(1) },
+      { ...receipt, totals: [...receipt.totals.slice(1), receipt.totals[1]] }]) {
+      expect(isWolfComebackReceipt(invalid)).toBe(false);
+    }
+    const first = records[0];
+    if (!first) throw new Error('Missing fictional record');
+    expect(wolfRecordMatchesGame(f.wolf, round, f.cards, { ...first, outcome: 'wolf' })).toBe(true);
+    expect(wolfRecordMatchesGame(game, round, f.cards, { ...first, outcome: 'wolf' })).toBe(false);
+    expect(wolfRecordMatchesGame(f.wolf, round, f.cards, { ...first, comeback: receipt })).toBe(false);
+    const cards = f.cards.map((card, index) => index === 0 ? { ...card, holes: card.holes.map((hole) => ({
+      ...hole, score: { ...hole.score, wolf: records.filter((record) => record.number === hole.number) },
+    })) } : card);
+    const final = { number: 17, choice: first.choice, comeback: receipt };
+    expect(wolfRecordMatchesGame(game, round, cards, final)).toBe(true);
+    expect(wolfRecordMatchesGame(game, round, cards, { ...first, comeback: receipt })).toBe(false);
+    expect(wolfRecordMatchesGame(game, round, cards, { number: 17, choice: first.choice })).toBe(false);
+    expect(wolfRecordMatchesGame(game, round, cards, { ...final, comeback: { ...receipt, proof: 'invented' } })).toBe(false);
   });
 });

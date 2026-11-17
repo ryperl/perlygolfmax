@@ -1,5 +1,5 @@
-import type { WolfGameDefinition, WolfHoleChoice, WolfHoleRecord, WolfResults } from '../domain/wolf.js';
-import { calculateWolf, wolfTransfers } from '../domain/wolf.js';
+import type { WolfComebackReceipt, WolfGameDefinition, WolfHoleChoice, WolfHoleRecord, WolfResults } from '../domain/wolf.js';
+import { calculateWolf, wolfForHole, wolfGroupMatchesRound, wolfTransfers } from '../domain/wolf.js';
 import type { WolfRoundInput } from '../domain/wolf.js';
 import type { Scorecard } from '../domain/scoring.js';
 import { boundedText } from './catalog.js';
@@ -18,8 +18,10 @@ const reasons = ['missing-handicap-index', 'uncaptured-handicap-index', 'invalid
   'missing-numeric-ball', 'invalid-stroke-score'];
 
 export function isWolfDefinition(value: unknown): value is WolfGameDefinition {
-  return isRecord(value) && keys(value, ['id', 'name', 'kind', 'version', 'basis', 'groupNumber', 'playerIds', 'allowPig'])
-    && isUuid(value.id) && boundedText(value.name) && value.kind === 'wolf' && value.version === 1
+  return isRecord(value) && keys(value, ['id', 'name', 'kind', 'version', 'basis', 'groupNumber', 'playerIds', 'allowPig',
+    ...(value.version === 2 ? ['stakeMinor'] : [])])
+    && isUuid(value.id) && boundedText(value.name) && value.kind === 'wolf'
+    && (value.version === 1 || value.version === 2 && (value.stakeMinor === null || nonnegative(value.stakeMinor)))
     && (value.basis === 'gross' || value.basis === 'net') && nonnegative(value.groupNumber) && value.groupNumber > 0
     && typeof value.allowPig === 'boolean' && Array.isArray(value.playerIds) && value.playerIds.length === 4
     && value.playerIds.every(isUuid) && new Set(value.playerIds).size === 4;
@@ -33,16 +35,65 @@ export function isWolfChoice(value: unknown): value is WolfHoleChoice {
 }
 
 export function isWolfRecord(value: unknown): value is WolfHoleRecord {
-  return isRecord(value) && keys(value, ['number', 'choice'], ['outcome', 'recordedLate'])
+  return isRecord(value) && keys(value, ['number', 'choice'], ['outcome', 'recordedLate', 'comeback'])
     && (value.recordedLate === undefined || value.recordedLate === true)
+    && (value.comeback === undefined || isWolfComebackReceipt(value.comeback))
     && integer(value.number) && value.number >= 1 && value.number <= 18 && isWolfChoice(value.choice)
     && (value.outcome === undefined || value.outcome === 'scores' || value.outcome === 'wolf'
       || value.outcome === 'opponents' || value.outcome === 'halved');
 }
 
+export function isWolfComebackReceipt(value: unknown): value is WolfComebackReceipt {
+  if (!isRecord(value) || !keys(value, ['wolfId', 'afterHoles', 'totals', 'proof'])
+    || !isUuid(value.wolfId) || typeof value.proof !== 'string' || value.proof.length === 0
+    || !Array.isArray(value.afterHoles) || ![7, 16].includes(value.afterHoles.length)
+    || !value.afterHoles.every((number: unknown) => integer(number) && number >= 1 && number <= 18)
+    || new Set(value.afterHoles).size !== value.afterHoles.length || !Array.isArray(value.totals)
+    || value.totals.length !== 4) return false;
+  const ids = new Set<string>();
+  for (const total of value.totals) {
+    if (!isRecord(total) || !keys(total, ['playerId', 'dots']) || !isUuid(total.playerId)
+      || !nonnegative(total.dots) || ids.has(total.playerId)) return false;
+    ids.add(total.playerId);
+  }
+  return ids.has(value.wolfId);
+}
+
+export function wolfRecordMatchesGame(
+  game: WolfGameDefinition, round: WolfRoundInput, cards: readonly Scorecard[], record: WolfHoleRecord,
+): boolean {
+  if (!isWolfRecord(record) || record.choice.gameId !== game.id || !wolfGroupMatchesRound(game, round)
+    || !round.layout.some((hole) => hole.number === record.number)
+    || record.choice.mode === 'pig' && !game.allowPig) return false;
+  if (game.version === 1 && record.comeback !== undefined
+    || game.version === 2 && record.outcome !== undefined && record.outcome !== 'scores') return false;
+  let wolfId = wolfForHole(game, round, record.number);
+  if (game.version === 2) {
+    const anchor = round.groups.find((group) => group.number === game.groupNumber)?.playerIds[0];
+    const saved = cards.find((card) => card.playerId === anchor)?.holes
+      .flatMap((hole) => hole.score.wolf?.filter((entry) => entry.choice.gameId === game.id) ?? []) ?? [];
+    const before = calculateWolf(game, round, cards, saved);
+    const candidate = before.comeback?.receipt;
+    if (record.comeback !== undefined && (!candidate || candidate.afterHoles.includes(record.number)
+      || !sameJsonValue(candidate, record.comeback))) return false;
+    const after = calculateWolf(game, round, cards, [...saved.filter((entry) => entry.number !== record.number), record]);
+    const hole = after.holes.find((entry) => entry.number === record.number);
+    wolfId = hole?.wolfId ?? null;
+    if (hole?.reason === 'invalid-wolf-choice') return false;
+    // The first final-hole declaration must freeze the shared selection.
+    if (candidate?.afterHoles.includes(record.number) === false
+      && before.comeback?.status !== 'saved' && record.comeback === undefined) return false;
+    if (!candidate && record.comeback !== undefined) return false;
+  }
+  return wolfId !== null && (record.choice.mode !== 'partner'
+    || record.choice.partnerId !== wolfId && game.playerIds.includes(record.choice.partnerId));
+}
+
 export function isWolfResults(value: unknown, game: WolfGameDefinition, context?: {
   readonly round: WolfRoundInput; readonly cards: readonly Scorecard[]; readonly records: readonly WolfHoleRecord[];
 }): value is WolfResults {
+  if (game.version === 2) return context !== undefined
+    && sameJsonValue(value, calculateWolf(game, context.round, context.cards, context.records));
   if (!isRecord(value) || !keys(value, ['status', 'holes', 'players'], ['reason'])
     || typeof value.status !== 'string' || !['complete', 'in-progress', 'unavailable'].includes(value.status)
     || value.reason !== undefined && (value.status !== 'unavailable' || typeof value.reason !== 'string' || !reasons.includes(value.reason))
