@@ -15,24 +15,34 @@ function props() {
   return { round: fictionalRoundScores, groupNumber: 1, busy: false, onGroupChange: vi.fn(), onEnterScores: vi.fn() };
 }
 describe('golfer-facing round scorecards', () => {
-  it('shows every golfer across groups and clears server differentials for an older response', async () => {
+  it('keeps differentials optional, shows every golfer when expanded and clears older responses', async () => {
     const source = strokeGameFixture(18, 8);
     const cards = source.cards.map((card, index) => index !== 7 ? card : { ...card,
       holes: card.holes.map((hole) => hole.number === 18 ? { ...hole, score: { kind: 'unplayed' as const } } : hole) });
     const base = strokeGamesRound({ ...source, cards });
     const round = { ...base, roundDifferentials: calculateRoundDifferentials(source.snapshot, cards) };
     const view = render(<SavedScorecards {...props()} round={round} />);
+    const user = userEvent.setup();
+    const disclosure = screen.getByText('Round differentials', { selector: 'summary' });
+    expect(view.container.querySelector('.round-differentials')).not.toBeVisible();
+    expect(screen.getByRole('table', { name: 'Front nine scorecard' })).toBeVisible();
+    await user.click(disclosure);
     const table = within(screen.getByRole('table', { name: 'Round differentials' }));
     expect(table.getAllByRole('row')).toHaveLength(9);
     expect(table.getByRole('row', { name: /Fictional golfer 5/ })).toHaveTextContent('0.0');
     expect(table.getByRole('row', { name: /Fictional golfer 8/ })).toHaveTextContent('—');
     expect(screen.getByRole('region', { name: 'Round differentials' })).toHaveTextContent('PCC assumed 0');
-    await userEvent.setup().click(within(screen.getByRole('table', { name: 'Front nine scorecard' }))
+    await user.click(disclosure);
+    expect(view.container.querySelector('.round-differentials')).not.toBeVisible();
+    await user.click(within(screen.getByRole('table', { name: 'Front nine scorecard' }))
       .getByRole('button', { name: 'Open scorecard for Fictional golfer 1' }));
+    expect(view.container.querySelector('.player-differential')).not.toBeVisible();
+    await user.click(screen.getByText('Estimated differential', { selector: 'summary' }));
     expect(screen.getByRole('group', { name: 'Estimated round differential' })).toHaveTextContent('0.0');
     view.rerender(<SavedScorecards {...props()} round={base} />);
     expect(screen.queryByRole('region', { name: 'Round differentials' })).not.toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Estimated round differential' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Round differentials', { selector: 'summary' })).not.toBeInTheDocument();
   });
 
   it('keeps server Course Handicap beside names across Front/Back/Full Card, game changes and refreshed projections', async () => {

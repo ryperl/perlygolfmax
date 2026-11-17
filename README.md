@@ -869,8 +869,10 @@ allocated money. These are planned winnings, never payments or transfers.
 
 ### Estimated round differentials
 
-Round scorecards include an all-golfer differential summary, with an individual
-value on a completed golfer's card. These are **18-hole estimates with PCC 0**,
+Round scorecards offer a collapsed **Round differentials** control for the
+all-golfer summary. Individual cards have a collapsed **Estimated differential**
+control. Both are optional and closed by default, keeping the scorecards in view.
+These are **18-hole estimates with PCC 0**,
 not official GHIN results or handicap submissions. A player needs all 18 saved
 numeric scores, usable captured personal-tee ratings/allocation and captured
 handicap inputs. Missing scores remain pending; pickup, X7, DNF, missing inputs

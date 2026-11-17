@@ -32,7 +32,10 @@ export function PlayerScorecardRecap({ round, card, gameId }: {
         {!summary.complete && <span>Incomplete</span>}
       </p>
     </header>
-    {differential && <PlayerDifferential value={differential} />}
+    {differential && <details className="scorecard-differential-disclosure">
+      <summary>Estimated differential</summary>
+      <PlayerDifferential value={differential} />
+    </details>}
     {round.games?.configuration.games.some((entry) => entry.kind === 'nassau' && entry.sides.some((side) => side.playerIds.includes(card.playerId)))
       && <p>Nassau match bets and presses are in Games and Leaderboard.</p>}
     {scorecardGameWarnings(game, [card]).map((warning) => <p className="scorecard-game-unavailable" key={warning}>{warning}</p>)}

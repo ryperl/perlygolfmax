@@ -295,6 +295,8 @@
   Keep missing-state reasons in contracts, but show only — in differential
   cells, without per-row explanations. Use Adj. Gross / Est. Diff. headings
   and A.G / E.D in narrow containers, retaining full accessible column names.
+  Keep round and individual differential sections collapsed by default so
+  optional summaries do not push the primary scorecards down the page.
 - Event Roster retains current HI. Round playing groups, unassigned golfers and
   competition teams show CH using that round's index and each personal/default
   tee through shared domain handicap math, never roster HI or game allowance.

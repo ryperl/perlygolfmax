@@ -1,5 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
 import type { RoundScores, Scorecard } from '../../domain/scoring';
 import { fictionalRoundScores } from '../../client/scoring.test-support';
 import { PlayerScorecardRecap } from './PlayerScorecardRecap';
@@ -28,11 +29,15 @@ function fixture() {
 }
 
 describe('individual traditional scorecard recap', () => {
-  it('uses the supplied estimate, then removes a stale completed value when scores become pending', () => {
+  it('keeps the estimate collapsed until requested and refreshes the expanded saved value', async () => {
     const { round, card } = fixture();
     const available = { playerId: card.playerId, method: 'estimated-18-hole' as const, pcc: 0 as const,
       status: 'available' as const, adjustedGross: 72, differentialTenths: 19 };
     const view = render(<PlayerScorecardRecap round={{ ...round, roundDifferentials: [available] }} card={card} />);
+    const user = userEvent.setup();
+    const disclosure = screen.getByText('Estimated differential', { selector: 'summary' });
+    expect(view.container.querySelector('.player-differential')).not.toBeVisible();
+    await user.click(disclosure);
     const estimate = screen.getByRole('group', { name: 'Estimated round differential' });
     expect(estimate).toHaveTextContent('1.9');
     expect(estimate).toHaveTextContent('PCC assumed 0');
@@ -43,6 +48,8 @@ describe('individual traditional scorecard recap', () => {
     }] }} card={card} />);
     expect(within(estimate).getByLabelText('Estimated differential unavailable')).toHaveTextContent('—');
     expect(estimate).not.toHaveTextContent('1.9');
+    await user.click(disclosure);
+    expect(estimate).not.toBeVisible();
     view.rerender(<PlayerScorecardRecap round={round} card={card} />);
     expect(screen.queryByRole('group', { name: 'Estimated round differential' })).not.toBeInTheDocument();
   });

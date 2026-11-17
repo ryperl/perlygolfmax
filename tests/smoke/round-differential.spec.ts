@@ -92,7 +92,30 @@ for (const theme of ['light', 'dark']) {
     await page.setContent(`<html data-theme="${theme}"><head>${styles.map((href) => `<link rel="stylesheet" href="${href}">`).join('')}</head>
       <body><div class="app"><main>${group}<section aria-label="Individual example">${individual}</section></main></div></body></html>`);
     await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
+    await page.setViewportSize({ width: 320, height: 900 });
+    const disclosure = page.locator('.round-scorecards > .scorecard-differential-disclosure');
+    await expect(disclosure).toHaveJSProperty('open', false);
+    const compact = await disclosure.boundingBox();
+    if (!compact) throw new Error('Missing optional differential control.');
+    expect(compact.height).toBeGreaterThanOrEqual(44);
+    expect(compact.height).toBeLessThanOrEqual(60);
+    const card = page.getByRole('region', { name: 'Round scorecards', exact: true })
+      .getByRole('table', { name: 'Front nine scorecard', exact: true });
+    const initialCard = await card.boundingBox();
+    if (!initialCard) throw new Error('Missing primary scorecard.');
+    const initialCardTop = initialCard.y + await page.evaluate(() => scrollY);
+    const toggle = disclosure.locator('summary');
+    await toggle.focus();
+    await toggle.press('Enter');
+    await expect(disclosure).toHaveJSProperty('open', true);
     const summary = page.getByRole('region', { name: 'Round differentials', exact: true });
+    await expect(summary).toBeVisible();
+    await toggle.click();
+    await expect(summary).not.toBeVisible();
+    const restoredCard = await card.boundingBox();
+    if (!restoredCard) throw new Error('Missing restored scorecard.');
+    expect(restoredCard.y + await page.evaluate(() => scrollY)).toBeCloseTo(initialCardTop, 1);
+    await toggle.click();
     const table = summary.getByRole('table', { name: 'Round differentials', exact: true });
     await expect(table.getByRole('row')).toHaveCount(9);
     await expect(table.getByRole('row', { name: /Fictional golfer 1/ })).toContainText('13.9');
@@ -105,6 +128,9 @@ for (const theme of ['light', 'dark']) {
     await expect(summary).toContainText('PCC assumed 0');
     await expect(summary).toContainText('Not official');
     const player = page.getByRole('group', { name: 'Estimated round differential', exact: true });
+    await expect(player).not.toBeVisible();
+    await page.locator('.player-scorecard-recap > .scorecard-differential-disclosure > summary').click();
+    await expect(player).toBeVisible();
     await expect(player).toContainText('13.9');
     await expect(player).toContainText('Adjusted gross 88');
     for (const width of [320, 390, 1280]) {
