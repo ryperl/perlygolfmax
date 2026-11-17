@@ -6,10 +6,13 @@ describe('exact purse money', () => {
     expect(parseMoney('0')).toBe(0);
     expect(parseMoney('1.01')).toBe(101);
     expect(parseMoney('001.1')).toBe(110);
+    expect(parseMoney('.1')).toBe(10);
+    expect(parseMoney('.50')).toBe(50);
+    expect(parseMoney('1')).toBe(100);
     expect(parseMoney('90071992547409.91')).toBe(Number.MAX_SAFE_INTEGER);
     expect(parseMoney('00090071992547409.91')).toBe(Number.MAX_SAFE_INTEGER);
   });
-  it.each(['', ' ', ' 1', '-1', '+1', '.1', '1.', '1.001', '1e3', '1,000', 'NaN',
+  it.each(['', ' ', ' 1', '-1', '+1', '.', '1.', '1.001', '1e3', '1,000', 'NaN',
     '90071992547409.92', '90071992547410', '999999999999999999999999999999999'])('rejects invalid/unsafe amount %s', (input) => {
     expect(parseMoney(input)).toBeNull();
   });

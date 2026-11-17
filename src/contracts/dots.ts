@@ -1,0 +1,75 @@
+import { calculateDots, dotsManualKinds, dotsSpecialCatalog } from '../domain/dots.js';
+import type { DotsGameDefinition, DotsHoleRecord, DotsResults, DotsSpecialKind } from '../domain/dots.js';
+import type { DotHoleContext, DotRoundInput } from '../domain/dot-context.js';
+import { isEventRevision, isRecord, isUuid } from './events.js';
+import { sameJsonValue } from './round-context.js';
+export { dotsDefinitionMatchesRound, dotsRecordsMatchGame } from '../domain/dots.js';
+
+function keys(value: Record<string, unknown>, required: readonly string[], optional: readonly string[] = []): boolean {
+  return required.every((key) => Object.hasOwn(value, key))
+    && Object.keys(value).every((key) => required.includes(key) || optional.includes(key));
+}
+const text = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0 && value.length <= 256;
+const integer = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+const positive = (value: unknown): value is number => integer(value) && value > 0;
+const distinct = (values: readonly unknown[]) => new Set(values).size === values.length;
+const special = (value: unknown): value is DotsSpecialKind => dotsSpecialCatalog.some((entry) => entry.kind === value);
+const members = (value: unknown): value is string[] => Array.isArray(value) && value.length === 4 && value.every(isUuid) && distinct(value);
+
+export function isDotsDefinition(value: unknown): value is DotsGameDefinition {
+  if (!isRecord(value) || !keys(value, ['id', 'name', 'kind', 'version', 'groupNumber', 'playerIds', 'specials', 'mode'],
+    ['stakeMinor', 'partnerIds', 'linkedGameId']) || !isUuid(value.id) || !text(value.name)
+    || value.kind !== 'dots' || value.version !== 1 || !positive(value.groupNumber) || !members(value.playerIds)
+    || !Array.isArray(value.specials) || !value.specials.every((entry: unknown) =>
+      isRecord(entry) && keys(entry, ['kind', 'units']) && special(entry.kind) && positive(entry.units))
+    || !distinct(value.specials.map((entry: { readonly kind: DotsSpecialKind }) => entry.kind))) return false;
+  const kinds = value.specials.map((entry: { readonly kind: DotsSpecialKind }) => entry.kind);
+  if (value.mode === 'individual' && kinds.includes('assassin') || value.mode !== 'linked' && kinds.includes('sweep')) return false;
+  if (value.mode === 'linked') return isUuid(value.linkedGameId) && value.linkedGameId !== value.id
+    && !Object.hasOwn(value, 'stakeMinor') && !Object.hasOwn(value, 'partnerIds');
+  if (value.mode !== 'individual' && value.mode !== 'fixed'
+    || value.stakeMinor !== null && !integer(value.stakeMinor) || !Object.hasOwn(value, 'stakeMinor')
+    || Object.hasOwn(value, 'linkedGameId')) return false;
+  const playerIds = value.playerIds;
+  return value.mode === 'individual' ? !Object.hasOwn(value, 'partnerIds')
+    : members(value.partnerIds) && value.partnerIds.every((id) => playerIds.includes(id));
+}
+
+export function isDotsHoleRecord(value: unknown): value is DotsHoleRecord {
+  if (!isRecord(value) || !keys(value, ['number', 'gameId', 'gameEtag', 'players', 'contests'])
+    || !positive(value.number) || value.number > 18 || !isUuid(value.gameId) || !isEventRevision(value.gameEtag)
+    || !Array.isArray(value.players) || !Array.isArray(value.contests)) return false;
+  const playerIds: string[] = [], callIds: string[] = [], contests: string[] = [];
+  for (const player of value.players) {
+    if (!isRecord(player) || !keys(player, ['playerId', 'counts', 'calls']) || !isUuid(player.playerId)
+      || !isRecord(player.counts) || !Array.isArray(player.calls)) return false;
+    playerIds.push(player.playerId);
+    for (const [kind, count] of Object.entries(player.counts)) {
+      if (!dotsManualKinds.some((manual) => manual === kind) || !integer(count)) return false;
+    }
+    if (Number(player.counts.dime ?? 0) > 0 && Number(player.counts['super-dime'] ?? 0) > 0) return false;
+    for (const call of player.calls) {
+      if (!isRecord(call) || !keys(call, ['id', 'kind', 'result']) || !isUuid(call.id)
+        || !['paree', 'murphy', 'pully-murphy'].includes(String(call.kind))
+        || !['pending', 'success', 'failure'].includes(String(call.result))) return false;
+      callIds.push(call.id);
+    }
+  }
+  for (const contest of value.contests) {
+    if (!isRecord(contest) || !keys(contest, ['kind', 'status'], ['winnerId', 'secondId'])
+      || !['kp', 'blue-plate', 'long-drive'].includes(String(contest.kind))) return false;
+    contests.push(String(contest.kind));
+    if (contest.status === 'awarded') {
+      if (!isUuid(contest.winnerId) || contest.secondId !== undefined && (!isUuid(contest.secondId)
+        || contest.secondId === contest.winnerId || contest.kind === 'long-drive')) return false;
+    } else if (contest.status !== 'no-qualifier' || Object.hasOwn(contest, 'winnerId') || Object.hasOwn(contest, 'secondId')) return false;
+  }
+  return distinct(playerIds) && distinct(callIds) && distinct(contests);
+}
+
+export function isDotsResults(
+  value: unknown, game: DotsGameDefinition, round: DotRoundInput, records: readonly DotsHoleRecord[],
+  contexts: readonly DotHoleContext[] = [],
+): value is DotsResults {
+  return sameJsonValue(value, calculateDots(game, round, records, contexts));
+}
