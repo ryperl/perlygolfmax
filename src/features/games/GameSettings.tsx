@@ -88,7 +88,7 @@ export function GameSettings({
         && (draft.churchyVersion === 2 && !churchyV2Supported || draft.churchyVersion === 3 && !churchyV3Supported)}>
         <legend>Edit game</legend>
         <label>Game name
-          <input value={draft.kind === 'churchy' ? 'Churcie' : draft.name} disabled={draft.kind === 'churchy'} maxLength={100} onChange={(event) => { onChange({ ...draft, name: event.target.value }); }} />
+          <input value={draft.kind === 'churchy' ? 'Churchie' : draft.name} disabled={draft.kind === 'churchy'} maxLength={100} onChange={(event) => { onChange({ ...draft, name: event.target.value }); }} />
         </label>
         <label>Game type<select value={draft.kind ?? 'stableford'}
           disabled={draft.kind === 'churchy' || existing && (internalOnly || draft.kind === 'wolf' && draft.wolfVersion !== 2)} onChange={(event) => {
@@ -104,7 +104,7 @@ export function GameSettings({
           <option value="nassau" disabled={setupLocked || !supportedGameKinds?.includes('nassau')}>Nassau · Match play</option></>}
           <option value="wolf" disabled={setupLocked || !supportedGameKinds?.includes('wolf') || !existing && !wolfV2Supported}>Wolf / PIG · Earned dots</option>
           <option value="dots" disabled={setupLocked || !supportedGameKinds?.includes('dots')}>Dots · Separate specials</option>
-          {churchyEnabled && (draft.kind === 'churchy' || churchyV3Supported && allowChurchyCreation && !churchyLocked) && <option value="churchy">Churcie</option>}
+          {churchyEnabled && (draft.kind === 'churchy' || churchyV3Supported && allowChurchyCreation && !churchyLocked) && <option value="churchy">Churchie</option>}
         </select></label>
         {stableford && <label>Points preset
           <select value={draft.preset} onChange={(event) => {
@@ -215,9 +215,9 @@ export function GameSettings({
           {...(dotsSpecialKinds ? { supportedKinds: dotsSpecialKinds } : {})}
           {...(presetStore ? { presetStore } : {})}
           wolves={games.filter((game) => game.kind === 'wolf')} onChange={(patch) => { onChange({ ...draft, ...patch }); }} />}
-        {draft.kind === 'churchy' && <section aria-label="Churcie setup">
-          {draft.churchyGroup && <h3>Group {draft.churchyGroup} · Churcie</h3>}
-          <label>Churcie playing group<select value={draft.churchyGroup ?? ''} disabled={churchyLocked} onChange={(event) => {
+        {draft.kind === 'churchy' && <section aria-label="Churchie setup">
+          {draft.churchyGroup && <h3>Group {draft.churchyGroup} · Churchie</h3>}
+          <label>Churchie playing group<select value={draft.churchyGroup ?? ''} disabled={churchyLocked} onChange={(event) => {
             const group = groups.find((entry) => entry.number === Number(event.target.value));
             if (group?.playerIds.length === 4) onChange({ ...draft, churchyGroup: group.number, churchyPlayers: group.playerIds });
           }}>
@@ -225,7 +225,7 @@ export function GameSettings({
             {groups.filter((entry) => entry.playerIds.length === 4).map((group) => <option key={group.number} value={group.number}>Group {group.number}</option>)}
           </select></label>
           {draft.churchyVersion === 3 && <>
-            <label>Choose Churcie partners<select value={draft.churchyOrderMode ?? 'approach'} disabled={churchyLocked}
+            <label>Choose Churchie partners<select value={draft.churchyOrderMode ?? 'approach'} disabled={churchyLocked}
               onChange={(event) => {
                 const mode = event.target.value;
                 if (mode === 'tee' || mode === 'approach') onChange({ ...draft, churchyOrderMode: mode });
@@ -263,7 +263,7 @@ export function GameSettings({
           </fieldset>}
           {draft.churchyVersion === 2 && churchyV3Supported && !churchyLocked && <>
             <p>Saved legacy rules are unchanged. Updated rules add approach ordering, shared specials and par-or-better Sandy.</p>
-            <button type="button" onClick={() => { onChange(upgradeChurchyDraft(draft, selectedChurchyGroup?.startingHole ?? numbers[0] ?? 1)); }}>Use updated Churcie rules</button>
+            <button type="button" onClick={() => { onChange(upgradeChurchyDraft(draft, selectedChurchyGroup?.startingHole ?? numbers[0] ?? 1)); }}>Use updated Churchie rules</button>
           </>}
           <details><summary>Partners and rules</summary>
           {draft.churchyVersion !== 3 && [1, 4, 7].map((number) => <p key={number}>Holes {number}–{number + 2} and {number + 9}–{number + 11}: {churchyPairs(draft.churchyPlayers ?? [], number)?.map((pair) =>
@@ -386,9 +386,9 @@ export function GameSettings({
       </fieldset>
       {matchLocked && <p>Saved scoring locks Dots, Nassau and Wolf setup. Other games can still be edited.</p>}
       {draft.kind === 'churchy' && draft.churchyVersion === 2 && !churchyV2Supported
-        && <p>Churcie edits require API rules support. Refresh before editing this game.</p>}
+        && <p>Churchie edits require API rules support. Refresh before editing this game.</p>}
       {draft.kind === 'churchy' && draft.churchyVersion === 3 && !churchyV3Supported
-        && <p>Updated Churcie edits require advertised API version-3 support.</p>}
+        && <p>Updated Churchie edits require advertised API version-3 support.</p>}
       {draft.kind !== 'churchy' && supportedGameKinds === undefined && <p>This API does not advertise Stroke Play, Wolf or Nassau support. Refresh after an API upgrade to configure these games.</p>}
       <div className="game-actions">
         <button type="submit" disabled={disabled || matchLocked || saveDisabled

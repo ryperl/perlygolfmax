@@ -9,7 +9,7 @@ export function churchyV3Fixture(count: 9 | 18 = 18, startingHole = 1, mode: 'te
   const base = strokeGameFixture(count);
   const ids = base.cards.map((card) => card.playerId);
   const snapshot = { ...base.snapshot, groups: [{ number: 1, startingHole, playerIds: ids }] };
-  const game: ChurchyGameDefinitionV3 = { id: '00000000-0000-4000-8000-000000000703', name: 'Churcie',
+  const game: ChurchyGameDefinitionV3 = { id: '00000000-0000-4000-8000-000000000703', name: 'Churchie',
     kind: 'churchy', version: 3, basis: 'net', groupNumber: 1, playerIds: ids,
     currency: 'USD', amountPerDotMinor: 50, orderMode: mode, specials: defaultChurchySpecialSelections };
   const declaration = (number = startingHole, order?: readonly string[]): ChurchySpecialsV3 => ({

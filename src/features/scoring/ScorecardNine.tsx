@@ -120,7 +120,7 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
                 {game.definition.kind === 'wolf' && game.definition.version === 1 ? 'DOT BALANCE' : unit === 'dots' ? 'Earned dots' : unit === 'points' ? 'Points' : unit === 'strokes' ? `${game.definition.basis === 'net' ? 'Net' : 'Gross'} strokes` : unit === 'skins' ? 'Skins' : 'Team to par'}
                 {game.definition.kind === 'dots' && <small>Total includes round bonuses</small>}
                 {game.definition.kind === 'churchy' && player && 'playingHandicap' in player
-                  && <small>Churcie relative handicap {player.playingHandicap ?? 'unavailable'}</small>}
+                  && <small>Churchie relative handicap {player.playingHandicap ?? 'unavailable'}</small>}
                 {player && 'teamId' in player && <small>{player.displayName}</small>}{!available && <small>Unavailable</small>}</th>
               {layout.map((hole) => {
                 const points = holePoints.get(hole.number);

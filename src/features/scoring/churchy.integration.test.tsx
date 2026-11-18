@@ -82,14 +82,14 @@ describe('Churchy workflow integration', () => {
     render(<OwnerScoresView client={store.client} eventId={round.eventId} roundId={round.roundId} onSessionExpired={vi.fn()} />);
     await screen.findByRole('heading', { name: 'Round scorecard' });
     await userEvent.click(screen.getByRole('button', { name: 'Games' }));
-    expect(screen.getAllByRole('region', { name: 'Churcie · Group 1 results' }).length).toBeGreaterThan(0);
-    expect(screen.getByRole('region', { name: 'Churcie · Group 2 results' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Edit Churcie · Group 1' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Edit Churcie · Group 2' })).toBeVisible();
+    expect(screen.getAllByRole('region', { name: 'Churchie · Group 1 results' }).length).toBeGreaterThan(0);
+    expect(screen.getByRole('region', { name: 'Churchie · Group 2 results' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Edit Churchie · Group 1' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Edit Churchie · Group 2' })).toBeVisible();
     await userEvent.click(screen.getByRole('button', { name: 'Enter scores' }));
     await userEvent.selectOptions(screen.getByLabelText('View group'), '2');
     const entry = within(screen.getByRole('article', { name: 'Fictional golfer 5 scorecard' }));
-    expect(entry.getByText(/Churcie relative handicap: 0/)).toBeVisible();
+    expect(entry.getByText(/Churchie relative handicap: 0/)).toBeVisible();
     await userEvent.click(entry.getByRole('button', { name: 'Dots for Fictional golfer 5' }));
     await userEvent.click(within(screen.getByRole('dialog')).getByLabelText(/Sticky confirmed/));
     await userEvent.click(screen.getByRole('button', { name: 'Return to score entry' }));
@@ -121,21 +121,21 @@ describe('Churchy workflow integration', () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Add game' }));
     await user.selectOptions(screen.getByLabelText('Game type'), 'churchy');
-    await user.selectOptions(screen.getByLabelText('Churcie playing group'), '1');
-    await user.selectOptions(screen.getByLabelText('Choose Churcie partners'), 'tee');
+    await user.selectOptions(screen.getByLabelText('Churchie playing group'), '1');
+    await user.selectOptions(screen.getByLabelText('Choose Churchie partners'), 'tee');
     await user.type(screen.getByLabelText('USD per dot'), '1.00');
     const second = f.game.playerIds[1];
     if (!second) throw new Error('Missing fictional group member');
-    await user.selectOptions(screen.getByLabelText('Churcie P1'), second);
+    await user.selectOptions(screen.getByLabelText('Churchie P1'), second);
     await user.click(screen.getByRole('button', { name: 'Save game' }));
     expect(await screen.findByText('Game settings saved.')).toBeVisible();
-    expect(record).toHaveBeenCalledWith([f.skins, expect.objectContaining({ kind: 'churchy', name: 'Churcie', version: 3, orderMode: 'tee',
+    expect(record).toHaveBeenCalledWith([f.skins, expect.objectContaining({ kind: 'churchy', name: 'Churchie', version: 3, orderMode: 'tee',
       amountPerDotMinor: 100, groupNumber: 1, playerIds: [second, f.game.playerIds[0], ...f.game.playerIds.slice(2)] })]);
   });
   it('leaves nonselected group scorecards unchanged instead of adding fake zero or unavailable Churchy rows', () => {
     const f = churchyFixture();
     render(<SavedScorecards round={f.round()} groupNumber={2} busy={false} onGroupChange={vi.fn()} onEnterScores={vi.fn()} />);
-    expect(screen.queryByText(/Churcie/)).toBeNull();
+    expect(screen.queryByText(/Churchie/)).toBeNull();
     expect(screen.queryByText(/Earned dots/)).toBeNull();
   });
   it('specials-only edit uses the same score transaction, remains on hole until acknowledgement, and guards/discards drafts', async () => {
@@ -175,7 +175,7 @@ describe('Churchy workflow integration', () => {
     render(<><RoundGamesPanel round={round} busy={false} onDirtyChange={vi.fn()} onSave={vi.fn()} onRefresh={vi.fn()} />
       <RoundLeaderboard round={round} busy={false} onManageGames={vi.fn()} />
       <SavedScorecards round={round} groupNumber={1} busy={false} onGroupChange={vi.fn()} onEnterScores={vi.fn()} /></>);
-    expect(screen.queryByText(/Churcie/)).toBeNull();
+    expect(screen.queryByText(/Churchie/)).toBeNull();
     expect(screen.getByRole('button', { name: 'Edit Fictional Skins' })).toBeVisible();
     expect(round.games?.configuration.games[0]).toEqual(f.game);
   });

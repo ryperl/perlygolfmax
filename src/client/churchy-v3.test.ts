@@ -5,7 +5,7 @@ import { createScoresClient } from './scoring.js';
 import { leanScoreWriteResult } from '../contracts/lean-round-scores.js';
 import { strokeGameId } from '../domain/stroke-games.test-support.js';
 
-describe('Churcie v3 declaration client transport', () => {
+describe('Churchie v3 declaration client transport', () => {
   it('uses the dedicated 12 KiB game route and validates coherent acknowledgements and retry identity', async () => {
     const f = churchyV3Fixture(9, 7);
     const churchy = { ...f.declaration(7, f.ids), players: [{ playerId: f.ids[0] ?? '', counts: { other: 2 },

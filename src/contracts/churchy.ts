@@ -31,7 +31,7 @@ export function isChurchyDefinition(value: unknown): value is ChurchyGameDefinit
     const { basis, currency, amountPerDotMinor, orderMode } = value;
     return keys(value, ['id', 'name', 'kind', 'version', 'basis', 'currency', 'groupNumber',
       'amountPerDotMinor', 'playerIds', 'orderMode', 'specials'])
-      && value.name === 'Churcie' && basis === 'net' && currency === 'USD' && exact(amountPerDotMinor)
+      && (value.name === 'Churchie' || value.name === 'Churcie') && basis === 'net' && currency === 'USD' && exact(amountPerDotMinor)
       && (orderMode === 'tee' || orderMode === 'approach')
       && isUuid(value.id) && value.kind === 'churchy' && exact(value.groupNumber) && value.groupNumber > 0
       && Array.isArray(value.playerIds) && value.playerIds.length === 4 && value.playerIds.every(isUuid)

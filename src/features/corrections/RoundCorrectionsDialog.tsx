@@ -162,7 +162,7 @@ function RoundCorrectionsController({ client, eventId, roundId, roundName, onClo
             <option key={hole.number} value={hole.number}>{hole.number}</option>)}</select>
         </label>)}</details>
         {(draft.gameTeams ?? []).map((game, gameIndex) => <details key={game.gameId}><summary>Competition game {gameIndex + 1} teams</summary>
-          <p>Keep full teams and assign each golfer once. Scored Churcie order remains protected.</p>
+          <p>Keep full teams and assign each golfer once. Scored Churchie order remains protected.</p>
           {game.teams.map((team) => <fieldset key={team.id}><legend>{team.name}</legend>
             {model.players.map((entry) => <label className="correction-check" key={entry.playerId}><input type="checkbox"
               checked={team.playerIds.includes(entry.playerId)} onChange={(event) => {

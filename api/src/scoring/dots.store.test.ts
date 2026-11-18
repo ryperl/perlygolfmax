@@ -43,7 +43,7 @@ function record(game: DotsGameDefinition, round: RoundScores, playerId: string, 
 }
 
 describe('persisted independent Dots and earned Wolf authority', () => {
-  it('rejects Churcie-only Murphy stages in Wolf-linked Dots before publishing scores or a capture', async () => {
+  it('rejects Churchie-only Murphy stages in Wolf-linked Dots before publishing scores or a capture', async () => {
     const f = await publicFixture();
     const base = dots(f.input.playerIds);
     const match = wolf(f.input.playerIds);

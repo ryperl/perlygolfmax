@@ -16,14 +16,14 @@ async function savePar(page: Page, hole: number) {
   await expect(page.getByRole('form', { name: `Group 1 hole ${String(hole + 1)} entry`, exact: true })).toBeVisible();
 }
 
-test('Churcie approach order and Sticky/Sandy calls survive a failed lean acknowledgement and rotate after three played holes', async ({ page }, testInfo) => {
+test('Churchie approach order and Sticky/Sandy calls survive a failed lean acknowledgement and rotate after three played holes', async ({ page }, testInfo) => {
   const fixture = await openChurcieV3Fixture(page, testInfo);
   try {
     await order(page);
     const form = page.getByRole('form', { name: 'Group 1 hole 10 entry', exact: true });
     await form.getByRole('button', { name: 'Par for blanks', exact: true }).click();
     await form.getByLabel('Fictional golfer 2 score', { exact: true }).fill('3');
-    await page.getByRole('button', { name: 'Dots for Fictional golfer 2 · Churcie', exact: true }).click();
+    await page.getByRole('button', { name: 'Dots for Fictional golfer 2 · Churchie', exact: true }).click();
     let dialog = page.getByRole('dialog', { name: 'Dots · Fictional golfer 2', exact: true });
     await dialog.getByLabel('Sticky for Fictional golfer 2', { exact: true }).check();
     expect(await dialog.getByLabel('Sticky for Fictional golfer 2', { exact: true }).evaluate((element) =>
@@ -42,7 +42,7 @@ test('Churcie approach order and Sticky/Sandy calls survive a failed lean acknow
     expect(fixture.counters().writes).toBe(0);
     await expect(form.getByLabel('Fictional golfer 2 score', { exact: true })).toHaveValue('3');
     await expect(page.getByRole('combobox', { name: 'Closest approach', exact: true })).toHaveValue(churciePlayers[1] ?? '');
-    await page.getByRole('button', { name: 'Dots for Fictional golfer 2 · Churcie', exact: true }).click();
+    await page.getByRole('button', { name: 'Dots for Fictional golfer 2 · Churchie', exact: true }).click();
     dialog = page.getByRole('dialog', { name: 'Dots · Fictional golfer 2', exact: true });
     await expect(dialog.getByLabel('Sticky for Fictional golfer 2', { exact: true })).toBeChecked();
     await expect(dialog.getByLabel('Sandy count · Fictional golfer 2', { exact: true })).toHaveValue('1');
@@ -67,7 +67,7 @@ test('Churcie approach order and Sticky/Sandy calls survive a failed lean acknow
     ]));
     await savePar(page, 11);
     await savePar(page, 12);
-    await page.getByRole('button', { name: 'Dots for Fictional golfer 2 · Churcie', exact: true }).click();
+    await page.getByRole('button', { name: 'Dots for Fictional golfer 2 · Churchie', exact: true }).click();
     await expect(page.getByRole('dialog').getByText('Partner: Fictional golfer 4 · ×1', { exact: true })).toBeVisible();
     await page.getByRole('dialog').getByRole('button', { name: 'Done', exact: true }).click();
     expect(fixture.counters().pageErrors).toEqual([]);
@@ -75,7 +75,7 @@ test('Churcie approach order and Sticky/Sandy calls survive a failed lean acknow
   } finally { await fixture.close(); }
 });
 
-test('Churcie tee creation copies device presets, preserves custom units after reload and stores only specials configuration', async ({ page }, testInfo) => {
+test('Churchie tee creation copies device presets, preserves custom units after reload and stores only specials configuration', async ({ page }, testInfo) => {
   const fixture = await openChurcieV3Fixture(page, testInfo, 'setup');
   try {
     if (testInfo.project.name !== 'desktop-chromium') {
@@ -89,9 +89,9 @@ test('Churcie tee creation copies device presets, preserves custom units after r
     await page.getByRole('button', { name: 'Add game', exact: true }).click();
     let editor = page.getByRole('form', { name: 'Game settings', exact: true });
     await editor.getByRole('combobox', { name: 'Game type', exact: true }).selectOption('churchy');
-    await editor.getByRole('combobox', { name: 'Churcie playing group', exact: true }).selectOption('1');
-    await editor.getByRole('combobox', { name: 'Choose Churcie partners', exact: true }).selectOption('tee');
-    await editor.getByRole('combobox', { name: 'Churcie P1', exact: true }).selectOption(churciePlayers[1] ?? '');
+    await editor.getByRole('combobox', { name: 'Churchie playing group', exact: true }).selectOption('1');
+    await editor.getByRole('combobox', { name: 'Choose Churchie partners', exact: true }).selectOption('tee');
+    await editor.getByRole('combobox', { name: 'Churchie P1', exact: true }).selectOption(churciePlayers[1] ?? '');
     await editor.getByText(/^Specials and presets ·/).click();
     await expect(editor.getByLabel('Eagle units', { exact: true })).toHaveValue('4');
     await expect(editor.getByRole('checkbox', { name: 'Sticky', exact: true })).toBeChecked();
@@ -136,7 +136,7 @@ test('Churcie tee creation copies device presets, preserves custom units after r
     await page.getByRole('button', { name: 'Add game', exact: true }).click();
     editor = page.getByRole('form', { name: 'Game settings', exact: true });
     await editor.getByRole('combobox', { name: 'Game type', exact: true }).selectOption('churchy');
-    await editor.getByRole('combobox', { name: 'Churcie playing group', exact: true }).selectOption('2');
+    await editor.getByRole('combobox', { name: 'Churchie playing group', exact: true }).selectOption('2');
     await editor.getByText(/^Specials and presets ·/).click();
     await editor.getByRole('combobox', { name: 'Specials preset', exact: true }).selectOption({ label: 'Fictional weekend specials' });
     await expect(editor.getByLabel('Eagle units', { exact: true })).toHaveValue('4');
@@ -159,7 +159,7 @@ test('Churcie tee creation copies device presets, preserves custom units after r
   } finally { await fixture.close(); }
 });
 
-test('Churcie deferred order remains available after another group locks setup and late saved receipts stay immutable', async ({ page }, testInfo) => {
+test('Churchie deferred order remains available after another group locks setup and late saved receipts stay immutable', async ({ page }, testInfo) => {
   const fixture = await openChurcieV3Fixture(page, testInfo, 'other-group-started');
   try {
     await expect(page.getByRole('combobox', { name: 'Closest approach', exact: true })).toBeEnabled();
@@ -174,8 +174,8 @@ test('Churcie deferred order remains available after another group locks setup a
     expect(receipt).toMatchObject({ version: 3, rotation: {
       playerIds: [churciePlayers[1], churciePlayers[2], churciePlayers[3], churciePlayers[0]], recordedLate: true,
     } });
-    await page.getByText('Churcie partners · Order recorded late', { exact: true }).click();
-    await expect(page.getByRole('list', { name: 'Churcie partner rotation', exact: true })).toContainText('Holes 10, 11, 12');
+    await page.getByText('Churchie partners · Order recorded late', { exact: true }).click();
+    await expect(page.getByRole('list', { name: 'Churchie partner rotation', exact: true })).toContainText('Holes 10, 11, 12');
     await expect(page.getByRole('combobox', { name: 'Closest approach', exact: true })).toHaveCount(0);
     await page.getByRole('combobox', { name: 'Jump to hole', exact: true }).selectOption('10');
     await page.getByLabel('Fictional golfer 1 score', { exact: true }).fill('5');
@@ -188,15 +188,15 @@ test('Churcie deferred order remains available after another group locks setup a
   } finally { await fixture.close(); }
 });
 
-test('old Churcie capability does not expose creation or new approach-order controls', async ({ page }, testInfo) => {
+test('old Churchie capability does not expose creation or new approach-order controls', async ({ page }, testInfo) => {
   const fixture = await openChurcieV3Fixture(page, testInfo, 'old-api');
   try {
     await expect(page.getByRole('combobox', { name: 'Closest approach', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Games', exact: true }).click();
     await page.getByRole('button', { name: 'Add game', exact: true }).click();
     const editor = page.getByRole('form', { name: 'Game settings', exact: true });
-    await expect(editor.getByRole('option', { name: 'Churcie', exact: true })).toHaveCount(0);
-    await expect(editor.getByRole('combobox', { name: 'Choose Churcie partners', exact: true })).toHaveCount(0);
+    await expect(editor.getByRole('option', { name: 'Churchie', exact: true })).toHaveCount(0);
+    await expect(editor.getByRole('combobox', { name: 'Choose Churchie partners', exact: true })).toHaveCount(0);
     expect(fixture.counters().writes).toBe(0);
     expect(fixture.counters().configWrites).toBe(0);
     expect(fixture.counters().pageErrors).toEqual([]);

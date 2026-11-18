@@ -5,7 +5,7 @@ import { churchyV3CategoryFixture, churchyV3Fixture } from './churchy-v3.test-su
 import { preserveScoreExtras, supportsDotsSpecials } from './scoring.js';
 import { strokeGameCards, strokeGameId } from './stroke-games.test-support.js';
 
-describe('Churcie v3 actual playing circuit and canonical shared specials', () => {
+describe('Churchie v3 actual playing circuit and canonical shared specials', () => {
   it.each([[3, 'kp'], [5, 'blue-plate'], [5, 'long-drive']] as const)(
     'uses captured default par %i for %s while keeping the first golfer’s personal par for Birdie', (par, category) => {
       const f = churchyV3CategoryFixture(par, 4, category);

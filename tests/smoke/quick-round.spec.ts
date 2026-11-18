@@ -127,8 +127,8 @@ for (const width of [320, 1280]) {
       const kinds = page.getByRole('combobox', { name: 'Game type', exact: true });
       for (const kind of ['stableford', 'ball-drop', 'skins', 'churchy']) await expect(kinds.locator(`option[value="${kind}"]`)).toHaveCount(1);
       await kinds.selectOption('churchy');
-      await page.getByRole('combobox', { name: 'Churcie playing group', exact: true }).selectOption('1');
-      await expect(page.getByRole('combobox', { name: 'Choose Churcie partners', exact: true })).toHaveValue('approach');
+      await page.getByRole('combobox', { name: 'Churchie playing group', exact: true }).selectOption('1');
+      await expect(page.getByRole('combobox', { name: 'Choose Churchie partners', exact: true })).toHaveValue('approach');
       await page.getByText(/^Specials and presets ·/).click();
       await expect(page.getByRole('combobox', { name: 'Specials preset', exact: true })).toBeVisible();
       await expect(page.getByText('Custom presets unavailable here. Built-in presets still work.', { exact: true })).toHaveCount(0);

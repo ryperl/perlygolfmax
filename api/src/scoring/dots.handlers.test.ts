@@ -34,9 +34,9 @@ async function fixture() {
 }
 
 describe('Dots HTTP namespaces and public internal authority', () => {
-  it.each(['owner', 'public'] as const)('accepts Churcie v3 canonical declarations on the dedicated %s route without raising ordinary limits', async (role) => {
+  it.each(['owner', 'public'] as const)('accepts Churchie v3 canonical declarations on the dedicated %s route without raising ordinary limits', async (role) => {
     const f = await fixture();
-    const game: ChurchyGameDefinitionV3 = { id: f.game.id, name: 'Churcie', kind: 'churchy', version: 3,
+    const game: ChurchyGameDefinitionV3 = { id: f.game.id, name: 'Churchie', kind: 'churchy', version: 3,
       basis: 'net', currency: 'USD', amountPerDotMinor: 50, groupNumber: 1, playerIds: f.game.playerIds,
       orderMode: 'approach', specials: [{ kind: 'dime', units: 1 }, { kind: 'murphy', units: 2 }] };
     const configured = await f.scores.saveGames(f.actor, event.id, f.roundId, [game], null, identifier(24500));
@@ -53,7 +53,7 @@ describe('Dots HTTP namespaces and public internal authority', () => {
     expect(await ordinary(f.request({ score }, 24501), f.context)).toMatchObject({ status: 413 });
     const saved = await dedicated(f.request({ score }, 24502, {}, '?format=lean'), f.context);
     expect(saved.status).toBe(200);
-    if (!isRecord(saved.jsonBody)) throw new Error('Missing fictional Churcie response');
+    if (!isRecord(saved.jsonBody)) throw new Error('Missing fictional Churchie response');
     expect(saved.jsonBody.change).not.toHaveProperty('dotAwardAudit');
     const round = decodeRoundScores(saved.jsonBody.round);
     expect(round?.games?.results[0]?.churchy?.order?.playerIds).toEqual(game.playerIds);

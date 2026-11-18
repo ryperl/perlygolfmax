@@ -39,7 +39,7 @@ function context(number = 1, multiplier: 1 | 2 | 3 = 1, sides: readonly (readonl
 }
 
 describe('source-only Dots declaration review', () => {
-  it.each([0, 1, 2] as const)('rejects Churcie-only Murphy stage %i in ordinary individual, fixed, linked and rotating Dots', (murphyPresses) => {
+  it.each([0, 1, 2] as const)('rejects Churchie-only Murphy stage %i in ordinary individual, fixed, linked and rotating Dots', (murphyPresses) => {
     const f = fixture([4], ['murphy']);
     const rotating: DotsGameDefinition = { id: f.game.id, name: f.game.name, kind: 'dots', version: 2,
       mode: 'rotating', rotationHoles: 3, groupNumber: 1, playerIds: ids, specials: f.game.specials, stakeMinor: null };
@@ -54,7 +54,7 @@ describe('source-only Dots declaration review', () => {
     }
   });
 
-  it('keeps current-stake Sweep confined to the internal Churcie profile, preserving ordinary linked multipliers', () => {
+  it('keeps current-stake Sweep confined to the internal Churchie profile, preserving ordinary linked multipliers', () => {
     const f = fixture([4], ['sweep']);
     const game = linked({ ...f.game, specials: [{ kind: 'sweep', units: 2 }] });
     const contexts: readonly DotHoleContext[] = [{ ...context(1, 2), sweepMultiplier: 3,

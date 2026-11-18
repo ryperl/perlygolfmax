@@ -51,7 +51,7 @@ test('legacy Churchy dialog and acknowledged save retain old rules at 320px/125%
       expect(await select.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
     }
     await page.getByRole('button', { name: 'Games', exact: true }).click();
-    const results = page.getByRole('region', { name: 'Churcie · Group 1 results', exact: true });
+    const results = page.getByRole('region', { name: 'Churchie · Group 1 results', exact: true });
     await expect(results).toBeVisible();
     await expect(results).toContainText('Collects from pot: $3.00');
     await expect(results.getByText('Saved hole receipts', { exact: true })).toHaveCount(0);
@@ -60,10 +60,10 @@ test('legacy Churchy dialog and acknowledged save retain old rules at 320px/125%
     await page.getByRole('button', { name: 'Enter scores', exact: true }).click();
     await expect(page.getByRole('button', { name: /Dots for/ })).toHaveCount(0);
     await page.getByRole('button', { name: 'Games', exact: true }).click();
-    await expect(page.getByText(/Churcie/)).toHaveCount(0);
+    await expect(page.getByText(/Churchie/)).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Edit Fictional Skins' })).toBeVisible();
     await page.getByRole('button', { name: 'Leaderboard', exact: true }).click();
-    await expect(page.getByText(/Churcie/)).toHaveCount(0);
+    await expect(page.getByText(/Churchie/)).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   } finally {
     await server.close();

@@ -14,7 +14,7 @@ export function ChurcieOrderControls({ mode, value, players, circuit, saved = fa
   const complete = value.length === 4 && new Set(value).size === 4
     && players.length === 4 && value.every((id) => players.some((player) => player.playerId === id));
   const labels = mode === 'approach' ? ['Closest approach', 'Farthest approach', 'Next farthest approach']
-    : ['Churcie P1', 'Churcie P2', 'Churcie P3', 'Churcie P4'];
+    : ['Churchie P1', 'Churchie P2', 'Churchie P3', 'Churchie P4'];
   const positions = mode === 'approach' ? [0, 3, 2] : [0, 1, 2, 3];
   const preview = complete ? [
     [[value[0], value[3]], [value[1], value[2]]],
@@ -36,17 +36,17 @@ export function ChurcieOrderControls({ mode, value, players, circuit, saved = fa
     }
     onChange(next);
   }
-  const pairings = <ol className="churcie-pair-preview" aria-label="Churcie partner rotation">
+  const pairings = <ol className="churcie-pair-preview" aria-label="Churchie partner rotation">
     {preview.map((pairs, index) => <li key={index}>
       <span>Holes {circuit.slice(index * 3, index * 3 + 3).join(', ')}</span>
       <span>{pairs.map((pair) => pair.map(name).join(' + ')).join(' vs ')}</span>
     </li>)}
   </ol>;
   if (saved) return <details className="churcie-order">
-    <summary>Churcie partners{late ? ' · Order recorded late' : ''}</summary>
-    {complete ? pairings : <p role="alert">Saved partner order is unavailable. Refresh before reviewing Churcie results.</p>}
+    <summary>Churchie partners{late ? ' · Order recorded late' : ''}</summary>
+    {complete ? pairings : <p role="alert">Saved partner order is unavailable. Refresh before reviewing Churchie results.</p>}
   </details>;
-  return <section className="churcie-order" aria-label="Churcie partner order">
+  return <section className="churcie-order" aria-label="Churchie partner order">
     <h3>{mode === 'approach' ? `Choose partners after approaches on hole ${String(circuit[0] ?? '—')}` : 'Set the order at the tee'}</h3>
     <div className="churcie-order-fields">{labels.map((label, index) => <label key={label}>{label}
       <select value={value[positions[index] ?? index] ?? ''} disabled={disabled} onChange={(event) => { choose(positions[index] ?? index, event.target.value); }}>

@@ -32,7 +32,7 @@ async function fixture(version: 1 | 2) {
 }
 
 describe('new Dots declaration exclusions with legacy preservation', () => {
-  it.each([1, 2] as const)('rejects Churcie-only press stages from ordinary Dots v%i writes and marks malformed saved records unavailable', async (version) => {
+  it.each([1, 2] as const)('rejects Churchie-only press stages from ordinary Dots v%i writes and marks malformed saved records unavailable', async (version) => {
     const f = await fixture(version);
     for (const murphyPresses of [0, 1, 2] as const) {
       const record = f.record([{ playerId: f.playerId, counts: {}, calls: [{

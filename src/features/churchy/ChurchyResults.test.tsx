@@ -14,8 +14,8 @@ describe('Churchy saved receipts and separate settlement', () => {
     const result = calculateGameResults([game], f.snapshot, cards)[0];
     if (!result?.churchy?.internalSettlement) throw new Error('Missing fictional v2 settlement.');
     render(<ChurchyResults game={game} result={result} />);
-    expect(screen.getByRole('region', { name: 'Churcie · Group 1 results' })).toBeVisible();
-    const summary = within(screen.getByRole('region', { name: 'Group 1 Churcie internal settlement' }));
+    expect(screen.getByRole('region', { name: 'Churchie · Group 1 results' })).toBeVisible();
+    const summary = within(screen.getByRole('region', { name: 'Group 1 Churchie internal settlement' }));
     fireEvent.click(summary.getByText('Rate and settlement method'));
     expect(summary.getByText(/Total to settle: USD\s+28.00/)).toBeVisible();
     const amounts = [...summary.getByRole('list', { name: 'Combined standings' }).querySelectorAll('summary .internal-settlement-money')]
@@ -30,7 +30,7 @@ describe('Churchy saved receipts and separate settlement', () => {
     const f = churchyFixture();
     const round = f.round(strokeGameCards(f.cards, 1, [{ kind: 'strokes', strokes: 3 }, { kind: 'strokes', strokes: 3 }]));
     render(<ChurchyResults game={f.game} result={round.games?.results[0]} />);
-    const standings = within(screen.getByRole('list', { name: 'Churcie standings' }));
+    const standings = within(screen.getByRole('list', { name: 'Churchie standings' }));
     expect(standings.getAllByRole('listitem')).toHaveLength(4);
     expect(standings.getAllByText(/T1.*5 earned dots/)).toHaveLength(2);
     expect(screen.queryByText(/Fictional golfer 5/)).toBeNull();
@@ -44,7 +44,7 @@ describe('Churchy saved receipts and separate settlement', () => {
     const f = churchyFixture();
     const round = f.round(strokeGameCards(f.cards, 1, [{ kind: 'unplayed' }]));
     render(<ChurchyResults game={f.game} result={round.games?.results[0]} />);
-    expect(screen.getByRole('list', { name: 'Churcie standings' })).toBeEmptyDOMElement();
+    expect(screen.getByRole('list', { name: 'Churchie standings' })).toBeEmptyDOMElement();
     expect(screen.getAllByText(/Pays into pot: Unavailable/)).toHaveLength(4);
     expect(screen.getByText(/Unawarded High carry: uncertain/)).toBeVisible();
     expect(screen.getByText(/pending holes are not ties/)).toBeVisible();

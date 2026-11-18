@@ -11,7 +11,7 @@ export const builtInDotPresets: readonly DotPreset[] = [
     .filter((special) => ['hogan', 'seve', 'long-drive', 'paree', 'sandy', 'pully', 'dime', 'kp',
       'murphy', 'haz-par', 'gorilla', 'birdie', 'eagle', 'chippy'].includes(special.kind))
     .map((special) => ({ kind: special.kind, units: special.defaultUnits })) },
-  { id: 'churcie-default', name: 'Churcie familiar', specials: defaultChurchySpecialSelections
+  { id: 'churcie-default', name: 'Churchie familiar', specials: defaultChurchySpecialSelections
     .map((special) => ({ ...special })) },
 ];
 

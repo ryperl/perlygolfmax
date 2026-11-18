@@ -271,7 +271,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     if (!round || !group || !hole || busy || saving.current || !canEditGroup) return;
     const plan = planGroup(round, group.playerIds, hole.number, currentDrafts.current);
     if (plan.invalid.length > 0) {
-      setNotice({ kind: 'attention', message: 'Nothing sent. Check every intended entry, including Dots/Churcie counts, partner order and conflicting specials or calls. Counts must be nonnegative whole numbers; scores accept a positive number, X / X7, DNF, or blank.' });
+      setNotice({ kind: 'attention', message: 'Nothing sent. Check every intended entry, including Dots/Churchie counts, partner order and conflicting specials or calls. Counts must be nonnegative whole numbers; scores accept a positive number, X / X7, DNF, or blank.' });
       return;
     }
     if (plan.conflicts.length > 0) {

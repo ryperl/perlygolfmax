@@ -28,7 +28,7 @@ export function ChurcieEntryControls({ round, game, holeNumber, saved, draft, di
   const players = game.playerIds.flatMap((id) => round.cards.filter((card) => card.playerId === id));
   if (orderOnly) {
     if (game.orderMode === 'approach' && !acknowledged.rotation && holeNumber !== acknowledged.firstHole) {
-      return <p className="game-hint">Churcie partners pending. Choose the approach order on hole {acknowledged.firstHole ?? '—'}.
+      return <p className="game-hint">Churchie partners pending. Choose the approach order on hole {acknowledged.firstHole ?? '—'}.
         Raw scores can still be saved.</p>;
     }
     return <ChurcieOrderControls mode={game.orderMode} value={preview.rotation?.playerIds ?? []} players={players}
@@ -49,18 +49,18 @@ export function ChurcieEntryControls({ round, game, holeNumber, saved, draft, di
       || Object.values(player.counts).some((count) => count !== 0));
     if (!contests && !selected) return null;
   }
-  const controls = <DotsHoleControls game={churchyDotsDefinition({ ...game, name: 'Churcie' })} holeNumber={holeNumber}
+  const controls = <DotsHoleControls game={churchyDotsDefinition({ ...game, name: 'Churchie' })} holeNumber={holeNumber}
     par={round.layout.find((hole) => hole.number === holeNumber)?.par ?? 0}
     playerPars={game.playerIds.map((id) => ({ playerId: id,
       par: round.playerTees?.find((entry) => entry.playerId === id)?.profile.holes.find((hole) => hole.number === holeNumber)?.par
         ?? round.layout.find((hole) => hole.number === holeNumber)?.par ?? 0 }))}
-    etag={etag ?? ''} saved={saved} draft={draft} players={players} contextLabel="Churcie partner order"
+    etag={etag ?? ''} saved={saved} draft={draft} players={players} contextLabel="Churchie partner order"
     context={preview.contexts.find((context) => context.number === holeNumber)}
     contextPreview={draft?.rotation !== undefined && acknowledged.rotation === undefined}
     specialLabels={{ dime: 'Sticky' }} allowMurphyPresses
     playerId={playerId} groupOnly={playerId === undefined} disabled={locked}
     onChange={(record) => { onChange({ ...record, version: 3 }); }} />;
   return playerId ? <DotsEntryButton name={players.find((player) => player.playerId === playerId)?.displayName ?? 'Golfer unavailable'}
-    gameName="Churcie" holeNumber={holeNumber} disabled={locked}
+    gameName="Churchie" holeNumber={holeNumber} disabled={locked}
     staged={draft?.players.some((player) => player.playerId === playerId) === true}>{controls}</DotsEntryButton> : controls;
 }

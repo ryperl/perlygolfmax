@@ -190,10 +190,10 @@ export function preserveScoreExtras(score: HoleScore, saved: HoleScore): HoleSco
     && (score.churchy.gameId !== saved.churchy.gameId || score.churchy.number !== saved.churchy.number
       || score.churchy.rotation && (score.churchy.rotation.playerIds.length !== saved.churchy.rotation.playerIds.length
         || score.churchy.rotation.playerIds.some((id, i) => id !== savedChurchy?.rotation?.playerIds[i])))) {
-    throw new GameDeclarationConflictError('A saved Churcie order cannot be replaced.', 'CHURCHY_ORDER_CONFLICT');
+    throw new GameDeclarationConflictError('A saved Churchie order cannot be replaced.', 'CHURCHY_ORDER_CONFLICT');
   }
   if (savedChurchy?.rotation && score.churchy && score.churchy.version !== 3) {
-    throw new GameDeclarationConflictError('A saved Churcie order cannot be replaced.', 'CHURCHY_ORDER_CONFLICT');
+    throw new GameDeclarationConflictError('A saved Churchie order cannot be replaced.', 'CHURCHY_ORDER_CONFLICT');
   }
   return { ...score,
     ...(churchy ? { churchy } : {}),

@@ -19,7 +19,7 @@ describe('game drafts', () => {
     expect(upgraded).toMatchObject({ version: 3, orderMode: 'tee' });
   });
 
-  it('creates Churcie v3 defaults without converting saved legacy games, and retains independent groups', () => {
+  it('creates Churchie v3 defaults without converting saved legacy games, and retains independent groups', () => {
     const f = churchyFixture();
     const legacy = draftFromGame(f.game);
     expect(legacy.churchyVersion).toBe(1);
@@ -28,16 +28,18 @@ describe('game drafts', () => {
     const draft = { ...setGameKind(newGameDraft(), 'churchy', f.cards.length),
       churchyGroup: 2, churchyPlayers: f.cards.slice(4).map((card) => card.playerId), amountPerDotMinor: '.50' };
     const built = buildGame(draft, f.cards.map((card) => card.playerId));
-    expect(built).toMatchObject({ version: 3, name: 'Churcie', orderMode: 'approach',
+    expect(built).toMatchObject({ version: 3, name: 'Churchie', orderMode: 'approach',
       specials: defaultChurchySpecialSelections, amountPerDotMinor: 50, groupNumber: 2 });
     if (!built || built.kind !== 'churchy') throw new Error('Missing fictional v3 game.');
     expect(buildGame(draftFromGame(built), f.cards.map((card) => card.playerId))).toEqual(built);
+    const previousSpelling = { ...built, name: 'Churcie' };
+    expect(buildGame(draftFromGame(previousSpelling), f.cards.map((card) => card.playerId))).toEqual(previousSpelling);
     expect(replaceGame([f.game], built)).toEqual([f.game, built]);
     expect(replaceGame([f.game], { ...built, groupNumber: 1, playerIds: f.game.playerIds })).toBeNull();
     const v2 = { ...f.game, version: 2 as const, enabledSpecials: defaultChurchySpecials };
     expect(buildGame(draftFromGame(v2), f.game.playerIds)).toEqual(v2);
     const upgraded = buildGame(upgradeChurchyDraft(draftFromGame(v2)), f.game.playerIds);
-    expect(upgraded).toMatchObject({ version: 3, name: 'Churcie', orderMode: 'tee',
+    expect(upgraded).toMatchObject({ version: 3, name: 'Churchie', orderMode: 'tee',
       specials: defaultChurchySpecialSelections });
     expect(upgraded?.kind === 'churchy' && upgraded.playerIds).toEqual([
       f.game.playerIds[0], f.game.playerIds[3], f.game.playerIds[2], f.game.playerIds[1],

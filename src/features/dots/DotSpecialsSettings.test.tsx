@@ -18,7 +18,7 @@ function Editor({ onChange, ...props }: Omit<DotSpecialsSettingsProps, 'specials
 }
 
 describe('shared specials setup and presets', () => {
-  it('aliases only canonical Dime as Sticky in Churcie and retains custom units while selecting all compatible specials', () => {
+  it('aliases only canonical Dime as Sticky in Churchie and retains custom units while selecting all compatible specials', () => {
     const onChange = vi.fn<DotSpecialsSettingsProps['onChange']>();
     render(<Editor mode="linked" context="churcie" supportedKinds={allKinds} onChange={onChange} />);
     expect(onChange).not.toHaveBeenCalled();

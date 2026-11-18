@@ -17,7 +17,7 @@ export function gameUnavailableMessage(reason: StrokeGameUnavailableReason | und
 }
 
 export function gameDisplayName(game: RoundGameDefinition): string {
-  return game.kind === 'churchy' ? 'Churcie' : game.name;
+  return game.kind === 'churchy' ? 'Churchie' : game.name;
 }
 
 export function gameScoringLabel(game: RoundGameDefinition): string {

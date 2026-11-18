@@ -94,7 +94,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
       return;
     }
     if (editor.draft.kind === 'churchy' && round.churchyEnabled !== true) {
-      setMessage('Churcie disabled. Cancel editing and refresh; ordinary scores and other games remain available.');
+      setMessage('Churchie disabled. Cancel editing and refresh; ordinary scores and other games remain available.');
       return;
     }
     const game = buildGame(editor.draft, editor.roster.map((card) => card.playerId));
@@ -119,7 +119,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
     if (game?.kind === 'churchy' && (previousGame?.kind === 'churchy' && previousGame.version !== game.version && !explicitChurchyUpgrade
       || previousGame === undefined && (game.version !== 3 || round.setupLocked || editingRound.setupLocked)
       || game.version !== 1 && (!round.churchyRulesVersions?.includes(game.version) || !editingRound.churchyRulesVersions?.includes(game.version)))) {
-      setMessage('Churcie rules support is required before creating or editing this game. Saved rules versions cannot be converted.');
+      setMessage('Churchie rules support is required before creating or editing this game. Saved rules versions cannot be converted.');
       return;
     }
     if (game?.kind === 'churchy') {
@@ -130,7 +130,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
       }
       if ((round.setupLocked || editingRound.setupLocked) && previousGame?.kind === 'churchy'
         && !sameGameDefinitions([game], [{ ...previousGame, amountPerDotMinor: game.amountPerDotMinor }])) {
-        setMessage('Saved scoring locks the Churcie foursome, order and enabled specials. Only the planned rate can change.');
+        setMessage('Saved scoring locks the Churchie foursome, order and enabled specials. Only the planned rate can change.');
         return;
       }
     }
@@ -157,7 +157,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
       if (peers.some((peer) => (peer.kind === 'churchy' || peer.kind === 'wolf' || peer.kind === 'dots')
         && peer.groupNumber === game.groupNumber && (game.kind === 'churchy' || peer.kind === 'churchy'
           || game.kind === 'wolf' && peer.kind === 'wolf'))) {
-        setMessage('Choose one internal base game per playing group. Churcie cannot accompany Wolf or Dots; Ball Drop remains separate.');
+        setMessage('Choose one internal base game per playing group. Churchie cannot accompany Wolf or Dots; Ball Drop remains separate.');
         return;
       }
       if (game.kind === 'dots' && game.mode === 'linked' && !peers.some((peer) => peer.kind === 'wolf'
@@ -173,7 +173,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
         ? 'Check the game name, saved playing group, distinct participants and order. Enter USD dollars and cents, or choose No planned money.'
         : editor.draft.kind === 'dots' ? 'Choose a saved playing group, compatible mode and enabled specials with positive whole units. Solo play is stats-only; otherwise use a valid optional USD rate with at most two decimal places.'
         : editor.draft.kind === 'churchy'
-        ? 'Choose a complete saved foursome, order all four golfers, and enter USD dollars and cents per dot (zero or more). Choose one Churcie game per group.'
+        ? 'Choose a complete saved foursome, order all four golfers, and enter USD dollars and cents per dot (zero or more). Choose one Churchie game per group.'
         : editor.draft.kind === 'stroke-play' ? 'Check the game name (1–100 characters) and gross or net score basis. Net uses 100% captured Course Handicap.'
         : editor.draft.kind === 'ball-drop' || editor.draft.kind === 'skins'
         ? 'Check the game name (1–100 characters), supported format, and complete four-person Ball Drop teams. Skins are individual; net always uses 100% Course Handicap.'
@@ -329,7 +329,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
           }} />
       </>}
       {editor?.draft.kind === 'churchy' && round.churchyEnabled !== true && <button type="button" disabled={working}
-        onClick={() => { setEditor(null); onDirtyChange(false); }}>Cancel unavailable Churcie edit</button>}
+        onClick={() => { setEditor(null); onDirtyChange(false); }}>Cancel unavailable Churchie edit</button>}
     </section>
   );
 }

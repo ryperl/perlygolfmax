@@ -40,7 +40,7 @@ function churcieStore(f: ReturnType<typeof churchyV3Fixture>, round: RoundScores
   return store;
 }
 
-describe('Churcie actual-circuit partner selection and shared specials', () => {
+describe('Churchie actual-circuit partner selection and shared specials', () => {
   it('discards a partial unsaved order without creating an empty score write or clearing a typed score', async () => {
     const { f, round } = initial(), store = churcieStore(f, round), user = userEvent.setup();
     const closest = f.ids[0];
@@ -65,7 +65,7 @@ describe('Churcie actual-circuit partner selection and shared specials', () => {
     const [anchor, closest, remaining, nextFarthest] = f.ids;
     if (!anchor || !closest || !remaining || !nextFarthest) throw new Error('Missing fictional foursome');
     const firstSave = store.client.save;
-    vi.mocked(firstSave).mockRejectedValueOnce(new Error('Fictional interrupted Churcie save'));
+    vi.mocked(firstSave).mockRejectedValueOnce(new Error('Fictional interrupted Churchie save'));
     render(<OwnerScoresView client={store.client} eventId={round.eventId} roundId={round.roundId} onSessionExpired={vi.fn()} />);
     await screen.findByRole('heading', { name: 'Round scorecard' });
     await user.click(screen.getByRole('button', { name: 'Enter scores' }));
@@ -74,7 +74,7 @@ describe('Churcie actual-circuit partner selection and shared specials', () => {
     await user.selectOptions(screen.getByLabelText('Next farthest approach'), nextFarthest);
     await user.click(screen.getByRole('button', { name: 'Par for blanks' }));
     fireEvent.change(screen.getByRole('textbox', { name: 'Fictional golfer 2 score' }), { target: { value: '3' } });
-    await user.click(screen.getByRole('button', { name: 'Dots for Fictional golfer 2 · Churcie' }));
+    await user.click(screen.getByRole('button', { name: 'Dots for Fictional golfer 2 · Churchie' }));
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByLabelText('Sticky for Fictional golfer 2')).toBeVisible();
     expect(within(dialog).queryByLabelText('Dime for Fictional golfer 2')).not.toBeInTheDocument();
@@ -82,7 +82,7 @@ describe('Churcie actual-circuit partner selection and shared specials', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Increase Sandy for Fictional golfer 2' }));
     await user.click(within(dialog).getByRole('button', { name: 'Done' }));
     await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
-    await screen.findByText(/Fictional interrupted Churcie save/);
+    await screen.findByText(/Fictional interrupted Churchie save/);
     expect(screen.getByRole('form', { name: 'Group 1 hole 10 entry' })).toBeVisible();
     expect(screen.getByLabelText('Closest approach')).toHaveValue(closest);
     const requestId = vi.mocked(firstSave).mock.calls[0]?.[6];
@@ -102,7 +102,7 @@ describe('Churcie actual-circuit partner selection and shared specials', () => {
     expect(result?.players.find((player) => player.playerId === closest)?.totalPoints).toBe(5);
     expect(result?.players.find((player) => player.playerId === anchor)?.totalPoints).toBe(5);
     await user.selectOptions(screen.getByLabelText('Jump to hole'), '10');
-    await user.click(screen.getByRole('button', { name: 'Clear Churcie hole specials' }));
+    await user.click(screen.getByRole('button', { name: 'Clear Churchie hole specials' }));
     await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     await screen.findByRole('form', { name: 'Group 1 hole 11 entry' });
     const cleared = store.read().cards.find((card) => card.playerId === anchor)?.holes.find((hole) => hole.number === 10)?.score.churchy;
@@ -137,8 +137,8 @@ describe('Churcie actual-circuit partner selection and shared specials', () => {
     await screen.findByRole('heading', { name: 'Round scorecard' });
     await user.click(screen.getByRole('button', { name: 'Enter scores' }));
     expect(screen.queryByLabelText('Closest approach')).not.toBeInTheDocument();
-    await user.click(screen.getByText('Churcie partners', { exact: true }));
-    expect(screen.getByRole('list', { name: 'Churcie partner rotation' })).toHaveTextContent('Holes 10, 11, 12');
+    await user.click(screen.getByText('Churchie partners', { exact: true }));
+    expect(screen.getByRole('list', { name: 'Churchie partner rotation' })).toHaveTextContent('Holes 10, 11, 12');
     await user.click(screen.getByRole('button', { name: 'Par for blanks' }));
     await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     await screen.findByRole('form', { name: 'Group 1 hole 11 entry' });

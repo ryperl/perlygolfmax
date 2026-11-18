@@ -186,7 +186,7 @@ export function calculateChurchyV3Results(game: ChurchyGameDefinitionV3, inputs:
           const personal = inputs.find((entry) => entry.playerId === playerId)?.layout.find((entry) => entry.number === number);
           const score = cards.find((entry) => entry.playerId === playerId)?.holes.find((entry) => entry.number === number)?.score;
           return personal ? [{ playerId, number, strokes: score?.kind === 'strokes' ? score.strokes : null, par: personal.par }] : [];
-        })), reason: `Saved Churcie ${kind} with its independent carry in actual playing order.` });
+        })), reason: `Saved Churchie ${kind} with its independent carry in actual playing order.` });
       sourceHoles = [];
     }
   }

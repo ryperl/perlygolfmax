@@ -16,7 +16,7 @@ function tamper(value: unknown, path: readonly (string | number)[], replacement:
   return { ...value, [key]: tamper(value[key], remaining, replacement) };
 }
 
-describe('Churcie v3 strict definitions, receipts and coherent lean round transport', () => {
+describe('Churchie v3 strict definitions, receipts and coherent lean round transport', () => {
   it.each([[3, 'kp'], [5, 'blue-plate'], [5, 'long-drive']] as const)(
     'reconstructs %s default-tee categories independently of the first golfer’s personal tee (%s)', (par, category) => {
       const f = churchyV3CategoryFixture(par, 4, category);
@@ -31,6 +31,7 @@ describe('Churcie v3 strict definitions, receipts and coherent lean round transp
   it('accepts explicit tee/approach definitions and copied shared units without accepting Sticky as a second kind', () => {
     const f = churchyV3Fixture();
     expect(isChurchyDefinition(f.game)).toBe(true);
+    expect(isChurchyDefinition({ ...f.game, name: 'Churcie' })).toBe(true);
     expect(isChurchyDefinition({ ...f.game, orderMode: 'tee' })).toBe(true);
     expect(isRoundGameDefinitions([f.game])).toBe(true);
     for (const edit of [{ orderMode: undefined }, { orderMode: 'gps' }, { name: 'Churchy Game' },

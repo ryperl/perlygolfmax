@@ -6,7 +6,7 @@ import { ChurcieOrderControls } from './ChurcieOrderControls';
 const players = ['A', 'B', 'C', 'D'].map((playerId) => ({ playerId, displayName: `Fictional golfer ${playerId}` }));
 const circuit = [10, 11, 12, 13, 14, 15, 16, 17, 18, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
-describe('Churcie starting order', () => {
+describe('Churchie starting order', () => {
   it('uses three approach choices and the remaining golfer, previewing the confirmed three-part rotation', () => {
     const onChange = vi.fn<(ids: readonly string[]) => void>();
     function Editor() {
@@ -36,14 +36,14 @@ describe('Churcie starting order', () => {
   it('swaps manual tee positions instead of duplicating a selected golfer', () => {
     const onChange = vi.fn();
     render(<ChurcieOrderControls mode="tee" value={['A', 'B', 'C', 'D']} players={players} circuit={circuit} disabled={false} onChange={onChange} />);
-    fireEvent.change(screen.getByLabelText('Churcie P1'), { target: { value: 'D' } });
+    fireEvent.change(screen.getByLabelText('Churchie P1'), { target: { value: 'D' } });
     expect(onChange).toHaveBeenCalledWith(['D', 'B', 'C', 'A']);
   });
 
   it('never edits an acknowledged order and marks late recovery without exposing editable selects', () => {
     render(<ChurcieOrderControls mode="approach" value={['A', 'D', 'C', 'B']} players={players} circuit={circuit}
       saved late disabled={false} onChange={vi.fn()} />);
-    expect(screen.getByText('Churcie partners · Order recorded late').closest('details')).not.toHaveAttribute('open');
+    expect(screen.getByText('Churchie partners · Order recorded late').closest('details')).not.toHaveAttribute('open');
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
@@ -51,7 +51,7 @@ describe('Churcie starting order', () => {
   it('keeps unavailable saved order explicit instead of guessing pairs from roster order', () => {
     render(<ChurcieOrderControls mode="approach" value={['A', 'A', 'C', 'D']} players={players} circuit={circuit}
       saved disabled={false} onChange={vi.fn()} />);
-    fireEvent.click(screen.getByText('Churcie partners'));
+    fireEvent.click(screen.getByText('Churchie partners'));
     expect(screen.getByRole('alert')).toHaveTextContent('Saved partner order is unavailable');
     expect(screen.queryByRole('list')).not.toBeInTheDocument();
   });

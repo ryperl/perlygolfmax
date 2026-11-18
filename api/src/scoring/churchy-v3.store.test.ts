@@ -22,7 +22,7 @@ async function fixture(startingHole = 1) {
     ...round, groups: round.groups.map((group) => ({ ...group, startingHole })),
   })) }, workspace.etag);
   const game: ChurchyGameDefinitionV3 = {
-    id: identifier(24000), name: 'Churcie', kind: 'churchy', version: 3, basis: 'net',
+    id: identifier(24000), name: 'Churchie', kind: 'churchy', version: 3, basis: 'net',
     orderMode: 'approach', groupNumber: 1, playerIds: f.input.playerIds.slice(0, 4),
     amountPerDotMinor: 50, currency: 'USD', specials: defaultChurchySpecialSelections,
   };
@@ -34,7 +34,7 @@ async function fixture(startingHole = 1) {
   return { ...f, game, round, declaration };
 }
 
-describe('Churcie v3 authoritative public conditional transactions', () => {
+describe('Churchie v3 authoritative public conditional transactions', () => {
   it.each([1, 10, 7])('acknowledges order with the first score from starting hole %i and whole-round capture', async (start) => {
     const f = await fixture(start);
     const score = { kind: 'strokes' as const, strokes: 4, churchy: f.declaration(start, f.game.playerIds) };
@@ -196,7 +196,7 @@ describe('Churcie v3 authoritative public conditional transactions', () => {
     const first = await f.scores.saveGames(f.actor, event.id, f.roundId, [v2], null, identifier(24051));
     const common = { id: v2.id, name: v2.name, kind: v2.kind, version: v2.version, basis: v2.basis,
       groupNumber: v2.groupNumber, playerIds: v2.playerIds, amountPerDotMinor: v2.amountPerDotMinor, currency: v2.currency };
-    const v3: ChurchyGameDefinitionV3 = { ...common, name: 'Churcie', version: 3, orderMode: 'approach',
+    const v3: ChurchyGameDefinitionV3 = { ...common, name: 'Churchie', version: 3, orderMode: 'approach',
       specials: defaultChurchySpecialSelections };
     await expect(f.scores.saveGames(f.actor, event.id, f.roundId, [v3], 'fictional-stale', identifier(24052)))
       .rejects.toMatchObject({ code: 'GAMES_CHANGED' });

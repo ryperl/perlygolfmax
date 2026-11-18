@@ -22,7 +22,7 @@ const snapshot = { ...source.snapshot, groups: source.snapshot.groups.map((group
   ({ ...group, startingHole: group.number === 1 ? 10 : 1 })) };
 export const churciePlayers = source.cards.map((card) => card.playerId);
 const games: readonly ChurchyGameDefinitionV3[] = snapshot.groups.map((group) => ({
-  id: strokeGameId(980 + group.number), name: 'Churcie', kind: 'churchy', version: 3,
+  id: strokeGameId(980 + group.number), name: 'Churchie', kind: 'churchy', version: 3,
   groupNumber: group.number, playerIds: group.playerIds, basis: 'net', currency: 'USD',
   amountPerDotMinor: 50, orderMode: group.number === 1 ? 'approach' : 'tee',
   specials: defaultChurchySpecialSelections,
@@ -92,7 +92,7 @@ export async function openChurcieV3Fixture(page: Page, testInfo: TestInfo,
   try {
     await server.listen();
     const address = server.httpServer?.address();
-    if (!address || typeof address === 'string') throw new Error('Fictional Churcie server unavailable.');
+    if (!address || typeof address === 'string') throw new Error('Fictional Churchie server unavailable.');
     const origin = `http://127.0.0.1:${String(address.port)}`;
     await page.route(`${origin}/`, (route) => route.fulfill({ contentType: 'text/html',
       body: '<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="public-app-fixture"></div><script type="module" src="/tests/smoke/public-app-fixture.tsx"></script></body></html>' }));
@@ -108,14 +108,14 @@ export async function openChurcieV3Fixture(page: Page, testInfo: TestInfo,
           reads++;
           return route.fulfill({ json: lean(stored) });
         }
-        throw new Error(`Unexpected fictional Churcie read: ${path}`);
+        throw new Error(`Unexpected fictional Churchie read: ${path}`);
       }
       const payload: unknown = request.postDataJSON();
       const id = headers['idempotency-key'], expectedEtag = headers['if-match'] ?? null;
-      if (request.method() !== 'PUT' || !isRecord(payload) || !id) throw new Error('Missing conditional fictional Churcie request.');
+      if (request.method() !== 'PUT' || !isRecord(payload) || !id) throw new Error('Missing conditional fictional Churchie request.');
       expect(url.searchParams.get('format')).toBe('lean');
       if (!path.includes('/holes/') && path.endsWith('/games')) {
-        if (!isRoundGameDefinitions(payload.games) || !stored.games) throw new Error('Invalid fictional Churcie configuration.');
+        if (!isRoundGameDefinitions(payload.games) || !stored.games) throw new Error('Invalid fictional Churchie configuration.');
         const replay = configReceipts.get(id);
         if (replay) {
           expect(payload.games).toEqual(replay.change.after);
@@ -136,11 +136,11 @@ export async function openChurcieV3Fixture(page: Page, testInfo: TestInfo,
         configReceipts.set(id, result);
         return route.fulfill({ json: { ...result, round: lean(stored) } });
       }
-      if (!isHoleScore(payload.score)) throw new Error('Invalid fictional Churcie score.');
+      if (!isHoleScore(payload.score)) throw new Error('Invalid fictional Churchie score.');
       const parts = path.split('/'), playerId = parts[5], holeNumber = Number(parts[7]);
       const card = stored.cards.find((entry) => entry.playerId === playerId);
       const before = card?.holes.find((hole) => hole.number === holeNumber)?.score;
-      if (!card || !before) throw new Error('Unknown fictional Churcie target.');
+      if (!card || !before) throw new Error('Unknown fictional Churchie target.');
       requests.push({ id, playerId: card.playerId, holeNumber, score: payload.score });
       const replay = receipts.get(id);
       if (replay) {
@@ -154,14 +154,14 @@ export async function openChurcieV3Fixture(page: Page, testInfo: TestInfo,
       if (card.etag === null) expect(headers['if-none-match']).toBe('*');
       if (failed) {
         failed = false;
-        return route.fulfill({ status: 503, json: { message: 'Fictional interrupted Churcie acknowledgement.' } });
+        return route.fulfill({ status: 503, json: { message: 'Fictional interrupted Churchie acknowledgement.' } });
       }
       let after = preserveScoreExtras(payload.score, before);
       const declaration = after.churchy;
       if (declaration?.version === 3) {
         const game = stored.games?.configuration.games.find((entry): entry is ChurchyGameDefinitionV3 =>
           entry.kind === 'churchy' && entry.version === 3 && entry.id === declaration.gameId);
-        if (!game) throw new Error('Unknown fictional Churcie game.');
+        if (!game) throw new Error('Unknown fictional Churchie game.');
         expect(game.groupNumber).toBe(stored.groups.find((group) => group.playerIds[0] === playerId)?.number);
         expect(declaration.gameEtag).toBe(stored.games?.configuration.etag);
         const receipt = churchyV3Records(game, stored.groups, stored.cards).find((entry) => entry.rotation);

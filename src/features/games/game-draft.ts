@@ -126,7 +126,7 @@ export function setGameKind(draft: GameDraft, kind: NonNullable<GameDraft['kind'
   if (kind === 'dots') return { ...reset, kind, name: 'Dots', dotsMode: 'individual', dotsPlayers: [], dotsSpecials: [], stake: '' };
   if (kind === 'nassau') return setNassauVariant({ ...reset, kind, name: 'Nassau', basis: 'net',
     nassauStakes: ['', '', ''], automaticPresses: false }, 'singles');
-  if (kind === 'churchy') return { ...reset, kind, name: 'Churcie', basis: 'net', amountPerDotMinor: '',
+  if (kind === 'churchy') return { ...reset, kind, name: 'Churchie', basis: 'net', amountPerDotMinor: '',
     churchyPlayers: [], churchyVersion: 3, churchyOrderMode: 'approach',
     churchySpecialSelections: defaultChurchySpecialSelections.map((special) => ({ ...special })) };
   return kind === 'ball-drop'
@@ -143,7 +143,7 @@ export function upgradeChurchyDraft(draft: GameDraft, startingHole = 1): GameDra
   const block = Math.floor((startingHole - 1) / 3) % 3;
   const order = a && b && c && d ? block === 0 ? [a, d, c, b] : block === 1 ? [a, b, d, c] : [a, c, b, d]
     : draft.churchyPlayers ?? [];
-  return { ...draft, name: 'Churcie', churchyVersion: 3, churchyOrderMode: 'tee',
+  return { ...draft, name: 'Churchie', churchyVersion: 3, churchyOrderMode: 'tee',
     churchyPlayers: order,
     churchySpecialSelections: defaultChurchySpecialSelections.filter((special) => special.kind === 'other'
       || enabled.has(special.kind)).map((special) => ({ ...special })) };
@@ -222,7 +222,7 @@ export function buildGame(draft: GameDraft, playerIds: readonly string[] = []): 
     return isRoundGameDefinition(game) ? game : null;
   }
   if (draft.kind === 'churchy') {
-    const game = { id: draft.id, name: draft.churchyVersion === 3 ? 'Churcie' : 'Churchy Game', kind: 'churchy', version: draft.churchyVersion ?? 1, basis: 'net',
+    const game = { id: draft.id, name: draft.churchyVersion === 3 ? draft.name : 'Churchy Game', kind: 'churchy', version: draft.churchyVersion ?? 1, basis: 'net',
       groupNumber: draft.churchyGroup, playerIds: draft.churchyPlayers, currency: 'USD',
       amountPerDotMinor: draft.churchyVersion === 3 && !draft.amountPerDotMinor?.trim() ? 0 : parseMoney(draft.amountPerDotMinor ?? ''),
       ...(draft.churchyVersion === 2 ? { enabledSpecials: draft.churchySpecials ?? defaultChurchySpecials }
