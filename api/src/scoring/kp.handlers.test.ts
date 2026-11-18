@@ -5,9 +5,11 @@ import { identifier } from '../../test/catalog-fixtures.js';
 import { creator, event, member } from '../../test/fixtures.js';
 import { createScoringHandler } from './handlers.js';
 import { createHash } from 'node:crypto';
+import { decodeRoundScores } from '../../../src/contracts/scoring.js';
+import { isRecord } from '../../../src/contracts/events.js';
 
 describe('KP bounded owner HTTP lifecycle', () => {
-  it('stages owner-bound digest content without changing active KP until conditional publication', async () => {
+  it.each(['', '?format=lean'])('stages owner-bound digest content without changing active KP until conditional publication %s', async (format) => {
     const f = await kpStoreFixture();
     const api = { verify: vi.fn().mockResolvedValue(creator), limiter: { check: vi.fn().mockResolvedValue(undefined) }, scores: f.scores };
     const handler = createScoringHandler(() => api, 'round-kp');
@@ -16,7 +18,7 @@ describe('KP bounded owner HTTP lifecycle', () => {
     const bytes = Buffer.from(JSON.stringify(selection));
     const upload = { id: identifier(992), bytes: bytes.length, parts: 1, sha256: createHash('sha256').update(bytes).digest('hex') };
     const call = (body: unknown) => handler(new HttpRequest({
-      method: 'PUT', url: 'https://fictional.example.test/api/kp', params: { id: event.id, roundId: f.roundId },
+      method: 'PUT', url: `https://fictional.example.test/api/kp${format}`, params: { id: event.id, roundId: f.roundId },
       headers: { authorization: 'Bearer fictional-token', 'Content-Type': 'application/json',
         'Idempotency-Key': identifier(993), 'If-Match': f.configured.round.kp?.etag ?? '' },
       body: { string: JSON.stringify(body) },
@@ -25,7 +27,11 @@ describe('KP bounded owner HTTP lifecycle', () => {
       .toMatchObject({ status: 200, jsonBody: { privateStaged: { id: upload.id, index: 0 } } });
     expect((await f.scores.get(creator, event.id, f.roundId)).kp?.status).toBe('open');
     expect(f.submit).not.toHaveBeenCalled();
-    expect(await call({ privateCommit: upload })).toMatchObject({ status: 200, jsonBody: { selection, requestId: identifier(993) } });
+    const saved = await call({ privateCommit: upload });
+    expect(saved).toMatchObject({ status: 200, jsonBody: { selection, requestId: identifier(993) } });
+    if (!isRecord(saved.jsonBody)) throw new Error('Missing fictional KP receipt');
+    expect(decodeRoundScores(saved.jsonBody.round)?.kp?.status).toBe('closed');
+    if (format) expect(saved.jsonBody.round).toMatchObject({ kind: 'round-scores-lean' });
     expect((await f.scores.get(creator, event.id, f.roundId)).kp?.status).toBe('closed');
     expect(await call({ privateCommit: upload })).toMatchObject({ status: 200, jsonBody: { requestId: identifier(993) } });
     expect(f.submit).toHaveBeenCalledOnce();

@@ -1,7 +1,8 @@
 import { HttpRequest, InvocationContext } from '@azure/functions';
 import { describe, expect, it, vi } from 'vitest';
 import type { DotsGameDefinition } from '../../../src/domain/dots.js';
-import { isScoreWriteResult } from '../../../src/contracts/scoring.js';
+import { decodeRoundScores, isScoreWriteResult } from '../../../src/contracts/scoring.js';
+import { isRecord } from '../../../src/contracts/events.js';
 import { maximumGameConfigurationBytes } from '../../../src/domain/games.js';
 import { publicFixture } from '../public-access/test-support.js';
 import { createPublicHandler } from '../public-access/handlers.js';
@@ -19,8 +20,8 @@ async function fixture() {
   const limiter = { check: vi.fn().mockResolvedValue(undefined) };
   const api = { publicEvents: f.publicEvents, scores: f.scores, workspace: f.workspace, purse: f.purse, limiter };
   const context = new InvocationContext({ invocationId: 'fictional-dots-http', logHandler: () => undefined });
-  const request = (body: unknown, operation: number, headers: Readonly<Record<string, string>> = {}) => new HttpRequest({
-    method: 'PUT', url: 'https://fictional.example.test/api/fixture',
+  const request = (body: unknown, operation: number, headers: Readonly<Record<string, string>> = {}, query = '') => new HttpRequest({
+    method: 'PUT', url: `https://fictional.example.test/api/fixture${query}`,
     params: { id: event.id, roundId: f.roundId, playerId: f.playerId, holeNumber: '1' },
     headers: { 'Content-Type': 'application/json', 'If-None-Match': '*',
       'Idempotency-Key': identifier(operation), ...headers },
@@ -32,6 +33,52 @@ async function fixture() {
 }
 
 describe('Dots HTTP namespaces and public internal authority', () => {
+  it.each(['owner', 'public'] as const)('returns lean %s game/score receipts and reads, retaining protected history, legacy replies and retries', async (role) => {
+    const f = await fixture();
+    const ownerApi = { verify: vi.fn().mockResolvedValue(creator), limiter: f.api.limiter, scores: f.scores };
+    const setupRequest = f.request({ games: [f.game] }, 21700, {}, '?format=lean');
+    const setup = role === 'owner'
+      ? await createScoringHandler(() => ownerApi, 'round-games')(setupRequest, f.context)
+      : await createPublicHandler(() => f.api, 'games')(setupRequest, f.context);
+    expect(setup.status).toBe(200);
+    if (!isRecord(setup.jsonBody)) throw new Error('Missing fictional setup response');
+    const round = decodeRoundScores(setup.jsonBody.round);
+    expect(round?.games?.configuration.games).toEqual([f.game]);
+    const score = { kind: 'strokes', strokes: 4, dots: [{ number: 1, gameId: f.game.id,
+      gameEtag: round?.games?.configuration.etag ?? '', players: [{
+        playerId: f.playerId, counts: {}, calls: [{ id: identifier(21701), kind: 'murphy', result: 'success' }],
+      }], contests: [] }] };
+    const handler = role === 'owner' ? createScoringHandler(() => ownerApi, 'score-game-hole')
+      : createPublicHandler(() => f.api, 'score-game-hole');
+    const request = f.request({ score }, 21702, {}, '?format=lean');
+    const saved = await handler(request, f.context);
+    expect(saved).toMatchObject({ status: 200, headers: { 'Cache-Control': 'no-store' },
+      jsonBody: { round: { kind: 'round-scores-lean', version: 1 }, change: { after: score } } });
+    expect(JSON.stringify(saved.jsonBody)).not.toMatch(/"awards"|"dotAwardAudit"/);
+    if (!isRecord(saved.jsonBody)) throw new Error('Missing fictional score response');
+    const expanded = decodeRoundScores(saved.jsonBody.round);
+    expect(expanded?.games?.results[0]?.dots?.awards).toHaveLength(1);
+    expect(isScoreWriteResult({ ...saved.jsonBody, round: expanded })).toBe(true);
+    expect(await handler(f.request({ score }, 21702, {}, '?format=lean'), f.context)).toEqual(saved);
+    const legacy = await handler(f.request({ score }, 21702), f.context);
+    expect(isScoreWriteResult(legacy.jsonBody)).toBe(true);
+    expect(JSON.stringify(legacy.jsonBody)).toContain('"awards"');
+    const history = await f.scores.history(creator, event.id, f.roundId, f.playerId);
+    expect(history.changes[0]?.dotAwardAudit?.[0]?.after).toHaveLength(1);
+    const readRequest = new HttpRequest({ method: 'GET', url: 'https://fictional.example.test/api/scores?format=lean',
+      params: { id: event.id, roundId: f.roundId } });
+    const read = role === 'owner'
+      ? await createScoringHandler(() => ownerApi, 'scores')(readRequest, f.context)
+      : await createPublicHandler(() => f.api, 'scores')(readRequest, f.context);
+    expect(read.status).toBe(200);
+    expect(decodeRoundScores(read.jsonBody)).toEqual(expanded);
+    expect(JSON.stringify(read.jsonBody)).not.toMatch(/"awards"|"dotAwardAudit"/);
+    expect(f.api.limiter.check).toHaveBeenLastCalledWith(role === 'owner' ? creator : f.actor, 'scores-read');
+    f.seed({ ...f.row('event'), status: 'archived' });
+    if (role === 'public') expect(await createPublicHandler(() => f.api, 'scores')(readRequest, f.context))
+      .toMatchObject({ status: 404 });
+  });
+
   it('accepts version-2 rotation with an order-only score and rejects forged receipts on the dedicated route', async () => {
     const f = await fixture();
     const game: DotsGameDefinition = { id: f.game.id, name: f.game.name, kind: 'dots', version: 2,

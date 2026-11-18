@@ -7,6 +7,7 @@ import type { RoundScores } from '../../domain/scoring';
 import { scorePermissions } from '../../domain/scoring';
 import { scorecardTee } from '../../domain/tees';
 import { canManageRoundGames, gameScoringLabel, gameUnavailableMessage } from '../games';
+import { InternalSettlement } from '../dots';
 import { gameStandings } from './standings';
 import './leaderboard.css';
 
@@ -46,7 +47,22 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
   const [pageIndex, setPageIndex] = useState(0);
   const games = visibleGames(round.games?.configuration.games ?? [], round.churchyEnabled);
   const canManage = round.eventStatus === 'active' && canManageRoundGames(round);
-  const game = games.find((entry) => entry.id === gameId) ?? games[0];
+  const combinations = (round.internalSettlements ?? []).flatMap((settlement) => {
+    if (settlement.gameIds.length !== 2) return [];
+    const wolf = games.find((entry) => entry.id === settlement.gameIds[0]);
+    const dots = games.find((entry) => entry.id === settlement.gameIds[1]);
+    if (wolf?.kind !== 'wolf' || wolf.version !== 2 || dots?.kind !== 'dots' || dots.mode !== 'linked'
+      || dots.linkedGameId !== wolf.id || dots.groupNumber !== wolf.groupNumber || settlement.groupNumber !== wolf.groupNumber
+      || settlement.players.length !== wolf.playerIds.length
+      || !settlement.players.every((player) => wolf.playerIds.includes(player.playerId))) return [];
+    return [{ id: `combined:${wolf.id}:${dots.id}`, settlement, names: [wolf.name, dots.name],
+      label: `${wolf.name} + ${dots.name} · Group ${String(settlement.groupNumber)} · Combined` }];
+  });
+  const fallback = combinations.find((entry) => games[0] && entry.settlement.gameIds.includes(games[0].id))?.id ?? games[0]?.id;
+  const selection = gameId !== null && (games.some((entry) => entry.id === gameId) || combinations.some((entry) => entry.id === gameId))
+    ? gameId : fallback;
+  const combined = combinations.find((entry) => entry.id === selection);
+  const game = games.find((entry) => entry.id === selection);
   const result = game && round.games?.results.find((entry) => entry.gameId === game.id);
   const teamGame = game !== undefined && isTeamGameDefinition(game);
   const rows: readonly (GamePlayerResult | GameTeamResult)[] = (teamGame ? result?.teams : result?.players) ?? [];
@@ -76,16 +92,30 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
       <p>{round.courseName} · {(round.playerTees?.length ?? 0) > 0 ? 'Default tee: ' : ''}{round.teeName} / {round.teeCategory}
         {(round.playerTees?.length ?? 0) > 0 && ' · Personal tees assigned'}</p>
     </header>
-    {!game ? <>
+    {!game && !combined ? <>
       <p>{round.eventStatus === 'archived' ? 'No games configured for this archived round.'
         : canManage ? 'No games configured for this round. Add a Stableford game to see its leaderboard.' : 'No games configured for this round.'}</p>
       {(canManage || round.eventStatus === 'archived' && scorePermissions(round).role === 'owner') && <button type="button" disabled={busy} onClick={onManageGames}>
         {round.eventStatus === 'archived' ? 'View games' : 'Configure a game'}
       </button>}
     </> : <>
-      <label className="leaderboard-game">Leaderboard game<select value={game.id} disabled={busy} onChange={(event) => { setGameId(event.target.value); }}>
-        {games.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} · {gameScoringLabel(entry)}</option>)}
+      <label className="leaderboard-game">Leaderboard game<select value={selection} disabled={busy} onChange={(event) => {
+        setGameId(event.target.value); setPageIndex(0); setQuery('');
+      }}>
+        {combinations.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
+        {games.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}{
+          combinations.some((combined) => combined.settlement.gameIds.includes(entry.id)) ? ' only' : ''} · {gameScoringLabel(entry)}</option>)}
       </select></label>
+      {combined ? <InternalSettlement settlement={combined.settlement} gameNames={combined.names} ranked sourceLabels={['Wolf', 'Dots']}
+        provisional={combined.settlement.gameIds.some((id) => !round.games?.results.find((entry) => entry.gameId === id)
+          ?.players.every((player) => player.status === 'complete'))}
+        progress={combined.settlement.players.map((player) => ({ playerId: player.playerId,
+          label: combined.settlement.gameIds.map((id, index) => {
+            const result = round.games?.results.find((entry) => entry.gameId === id)?.players.find((entry) => entry.playerId === player.playerId);
+            return `${index === 0 ? 'Wolf' : 'Dots'} ${String(result?.holesScored ?? '—')}/${String(result?.totalHoles ?? '—')}`;
+          }).join(' · '),
+        }))} />
+        : game && <>
       <p className="leaderboard-format">{gameScoringLabel(game)}</p>
       {game.kind === 'nassau' ? <NassauResults game={game} result={result?.nassau} players={round.cards} />
         : game.kind === 'churchy' ? <ChurchyResults game={game} result={result} /> : teamGame && result?.teamSetupRequired ? <>
@@ -123,6 +153,7 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
         </section>}
         <p className="leaderboard-hint">{game.kind === 'skins' ? 'Golfers with awarded skins. Pending or unavailable results shown separately.'
           : `All ${teamGame ? 'teams' : 'golfers'} in this round.`} Ties share a position; no tie-break is applied. Saved scores only.</p>
+      </>}
       </>}
     </>}
   </section>;

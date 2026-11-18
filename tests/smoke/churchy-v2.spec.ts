@@ -33,16 +33,21 @@ for (const theme of ['light', 'dark'] as const) {
       await first.getByRole('button', { name: 'Dots for Fictional golfer 1', exact: true }).click();
       let dialog = page.getByRole('dialog', { name: 'Fictional golfer 1 · Hole 1 dots', exact: true });
       await dialog.getByLabel(/Sticky/).check();
-      await dialog.getByLabel(/Sandy count/).fill('2');
-      await dialog.getByLabel(/Other dots/).fill('3');
-      for (const input of await dialog.locator('input:not([type="checkbox"])').all()) {
-        const bounds = await input.boundingBox();
+      for (let count = 0; count < 2; count++) await dialog.getByRole('button', { name: 'Increase Sandy for Fictional golfer 1', exact: true }).click();
+      for (let count = 0; count < 3; count++) await dialog.getByRole('button', { name: 'Increase Other dots for Fictional golfer 1', exact: true }).click();
+      await expect(dialog.getByLabel('Sandy count for Fictional golfer 1', { exact: true })).toHaveText('2');
+      await expect(dialog.getByLabel('Other dots count for Fictional golfer 1', { exact: true })).toHaveText('3');
+      await expect(dialog.locator('input:not([type="checkbox"]):visible')).toHaveCount(0);
+      expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe('INPUT');
+      for (const target of await dialog.locator('button:visible, label:visible').all()) {
+        const bounds = await target.boundingBox();
         expect(bounds?.width).toBeGreaterThanOrEqual(44);
         expect(bounds?.height).toBeGreaterThanOrEqual(44);
       }
       expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+      if (testInfo.project.name === 'iphone-16-pro-webkit') await dialog.screenshot({ path: `coverage/mobile-churchy-${theme}.png` });
       await dialog.getByRole('button', { name: 'Return to score entry', exact: true }).click();
-      for (const input of await form.locator('.entry-value input').all()) await input.fill('4');
+      await form.getByRole('button', { name: 'Par for blanks', exact: true }).click();
       await expect(first.locator('.entry-heading')).toContainText('Thru 0');
       fixture.pauseNextFailure();
       await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
@@ -54,8 +59,8 @@ for (const theme of ['light', 'dark'] as const) {
       await first.getByRole('button', { name: 'Dots for Fictional golfer 1', exact: true }).click();
       dialog = page.getByRole('dialog', { name: 'Fictional golfer 1 · Hole 1 dots', exact: true });
       await expect(dialog.getByLabel(/Sticky/)).toBeChecked();
-      await expect(dialog.getByLabel(/Sandy count/)).toHaveValue('2');
-      await expect(dialog.getByLabel(/Other dots/)).toHaveValue('3');
+      await expect(dialog.getByLabel('Sandy count for Fictional golfer 1', { exact: true })).toHaveText('2');
+      await expect(dialog.getByLabel('Other dots count for Fictional golfer 1', { exact: true })).toHaveText('3');
       await dialog.getByRole('button', { name: 'Return to score entry', exact: true }).click();
       const failed = fixture.counters().requests[0];
       await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
@@ -82,17 +87,21 @@ for (const theme of ['light', 'dark'] as const) {
       await second.getByRole('button', { name: 'Dots for Fictional golfer 5', exact: true }).click();
       dialog = page.getByRole('dialog', { name: /Fictional golfer 5 · Hole \d+ dots/ });
       await expect(dialog.getByLabel(/Sticky/)).toHaveCount(0);
-      await dialog.getByLabel(/Other dots/).fill('2');
+      for (let count = 0; count < 2; count++) await dialog.getByRole('button', { name: 'Increase Other dots for Fictional golfer 5', exact: true }).click();
       await dialog.getByRole('button', { name: 'Return to score entry', exact: true }).click();
       form = page.getByRole('form', { name: /Group 2 hole \d+ entry/ });
-      for (const input of await form.locator('.entry-value input').all()) await input.fill('4');
+      await form.getByRole('button', { name: 'Par for blanks', exact: true }).click();
       await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
       await expect.poll(() => fixture.counters().writes).toBe(9);
       expect(fixture.read().games?.results.filter((result) => result.kind === 'churchy')
         .map((result) => result.players.map((player) => player.totalPoints))).toEqual([[6, 6, 0, 0], [2, 2, 0, 0]]);
       await page.getByRole('button', { name: 'Games', exact: true }).click();
       await expect(page.getByText(/experimental/i)).toHaveCount(0);
-      await expect(page.getByText('Total to settle:', { exact: false }).first()).toBeVisible();
+      const results = page.getByRole('region', { name: 'Churchy Game · Group 1 results', exact: true });
+      await expect(results.getByRole('list', { name: 'Combined standings', exact: true })).toBeVisible();
+      await expect(results.getByText('Rate and settlement method').locator('..')).not.toHaveAttribute('open', '');
+      await results.getByText('Rate and settlement method').click();
+      await expect(results.getByText('Total to settle:', { exact: false })).toBeVisible();
       await fits(page, page.getByRole('region', { name: 'Round games', exact: true }));
       if (testInfo.project.name === 'desktop-chromium') {
         await page.setViewportSize({ width: 1280, height: 900 });

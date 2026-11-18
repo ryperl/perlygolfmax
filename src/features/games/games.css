@@ -43,3 +43,18 @@
 .round-game-hole-controls :is(select, button, input, summary):focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
 .round-game-hole-controls summary { min-height: 44px; cursor: pointer; align-content: center; }
 .round-game-hole-controls :disabled { color: var(--cp-text-muted); }
+.dots-results table, .wolf-results-earned table { min-width: 0; width: 100%; }
+.dots-results th:first-child, .wolf-results-earned th:first-child { white-space: normal; overflow-wrap: anywhere; }
+.dots-results :is(th, td), .wolf-results-earned :is(th, td) { padding: .5rem .3rem; }
+.dots-results :is(th, td):not(:first-child), .wolf-results-earned :is(th, td):not(:first-child) { text-align: right; }
+.dots-results summary, .round-game > details > summary { min-height: 44px; align-content: center; cursor: pointer; }
+.round-game > details > summary:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
+.game-net-list { list-style: none; display: grid; gap: .4rem; margin: .5rem 0; padding: 0; min-width: 0; }
+.game-net-list > li { display: flex; justify-content: space-between; gap: .75rem; min-width: 0; padding-block: .4rem; border-bottom: 1px solid var(--cp-border); }
+.game-net-list strong { text-align: right; font-variant-numeric: tabular-nums; }
+.nassau-bet summary { min-height: 44px; align-content: center; cursor: pointer; }
+.nassau-bet summary:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
+.game-settings label:has(> input[type="checkbox"]) { display: flex; align-items: center; gap: .6rem; min-height: 44px; }
+.game-settings label > input[type="checkbox"] { flex: 0 0 1.25rem; width: 1.25rem; height: 1.25rem; min-height: 0; padding: 0; accent-color: var(--cp-round-line, var(--cp-accent)); }
+.game-settings details > summary { min-height: 44px; align-content: center; cursor: pointer; }
+.game-settings details > summary:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }

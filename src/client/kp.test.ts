@@ -5,6 +5,7 @@ import { fictionalId } from './catalog.test-support';
 import { kpContext } from '../domain/kp';
 import { isRecord } from '../contracts/events';
 import { maximumGameConfigurationBytes } from '../domain/games';
+import { leanRoundScores } from '../contracts/lean-round-scores';
 
 describe('typed KP organizer transport', () => {
   it('accepts KP preserved on legacy raw writes but refuses a changed explicit-clear acknowledgement', async () => {
@@ -28,13 +29,14 @@ describe('typed KP organizer transport', () => {
       if (isRecord(body) && isRecord(body.privateUpload)) return Promise.resolve(new Response(JSON.stringify({
         privateStaged: { id: body.privateUpload.id, index: body.privateUpload.index },
       })));
-      return Promise.resolve(new Response(JSON.stringify({ round, selection, requestId, expectedEtag: null })));
+      return Promise.resolve(new Response(JSON.stringify({ round: leanRoundScores(round), selection, requestId, expectedEtag: null })));
     });
     const client = createScoresClient('https://fictional.example.test/api', () => Promise.resolve('fictional-token'), send);
     if (!client.saveKp) throw new Error('Missing KP client');
     expect(await client.saveKp(round.eventId, round.roundId, selection, null, requestId, new AbortController().signal)).toEqual(round);
     expect(send.mock.calls.length).toBeGreaterThan(2);
-    for (const [, init] of send.mock.calls) {
+    for (const [url, init] of send.mock.calls) {
+      expect(typeof url === 'string' ? url : url instanceof URL ? url.href : url.url).toContain('/kp?format=lean');
       expect(typeof init?.body === 'string' && new TextEncoder().encode(init.body).length <= maximumGameConfigurationBytes).toBe(true);
       expect(new Headers(init?.headers).get('Idempotency-Key')).toBe(requestId);
     }

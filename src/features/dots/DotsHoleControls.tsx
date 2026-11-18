@@ -29,6 +29,8 @@ export function DotsHoleControls({ game, holeNumber, par, playerPars, etag, save
   const sides = game.mode === 'fixed' ? [game.partnerIds.slice(0, 2), game.partnerIds.slice(2)]
     : (game.mode === 'linked' || game.mode === 'rotating') && context?.status === 'ready' ? context.sides : [];
   const partnered = sides.length === 2 && sides.every((side) => side.length === 2);
+  const ownSide = selectedPlayerId ? sides.find((side) => side.includes(selectedPlayerId)) : undefined;
+  const teammates = ownSide?.filter((id) => id !== selectedPlayerId) ?? [];
   const eligibleContests = (['kp', 'blue-plate', 'long-drive'] satisfies readonly DotsContest['kind'][]).filter((kind) =>
     (enabled(kind) || kind !== 'long-drive' && enabled('assassin')) && par === (kind === 'kp' ? 3 : 5));
   const hasSelections = (value: DotsHoleRecord | undefined) => value !== undefined
@@ -51,6 +53,13 @@ export function DotsHoleControls({ game, holeNumber, par, playerPars, etag, save
       ? `Partner: ${context.sides.find((side) => side.includes(selectedPlayerId))
         ?.filter((id) => id !== selectedPlayerId).map(name).join(' + ') ?? 'Pending'}${rotationLocked ? '' : ' · Preview'}`
       : 'Partner order pending. Choose P1–P4 below the score fields.'}</p>}
+    {selectedPlayerId && game.mode === 'fixed' && <p className="dots-entry-partner">
+      Fixed partner: {teammates.map(name).join(' + ')} · All round
+    </p>}
+    {selectedPlayerId && game.mode === 'linked' && <p className="dots-entry-partner">{context?.status !== 'ready'
+      ? 'Partners pending saved Wolf choice'
+      : teammates.length === 0 ? `Solo · ×${String(context.multiplier)}`
+        : `${teammates.length === 1 ? 'Partner' : 'Teammates'}: ${teammates.map(name).join(' + ')} · ×${String(context.multiplier)}`}</p>}
     {!selectedPlayerId && game.mode === 'linked' && <p>{context?.status === 'ready'
       ? `${context.sides.map((side) => side.map(name).join(' + ')).join(' vs ')} · ×${String(context.multiplier)}`
       : 'Linked sides are pending saved Wolf choices. Results use the authoritative saved context.'}</p>}

@@ -177,9 +177,33 @@ as `dotAwardAudit` before/after snapshots on immutable private score receipts,
 binding the game definition/version, game revision and input revision.
 Owner correction receipts retain corresponding award changes without rewriting
 raw cards. Public/tester acknowledgements omit this private audit payload.
-Current public explanations use allowlisted award reasons, score/par evidence,
-source holes, units/count/multiplier and recipients, not private actor IDs,
-call UUIDs or raw timestamps. They are not a historical audit browser.
+Routine mobile and desktop game views omit verbose award evidence rather than
+merely collapsing its markup. Existing immutable private score/correction audit
+snapshots remain unchanged. A future requested desktop audit view must retain
+its own permission boundary; this optimization grants no historical access.
+
+Current scoring clients request `format=lean` on round reads and score/game/KP
+save replies. The version-1 `round-scores-lean` wrapper omits Dots/Wolf award
+evidence and Churchy special explanations, including nested duplicates.
+Duplicate derived Dots/Wolf players and Wolf contexts are omitted. Computed
+saved comeback receipts reference the identical canonical card receipt; absent
+or forged references fail validation. Available pre-write proofs remain intact.
+Captured cards, declaration/rotation/comeback receipts, transmitted totals,
+per-hole points, progress, capabilities and authoritative money are retained.
+The decoder restores only suppressed derived fields for the existing full coherence
+checks; malformed or numerically changed replies are rejected. Private
+`dotAwardAudit` is omitted from routine save acknowledgements, never deleted
+from stored receipts. Legacy full reads and old API responses remain supported.
+Page hashes/quotas, staged transports, conditional writes and host limits stay.
+The fictional 12-player, three-foursome heavy Wolf/Dots regression is 237,432
+UTF-8 bytes versus 1,059,473 full, below the existing 256 KiB inline threshold.
+
+The Games screen leads with one net amount per golfer, with source breakdowns
+and an optional calculation. Explicit Wolf/Dots links offer combined standings;
+unlinked games, independent groups and event-wide competitions remain separate.
+Nassau shows net money once with individual bet details on demand. No payment
+is transferred or marked paid. Provisional/unavailable/points-only states remain
+visible, and incomplete combined progress is not presented as final.
 
 Money uses exact minor units and the agreed per-opponent formula
 `(4*d_i - sum(d)) * rateMinor`. Blank/zero is points-only; positive incomplete

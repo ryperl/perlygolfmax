@@ -248,18 +248,26 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
       </header>
       {archived && <p>This trip is archived. Game settings are read-only.</p>}
       {games.length === 0 && <p>No games configured for this round.</p>}
+      {round.internalSettlements?.map((settlement) => <InternalSettlement key={`${String(settlement.groupNumber)}:${settlement.gameIds.join(':')}`}
+        settlement={settlement} sourceLabels={settlement.gameIds.length === 2 ? ['Wolf', 'Dots'] : ['Base', 'Specials']}
+        provisional={settlement.gameIds.some((id) => !round.games?.results.find((entry) => entry.gameId === id)
+          ?.players.every((player) => player.status === 'complete'))}
+        gameNames={settlement.gameIds.map((id) => games.find((game) => game.id === id)?.name ?? 'Game unavailable')} />)}
       {visibleGames(games, round.churchyEnabled).map((game) => <div className="round-game" key={game.id}>
-        <GameResults game={game} result={round.games?.results.find((result) => result.gameId === game.id)}
-          holeNumbers={round.layout.map((hole) => hole.number)} players={round.cards} />
+        {round.internalSettlements?.some((settlement) => settlement.gameIds.includes(game.id)) ? <details>
+          <summary>{game.name} · Game standings</summary>
+          <GameResults game={game} result={round.games?.results.find((result) => result.gameId === game.id)}
+            holeNumbers={round.layout.map((hole) => hole.number)} players={round.cards} />
+        </details> : <GameResults game={game} result={round.games?.results.find((result) => result.gameId === game.id)}
+          holeNumbers={round.layout.map((hole) => hole.number)} players={round.cards} />}
         {canManage && (canManageAllRoundGames(round) || canManageGame(round, game)) && <button type="button"
           disabled={disabled || editor !== null || !supportsRoundGame(round, game.kind ?? 'stableford') || !canManageGame(round, game)}
           onClick={() => { open(game); }}>Edit {game.name}{game.kind === 'churchy'
             && games.filter((entry) => entry.kind === 'churchy').length > 1 ? ` · Group ${String(game.groupNumber)}` : ''}</button>}
-        {(game.kind === 'nassau' || game.kind === 'wolf' || game.kind === 'dots') && round.setupLocked && <p>Setup locked by saved scoring; hole choices and results are in score entry.</p>}
         {!supportsRoundGame(round, game.kind ?? 'stableford') && <p>This API does not advertise support for editing this game.</p>}
       </div>)}
-      {round.internalSettlements?.map((settlement) => <InternalSettlement key={`${String(settlement.groupNumber)}:${settlement.gameIds.join(':')}`}
-        settlement={settlement} gameNames={settlement.gameIds.map((id) => games.find((game) => game.id === id)?.name ?? 'Game unavailable')} />)}
+      {round.setupLocked && games.some((game) => game.kind === 'nassau' || game.kind === 'wolf' || game.kind === 'dots')
+        && <p className="game-hint">Setup locked by saved scoring. Score entry retains hole declarations.</p>}
       {!editor && !archived && canManage && <button type="button" disabled={disabled || games.length >= maximumGamesPerRound}
         onClick={() => { open(); }}>Add game</button>}
       {games.length >= maximumGamesPerRound && <p>This round has reached the 16-game limit.</p>}

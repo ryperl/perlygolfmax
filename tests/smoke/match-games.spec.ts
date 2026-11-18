@@ -183,10 +183,20 @@ for (const theme of ['light', 'dark']) {
       await form.getByRole('combobox', { name: 'Side A vs Side B · Hole 1', exact: true }).selectOption('side-a');
       expect(fixture.counters().writes).toBe(0);
       await page.getByRole('button', { name: 'Games', exact: true }).click();
+      const openWolf = async () => {
+        const summary = page.getByText('Wolf · Game standings', { exact: true });
+        if (!await summary.evaluate((element) => {
+          const details = element.closest('details');
+          if (!details) throw new Error('Missing Wolf standings disclosure');
+          return details.open;
+        })) await summary.click();
+      };
+      await openWolf();
       const wolfResults = page.getByRole('region', { name: 'Wolf results', exact: true });
       await expect(wolfResults.getByRole('cell', { name: '3', exact: true })).toHaveCount(0);
       await expect(page.getByRole('region', { name: 'Nassau matchboard', exact: true })).toContainText('0 resolved / 9 remaining');
       await page.getByRole('button', { name: 'Refresh saved round', exact: true }).click();
+      await openWolf();
       await expect(wolfResults.getByRole('columnheader', { name: 'Earned dots', exact: true })).toBeVisible();
       await expect(wolfResults.getByRole('columnheader', { name: 'Lost', exact: true })).toHaveCount(0);
       expect(fixture.counters().writes).toBe(0);
@@ -203,10 +213,12 @@ for (const theme of ['light', 'dark']) {
       await expect(form.getByRole('combobox', { name: 'Wolf declaration', exact: true })).toBeDisabled();
       await expect(form.getByRole('combobox', { name: 'Wolf match outcome', exact: true })).toHaveCount(0);
       await page.getByRole('button', { name: 'Games', exact: true }).click();
+      await openWolf();
       await expect(wolfResults.getByRole('cell', { name: '3', exact: true })).toHaveCount(0);
       fixture.resolveSavedHole();
       await expect(wolfResults.getByRole('cell', { name: '3', exact: true })).toHaveCount(0);
       await page.getByRole('button', { name: 'Refresh saved round', exact: true }).click();
+      await openWolf();
       await expect(wolfResults.getByRole('cell', { name: '3', exact: true })).toHaveCount(1);
       await page.getByRole('button', { name: 'Leaderboard', exact: true }).click();
       await page.getByRole('combobox', { name: 'Leaderboard game', exact: true }).selectOption({ index: 0 });
@@ -236,8 +248,8 @@ test('saved late Wolf decisions stay read-only, corrections use peer revision, a
     await expect(form.getByText('Choice recorded after scores were saved. Tee-shot timing was not verified.')).toBeVisible();
     await page.getByRole('button', { name: 'Games', exact: true }).click();
     const results = page.getByRole('region', { name: 'Fictional Wolf results', exact: true });
-    await results.getByText('Saved hole choices and winners', { exact: true }).click();
-    await expect(results).toContainText('Choice recorded after scores');
+    await expect(results.getByText('Saved hole choices and winners', { exact: true })).toHaveCount(0);
+    await expect(results.getByRole('columnheader', { name: 'Dot balance', exact: true })).toBeVisible();
     fixture.unsupported();
     await page.getByRole('button', { name: 'Refresh saved round', exact: true }).click();
     await expect(page.getByText('This API does not advertise support for editing this game.')).toHaveCount(2);

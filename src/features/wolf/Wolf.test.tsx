@@ -64,7 +64,7 @@ describe('Wolf declarations and ledger', () => {
     expect(screen.getByText(/Wolf selection is pending authoritative/)).toBeVisible();
   });
 
-  it('shows V2 nonnegative earned totals and separate High/Low outcomes, preserving the legacy ledger test separately', () => {
+  it('shows V2 nonnegative earned totals without mounting hole-by-hole award evidence', () => {
     const { f, game: legacy } = fixture();
     const game: WolfGameDefinition = { ...legacy, version: 2, stakeMinor: 50 };
     const result = calculateWolf(game, { layout: f.snapshot.teeProfile.holes, groups: f.snapshot.groups,
@@ -76,8 +76,8 @@ describe('Wolf declarations and ledger', () => {
     expect(screen.queryByRole('columnheader', { name: 'Lost' })).not.toBeInTheDocument();
     expect(screen.queryByRole('columnheader', { name: 'Dot balance' })).not.toBeInTheDocument();
     expect(view.container).not.toHaveTextContent('No dollar settlement');
-    expect(view.container).toHaveTextContent('High');
-    expect(view.container).toHaveTextContent('Low');
+    expect(screen.queryByText('Saved hole choices and winners')).not.toBeInTheDocument();
+    expect(view.container).not.toHaveTextContent('wolf-high');
     expect(view.container).not.toHaveTextContent('fictional-game-revision');
   });
   it('records honor-system PIG/partner choices and explicit outcomes without independent saves', () => {
@@ -133,7 +133,7 @@ describe('Wolf declarations and ledger', () => {
     expect(saved.recordedLate).toBe(true);
   });
 
-  it('shows authoritative won/lost/balance including zeros and negatives and saved hole winners, never dollars or earned dots', () => {
+  it('keeps legacy authoritative won/lost/balance, zeros and negatives without detailed winner receipts or dollars', () => {
     const { f, game } = fixture();
     const records: readonly WolfHoleRecord[] = [{ number: 1, choice: { gameId: game.id, gameEtag: 'private-etag', mode: 'pig' }, outcome: 'wolf' }];
     const result = calculateWolf(game, { layout: f.snapshot.teeProfile.holes, groups: f.snapshot.groups,
@@ -145,8 +145,8 @@ describe('Wolf declarations and ledger', () => {
     expect(screen.getByRole('columnheader', { name: 'Dot balance' })).toBeVisible();
     expect(screen.getAllByRole('cell', { name: '-3' })).toHaveLength(3);
     expect(screen.getAllByRole('cell', { name: '0' }).length).toBeGreaterThan(0);
-    expect(view.container).toHaveTextContent('PIG');
-    expect(view.container).toHaveTextContent('Fictional golfer 1 won');
+    expect(screen.queryByText('Saved hole choices and winners')).not.toBeInTheDocument();
+    expect(view.container).not.toHaveTextContent('Fictional golfer 1 won');
     expect(view.container).not.toHaveTextContent('private-etag');
     expect(screen.queryByText('Earned dots')).not.toBeInTheDocument();
     expect(view.container).toHaveTextContent('No dollar settlement');

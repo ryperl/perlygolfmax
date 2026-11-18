@@ -54,8 +54,8 @@ test('legacy Churchy dialog and acknowledged save retain old rules at 320px/125%
     const results = page.getByRole('region', { name: 'Churchy Game · Group 1 results', exact: true });
     await expect(results).toBeVisible();
     await expect(results).toContainText('Collects from pot: $3.00');
-    await results.getByText('Saved hole receipts', { exact: true }).click();
-    await expect(results).toContainText('Murphy made by Fictional golfer 1');
+    await expect(results.getByText('Saved hole receipts', { exact: true })).toHaveCount(0);
+    await expect(results).not.toContainText('Murphy made by Fictional golfer 1');
     await page.getByRole('button', { name: 'Toggle game capability' }).click();
     await page.getByRole('button', { name: 'Enter scores', exact: true }).click();
     await expect(page.getByRole('button', { name: /Dots for/ })).toHaveCount(0);

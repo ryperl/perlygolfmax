@@ -14,6 +14,7 @@ import type { EventWorkspace } from '../../src/domain/setup';
 import { calculateGameResults } from '../../src/domain/stableford';
 import { calculateInternalSettlements } from '../../src/domain/internal-games';
 import { strokeGameFixture, strokeGameId, strokeGamesRound } from '../../src/domain/stroke-games.test-support';
+import { leanRoundScores, leanScoreWriteResult } from '../../src/contracts/lean-round-scores';
 
 export const dotsFixture = strokeGameFixture(9);
 export const dotsPlayers = dotsFixture.cards.map((card) => card.playerId);
@@ -63,7 +64,8 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
       .map((kind) => ({ kind, units: 1 })), { kind: 'birdie', units: 2 }] };
   let stored = project(initial, scenario.startsWith('rotating') ? [dotsFixture.skins, rotating]
     : scenario === 'setup' ? [dotsFixture.skins] : [dotsFixture.skins, wolf, dots]);
-  let writes = 0, configWrites = 0, failPaused = false;
+  let writes = 0, configWrites = 0, failPaused = false, roundReads = 0;
+  const roundReadFormats: string[] = [];
   let releaseFailure: (() => void) | null = null;
   const requests: { readonly id: string; readonly playerId: string; readonly etag: string | null; readonly score: HoleScore }[] = [];
   const configurations: (readonly RoundGameDefinition[])[] = [];
@@ -85,7 +87,12 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
       if (request.method() === 'GET') {
         if (path === 'events') return route.fulfill({ json: { events: [workspace(stored).event] } });
         if (path.endsWith('/workspace')) return route.fulfill({ json: workspace(stored) });
-        if (path.endsWith('/scores')) return route.fulfill({ json: stored });
+        if (path.endsWith('/scores')) {
+          roundReads++;
+          const lean = new URL(request.url()).searchParams.get('format') === 'lean';
+          roundReadFormats.push(lean ? 'lean' : 'full');
+          return route.fulfill({ json: lean ? leanRoundScores(stored) : stored });
+        }
         throw new Error(`Unexpected fictional Dots read: ${path}`);
       }
       const payload: unknown = request.postDataJSON();
@@ -106,7 +113,8 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
           expectedEtag, before, after: payload.games, recordedAt: '2026-01-01T00:00:00Z',
           recordedBy: { kind: 'public-score', eventId: stored.eventId } } };
         expect(isRoundScores(stored)).toBe(true);
-        return route.fulfill({ json: result });
+        return route.fulfill({ json: new URL(request.url()).searchParams.get('format') === 'lean'
+          ? { ...result, round: leanRoundScores(result.round) } : result });
       }
       if (!isHoleScore(payload.score)) throw new Error('Invalid fictional Dots score request');
       const parts = path.split('/'), playerId = parts[5], holeNumber = Number(parts[7]);
@@ -133,12 +141,12 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
         playerId: card.playerId, holeNumber, before, after, expectedEtag, recordedAt,
         recordedBy: { kind: 'public-score', eventId: stored.eventId } } };
       expect(isScoreWriteResult(result)).toBe(true);
-      return route.fulfill({ json: result });
+      return route.fulfill({ json: new URL(request.url()).searchParams.get('format') === 'lean' ? leanScoreWriteResult(result) : result });
     });
     await page.goto(`${origin}/#events?event=${stored.eventId}&round=${stored.roundId}`);
     await expect(page.getByRole('form', { name: 'Group 1 hole 1 entry', exact: true })).toBeVisible();
     return { close: () => server.close(), read: () => stored,
-      counters: () => ({ writes, configWrites, requests, configurations, pageErrors }),
+      counters: () => ({ writes, configWrites, requests, configurations, pageErrors, roundReads, roundReadFormats }),
       pauseNextFailure() { failPaused = true; },
       releaseFailure() {
         if (!releaseFailure) throw new Error('No fictional Dots request is paused');

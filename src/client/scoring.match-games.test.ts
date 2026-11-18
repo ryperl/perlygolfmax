@@ -8,6 +8,7 @@ import { matchGamesFixture } from '../domain/match-games.test-support';
 import { strokeGameId } from '../domain/stroke-games.test-support';
 import { nassauMatchId } from '../domain/nassau';
 import { fictionalChange } from './scoring.test-support';
+import { leanScoreWriteResult } from '../contracts/lean-round-scores';
 
 describe('bounded game declaration score transport', () => {
   it('stages large commands on the dedicated scoring route with stable identity, then validates the complete acknowledgement', async () => {
@@ -34,14 +35,14 @@ describe('bounded game declaration score transport', () => {
       if (typeof init?.body !== 'string') throw new Error('Missing fictional declaration body');
       const body: unknown = JSON.parse(init.body);
       return Promise.resolve(new Response(JSON.stringify(isRecord(body) && isRecord(body.privateUpload)
-        ? { privateStaged: { id: body.privateUpload.id, index: body.privateUpload.index } } : response)));
+        ? { privateStaged: { id: body.privateUpload.id, index: body.privateUpload.index } } : leanScoreWriteResult(response))));
     });
     const client = createScoresClient('https://fictional.example.test/api/public', () => Promise.resolve(''), send, 'None');
     const signal = new AbortController().signal;
     expect(await client.save(round.eventId, round.roundId, playerId, 3, score, change.expectedEtag, change.id, signal)).toEqual(result);
     expect(send.mock.calls.length).toBeGreaterThan(2);
     for (const [url, init] of send.mock.calls) {
-      expect(url).toBe(`https://fictional.example.test/api/public/events/${round.eventId}/rounds/${round.roundId}/players/${playerId}/holes/3/games`);
+      expect(url).toBe(`https://fictional.example.test/api/public/events/${round.eventId}/rounds/${round.roundId}/players/${playerId}/holes/3/games?format=lean`);
       expect(init?.credentials).toBe('omit');
       expect(new Headers(init?.headers).get('Idempotency-Key')).toBe(change.id);
       expect(new Headers(init?.headers).get('If-Match')).toBe(change.expectedEtag);

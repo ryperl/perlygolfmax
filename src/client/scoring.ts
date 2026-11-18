@@ -1,5 +1,5 @@
 import { isEventRevision, isUuid } from '../contracts/events';
-import { isGameWriteResult, isHoleScore, isRoundScores, isScoreHistoryPage, isScoreWriteResult } from '../contracts/scoring';
+import { decodeRoundScores, isGameWriteResult, isHoleScore, isScoreHistoryPage, isScoreWriteResult } from '../contracts/scoring';
 import { isRoundGameDefinitions } from '../contracts/games';
 import type { RoundGameDefinition } from '../domain/games';
 import { maximumGameConfigurationBytes, sameGameDefinitions } from '../domain/games';
@@ -11,6 +11,10 @@ import { isKpSelection } from '../contracts/kp';
 import { isRecord } from '../contracts/events';
 import { sameJsonValue } from '../contracts/round-context';
 import { createPrivateRequest, readPrivateValue, writePrivateValue } from './private-request';
+
+function decodeRoundResult(value: unknown): unknown {
+  return isRecord(value) ? { ...value, round: decodeRoundScores(value.round) } : value;
+}
 
 export interface ScoresClient {
   readonly saveKp?: (eventId: string, roundId: string, selection: KpSelection, etag: string | null,
@@ -35,19 +39,20 @@ export function createScoresClient(apiUrl: string, getToken: () => Promise<strin
     async saveKp(eventId, roundId, selection, etag, requestId, signal) {
       if (!isKpSelection(selection) || !isUuid(requestId)
         || etag !== null && !isEventRevision(etag)) throw new Error('Invalid KP settings. Nothing was sent.');
-      const value = await writePrivateValue(gameRequest, `${path(eventId, roundId)}/kp`, signal, {
+      const value = await writePrivateValue(gameRequest, `${path(eventId, roundId)}/kp?format=lean`, signal, {
         method: 'PUT', body: selection, requestId, ...(etag === null ? { createOnly: true } : { etag }),
       }, maximumGameConfigurationBytes);
-      if (!isRecord(value) || !isRoundScores(value.round) || value.round.eventId !== eventId || value.round.roundId !== roundId
+      const round = isRecord(value) ? decodeRoundScores(value.round) : null;
+      if (!isRecord(value) || !round || round.eventId !== eventId || round.roundId !== roundId
         || value.requestId !== requestId || value.expectedEtag !== etag || !sameJsonValue(value.selection, selection)
-        || value.round.kpEnabled !== true || !value.round.kp || value.round.permissions?.role !== 'owner') {
+        || round.kpEnabled !== true || !round.kp || round.permissions?.role !== 'owner') {
         throw new Error('KP outcome uncertain. Keep this request and refresh before retrying.');
       }
-      return value.round;
+      return round;
     },
     async load(eventId, roundId, signal) {
-      const value = await readPrivateValue(request, `${path(eventId, roundId)}/scores`, signal);
-      if (!isRoundScores(value) || value.permissions === undefined || value.eventId !== eventId || value.roundId !== roundId
+      const value = decodeRoundScores(await readPrivateValue(request, `${path(eventId, roundId)}/scores?format=lean`, signal));
+      if (!value || value.permissions === undefined || value.eventId !== eventId || value.roundId !== roundId
         || value.cards.some((card) => card.etag !== null) && (!value.setupLocked || value.lastUpdatedAt === null)) throw new Error('Invalid owner scorecards response. Nothing was loaded.');
       return value;
     },
@@ -57,12 +62,12 @@ export function createScoresClient(apiUrl: string, getToken: () => Promise<strin
         || !isHoleScore(score) || etag !== null && !isEventRevision(etag) || !isUuid(requestId)
         || inputRevision !== undefined && inputRevision !== null && !isUuid(inputRevision)) throw new Error('Invalid hole save request. Nothing was sent.');
       const hasDeclarations = Boolean(score.nassau?.length || score.wolf?.length || score.dots?.length);
-      const target = `${base}/players/${encodeURIComponent(playerId)}/holes/${String(holeNumber)}${hasDeclarations ? '/games' : ''}`;
+      const target = `${base}/players/${encodeURIComponent(playerId)}/holes/${String(holeNumber)}${hasDeclarations ? '/games' : ''}?format=lean`;
       const options = {
         method: 'PUT', body: { score, ...(inputRevision === undefined ? {} : { inputRevision }) }, requestId, ...(etag === null ? { createOnly: true } : { etag }),
       } as const;
-      const value = hasDeclarations ? await writePrivateValue(gameRequest, target, signal, options, maximumGameConfigurationBytes)
-        : await request(target, signal, options);
+      const value = decodeRoundResult(hasDeclarations ? await writePrivateValue(gameRequest, target, signal, options, maximumGameConfigurationBytes)
+        : await request(target, signal, options));
       if (!isScoreWriteResult(value) || value.round.permissions === undefined || value.round.eventId !== eventId || value.round.roundId !== roundId
         || value.change.eventId !== eventId || value.change.roundId !== roundId || value.change.playerId !== playerId
         || value.change.holeNumber !== holeNumber || value.change.id !== requestId
@@ -88,9 +93,9 @@ export function createScoresClient(apiUrl: string, getToken: () => Promise<strin
       const base = path(eventId, roundId);
       if (!isRoundGameDefinitions(games) || games.length === 0 || !isUuid(requestId)
         || etag !== null && !isEventRevision(etag)) throw new Error('Check the game settings. Nothing was sent.');
-      const value = await writePrivateValue(gameRequest, `${base}/games`, signal, {
+      const value = decodeRoundResult(await writePrivateValue(gameRequest, `${base}/games?format=lean`, signal, {
         method: 'PUT', body: { games }, requestId, ...(etag === null ? { createOnly: true } : { etag }),
-      }, maximumGameConfigurationBytes);
+      }, maximumGameConfigurationBytes));
       if (!isGameWriteResult(value) || value.round.permissions === undefined || value.round.eventId !== eventId || value.round.roundId !== roundId
         || value.change.id !== requestId || value.change.expectedEtag !== etag
         || !sameGameDefinitions(value.change.after, games)) {

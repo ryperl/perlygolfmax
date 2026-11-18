@@ -24,7 +24,8 @@ describe('internal earned-dot result presentation', () => {
     expect(screen.getAllByRole('rowheader', { name: /game dots$/ })).toHaveLength(4);
     expect(screen.getByRole('columnheader', { name: 'Earned dots' })).toBeVisible();
     expect(screen.getAllByText('Total includes round bonuses')).toHaveLength(4);
-    expect(screen.getByText('Saved special dots · Includes individual round bonuses')).toBeVisible();
+    expect(screen.getByText('Saved special dots')).toBeVisible();
+    expect(screen.queryByText('Saved award explanations and score evidence')).not.toBeInTheDocument();
     expect(screen.queryByText('DOT BALANCE')).not.toBeInTheDocument();
   });
 

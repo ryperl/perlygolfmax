@@ -66,12 +66,12 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
     })}
     {calls.filter(enabled).map((kind) => {
       const callBlocked = kind === 'murphy' && (declaration.counts.hogan ?? 0) > 0;
-      return <div key={kind}>
+      return <div className="dots-call-controls" key={kind}>
         <button type="button" aria-label={`Call ${label(kind)} · ${name}`} disabled={callBlocked} onClick={() => {
           onChange({ ...declaration, calls: [...declaration.calls, { id: crypto.randomUUID(), kind, result: 'pending' }] });
         }}>Call {label(kind)}</button>
         {callBlocked && <small>Clear this golfer&apos;s Hogan before calling Murphy.</small>}
-        {declaration.calls.filter((call) => call.kind === kind).map((call, index) => <div key={call.id}>
+        {declaration.calls.filter((call) => call.kind === kind).map((call, index) => <div className="dots-call" key={call.id}>
           <label>{label(kind)} call {index + 1}
             <select aria-label={`${label(kind)} call ${String(index + 1)} · ${name}`} value={call.result} onChange={(event) => {
               const result = event.target.value;

@@ -44,7 +44,8 @@ describe('Churchy workflow integration', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Fictional golfer 2 score' }), { target: { value: '6' } });
     await user.click(screen.getByRole('button', { name: 'Dots for Fictional golfer 1' }));
     let dialog = within(screen.getByRole('dialog'));
-    fireEvent.change(dialog.getByLabelText(/Sandy count/), { target: { value: '2' } });
+    await user.click(dialog.getByText('Edit counts'));
+    fireEvent.change(dialog.getByLabelText('Sandy count', { selector: 'input' }), { target: { value: '2' } });
     fireEvent.change(dialog.getByLabelText('Other dots'), { target: { value: '-1.5' } });
     expect(dialog.getByLabelText('Other dots')).toHaveValue('-1.5');
     expect(screen.getByRole('alert')).toHaveTextContent('nonnegative whole numbers');

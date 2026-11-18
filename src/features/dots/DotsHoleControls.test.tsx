@@ -7,6 +7,23 @@ import { DotsHoleControls } from './DotsHoleControls';
 import { dotsFixture } from './dots.test-support';
 
 describe('separate Dots hole declarations', () => {
+  it('identifies fixed versus saved linked partners and solo context in each golfer entry', () => {
+    const f = dotsFixture(), playerId = f.ids[0];
+    if (!playerId) throw new Error('Missing fictional player');
+    const fixed: DotsGameDefinition = { ...f.game, mode: 'fixed', partnerIds: f.ids };
+    const props = { players: f.round.cards, playerId, holeNumber: 1, par: 4, etag: 'fictional',
+      saved: undefined, draft: undefined, disabled: false, onChange: vi.fn() };
+    const view = render(<DotsHoleControls {...props} game={fixed} />);
+    expect(screen.getByText('Fixed partner: Fictional golfer 2 · All round')).toBeVisible();
+    const linked: DotsGameDefinition = { id: f.game.id, name: f.game.name, kind: 'dots', version: 1, mode: 'linked',
+      linkedGameId: 'fictional-wolf', groupNumber: 1, playerIds: f.ids, specials: f.game.specials };
+    view.rerender(<DotsHoleControls {...props} game={linked} />);
+    expect(screen.getByText('Partners pending saved Wolf choice')).toBeVisible();
+    view.rerender(<DotsHoleControls {...props} game={linked} context={{ number: 1, status: 'ready',
+      sides: [f.ids.slice(0, 1), f.ids.slice(1)], multiplier: 3 }} />);
+    expect(screen.getByText('Solo · ×3')).toBeVisible();
+  });
+
   it.each([['kp', 'KP', 3], ['blue-plate', 'Blue Plate', 5], ['long-drive', 'Long Drive', 5]] as const)(
     'offers optional second %s qualifiers only in partnered Assassin contexts and preserves the first winner on clear', (kind, label, par) => {
       const f = dotsFixture();

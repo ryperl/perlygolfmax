@@ -141,11 +141,14 @@ export function GameSettings({
               <option key={group.number} value={group.number}>Group {group.number}</option>)}
           </select></label>
           {draft.kind === 'wolf' ? <>
-            <p>Wolf tees last; choose a partner immediately after their drive, before the next drive, or pass all.
+            <details><summary>Wolf rules</summary><p>Wolf tees last; choose a partner immediately after their drive, before the next drive, or pass all.
               Blind Wolf passes all after seeing drives (double); PIG is declared before any tee shots (triple).
               Timing is honor-system. Ties award zero; no carry.
               {draft.wolfVersion === 2 ? ' Partnered High and Low earn one dot each per winning teammate. Solo Blind Wolf earns two, PIG three, per winning golfer.'
                 : ' Legacy transfer-balance rules are preserved; no dollar settlement.'}</p>
+              {draft.wolfVersion === 2 && <p>Final two holes: the lowest earned total after the opening 7 or 16 holes chooses Wolf, including explicitly linked Dots.
+                Ties use the next printed rotation. Saved selection survives later corrections.</p>}
+            </details>
             {(draft.wolfPlayers ?? []).map((id, index) => <label key={index}>Wolf P{index + 1}<select value={id} onChange={(event) => {
               const ids = [...(draft.wolfPlayers ?? [])], other = ids.indexOf(event.target.value);
               if (other >= 0) { ids[other] = id; ids[index] = event.target.value; onChange({ ...draft, wolfPlayers: ids }); }
@@ -153,8 +156,6 @@ export function GameSettings({
               <option key={playerId} value={playerId}>{roster.find((entry) => entry.playerId === playerId)?.displayName ?? 'Golfer unavailable'}</option>)}</select></label>)}
             <p>P1–P4 rotate from the saved group&apos;s starting hole.</p>
             {draft.wolfVersion === 2 && <>
-              <p>Final two holes: the lowest earned total after the opening 7 or 16 holes chooses Wolf, including explicitly linked Dots.
-                Ties use the next printed rotation. Saved selection survives later corrections.</p>
               <label>USD per dot difference<span>$ <input aria-label="USD per dot difference" inputMode="decimal" value={draft.stake ?? ''}
                 onChange={(event) => { onChange({ ...draft, stake: event.target.value }); }} /></span></label>
               <small>Optional dollars and cents. Blank or 0 means points-only; one individual settlement per opponent.</small>

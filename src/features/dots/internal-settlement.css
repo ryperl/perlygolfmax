@@ -1,0 +1,24 @@
+.internal-settlement { display: grid; gap: .75rem; min-width: 0; overflow-wrap: anywhere; }
+.internal-settlement h3, .internal-settlement p { margin: 0; }
+.internal-settlement-status { color: var(--cp-text-muted); font-size: .85rem; }
+.internal-settlement-list { list-style: none; display: grid; gap: .5rem; margin: 0; padding: 0; min-width: 0; }
+.internal-settlement-list > li { min-width: 0; border: 1px solid var(--cp-border); border-radius: .625rem; background: var(--cp-surface); }
+.internal-settlement-list summary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(5.5rem, .7fr) 1rem; gap: .5rem; align-items: center; min-height: 72px; padding: .65rem .75rem; cursor: pointer; list-style: none; }
+.internal-settlement-list summary::-webkit-details-marker { display: none; }
+.internal-settlement-list .internal-ranked summary { grid-template-columns: 1.5rem minmax(0, 1fr) minmax(5.5rem, .7fr) 1rem; }
+.internal-settlement-name, .internal-settlement-points, .internal-settlement-source, .internal-settlement-money { display: block; min-width: 0; }
+.internal-settlement-name { font-weight: 650; }
+.internal-settlement-points { margin-top: .2rem; font-variant-numeric: tabular-nums; }
+.internal-settlement-source { color: var(--cp-text-muted); font-size: .75rem; margin-top: .2rem; }
+.internal-settlement-money { text-align: right; font-size: 1rem; font-variant-numeric: tabular-nums; }
+.internal-settlement-position { color: var(--cp-accent); font-weight: 650; }
+.internal-settlement-calculation { display: grid; gap: .5rem; padding: .1rem .75rem .75rem; font-size: .85rem; }
+.internal-settlement-calculation ul { margin: 0; padding-inline-start: 1.1rem; }
+.internal-settlement-list details[open] > summary svg { transform: rotate(180deg); }
+.internal-settlement summary:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; border-radius: .4rem; }
+.internal-settlement-method > summary { min-height: 44px; align-content: center; cursor: pointer; }
+.internal-settlement-method p { margin-block: .4rem; }
+@media (max-width: 380px) {
+  .internal-settlement-list summary { padding: .6rem; }
+  .internal-settlement-list .internal-ranked summary { grid-template-columns: 1rem minmax(0, 1fr) minmax(4.5rem, .65fr) .75rem; gap: .35rem; }
+}

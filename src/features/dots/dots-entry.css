@@ -1,4 +1,5 @@
 .dots-entry-dialog {
+  box-sizing: border-box;
   width: min(34rem, calc(100vw - .5rem));
   max-width: calc(100% - .5rem);
   max-height: calc(100dvh - .5rem);
@@ -48,7 +49,8 @@ dialog.dots-entry-dialog fieldset > legend {
 .dots-entry-dialog > header h3 { min-width: 0; margin: 0; font-size: 1rem; line-height: 1.2; }
 .dots-entry-dialog > header button { flex-shrink: 0; align-self: start; white-space: nowrap; padding: .3rem .6rem; font-size: .8rem; }
 .dots-entry-partner { margin-block: .4rem; font-size: .85rem; }
-.dots-count-control > span { flex-shrink: 0; white-space: nowrap; font-size: .9rem; }
+.dots-count-control { flex-wrap: wrap; }
+.dots-count-control > span { min-width: 0; font-size: .9rem; }
 
 .dots-player-controls {
   display: grid;
@@ -90,8 +92,8 @@ dialog.dots-entry-dialog fieldset > legend {
 }
 
 .dots-special-choice:has(input:checked) {
-  background: var(--cp-accent-soft);
-  border-color: var(--cp-accent);
+  background: var(--cp-round-surface, var(--cp-accent-soft));
+  border-color: var(--cp-round-line, var(--cp-accent));
 }
 
 .dots-special-choice > span { min-width: 0; overflow-wrap: anywhere; }
@@ -104,11 +106,29 @@ dialog.dots-entry-dialog fieldset > legend {
   padding: 0;
   margin: 0;
   flex-shrink: 0;
-  accent-color: var(--cp-accent);
+  accent-color: var(--cp-round-line, var(--cp-accent));
 }
 
 .dots-count-details > summary { min-height: 44px; cursor: pointer; }
 .dots-count-details > label { margin-block: .5rem; }
+.dots-call-controls { min-width: 0; }
+.dots-call {
+  border: 1px solid var(--cp-border);
+  border-radius: .5rem;
+  padding: .4rem;
+  margin-block: .35rem;
+}
+.dots-call label { display: grid; gap: .25rem; }
+.dots-call select {
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+  padding-inline: .4rem;
+}
+.dots-call button {
+  margin: 0;
+  margin-block-start: .25rem;
+}
 .dots-entry-dialog small,
 .dots-player-controls small {
   color: var(--cp-text-muted);

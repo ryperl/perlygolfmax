@@ -27,6 +27,7 @@ import { isRoundDifferentials } from './round-differential.js';
 import { calculateChurchyResults, churchySpecialsMatchGame } from '../domain/churchy.js';
 import { isKpConfiguration, isKpEntry } from './kp.js';
 import { purseCurrencies } from '../domain/purse.js';
+import { restoreLeanRoundGames } from './lean-round-scores.js';
 
 export function isScoreActor(value: unknown): value is ScoreActor {
   return isPublicScoreIdentity(value) || isEventTesterIdentity(value) || isRecord(value) && !Object.hasOwn(value, 'kind')
@@ -112,6 +113,18 @@ export function isScorecard(value: unknown): value is Scorecard {
 }
 
 export function isRoundScores(value: unknown): value is RoundScores {
+  return validateRoundScores(value);
+}
+
+/** New readers accept legacy full responses; tagged lean responses are strict and lossless. */
+export function decodeRoundScores(value: unknown): RoundScores | null {
+  if (!isRecord(value) || value.kind !== 'round-scores-lean') return isRoundScores(value) ? value : null;
+  if (value.version !== 1 || Object.keys(value).length !== 3 || !isRecord(value.round)) return null;
+  const round = { ...value.round };
+  return validateRoundScores(round, true) ? round : null;
+}
+
+function validateRoundScores(value: unknown, lean = false): value is RoundScores {
   if (isRecord(value) && value.churchyRulesVersions !== undefined
     && (!Array.isArray(value.churchyRulesVersions)
       || !value.churchyRulesVersions.every((version: unknown) => version === 1 || version === 2)
@@ -286,6 +299,12 @@ export function isRoundScores(value: unknown): value is RoundScores {
         && typeof value.gameInputContext.teeProfileId === 'number'
         ? { gameInputContext: { courseVersionId: value.gameInputContext.courseVersionId, teeProfileId: value.gameInputContext.teeProfileId } } : {}),
       ...(typeof value.inputRevision === 'string' ? { inputRevision: value.inputRevision } : {}) };
+    if (lean) {
+      const games = restoreLeanRoundGames(value.games, context);
+      if (games === null) return false;
+      // Only decodeRoundScores passes lean=true, with a fresh enclosing object.
+      value.games = games;
+    }
     if (!isRoundGamesView(value.games, context) || value.games.configuration.eventId !== value.eventId
       || value.games.configuration.roundId !== value.roundId
       || value.games.results.some((result) => (!['churchy', 'wolf', 'nassau', 'dots'].includes(result.kind ?? '') && result.players.length !== cards.length) || result.players.some((player) => {

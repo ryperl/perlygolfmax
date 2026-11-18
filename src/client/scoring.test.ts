@@ -8,6 +8,10 @@ import { maximumExactHoleStrokes } from '../domain/scoring';
 import type { RoundGameDefinition, TeamGameDefinition } from '../domain/games';
 import { maximumGameConfigurationBytes } from '../domain/games';
 import { stablefordPoints } from '../domain/stableford';
+import { leanRoundScores, leanScoreWriteResult } from '../contracts/lean-round-scores';
+import { leanScoresFixture } from '../contracts/lean-round-scores.test-support';
+import { createHash } from 'node:crypto';
+import { privateReadPartCharacters } from '../contracts/private-values';
 
 const { eventId, roundId } = fictionalRoundScores;
 const { playerId, id, after: score } = fictionalChange;
@@ -17,6 +21,53 @@ function fixture(value: unknown = fictionalRoundScores, status = 200) {
   return { send, token, client: createScoresClient('https://fictional.example.test/api', token, send), signal: new AbortController().signal };
 }
 describe('owner scoring transport', () => {
+  it('keeps the lean query on digest-bound pages and rejects a mixed round before exposing it', async () => {
+    const round = leanScoresFixture();
+    const text = JSON.stringify(leanRoundScores(round));
+    const sha256 = createHash('sha256').update(text).digest('hex');
+    let corrupt = false;
+    const { client, send, signal } = fixture();
+    send.mockImplementation((target) => {
+      const url = new URL(typeof target === 'string' ? target : target instanceof URL ? target.href : target.url);
+      expect(url.searchParams.get('format')).toBe('lean');
+      const index = Number(url.searchParams.get('privatePart') ?? 0);
+      if (index > 0) expect(url.searchParams.get('privateHash')).toBe(sha256);
+      return Promise.resolve(new Response(JSON.stringify({ privateRead: {
+        sha256: corrupt && index === 1 ? 'f'.repeat(64) : sha256, index,
+        parts: Math.ceil(text.length / privateReadPartCharacters), bytes: new TextEncoder().encode(text).length,
+        content: text.slice(index * privateReadPartCharacters, (index + 1) * privateReadPartCharacters),
+      } })));
+    });
+    expect(await client.load(round.eventId, round.roundId, signal)).toEqual(round);
+    expect(send.mock.calls.length).toBeGreaterThan(1);
+    corrupt = true;
+    await expect(client.load(round.eventId, round.roundId, signal)).rejects.toThrow('page');
+  });
+
+  it('opts into lean reads and score/game acknowledgements while preserving all authoritative fields and retry identities', async () => {
+    const round = leanScoresFixture();
+    const loaded = fixture(leanRoundScores(round));
+    expect(await loaded.client.load(round.eventId, round.roundId, loaded.signal)).toEqual(round);
+    expect(loaded.send).toHaveBeenCalledOnce();
+    const change = { ...fictionalChange, eventId: round.eventId, roundId: round.roundId,
+      playerId: round.cards[1]?.playerId ?? '', after: { kind: 'strokes' as const, strokes: 4 } };
+    const saved = fixture(leanScoreWriteResult({ round, change }));
+    saved.send.mockImplementation(() => Promise.resolve(new Response(JSON.stringify(leanScoreWriteResult({ round, change })))));
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect(await saved.client.save(round.eventId, round.roundId, change.playerId, change.holeNumber,
+        change.after, change.expectedEtag, change.id, saved.signal)).toEqual({ round, change });
+    }
+    expect(saved.send.mock.calls[0]).toEqual(saved.send.mock.calls[1]);
+    expect(saved.send.mock.calls[0]?.[0]).toContain('/holes/1?format=lean');
+    const games = round.games?.configuration.games ?? [];
+    const result = { round, change: { id, eventId: round.eventId, roundId: round.roundId,
+      expectedEtag: null, before: [], after: games, recordedAt: fictionalChange.recordedAt,
+      recordedBy: fictionalChange.recordedBy } };
+    const configured = fixture({ ...result, round: leanRoundScores(round) });
+    expect(await configured.client.saveGames(round.eventId, round.roundId, games, null, id, configured.signal)).toEqual(result);
+    const invalid = fixture({ ...leanRoundScores(round), version: 2 });
+    await expect(invalid.client.load(round.eventId, round.roundId, invalid.signal)).rejects.toThrow('response');
+  });
   const game: RoundGameDefinition = {
     id: fictionalId(700), name: 'Fictional Stableford', preset: 'standard', basis: 'gross',
     handicapAllowancePercent: 95, points: stablefordPoints('standard'),
@@ -27,7 +78,7 @@ describe('owner scoring transport', () => {
     const { client, send, signal } = fixture(result);
     expect(await client.saveGames(eventId, roundId, [game], etag, id, signal)).toEqual(result);
     const init = send.mock.calls[0]?.[1];
-    expect(send.mock.calls[0]?.[0]).toBe(`https://fictional.example.test/api/events/${eventId}/rounds/${roundId}/games`);
+    expect(send.mock.calls[0]?.[0]).toBe(`https://fictional.example.test/api/events/${eventId}/rounds/${roundId}/games?format=lean`);
     expect(init).toMatchObject({ method: 'PUT', cache: 'no-store', credentials: 'omit', body: JSON.stringify({ games: [game] }) });
     const headers = new Headers(init?.headers);
     expect(headers.get('Idempotency-Key')).toBe(id);
@@ -96,10 +147,11 @@ describe('owner scoring transport', () => {
       if (isRecord(body) && isRecord(body.privateUpload)) return Promise.resolve(new Response(JSON.stringify({
         privateStaged: { id: body.privateUpload.id, index: body.privateUpload.index },
       })));
-      return Promise.resolve(new Response(JSON.stringify(result)));
+      return Promise.resolve(new Response(JSON.stringify({ ...result, round: leanRoundScores(result.round) })));
     });
     await expect(client.saveGames(eventId, roundId, oversized, null, id, signal)).resolves.toEqual(result);
     expect(send.mock.calls.length).toBeGreaterThan(2);
+    expect(send.mock.calls.every((call) => typeof call[0] === 'string' && call[0].endsWith('/games?format=lean'))).toBe(true);
     expect(send.mock.calls.every((call) => typeof call[1]?.body === 'string'
       && new TextEncoder().encode(call[1].body).length <= maximumGameConfigurationBytes)).toBe(true);
   });
@@ -118,7 +170,7 @@ describe('owner scoring transport', () => {
     const { client, send, token, signal } = fixture();
     expect(await client.load(eventId, roundId, signal)).toEqual(fictionalRoundScores);
     expect(token).toHaveBeenCalledOnce();
-    expect(send).toHaveBeenCalledWith(`https://fictional.example.test/api/events/${eventId}/rounds/${roundId}/scores`, expect.objectContaining({
+    expect(send).toHaveBeenCalledWith(`https://fictional.example.test/api/events/${eventId}/rounds/${roundId}/scores?format=lean`, expect.objectContaining({
       signal, cache: 'no-store', credentials: 'omit', headers: { Authorization: 'Bearer fictional-token' },
     }));
   });

@@ -34,6 +34,15 @@ async function stageSpecials(form: Locator, gameName = 'Dots') {
   await dialog.getByRole('button', { name: 'Done', exact: true }).click();
 }
 
+async function openGameStandings(page: Page, name: string) {
+  const summary = page.getByText(`${name} · Game standings`, { exact: true });
+  if (!await summary.evaluate((element) => {
+    const details = element.closest('details');
+    if (!details) throw new Error('Missing game standings disclosure');
+    return details.open;
+  })) await summary.click();
+}
+
 test('Dots setup stays compact and selects all compatible specials without losing custom units', async ({ page }, testInfo) => {
   test.setTimeout(30000);
   const fixture = await openDotsFixture(page, testInfo);
@@ -239,6 +248,7 @@ for (const [theme, mode] of [['light', 'individual'], ['dark', 'fixed']] as cons
       const configured = fixture.counters().configurations[0]?.find((game) => game.kind === 'dots');
       expect(configured).toMatchObject({ kind: 'dots', mode, stakeMinor: 50 });
       const results = page.getByRole('region', { name: 'Dots results', exact: true });
+      await openGameStandings(page, 'Dots');
       await expect(results.getByRole('row', { name: /Fictional golfer 1/ }).getByRole('cell').first()).toHaveText('—');
       await page.getByRole('button', { name: 'Enter scores', exact: true }).click();
       const form = page.getByRole('form', { name: 'Group 1 hole 1 entry', exact: true });
@@ -288,15 +298,16 @@ for (const [theme, mode] of [['light', 'individual'], ['dark', 'fixed']] as cons
       expect(fixture.counters().requests[1]).toEqual(failed);
       expect(fixture.counters().requests[0]?.playerId).toBe(dotsPlayers[0]);
       await page.getByRole('button', { name: 'Games', exact: true }).click();
+      await openGameStandings(page, 'Dots');
       await expect(results.getByRole('row', { name: /Fictional golfer 1/ }).getByRole('cell').first()).toHaveText(mode === 'individual' ? '5' : '4');
       const settlement = page.getByRole('region', { name: 'Group 1 Dots internal settlement', exact: true });
       await expect(settlement).toContainText('Provisional settlement · Not paid');
+      await expect(settlement.locator('.internal-settlement-list > li').filter({ has: page.getByText('Fictional golfer 1', { exact: true }) }).locator('summary'))
+        .toContainText(mode === 'individual' ? 'Due USD 6.50' : 'Due USD 3.00');
+      await expect(settlement.getByText('Rate and settlement method').locator('..')).not.toHaveAttribute('open', '');
+      await settlement.getByText('Rate and settlement method').click();
       await expect(settlement).toContainText(mode === 'individual' ? 'Total to settle: USD 6.50' : 'Total to settle: USD 6.00');
-      await expect(settlement.getByRole('row', { name: /Fictional golfer 1/ })).toContainText(mode === 'individual' ? 'Due USD 6.50' : 'Due USD 3.00');
-      await results.getByText('Saved award explanations and score evidence', { exact: true }).click();
-      await expect(results).toContainText('1 units × 3 × 1');
-      await expect(results).toContainText('Failed call · Opponents earn');
-      await expect(results).toContainText('Successful call · Calling side earns');
+      await expect(results.getByText('Saved award explanations and score evidence', { exact: true })).toHaveCount(0);
       for (const record of failed?.score.dots ?? []) for (const player of record.players) for (const call of player.calls) {
         await expect(results).not.toContainText(call.id);
       }
@@ -310,6 +321,8 @@ test('linked earned Wolf and Dots retain separate ledgers and one individual set
   test.setTimeout(30000);
   const fixture = await openDotsFixture(page, testInfo, 'linked');
   try {
+    expect(fixture.counters().roundReads).toBe(1);
+    expect(fixture.counters().roundReadFormats).toEqual(['lean']);
     const form = page.getByRole('form', { name: 'Group 1 hole 1 entry', exact: true });
     const declaration = form.getByRole('combobox', { name: 'Wolf declaration', exact: true });
     const declarationBox = await declaration.boundingBox(), scoreBox = await form.locator('.entry-value input').first().boundingBox();
@@ -328,14 +341,27 @@ test('linked earned Wolf and Dots retain separate ledgers and one individual set
       .getByLabel('Saved solo Wolf turns')).not.toContainText('Fictional golfer 1');
     expect(fixture.counters().requests[0]?.score).toMatchObject({ dots: [{ players: [{ counts: { sandy: 3 } }, {}] }], wolf: [{ choice: { mode: 'pig' } }] });
     await page.getByRole('button', { name: 'Games', exact: true }).click();
+    await openGameStandings(page, 'Fictional earned Wolf');
+    await openGameStandings(page, 'Fictional linked specials');
     await expect(page.getByRole('region', { name: 'Fictional earned Wolf results', exact: true }).getByRole('columnheader', { name: 'Earned dots', exact: true })).toBeVisible();
     const results = page.getByRole('region', { name: 'Fictional linked specials results', exact: true });
     await expect(results.getByRole('row', { name: /Fictional golfer 1/ }).getByRole('cell').first()).toHaveText('15');
     const settlement = page.getByRole('region', { name: 'Group 1 Fictional earned Wolf + Fictional linked specials internal settlement', exact: true });
     await expect(settlement).toHaveCount(1);
-    await expect(settlement.getByRole('row', { name: /Fictional golfer 1/ })).toContainText('Due USD 22.50');
+    await expect(settlement.locator('.internal-settlement-list > li').filter({ has: page.getByText('Fictional golfer 1', { exact: true }) }).locator('summary'))
+      .toContainText('Due USD 22.50');
     expect(fixture.read().internalSettlements).toHaveLength(1);
     expect(fixture.read().internalSettlements?.[0]?.gameIds).toHaveLength(2);
+    await page.getByRole('button', { name: 'Leaderboard', exact: true }).click();
+    const leaderboard = page.getByRole('region', { name: 'Round leaderboard', exact: true });
+    const leaderboardGame = leaderboard.getByRole('combobox', { name: 'Leaderboard game' });
+    await leaderboardGame.selectOption({ label: 'Fictional earned Wolf + Fictional linked specials · Group 1 · Combined' });
+    await expect(leaderboardGame).toHaveValue(/^combined:/);
+    const combined = leaderboard.getByRole('list', { name: 'Combined standings', exact: true });
+    await expect(combined.locator(':scope > li')).toHaveCount(4);
+    await expect(combined.locator(':scope > li').first()).toContainText('Due USD 22.50');
+    await narrowControls(page, leaderboard);
+    if (testInfo.project.name === 'iphone-16-pro-webkit') await leaderboard.screenshot({ path: 'coverage/mobile-combined-leaderboard.png' });
     expect(fixture.counters().pageErrors).toEqual([]);
   } finally { await fixture.close(); }
 });

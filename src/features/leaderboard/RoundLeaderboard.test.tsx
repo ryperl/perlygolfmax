@@ -7,8 +7,79 @@ import { fictionalRoundScores } from '../../client/scoring.test-support';
 import { fictionalId, fictionalProfile } from '../../client/catalog.test-support';
 import { calculateGameResults } from '../../domain/stableford';
 import { strokeGameCards, strokeGameFixture, strokeGamesRound } from '../../domain/stroke-games.test-support';
+import { matchGamesFixture } from '../../domain/match-games.test-support';
+import { calculateInternalSettlements } from '../../domain/internal-games';
+import { wolfForHole } from '../../domain/wolf';
+import type { WolfGameDefinition } from '../../domain/wolf';
+import type { DotsGameDefinition } from '../../domain/dots';
+
+function linkedRound() {
+  const f = matchGamesFixture();
+  const anchor = f.ids[0];
+  if (!anchor) throw new Error('Missing fictional anchor');
+  const wolf: WolfGameDefinition = { ...f.wolf, version: 2, stakeMinor: 50 };
+  const dots: DotsGameDefinition = { id: fictionalId(997), name: 'Fictional specials', kind: 'dots', version: 1,
+    groupNumber: 1, playerIds: f.ids, mode: 'linked', linkedGameId: wolf.id, specials: [{ kind: 'sandy', units: 1 }] };
+  const cards = f.cards.map((card) => card.playerId === anchor ? { ...card, holes: card.holes.map((hole) => {
+    const wolfId = wolfForHole(wolf, { layout: f.snapshot.teeProfile.holes, groups: f.snapshot.groups }, hole.number);
+    const partnerId = f.ids.find((id) => id !== wolfId);
+    if (!partnerId) throw new Error('Missing fictional partner');
+    return { ...hole, score: { ...hole.score,
+      wolf: hole.number <= 16 ? [{ number: hole.number, choice: {
+        gameId: wolf.id, gameEtag: 'fictional-game-revision', mode: 'partner' as const, partnerId,
+      } }] : [],
+      dots: hole.number === 1 ? [{ number: 1, gameId: dots.id, gameEtag: 'fictional-game-revision',
+        players: [{ playerId: anchor, counts: { sandy: 2 }, calls: [] }], contests: [] }] : [],
+    } };
+  }) } : card);
+  const base = f.round(cards, [wolf, dots]);
+  const results = base.games?.results;
+  if (!results) throw new Error('Missing fictional results');
+  return { f, wolf, dots, round: { ...base,
+    internalSettlements: calculateInternalSettlements([wolf, dots], results, base) } };
+}
 
 describe('round leaderboard', () => {
+  it('defaults an explicit Wolf + Dots link to combined ranked totals and net money, retaining per-game views', async () => {
+    const { round, wolf, dots } = linkedRound();
+    const user = userEvent.setup();
+    render(<RoundLeaderboard round={round} busy={false} onManageGames={vi.fn()} />);
+    const choice = screen.getByLabelText('Leaderboard game');
+    expect(choice).toHaveValue(`combined:${wolf.id}:${dots.id}`);
+    const board = screen.getByRole('list', { name: 'Combined standings' });
+    const rows = [...board.children];
+    expect(rows).toHaveLength(4);
+    expect(rows[0]).toHaveTextContent('Fictional golfer 1');
+    expect(rows[0]).toHaveTextContent(/Due USD\s+2.00/);
+    expect(rows[0]).toHaveTextContent('Wolf 0 + Dots 2');
+    expect(rows[0]).toHaveTextContent('Wolf 16/18');
+    expect(screen.getAllByLabelText('Tied position 1')).toHaveLength(2);
+    expect(screen.getAllByLabelText('Tied position 3')).toHaveLength(2);
+    expect(screen.getByText('Provisional settlement · Not paid')).toBeVisible();
+    await user.selectOptions(choice, wolf.id);
+    expect(screen.queryByRole('list', { name: 'Combined standings' })).not.toBeInTheDocument();
+    expect(within(screen.getByRole('list', { name: 'Standings' })).getAllByLabelText('Tied position 1')).toHaveLength(4);
+    await user.selectOptions(choice, `combined:${wolf.id}:${dots.id}`);
+    expect(screen.getByRole('list', { name: 'Combined standings' })).toBeVisible();
+  });
+
+  it('keeps an event-wide game as the default and does not fabricate a combined view after its link disappears', async () => {
+    const { f, round, wolf, dots } = linkedRound();
+    if (!round.games) throw new Error('Missing fictional games');
+    const games = [f.ballDrop, wolf, dots];
+    const withField = { ...round, games: { configuration: { ...round.games.configuration, games },
+      results: calculateGameResults(games, f.snapshot, round.cards) } };
+    const view = render(<RoundLeaderboard round={withField} busy={false} onManageGames={vi.fn()} />);
+    expect(screen.getByLabelText('Leaderboard game')).toHaveValue(f.ballDrop.id);
+    await userEvent.setup().selectOptions(screen.getByLabelText('Leaderboard game'), `combined:${wolf.id}:${dots.id}`);
+    view.rerender(<RoundLeaderboard round={{ ...round, internalSettlements: [], games: {
+      configuration: { ...round.games.configuration, games: [wolf] },
+      results: round.games.results.filter((result) => result.gameId === wolf.id),
+    } }} busy={false} onManageGames={vi.fn()} />);
+    expect(screen.getByLabelText('Leaderboard game')).toHaveValue(wolf.id);
+    expect(screen.queryByRole('list', { name: 'Combined standings' })).not.toBeInTheDocument();
+  });
+
   it.each(['gross', 'net'] as const)('shows only awarded %s Skins golfers and restores winners after refresh', (basis) => {
     const f = strokeGameFixture(9, 16);
     const skins = { ...f.skins, basis: 'gross' as const, carryovers: false };

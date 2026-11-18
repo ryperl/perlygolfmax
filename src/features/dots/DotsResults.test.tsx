@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { DotsGameDefinition, DotsResults as Results } from '../../domain/dots';
 import { calculateDotSettlement } from '../../domain/dot-settlement';
@@ -21,7 +21,7 @@ describe('saved Dots awards and one internal settlement', () => {
     expect(screen.queryByText(/Partner order pending/)).not.toBeInTheDocument();
   });
 
-  it('explains round bonus units, recipients and source facts without showing identities or claiming historical audit', () => {
+  it('retains server totals and fixed-partner identity without mounting award evidence or an audit panel', () => {
     const { game, f, ids } = dotsFixture();
     const id = ids[0] ?? '';
     const result: Results = { status: 'complete', holes: [], players: [], issues: [], unawarded: [],
@@ -30,15 +30,15 @@ describe('saved Dots awards and one internal settlement', () => {
         scores: [{ playerId: id, number: 1, strokes: 3, par: 3 }], reason: 'king-kp' }] };
     const players = f.cards.map((card) => ({ playerId: card.playerId, displayName: card.displayName, holes: [],
       playingHandicap: null, holesScored: 9, totalHoles: 9, status: 'complete' as const, frontPoints: 0, backPoints: 0, totalPoints: 1 }));
-    const view = render(<DotsResults game={game} result={{ ...result, players }} />);
-    screen.getByText('Saved award explanations and score evidence').click();
-    expect(view.container).toHaveTextContent('Round bonus · King of the Hill');
-    expect(view.container).toHaveTextContent('1 units × 1 × 1 = 1 dots each');
-    expect(view.container).toHaveTextContent('Source holes 1, 3');
-    expect(view.container).toHaveTextContent('Hole 1 · 3 / par 3');
+    const fixed: DotsGameDefinition = { ...game, mode: 'fixed', partnerIds: ids };
+    const view = render(<DotsResults game={fixed} result={{ ...result, players }} />);
+    expect(screen.getByText('Fixed partners')).toBeVisible();
+    expect(screen.getByText(/Fictional golfer 1 \+ Fictional golfer 2 vs Fictional golfer 3 \+ Fictional golfer 4/)).toBeVisible();
+    expect(screen.getAllByRole('cell', { name: '1' })).toHaveLength(4);
+    expect(screen.queryByText('Saved award explanations and score evidence')).not.toBeInTheDocument();
+    expect(view.container).not.toHaveTextContent('King of the Hill');
     expect(view.container).not.toHaveTextContent('private-award-id');
     expect(view.container).not.toHaveTextContent(id);
-    expect(view.container).toHaveTextContent('not a historical audit view');
   });
 
   it('shows exact net due/owed once, provisional status, source dot totals and points-only/unavailable states', () => {
@@ -48,18 +48,29 @@ describe('saved Dots awards and one internal settlement', () => {
         baseDots: index < 2 ? 5 : 0, specialDots: 1 })) });
     const view = render(<InternalSettlement settlement={settlement} />);
     expect(screen.getByText('Provisional settlement · Not paid')).toBeVisible();
-    expect(screen.getAllByRole('cell', { name: /Due USD\s+10.00/ })).toHaveLength(2);
-    expect(screen.getAllByRole('cell', { name: /Owes USD\s+10.00/ })).toHaveLength(2);
+    const amounts = [...view.container.querySelectorAll('summary .internal-settlement-money')].map((element) => element.textContent);
+    expect(amounts.filter((value) => /Due USD\s+10.00/.test(value))).toHaveLength(2);
+    expect(amounts.filter((value) => /Owes USD\s+10.00/.test(value))).toHaveLength(2);
+    expect(screen.getByText('Rate and settlement method').closest('details')).not.toHaveAttribute('open');
+    fireEvent.click(screen.getByText('Rate and settlement method'));
     expect(screen.getByText(/Total to settle: USD\s+20.00/)).toBeVisible();
-    expect(screen.getByRole('columnheader', { name: 'Base dots' })).toBeVisible();
-    expect(screen.getByRole('columnheader', { name: 'Special dots' })).toBeVisible();
+    expect(screen.getAllByText('Base 5 + Specials 1')).toHaveLength(2);
+    const rows = [...screen.getByRole('list', { name: 'Individual net settlement' }).children];
+    expect(rows).toHaveLength(4);
+    expect(rows[0]?.querySelector('details')).not.toHaveAttribute('open');
+    const first = rows[0];
+    if (!(first instanceof HTMLElement)) throw new Error('Missing fictional settlement');
+    fireEvent.click(first.querySelector('summary') ?? first);
+    expect(within(first).getByText(/How calculated/)).toBeVisible();
+    expect(first).toHaveTextContent('(4 × 6 − 14)');
+    expect(first).toHaveTextContent('not additional payments');
     view.rerender(<InternalSettlement settlement={{ ...settlement, status: 'points-only', stakeMinor: null }} />);
     expect(screen.getByText('No money configured · Points-only')).toBeVisible();
     expect(screen.queryByText(/Total to settle:/)).not.toBeInTheDocument();
     view.rerender(<InternalSettlement settlement={{ ...settlement, status: 'unavailable', totalToSettleMinor: null,
       players: settlement.players.map((player) => ({ ...player, netMinor: null })) }} />);
     expect(screen.getByText('Settlement unavailable')).toBeVisible();
-    expect(screen.getAllByRole('cell', { name: 'Unavailable' })).toHaveLength(4);
+    expect(screen.getAllByText('Unavailable', { exact: true })).toHaveLength(4);
   });
 
   it('names both explicitly linked sources while retaining one combined settlement', () => {
@@ -70,7 +81,25 @@ describe('saved Dots awards and one internal settlement', () => {
       })) });
     render(<InternalSettlement settlement={settlement} gameNames={['Fictional Wolf', 'Fictional specials']} />);
     expect(screen.getByRole('region', { name: 'Group 1 Fictional Wolf + Fictional specials internal settlement' })).toBeVisible();
+    fireEvent.click(screen.getByText('Rate and settlement method'));
     expect(screen.getByText('One combined settlement for these explicitly linked games.')).toBeVisible();
     expect(screen.getAllByText(/Total to settle:/)).toHaveLength(1);
+  });
+
+  it('ranks known combined totals with shared positions and keeps unavailable money out of ranked results', () => {
+    const { f, game } = dotsFixture();
+    const settlement = calculateDotSettlement({ groupNumber: 1, gameIds: [game.id], stakeMinor: 50, complete: true,
+      players: f.cards.map((card, index) => ({ playerId: card.playerId, displayName: card.displayName,
+        baseDots: 0, specialDots: [2, 5, 5, 1][index] ?? 0 })) });
+    const view = render(<InternalSettlement settlement={settlement} ranked />);
+    const rows = [...screen.getByRole('list', { name: 'Combined standings' }).children];
+    expect(rows[0]).toHaveTextContent('Fictional golfer 2');
+    expect(rows[1]).toHaveTextContent('Fictional golfer 3');
+    expect(screen.getAllByLabelText('Tied position 1')).toHaveLength(2);
+    expect(screen.getByLabelText('Position 3')).toBeVisible();
+    view.rerender(<InternalSettlement settlement={{ ...settlement, status: 'unavailable' }} ranked />);
+    expect(screen.getAllByLabelText('Unranked')).toHaveLength(4);
+    expect(screen.getAllByText('Unavailable', { exact: true })).toHaveLength(4);
+    expect(screen.queryByText(/^Due USD/)).not.toBeInTheDocument();
   });
 });

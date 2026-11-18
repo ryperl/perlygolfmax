@@ -80,7 +80,8 @@ describe('Nassau saved match UI', () => {
     expect(board).toHaveTextContent('Stake per side $1.01');
     expect(board).toHaveTextContent('Press of Front (holes 1–9)');
     expect(board).toHaveTextContent('Planned net settlement · USD');
-    expect(board).toHaveTextContent('Net Pending');
+    expect(within(screen.getByRole('region', { name: 'Nassau planned settlement' })).getAllByText('Pending', { exact: true })).toHaveLength(3);
+    expect(board.querySelector('.nassau-bet details')).not.toHaveAttribute('open');
     expect(board).not.toHaveTextContent(press.id);
     expect(board).not.toHaveTextContent(press.proof);
     expect(board).not.toHaveTextContent('internal-game-etag');
@@ -90,14 +91,14 @@ describe('Nassau saved match UI', () => {
     const { f, game, result } = fixture();
     const view = render(<NassauResults game={game} result={calculateNassau(game, f.snapshot, f.cards)} players={f.cards} />);
     expect(screen.getAllByText(/Push/)).toHaveLength(3);
-    expect(screen.getByRole('region', { name: 'Nassau planned settlement' })).toHaveTextContent('Net $0.00');
+    expect(within(screen.getByRole('region', { name: 'Nassau planned settlement' })).getAllByText('$0.00', { exact: true })).toHaveLength(3);
     const option = result.pressOptions[0];
     if (!option) throw new Error('Missing fictional press');
     const stale = calculateNassau(game, f.snapshot, f.cards, [{
       number: 4, gameId: game.id, gameEtag: 'old', outcomes: [], presses: [{ ...option, id: strokeGameId(985) }],
     }]);
     view.rerender(<NassauResults game={game} result={stale} players={f.cards} />);
-    expect(screen.getByRole('region', { name: 'Nassau planned settlement' })).toHaveTextContent('Net Unavailable');
+    expect(within(screen.getByRole('region', { name: 'Nassau planned settlement' })).getAllByText('Unavailable', { exact: true })).toHaveLength(3);
     expect(screen.getByText(/stale press declaration/)).toBeVisible();
   });
 });

@@ -52,6 +52,15 @@
   summary contracts instead of sending full scorecards, captures or editing
   context to simple public views. Preserve server authority, exact money,
   freshness, coherent snapshots, compatibility and distributed request budgets.
+- Routine scoring uses the versioned lean transport, not eager award evidence.
+  Preserve transmitted numerical authority, strict coherence validation and
+  immutable backend audits. Do not mount mobile audit/evidence panels or grant
+  public history access; explicit legacy/investigation reads stay compatible.
+  Show one net money amount per golfer, with optional calculation details.
+  Combine standings only for an authoritative explicit Wolf/Dots link, never
+  unrelated games or foursomes; retain pending/unavailable/points-only states.
+  Common Dots/Churchy entry uses 44px touch choices/steppers without a keyboard.
+  Preserve custom/invalid count drafts, explicit saves, retries and focus.
 - Add co-located success and edge-case tests for each changed component/module.
 - Run `npm run check:lockfile`, `npm run typecheck`, `npm run lint`, `npm test`,
   `npm run build`, and `npm run test:smoke`; inspect individual suite outcomes.

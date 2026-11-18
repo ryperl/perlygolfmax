@@ -766,10 +766,24 @@ provisional; nothing is collected, transferred or marked paid.
 Counts, calls and category decisions stage below raw scores and save through
 the same acknowledged conditional score write. Dots records live on the saved
 group's first golfer card, not Wolf P1. Raw-only clients preserve hidden records.
-Saved explanations include qualifying golfer, score/par, source holes, units,
-count, multiplier and recipients. Immutable private score/correction receipts
-retain original and replacement award snapshots; public explanation views show
-current awards, not protected historical actors or a historical audit browser.
+Immutable private score/correction receipts retain original and replacement
+award snapshots. Routine scoring requests use the versioned `format=lean`
+transport: verbose award evidence is omitted from reads and save replies,
+while server totals, money, capabilities, captured inputs and safe-write
+receipts remain. Full legacy reads stay compatible for explicit investigation.
+Duplicate derived players/contexts are omitted too; saved comeback copies
+reference the unchanged canonical card receipt. Available pre-write proofs
+remain intact. The client restores omitted derived fields for existing strict
+coherence validation; it does not replace transmitted numerical results.
+No mobile audit/evidence panel is mounted. A separately requested desktop audit
+view is future work, not a new public history permission.
+
+Explicitly linked Wolf + Dots has a combined leaderboard with separate source
+subtotals and one authoritative net due/owed amount per golfer. Individual game
+standings remain available; unrelated games and foursomes are never combined.
+An event-wide first game such as Ball Drop remains the initial selection.
+Tap a net result for its calculation; the rate/method detail is collapsed by
+default rather than showing a competing payment total.
 
 Setup uses compact aligned rows, normal checkbox visuals with large hit areas,
 on-demand rule descriptions and **Select all** for the selected mode. Existing
@@ -778,6 +792,9 @@ rules are in play during setup; they are not score-entry chores.
 
 During scoring, each golfer's **Dots** action sits under their score alongside
 KP. Only enabled manual specials/calls need entry; Sandy has tap counters.
+Churchy Sandy/Other counts also have touch steppers; custom count editing is
+optional and preserves invalid draft text for correction. Partner labels
+distinguish fixed partners, rotating blocks and saved Wolf sides.
 **Par for blanks** fills untouched unplayed fields using each personal tee's
 par, without overwriting saved scores, explicit clears, pickups or other
 staged edits. It is an explicit draft action, never an automatic score.

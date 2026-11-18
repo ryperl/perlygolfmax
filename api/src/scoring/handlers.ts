@@ -14,6 +14,7 @@ import { isKpSelection } from '../../../src/contracts/kp.js';
 import { isEventSkinsConfiguration } from '../../../src/contracts/event-skins.js';
 import { calculateEventSkinsDetails } from '../../../src/domain/event-skins.js';
 import type { HoleScore } from '../../../src/domain/scoring.js';
+import { leanRoundScores, leanScoreWriteResult } from '../../../src/contracts/lean-round-scores.js';
 
 export interface ScoringApi {
   readonly verify: VerifyIdentity;
@@ -74,7 +75,11 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
         return response(200, privateReadResponse(request, value));
       }
       const roundId = uuid(request.params.roundId);
-      if (action === 'scores') return response(200, privateReadResponse(request, await api.scores.get(identity, eventId, roundId)));
+      const lean = request.query.get('format') === 'lean';
+      if (action === 'scores') {
+        const round = await api.scores.get(identity, eventId, roundId);
+        return response(200, privateReadResponse(request, lean ? leanRoundScores(round) : round));
+      }
       if (action === 'round-kp') {
         const requestId = uuid(request.headers.get('Idempotency-Key'));
         const expectedEtag = precondition(request, 'KP_REVISION_REQUIRED');
@@ -85,7 +90,8 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
           body = received.value;
         }
         if (!isKpSelection(body)) throw new ApiError(400, 'INVALID_KP_SETUP');
-        return response(200, await api.scores.saveKp(identity, eventId, roundId, body, expectedEtag, requestId));
+        const result = await api.scores.saveKp(identity, eventId, roundId, body, expectedEtag, requestId);
+        return response(200, lean ? { ...result, round: leanRoundScores(result.round) } : result);
       }
       if (action === 'round-games') {
         const requestId = uuid(request.headers.get('Idempotency-Key'));
@@ -99,7 +105,8 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
         if (!isRecord(body) || Object.keys(body).length !== 1 || !isRoundGameDefinitions(body.games) || body.games.length === 0) {
           throw new ApiError(400, 'INVALID_GAME_SETUP');
         }
-        return response(200, await api.scores.saveGames(identity, eventId, roundId, body.games, expectedEtag, requestId));
+        const result = await api.scores.saveGames(identity, eventId, roundId, body.games, expectedEtag, requestId);
+        return response(200, lean ? { ...result, round: leanRoundScores(result.round) } : result);
       }
       const playerId = uuid(request.params.playerId);
       if (action === 'score-history') return response(200, await api.scores.history(identity, eventId, roundId, playerId, readCursor(request)));
@@ -116,8 +123,9 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
       const parsed = parseScoreWriteBody(body);
       if (action === 'score-game-hole' && !parsed.score.nassau?.length && !parsed.score.wolf?.length
         && !parsed.score.dots?.length) throw new ApiError(400, 'INVALID_GAME_SCORE');
-      return response(200, await api.scores.write(identity, eventId, roundId, playerId, Number(rawHole),
-        parsed.score, expectedEtag, requestId, parsed.inputRevision));
+      const result = await api.scores.write(identity, eventId, roundId, playerId, Number(rawHole),
+        parsed.score, expectedEtag, requestId, parsed.inputRevision);
+      return response(200, lean ? leanScoreWriteResult(result) : result);
     } catch (error) {
       const status = error instanceof ApiError ? error.status : 503;
       const code = error instanceof ApiError ? error.code : 'SERVICE_UNAVAILABLE';
