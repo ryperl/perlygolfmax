@@ -286,7 +286,13 @@
   V3 reuses Dots configuration/qualifications: Sticky is canonical Dime, Sandy
   allows par or better, and same-golfer exclusions apply. All compatible
   specials are selectable; defaults retain the familiar subset, Birdie 2/
-  Eagle 4/other units 1. Murphy stages scale configured units by 1/2/3;
+  Eagle 4/other units 1, including KP and Blue Plate enabled at 1 each.
+  KP carries only between default-tee par 3s; Blue Plate requires a qualifying
+  GIR on default-tee par 5s and carries only between those holes. No qualifier
+  carries; missing decisions stay pending. Credit the full accumulated award
+  once to the winning golfer and their current partner, never split or apply
+  again for partner entry. Do not retro-enable or relabel saved Other entries.
+  Murphy stages scale configured units by 1/2/3;
   Sweep scales units by the current stake. Neither changes ordinary Dots.
   Category holes use the captured default tee; source qualifications use
   personal tees. Shared presets copy configuration into games, never bind

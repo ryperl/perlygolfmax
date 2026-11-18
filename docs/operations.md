@@ -301,6 +301,15 @@ Sandy is gross par-or-better. Units are positive safe integers; Murphy stages
 multiply their configured units, while Sweep uses units times current stake.
 Ordinary Dots does not gain Churchie press semantics.
 
+New Churchie defaults enable KP and Blue Plate at one unit each. KP carries
+only to the next default-tee par 3; Blue Plate is closest qualifying GIR on
+default-tee par 5s and carries only to the next par 5. Categories resolve
+independently in actual playing order. Explicit No qualifier carries; omitted
+input remains pending. Both members of the winning golfer's current pair
+receive the full accumulated award, recorded once. Final unclaimed carries
+stay unawarded. Preset/default changes do not modify saved definitions or
+reinterpret historical Other records.
+
 Tee order is an explicit saved definition. Approach order is an immutable
 canonical group-first card receipt on the group's starting hole, saved through
 the dedicated staged conditional score transaction. Both rotate partners in

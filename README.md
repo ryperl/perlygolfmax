@@ -1005,7 +1005,16 @@ specials or raw-only edits preserve the original order.
 Version 3 shares the Dots specials catalog and configuration editor. Its
 **Sticky is Dime**, not an additional award. All compatible specials can be
 selected with positive whole-dot units. The Churchie default selects the familiar
-subset, with Birdie 2, Eagle 4 and other default units 1. Sandy now allows gross
+subset, with Birdie 2, Eagle 4 and other default units 1.
+KP and Blue Plate are enabled by default at 1 dot: KP is open
+on default-tee par 3s and carries to the next par 3 after an explicit No qualifier;
+Blue Plate is the closest qualifying GIR on default-tee par 5s and carries to
+the next par 5. Their carries are independent and follow actual playing order.
+The eventual winner and their current partner each receive the full carried
+award, entered once for the winning golfer, never split or credited twice.
+Missing input remains pending, not No qualifier. Existing saved definitions
+and Other entries are never changed by a new default.
+Sandy now allows gross
 par or better. Shared same-golfer exclusions apply, including Sticky/Pully and
 Hogan/Seve; SuperDime replaces Sticky. High/Low remain Churchie's own game.
 Murphy press stages multiply its configured units by 1/2/3; Sweep multiplies its

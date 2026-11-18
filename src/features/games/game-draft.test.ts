@@ -40,7 +40,7 @@ describe('game drafts', () => {
     expect(buildGame(draftFromGame(v2), f.game.playerIds)).toEqual(v2);
     const upgraded = buildGame(upgradeChurchyDraft(draftFromGame(v2)), f.game.playerIds);
     expect(upgraded).toMatchObject({ version: 3, name: 'Churchie', orderMode: 'tee',
-      specials: defaultChurchySpecialSelections });
+      specials: defaultChurchySpecialSelections.filter((special) => special.kind !== 'kp' && special.kind !== 'blue-plate') });
     expect(upgraded?.kind === 'churchy' && upgraded.playerIds).toEqual([
       f.game.playerIds[0], f.game.playerIds[3], f.game.playerIds[2], f.game.playerIds[1],
     ]);

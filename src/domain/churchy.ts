@@ -48,7 +48,8 @@ export interface ChurchyGameDefinitionV3 extends CommonChurchyGameDefinition {
 export const defaultChurchySpecialSelections: readonly DotsSpecialSelection[] = [
   { kind: 'paree', units: 1 }, { kind: 'murphy', units: 1 }, { kind: 'sandy', units: 1 },
   { kind: 'pully', units: 1 }, { kind: 'birdie', units: 2 }, { kind: 'eagle', units: 4 },
-  { kind: 'dime', units: 1 }, { kind: 'sweep', units: 1 }, { kind: 'other', units: 1 },
+  { kind: 'dime', units: 1 }, { kind: 'kp', units: 1 }, { kind: 'blue-plate', units: 1 },
+  { kind: 'sweep', units: 1 }, { kind: 'other', units: 1 },
 ];
 export type ChurchyGameDefinition = ChurchyGameDefinitionV1 | ChurchyGameDefinitionV2 | ChurchyGameDefinitionV3;
 

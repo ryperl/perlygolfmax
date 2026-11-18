@@ -42,7 +42,13 @@ describe('shared specials setup and presets', () => {
     fireEvent.change(screen.getByLabelText('Specials preset'), { target: { value: 'built-in:churcie-default' } });
     expect(onChange).not.toHaveBeenCalled();
     expect(screen.getByLabelText('Sandy units')).toHaveValue(7);
+    expect(screen.getByLabelText('KP')).not.toBeChecked();
+    expect(screen.getByLabelText('Blue Plate')).not.toBeChecked();
     fireEvent.click(screen.getByRole('button', { name: 'Apply preset' }));
+    expect(screen.getByLabelText('KP')).toBeChecked();
+    expect(screen.getByLabelText('Blue Plate')).toBeChecked();
+    expect(screen.getByLabelText('KP units')).toHaveValue(1);
+    expect(screen.getByLabelText('Blue Plate units')).toHaveValue(1);
     const first = onChange.mock.lastCall?.[0];
     expect(first).toEqual(defaultChurchySpecialSelections);
     expect(first).not.toBe(defaultChurchySpecialSelections);

@@ -6,6 +6,45 @@ import { preserveScoreExtras, supportsDotsSpecials } from './scoring.js';
 import { strokeGameCards, strokeGameId } from './stroke-games.test-support.js';
 
 describe('Churchie v3 actual playing circuit and canonical shared specials', () => {
+  it('carries KP and Blue Plate independently to their next eligible holes and credits both current teammates in full', () => {
+    const f = churchyV3Fixture(9), [a, b, c, d] = f.ids;
+    if (!a || !b || !c || !d) throw new Error('Missing fictional foursome');
+    const par3s = [1, 4, 7], par5s = [2, 5, 8];
+    const snapshot = { ...f.snapshot, teeProfile: { ...f.snapshot.teeProfile,
+      holes: f.snapshot.teeProfile.holes.map((hole) => ({ ...hole, par: par3s.includes(hole.number) ? 3 : par5s.includes(hole.number) ? 5 : 4 })) } };
+    const cards = f.cards.map((card, index) => index ? card : { ...card,
+      holes: card.holes.map((hole) => ({ ...hole, score: { kind: 'strokes' as const, strokes: 4,
+        ...(par3s.includes(hole.number) || par5s.includes(hole.number) ? {
+          churchy: { ...f.declaration(hole.number, hole.number === 1 ? f.ids : undefined), contests: [
+            hole.number === 4 ? { kind: 'kp' as const, status: 'awarded' as const, winnerId: a }
+              : hole.number === 8 ? { kind: 'blue-plate' as const, status: 'awarded' as const, winnerId: b }
+                : { kind: par3s.includes(hole.number) ? 'kp' as const : 'blue-plate' as const, status: 'no-qualifier' as const },
+          ] },
+        } : {}) } })) });
+    const game = { ...f.game, specials: [{ kind: 'kp' as const, units: 1 }, { kind: 'blue-plate' as const, units: 1 }] };
+    const result = calculateGameResults([game], snapshot, cards)[0]?.churchy;
+    expect(result?.status).toBe('complete');
+    const categories = result?.awards?.filter((award) => award.kind === 'kp' || award.kind === 'blue-plate');
+    expect(categories).toEqual([
+      expect.objectContaining({ kind: 'kp', number: 4, earnedBy: a, count: 2, units: 1, dots: 2,
+        sourceHoles: [1, 4], recipientIds: [a, c] }),
+      expect.objectContaining({ kind: 'blue-plate', number: 8, earnedBy: b, count: 3, units: 1, dots: 3,
+        sourceHoles: [2, 5, 8], recipientIds: [a, b] }),
+    ]);
+    expect(categories?.some((award) => award.number === 3 || award.number === 6 || award.number === 9)).toBe(false);
+    expect(categories?.some((award) => award.kind === 'kp' && award.recipientIds.includes(d))).toBe(false);
+    expect(result?.internalSettlement?.players.map((player) => player.specialDots)).toEqual([5, 3, 2, 0]);
+    const missingDecision = cards.map((card, index) => index ? card : { ...card,
+      holes: card.holes.map((hole) => hole.number === 1 && hole.score.churchy
+        ? { ...hole, score: { ...hole.score, churchy: { ...hole.score.churchy, contests: [] } } } : hole) });
+    const pending = calculateGameResults([game], snapshot, missingDecision)[0]?.churchy;
+    expect(pending?.status).toBe('in-progress');
+    expect(pending?.awards?.some((award) => award.kind === 'kp')).toBe(false);
+    expect(pending?.awards?.filter((award) => award.kind === 'blue-plate')).toEqual([
+      expect.objectContaining({ number: 8, dots: 3, recipientIds: [a, b] }),
+    ]);
+  });
+
   it.each([[3, 'kp'], [5, 'blue-plate'], [5, 'long-drive']] as const)(
     'uses captured default par %i for %s while keeping the first golfer’s personal par for Birdie', (par, category) => {
       const f = churchyV3CategoryFixture(par, 4, category);
