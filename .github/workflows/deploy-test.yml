@@ -73,8 +73,17 @@ jobs:
           appendFileSync(process.env.GITHUB_OUTPUT, `configured=${configured ? 'true' : 'false'}\n`);
           JS
       - run: npm run build
-      - run: npx playwright install --with-deps chromium webkit
-      - run: npm run test:smoke
+      - name: Run configured browser smoke tests with pinned Playwright
+        run: >-
+          docker run --rm --ipc=host
+          --user "$(id -u):$(id -g)" --env HOME=/tmp --env CI=true
+          --env VITE_API_URL --env VITE_ENTRA_SPA_CLIENT_ID
+          --env VITE_ENTRA_TENANT_ID --env VITE_ENTRA_SUBDOMAIN
+          --env VITE_ENTRA_API_SCOPE --env EXPECT_EVENT_SERVICES_CONFIGURED
+          --env EXPECT_PUBLIC_SERVICES_CONFIGURED
+          --volume "$PWD:/work" --workdir /work
+          mcr.microsoft.com/playwright:v1.56.0-noble@sha256:35246d87a7c88ea9b771c65d33171b2611b02a8253b4b12ce6f94376c55f99f2
+          npm run test:smoke
       - uses: actions/upload-artifact@v4
         with:
           name: test-frontend-dist
@@ -250,14 +259,20 @@ jobs:
           cache: npm
           registry-url: https://registry.npmjs.org
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
       - name: Exercise deployed Sign in without requesting a code
         env:
           TEST_FRONTEND_URL: ${{ vars.AZURE_TEST_FRONTEND_URL }}
           TEST_CUSTOM_FRONTEND_URL: ${{ vars.AZURE_TEST_CUSTOM_FRONTEND_URL }}
           TEST_ENTRA_SUBDOMAIN: ${{ vars.VITE_ENTRA_SUBDOMAIN }}
         run: |
-          node scripts/verify-test-signin.mjs
-          if [ -n "$TEST_CUSTOM_FRONTEND_URL" ]; then
-            TEST_FRONTEND_URL="$TEST_CUSTOM_FRONTEND_URL" node scripts/verify-test-signin.mjs
-          fi
+          docker run --rm --ipc=host \
+            --user "$(id -u):$(id -g)" --env HOME=/tmp \
+            --env TEST_FRONTEND_URL --env TEST_CUSTOM_FRONTEND_URL --env TEST_ENTRA_SUBDOMAIN \
+            --volume "$PWD:/work" --workdir /work \
+            mcr.microsoft.com/playwright:v1.56.0-noble@sha256:35246d87a7c88ea9b771c65d33171b2611b02a8253b4b12ce6f94376c55f99f2 \
+            sh -ec '
+              node scripts/verify-test-signin.mjs
+              if [ -n "$TEST_CUSTOM_FRONTEND_URL" ]; then
+                TEST_FRONTEND_URL="$TEST_CUSTOM_FRONTEND_URL" node scripts/verify-test-signin.mjs
+              fi
+            '

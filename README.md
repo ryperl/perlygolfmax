@@ -1366,9 +1366,16 @@ or registry availability there.
 
 Pull requests and branch pushes run locked installation, public-lockfile
 checks, strict type checking, lint, named unit/component suites, production
-build, and Chromium desktop/mobile smoke tests. CI has read-only repository
-permissions and uses no production secrets. The workflow uses ordinary
+build, and Chromium desktop/mobile plus iPhone WebKit smoke tests. CI has
+read-only repository permissions and uses no production secrets. It uses ordinary
 `pull_request`, not privileged `pull_request_target`.
+
+Hosted browser checks use the official Playwright image with browsers and OS
+dependencies preinstalled, pinned to the locked Playwright version and an
+immutable image digest in both workflows. Update those pins together with
+Playwright. Only browser commands run in that container; local commands remain
+unchanged and do not require Docker. Test packaging forwards its public build
+configuration and smoke expectations explicitly.
 
 Production deployment on `main` calls that same validation workflow and only
 uploads the resulting verified `dist/` artifact after every check passes.

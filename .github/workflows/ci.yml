@@ -33,9 +33,13 @@ jobs:
       - run: npm run lint:docs
       - run: npm test
       - run: npm run build
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium webkit
-      - run: npm run test:smoke
+      - name: Run browser smoke tests with pinned Playwright
+        run: >-
+          docker run --rm --ipc=host
+          --user "$(id -u):$(id -g)" --env HOME=/tmp --env CI=true
+          --volume "$PWD:/work" --workdir /work
+          mcr.microsoft.com/playwright:v1.56.0-noble@sha256:35246d87a7c88ea9b771c65d33171b2611b02a8253b4b12ce6f94376c55f99f2
+          npm run test:smoke
       - name: Save verified production assets
         uses: actions/upload-artifact@v4
         with:

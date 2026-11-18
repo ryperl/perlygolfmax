@@ -64,11 +64,17 @@ intentionally trades deployment parallelism for compatibility: newly exposed
 initial-index and setup-refresh controls must not reach older handlers that
 ignore or lack their request contract.
 
-Hosted validation and configured packaging allow 25 minutes for the complete
-job, including Chromium/WebKit OS-dependency installation. Two independent
-15-minute jobs were cancelled inside the installer before browser tests began.
-This setup budget does not change individual test timeouts, retries, assertions,
-browser coverage or any Azure runtime/capacity setting.
+Hosted browser checks use the official Playwright image with preinstalled
+Chromium/WebKit and OS dependencies, pinned by version and immutable digest.
+Keep both workflow image references aligned with the locked Playwright version.
+The host still runs locked installation, Node 22 checks/builds and API packaging;
+only smoke tests and read-only hosted sign-in checks run in the container.
+Configured smoke tests explicitly forward the same public Vite configuration
+and expectation flags as their build. No corporate feed credentials are passed.
+This avoids repeated slow Ubuntu mirror downloads that exhausted both 15- and
+25-minute jobs before browser tests began. The whole-job budget stays 25 minutes;
+individual test timeouts, retries, assertions, browser coverage and Azure
+runtime/capacity are unchanged. Local browser commands do not require Docker.
 
 ## Round Stroke Play, Nassau and Wolf capability rollout
 
