@@ -32,6 +32,16 @@ const change: ScoreChange = {
 };
 
 describe('owner gross scoring network contracts', () => {
+  it('validates explicit Dots rules capabilities while preserving legacy omission', () => {
+    const saved = round();
+    expect(isRoundScores(saved)).toBe(true);
+    for (const versions of [[], [1], [2], [1, 2]]) {
+      expect(isRoundScores({ ...saved, dotsRulesVersions: versions })).toBe(true);
+    }
+    for (const versions of [null, true, [2, 2], [1, 3], ['2'], 2]) {
+      expect(isRoundScores({ ...saved, dotsRulesVersions: versions })).toBe(false);
+    }
+  });
   describe('Churchy rules-version and saved declaration contracts', () => {
     function churchyRound(edit?: (specials: ChurchySpecials) => ChurchySpecials): RoundScores {
       const base = round();

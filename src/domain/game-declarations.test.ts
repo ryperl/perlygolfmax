@@ -3,7 +3,8 @@ import type { NassauHoleRecord, NassauManualPress } from './nassau.js';
 import { nassauMatchId } from './nassau.js';
 import type { HoleScore } from './scoring.js';
 import { preserveScoreExtras, sameHoleScore, supportsRoundGame } from './scoring.js';
-import { mergeNassauRecords, mergeWolfRecords, nassauContextFromScores, scoreDeclarationIntent, scoreMatchesIntent } from './game-declarations.js';
+import { GameDeclarationConflictError, mergeDotsRecords, mergeNassauRecords, mergeWolfRecords, nassauContextFromScores, scoreDeclarationIntent, scoreMatchesIntent } from './game-declarations.js';
+import type { DotsHoleRecord } from './dots.js';
 import { matchGamesFixture } from './match-games.test-support.js';
 import { strokeGameId } from './stroke-games.test-support.js';
 
@@ -14,6 +15,33 @@ describe('saved game declaration merging', () => {
     startHole: 3, declaredAfterHole: 2, pressingSide: 'b', proof: 'nassau-v1:[]' };
   const record: NassauHoleRecord = { number: 3, gameId: f.nassau.id, gameEtag: 'fictional-game-revision',
     outcomes: [{ matchId, outcome: 'side-a' }], presses: [press] };
+
+  it('keeps Dots order immutable across corrections, clear-special edits, raw-only saves and retries', () => {
+    const saved: DotsHoleRecord = { number: 1, gameId: strokeGameId(1980), gameEtag: 'fictional-game-revision',
+      players: [{ playerId: f.ids[0] ?? '', counts: { sandy: 1 }, calls: [] }], contests: [],
+      rotation: { playerIds: f.ids, recordedLate: true } };
+    const peer: DotsHoleRecord = { ...saved, gameId: strokeGameId(1981) };
+    const clear = { ...saved, rotation: { playerIds: f.ids }, players: [], contests: [] };
+    const corrected = mergeDotsRecords([clear], [saved, peer]);
+    expect(corrected).toEqual([{ ...clear, rotation: saved.rotation }, peer]);
+    expect(mergeDotsRecords([], [saved])).toEqual([saved]);
+    const raw: HoleScore = { kind: 'strokes', strokes: 5 };
+    const score: HoleScore = { kind: 'strokes', strokes: 4, dots: [saved] };
+    expect(preserveScoreExtras(raw, score)).toEqual({ ...raw, dots: [saved] });
+    expect(scoreMatchesIntent(score, { ...score, dots: [{ ...saved, rotation: { playerIds: f.ids } }] })).toBe(true);
+    expect(scoreDeclarationIntent({ ...raw, dots: [{ ...saved, rotation: { playerIds: f.ids } }] }, score)).toEqual(raw);
+    expect(saved.rotation?.recordedLate).toBe(true);
+    expect(saved.players).toHaveLength(1);
+    const { rotation: omitted, ...drop } = saved;
+    expect(omitted).toBeDefined();
+    for (const edit of [drop, { ...saved, rotation: { playerIds: [...f.ids].reverse() } }, { ...saved, number: 2 }]) {
+      expect(() => mergeDotsRecords([edit], [saved])).toThrow(GameDeclarationConflictError);
+      try { mergeDotsRecords([edit], [saved]); } catch (error) {
+        expect(error).toMatchObject({ code: 'DOTS_ROTATION_CONFLICT' });
+      }
+      expect(scoreMatchesIntent(score, { kind: 'strokes', strokes: 4, dots: [edit] })).toBe(false);
+    }
+  });
 
   it('merges patches per game, preserves presses and clears only an explicitly reverted match outcome', () => {
     const peer = { ...record, gameId: strokeGameId(979), presses: [] };

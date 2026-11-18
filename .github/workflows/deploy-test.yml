@@ -21,7 +21,7 @@ jobs:
     needs: validate
     environment: perlygolfmax-test
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     outputs:
       identity-configured: ${{ steps.frontend-config.outputs.configured }}
     steps:

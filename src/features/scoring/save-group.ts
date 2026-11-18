@@ -9,6 +9,7 @@ import { scoreAccessKey, writablePlayerIds } from './score-access';
 import { isHoleScore } from '../../contracts/scoring';
 import { validChurchyCounts } from '../churchy';
 import { churchySpecialsMatchGame, sameChurchySpecials } from '../../domain/churchy';
+import { dotsDeclarationIssues } from '../../domain/dots';
 
 export interface GroupWrite {
   readonly playerId: string;
@@ -41,6 +42,13 @@ export function planGroup(round: RoundScores, playerIds: readonly string[], hole
         || game.version === 2 && !round.churchyRulesVersions?.includes(2)
         || !churchySpecialsMatchGame(specials, game)) { invalid.push(playerId); continue; }
     }
+    if (draft?.dots?.some((record) => {
+      const game = round.games?.configuration.games.find((game) => game.kind === 'dots' && game.id === record.gameId);
+      if (game?.kind !== 'dots' || game.version === 2 && !round.dotsRulesVersions?.includes(2)) return true;
+      const previous = saved.dots?.find((entry) => entry.gameId === record.gameId && entry.number === record.number);
+      return record.players.some((player) => dotsDeclarationIssues(player).conflicts.length > 0
+        && JSON.stringify(player) !== JSON.stringify(previous?.players.find((entry) => entry.playerId === player.playerId)));
+    })) { invalid.push(playerId); continue; }
     const entry = draft ? entryScore(draft.text, draft.churchy ?? saved.churchy, draft.kp !== undefined ? draft.kp : saved.kp,
       draft.nassau, draft.wolf, draft.dots) : saved;
     if (!entry || !isHoleScore(entry)) { invalid.push(playerId); continue; }

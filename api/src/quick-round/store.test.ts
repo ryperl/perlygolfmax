@@ -31,6 +31,27 @@ async function fixture() {
 }
 
 describe('public Quick round authority and persistence', () => {
+  it('edits a created roster before scoring but refuses the same change after the first saved entry', async () => {
+    const f = await fixture();
+    const initial = await f.quick.create(f.id, f.input);
+    const changed = { ...f.input, playerIds: f.input.playerIds.filter((id) => id !== f.peerId),
+      rounds: f.input.rounds.map((round) => ({ ...round, groups: round.groups.map((group) => ({
+        ...group, playerIds: group.playerIds.filter((id) => id !== f.peerId),
+      })).filter((group) => group.playerIds.length > 0) })) };
+    const edited = await f.quick.save(f.id, initial.etag, identifier(8260), changed);
+    expect(edited.roster.map((player) => player.playerId)).toEqual(changed.playerIds);
+    expect(edited.rounds[0]?.scoringStarted).not.toBe(true);
+    const scores = await f.scores.get(f.actor, f.id, f.roundId);
+    expect(isRoundScores(scores)).toBe(true);
+    expect(scores.cards.some((card) => card.playerId === f.peerId)).toBe(false);
+    await f.scores.write(f.actor, f.id, f.roundId, f.playerId, 1,
+      { kind: 'strokes', strokes: 4 }, null, identifier(8261));
+    const locked = await f.quick.load(f.id);
+    await expect(f.quick.save(f.id, locked.etag, identifier(8262), f.input))
+      .rejects.toMatchObject({ code: 'ROUND_SCORING_STARTED' });
+    expect((await f.quick.load(f.id)).roster.map((player) => player.playerId)).toEqual(changed.playerIds);
+  });
+
   it('archives only a ready Quick round, retaining cards/captures and an idempotent public audit without exposing archives', async () => {
     const f = await fixture();
     await f.quick.create(f.id, f.input);

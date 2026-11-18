@@ -118,6 +118,9 @@ export function isRoundScores(value: unknown): value is RoundScores {
       || new Set(value.churchyRulesVersions).size !== value.churchyRulesVersions.length
       || value.churchyRulesVersions.length > 0 && value.churchyEnabled !== true)) return false;
   if (isRecord(value) && (value.internalGamesSupported !== undefined && typeof value.internalGamesSupported !== 'boolean'
+    || value.dotsRulesVersions !== undefined && (!Array.isArray(value.dotsRulesVersions)
+      || !value.dotsRulesVersions.every((version: unknown) => version === 1 || version === 2)
+      || new Set(value.dotsRulesVersions).size !== value.dotsRulesVersions.length)
     || value.wolfRulesVersions !== undefined && (!Array.isArray(value.wolfRulesVersions)
       || !value.wolfRulesVersions.every((version: unknown) => version === 1 || version === 2)
       || new Set(value.wolfRulesVersions).size !== value.wolfRulesVersions.length))) return false;

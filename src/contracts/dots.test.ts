@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { calculateDots } from '../domain/dots.js';
 import type { DotsGameDefinition, DotsHoleRecord } from '../domain/dots.js';
 import type { DotRoundInput } from '../domain/dot-context.js';
-import { dotsDefinitionMatchesRound, dotsRecordsMatchGame, isDotsDefinition, isDotsHoleRecord, isDotsResults } from './dots.js';
+import { dotsDefinitionMatchesRound, dotsRecordsMatchGame, isDotsDefinition, isDotsHoleRecord, isDotsResults, isDotsRotationStart } from './dots.js';
+import { isRoundGameDefinition, isRoundGameDefinitions } from './games.js';
 
 const A = '00000000-0000-4000-8000-000000000001';
 const B = '00000000-0000-4000-8000-000000000002';
@@ -24,6 +25,53 @@ const record: DotsHoleRecord = { number: 1, gameId: game.id, gameEtag: 'revision
   contests: [{ kind: 'kp', status: 'awarded', winnerId: A, secondId: B }] };
 
 describe('Dots network contracts', () => {
+  it('accepts only explicit v2 rotating definitions with 3/6 blocks, allowing Assassin but no Sweep or legacy hybrid', () => {
+    const rotating = { ...game, version: 2, mode: 'rotating', rotationHoles: 3, specials: [{ kind: 'assassin', units: 1 }] };
+    expect(isDotsDefinition(rotating)).toBe(true);
+    expect(isDotsDefinition({ ...rotating, rotationHoles: 6 })).toBe(true);
+    expect(isRoundGameDefinition(rotating)).toBe(true);
+    expect(isRoundGameDefinitions([rotating])).toBe(true);
+    for (const patch of [
+      { version: 1 }, { rotationHoles: 4 }, { rotationHoles: undefined },
+      { mode: 'individual' }, { mode: 'fixed', partnerIds: game.playerIds },
+      { linkedGameId }, { partnerIds: game.playerIds }, { stakeMinor: undefined },
+      { specials: [{ kind: 'sweep', units: 1 }] },
+    ]) expect(isDotsDefinition({ ...rotating, ...patch })).toBe(false);
+    expect(isDotsDefinition({ ...game, rotationHoles: 3 })).toBe(false);
+  });
+
+  it('validates versionless optional rotation receipts without trusting participant-set order or client timing metadata', () => {
+    const rotation = { playerIds: [D, B, A, C] };
+    expect(isDotsRotationStart(rotation)).toBe(true);
+    expect(isDotsRotationStart({ ...rotation, recordedLate: true })).toBe(true);
+    expect(isDotsHoleRecord({ ...record, rotation })).toBe(true);
+    for (const value of [
+      null, { playerIds: [A, A, C, D] }, { playerIds: [A, B, C] }, { playerIds: ['A', B, C, D] },
+      { ...rotation, recordedLate: false }, { ...rotation, recordedAt: '2026-01-01' },
+      { ...rotation, version: 2 },
+    ]) {
+      expect(isDotsRotationStart(value)).toBe(false);
+      expect(isDotsHoleRecord({ ...record, rotation: value })).toBe(false);
+    }
+    const rotating: DotsGameDefinition = { ...game, version: 2, mode: 'rotating', rotationHoles: 3 };
+    const records = [{ ...record, rotation }];
+    const result = calculateDots(rotating, round, records);
+    expect(isDotsResults(result, rotating, round, records)).toBe(true);
+    expect(isDotsResults({ ...result, rotation: { ...result.rotation, firstHole: 2 } }, rotating, round, records)).toBe(false);
+  });
+
+  it('keeps new exclusion conflicts readable in v1 network records but strict for v2 semantic writes', () => {
+    const historical: DotsHoleRecord = { ...record, contests: [], players: [{ playerId: A, counts: { hogan: 1, seve: 1 }, calls: [] }] };
+    const both: DotsGameDefinition = { ...game, specials: [{ kind: 'hogan', units: 1 }, { kind: 'seve', units: 1 }] };
+    expect(isDotsHoleRecord(historical)).toBe(true);
+    expect(isDotsDefinition(both)).toBe(true);
+    expect(dotsRecordsMatchGame([historical], both, round)).toBe(true);
+    expect(calculateDots(both, round, [historical]).players[0]?.totalPoints).toBe(2);
+    const rotating: DotsGameDefinition = { ...both, version: 2, mode: 'rotating', rotationHoles: 3 };
+    expect(isDotsDefinition(rotating)).toBe(true);
+    expect(dotsRecordsMatchGame([{ ...historical, rotation: { playerIds: game.playerIds } }], rotating, round)).toBe(false);
+  });
+
   it('accepts explicit standalone and linked modes without granting the linked game its own stake', () => {
     expect(isDotsDefinition(game)).toBe(true);
     expect(isDotsDefinition({ ...game, stakeMinor: 0 })).toBe(true);

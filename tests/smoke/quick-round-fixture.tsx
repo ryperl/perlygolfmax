@@ -51,14 +51,15 @@ const scores: ScoresClient = {
   load: (eventId, roundId) => Promise.resolve({ ...fictionalGamesRound, eventId, roundId, quickRound: true, churchyEnabled: true,
     churchyRulesVersions: [1, 2],
     eventName: setupInput?.name ?? 'Fictional Quick round', groups: setupInput?.rounds[0]?.groups ?? [],
-    cards: players.map((player) => ({ playerId: player.id, displayName: player.displayName, etag: null, updatedAt: null,
+    cards: players.filter((player) => setupInput?.playerIds.includes(player.id)).map((player) => ({ playerId: player.id, displayName: player.displayName, etag: null, updatedAt: null,
       holes: fictionalCapturedRound.teeProfile.holes.map((hole) => ({ number: hole.number, score: { kind: 'unplayed' } })) })),
     setupLocked: false, lastUpdatedAt: null, games: { configuration: { eventId, roundId, etag: null, games: [] }, results: [] },
-    permissions: { role: 'public', canManageGames: true, writePlayerIds: players.map((player) => player.id) },
+    permissions: { role: 'public', canManageGames: true, writePlayerIds: setupInput?.playerIds ?? [] },
   }),
 };
 const root = document.getElementById('quick-round-fixture');
 if (!root) throw new Error('Missing fictional Quick round fixture');
 createRoot(root).render(<main><PublicEventsPage services={{ ...base, scores, quickRounds: quick,
+  setup: { ...base.setup, load: (eventId, signal) => quick.load(eventId, signal) },
   events: { list: () => Promise.resolve({ events: archived ? [] : [workspace?.event ?? listedEvent] }) },
 }} /></main>);

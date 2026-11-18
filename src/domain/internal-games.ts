@@ -58,7 +58,7 @@ export function calculateInternalGameResults(
       : context.layout.map((hole) => ({ number: hole.number, status: 'unavailable' as const, sides: [],
         multiplier: 1 as const, reason: 'Linked game is missing, incompatible or duplicated.' }));
     const dots = calculateDots(game, round, dotsRecordsFor(game, context.groups, context.cards), contexts);
-    output.set(game.id, { gameId: game.id, kind: 'dots', version: 1, dots, players: dots.players });
+    output.set(game.id, { gameId: game.id, kind: 'dots', version: game.version, dots, players: dots.players });
   }
   return output;
 }

@@ -95,6 +95,11 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
     }
     const game = buildGame(editor.draft, editor.roster.map((card) => card.playerId));
     const previousGame = editor.base.find((entry) => entry.id === editor.draft.id);
+    if (game?.kind === 'dots' && (previousGame?.kind === 'dots' && previousGame.version !== game.version
+      || game.version === 2 && (!round.dotsRulesVersions?.includes(2) || !editingRound.dotsRulesVersions?.includes(2)))) {
+      setMessage('Rotating Dots requires API rules support. Saved rules versions cannot be converted.');
+      return;
+    }
     if (game?.kind === 'churchy' && (previousGame?.kind === 'churchy' && previousGame.version !== game.version
       || previousGame === undefined && (game.version !== 2 || round.setupLocked || editingRound.setupLocked)
       || game.version === 2 && (!round.churchyRulesVersions?.includes(2) || !editingRound.churchyRulesVersions?.includes(2)))) {
@@ -276,6 +281,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
           games={editor.base} internalOnly={!canManageAllRoundGames(editingRound)}
           existing={editor.base.some((game) => game.id === editor.draft.id)}
           wolfV2Supported={round.wolfRulesVersions?.includes(2) === true && editingRound.wolfRulesVersions?.includes(2) === true}
+          dotsV2Supported={round.dotsRulesVersions?.includes(2) === true && editingRound.dotsRulesVersions?.includes(2) === true}
           churchyV2Supported={round.churchyRulesVersions?.includes(2) === true && editingRound.churchyRulesVersions?.includes(2) === true}
           setupLocked={round.setupLocked || editingRound.setupLocked}
           allowChurchyCreation={!editor.base.some((game) => game.id === editor.draft.id)}

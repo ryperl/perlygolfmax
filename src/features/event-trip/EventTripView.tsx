@@ -194,6 +194,8 @@ export function EventTripView({ workspace, view, progress }: EventTripViewProps)
         {view !== 'overview' && event.startDate && <p>Start date: <time dateTime={event.startDate}>{eventStartDateLabel(event.startDate)}</time></p>}
         {archived && <p className="event-trip-archive"><strong>Archived event · Read-only</strong></p>}
         <nav className="event-trip-links" aria-label={event.role === 'owner' ? 'Event setup' : 'Event links'}>
+            {workspace.quickRound === true && !archived && !workspace.testerAccess
+              && <a href={`#events?event=${encodeURIComponent(event.id)}&quick=1`}>Edit Quick round</a>}
             {event.role === 'owner' && <a href={setupLink(event.id)}>{archived ? 'View event setup' : 'Configure event'}</a>}
             {!workspace.testerAccess && workspace.eventSkinsSupported === true && (workspace.eventSkins || event.role === 'owner')
               && view !== 'group' && <a href={event.role === 'owner'

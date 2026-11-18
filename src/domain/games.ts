@@ -246,7 +246,8 @@ export function sameGameDefinitions(left: readonly RoundGameDefinition[], right:
     if (!other) return false;
     if (game.kind === 'dots' || other.kind === 'dots') {
       return game.kind === 'dots' && other.kind === 'dots' && game.id === other.id && game.name === other.name
-        && game.groupNumber === other.groupNumber && game.mode === other.mode
+        && game.groupNumber === other.groupNumber && game.mode === other.mode && game.version === other.version
+        && game.rotationHoles === other.rotationHoles
         && game.stakeMinor === other.stakeMinor && game.linkedGameId === other.linkedGameId
         && game.playerIds.length === other.playerIds.length && game.playerIds.every((id, i) => id === other.playerIds[i])
         && (game.partnerIds?.length ?? 0) === (other.partnerIds?.length ?? 0)

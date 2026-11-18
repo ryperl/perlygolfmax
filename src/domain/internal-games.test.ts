@@ -31,6 +31,39 @@ function fixture() {
 }
 
 describe('optional independent Dots/Wolf composition', () => {
+  it('keeps rotating groups, acknowledged order, result versions and exact settlements independent', () => {
+    const f = matchGamesFixture(8);
+    const groups = [{ number: 1, playerIds: f.ids.slice(0, 4), startingHole: 16 },
+      { number: 2, playerIds: f.ids.slice(4, 8), startingHole: 7 }];
+    const games = groups.map((group, index): DotsGameDefinition => ({ id: strokeGameId(2100 + index),
+      name: `Fictional rotating group ${String(index + 1)}`, kind: 'dots', version: 2, mode: 'rotating',
+      rotationHoles: index === 0 ? 3 : 6, groupNumber: group.number, playerIds: group.playerIds,
+      specials: [{ kind: 'sandy', units: 1 }], stakeMinor: 100 }));
+    const cards = f.cards.map((card): Scorecard => {
+      const group = groups.find((entry) => entry.playerIds.includes(card.playerId));
+      const game = games.find((entry) => entry.groupNumber === group?.number);
+      return { ...card, holes: card.holes.map((hole) => ({ ...hole, score: { kind: 'strokes', strokes: 4,
+        ...(game && group && card.playerId === group.playerIds[0] && hole.number === group.startingHole
+          ? { dots: [{ number: hole.number, gameId: game.id, gameEtag: 'fictional-game-revision',
+            rotation: { playerIds: [...group.playerIds].reverse() }, contests: [],
+            players: [{ playerId: card.playerId, counts: { sandy: group.number }, calls: [] }] }] } : {}) } })) };
+    });
+    const context = { ...f.round(cards, games), groups, layout: f.snapshot.teeProfile.holes.map((hole) => ({ ...hole, par: 4 })) };
+    const results = [...calculateInternalGameResults(games, context).values()];
+    expect(results.map((result) => [result.version, result.dots?.rotation?.firstHole])).toEqual([[2, 16], [2, 7]]);
+    expect(results.map((result) => result.players.map((player) => player.totalPoints))).toEqual([[1, 1, 0, 0], [2, 2, 0, 0]]);
+    const settlements = calculateInternalSettlements(games, results, context);
+    expect(settlements.map((settlement) => settlement.groupNumber)).toEqual([1, 2]);
+    expect(settlements.every((settlement) => settlement.status === 'complete')).toBe(true);
+    expect(settlements.map((settlement) => settlement.players.map((player) => player.netMinor))).toEqual([
+      [200, 200, -200, -200], [400, 400, -400, -400],
+    ]);
+    const withoutGroupTwoOrder = { ...context, cards: context.cards.map((card) => card.playerId === groups[1]?.playerIds[0]
+      ? { ...card, holes: card.holes.map((hole) => ({ ...hole, score: { kind: 'strokes' as const, strokes: 4 } })) } : card) };
+    const partial = [...calculateInternalGameResults(games, withoutGroupTwoOrder).values()];
+    expect(calculateInternalSettlements(games, partial, withoutGroupTwoOrder).map((settlement) => settlement.status)).toEqual(['complete', 'pending']);
+  });
+
   it('uses only linked prefix specials to select the trailing Wolf, with separate results and one settlement', () => {
     const f = fixture();
     const context = f.round(f.cards, [f.wolf, f.dots]);

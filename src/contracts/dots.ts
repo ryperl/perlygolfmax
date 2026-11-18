@@ -1,5 +1,5 @@
 import { calculateDots, dotsManualKinds, dotsSpecialCatalog } from '../domain/dots.js';
-import type { DotsGameDefinition, DotsHoleRecord, DotsResults, DotsSpecialKind } from '../domain/dots.js';
+import type { DotsGameDefinition, DotsHoleRecord, DotsResults, DotsRotationStart, DotsSpecialKind } from '../domain/dots.js';
 import type { DotHoleContext, DotRoundInput } from '../domain/dot-context.js';
 import { isEventRevision, isRecord, isUuid } from './events.js';
 import { sameJsonValue } from './round-context.js';
@@ -18,13 +18,17 @@ const members = (value: unknown): value is string[] => Array.isArray(value) && v
 
 export function isDotsDefinition(value: unknown): value is DotsGameDefinition {
   if (!isRecord(value) || !keys(value, ['id', 'name', 'kind', 'version', 'groupNumber', 'playerIds', 'specials', 'mode'],
-    ['stakeMinor', 'partnerIds', 'linkedGameId']) || !isUuid(value.id) || !text(value.name)
-    || value.kind !== 'dots' || value.version !== 1 || !positive(value.groupNumber) || !members(value.playerIds)
+    ['stakeMinor', 'partnerIds', 'linkedGameId', 'rotationHoles']) || !isUuid(value.id) || !text(value.name)
+    || value.kind !== 'dots' || value.version !== 1 && value.version !== 2 || !positive(value.groupNumber) || !members(value.playerIds)
     || !Array.isArray(value.specials) || !value.specials.every((entry: unknown) =>
       isRecord(entry) && keys(entry, ['kind', 'units']) && special(entry.kind) && positive(entry.units))
     || !distinct(value.specials.map((entry: { readonly kind: DotsSpecialKind }) => entry.kind))) return false;
   const kinds = value.specials.map((entry: { readonly kind: DotsSpecialKind }) => entry.kind);
   if (value.mode === 'individual' && kinds.includes('assassin') || value.mode !== 'linked' && kinds.includes('sweep')) return false;
+  if (value.version === 2) return value.mode === 'rotating' && (value.rotationHoles === 3 || value.rotationHoles === 6)
+    && Object.hasOwn(value, 'stakeMinor') && (value.stakeMinor === null || integer(value.stakeMinor))
+    && !Object.hasOwn(value, 'partnerIds') && !Object.hasOwn(value, 'linkedGameId');
+  if (Object.hasOwn(value, 'rotationHoles')) return false;
   if (value.mode === 'linked') return isUuid(value.linkedGameId) && value.linkedGameId !== value.id
     && !Object.hasOwn(value, 'stakeMinor') && !Object.hasOwn(value, 'partnerIds');
   if (value.mode !== 'individual' && value.mode !== 'fixed'
@@ -35,10 +39,16 @@ export function isDotsDefinition(value: unknown): value is DotsGameDefinition {
     : members(value.partnerIds) && value.partnerIds.every((id) => playerIds.includes(id));
 }
 
+export function isDotsRotationStart(value: unknown): value is DotsRotationStart {
+  return isRecord(value) && keys(value, ['playerIds'], ['recordedLate']) && members(value.playerIds)
+    && (!Object.hasOwn(value, 'recordedLate') || value.recordedLate === true);
+}
+
 export function isDotsHoleRecord(value: unknown): value is DotsHoleRecord {
-  if (!isRecord(value) || !keys(value, ['number', 'gameId', 'gameEtag', 'players', 'contests'])
+  if (!isRecord(value) || !keys(value, ['number', 'gameId', 'gameEtag', 'players', 'contests'], ['rotation'])
     || !positive(value.number) || value.number > 18 || !isUuid(value.gameId) || !isEventRevision(value.gameEtag)
-    || !Array.isArray(value.players) || !Array.isArray(value.contests)) return false;
+    || !Array.isArray(value.players) || !Array.isArray(value.contests)
+    || Object.hasOwn(value, 'rotation') && !isDotsRotationStart(value.rotation)) return false;
   const playerIds: string[] = [], callIds: string[] = [], contests: string[] = [];
   for (const player of value.players) {
     if (!isRecord(player) || !keys(player, ['playerId', 'counts', 'calls']) || !isUuid(player.playerId)

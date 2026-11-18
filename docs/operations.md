@@ -64,6 +64,12 @@ intentionally trades deployment parallelism for compatibility: newly exposed
 initial-index and setup-refresh controls must not reach older handlers that
 ignore or lack their request contract.
 
+Hosted validation and configured packaging allow 25 minutes for the complete
+job, including Chromium/WebKit OS-dependency installation. Two independent
+15-minute jobs were cancelled inside the installer before browser tests began.
+This setup budget does not change individual test timeouts, retries, assertions,
+browser coverage or any Azure runtime/capacity setting.
+
 ## Round Stroke Play, Nassau and Wolf capability rollout
 
 Deploy the API before the frontend. `RoundScores.supportedGameKinds` lists actual
@@ -175,6 +181,41 @@ amounts are projected, never final payments. New settlement is separate from
 legacy Churchy and event purse sources. No environment setting, role,
 infrastructure, identity provider, storage account or resource creation is
 required by this release.
+
+### Rotating Dots and first-hole order
+
+Rotating Dots uses a version-2 definition with three- or six-hole partner blocks,
+not a new Sixes base-match engine. The API advertises `dotsRulesVersions`.
+Missing version-2 capability prevents new rotating writes, while known saved
+definitions remain readable. Existing version-1 definitions are not converted.
+
+The canonical group-first golfer card holds an optional rotation receipt in
+that game's first-played-hole record. Four ordered distinct participants must
+match the authoritative saved foursome. The receipt pins the cycle origin and
+order; later raw corrections, clearing specials or raw-only writes cannot
+replace/remove it. Missing order leaves sharing pending. Recovery after group
+scores is server-marked late, not a claim of verified first-tee timing.
+Other groups' activity alone does not author that late flag.
+
+Initial order and specials share the existing conditional score transaction,
+idempotency keys, input/game/card/event/grant checks, staged transport and
+private award audit. No second write, new host ceiling, storage resource,
+permission or identity is needed. Old raw clients preserve hidden metadata;
+legacy tester projections still omit Dots and its controls.
+
+New/changed source-golfer declarations reject Hogan/Seve, Pully with
+Dime/SuperDime, and Hogan with Murphy/Chippy. These are not config exclusions
+or restrictions on teammates receiving shared awards. Hogan/Seve with Walk is
+an allowed warning. Historical version-1 declarations remain readable and
+unchanged raw-only extras are preserved; never make old rounds unreadable to
+enforce a newly introduced entry rule.
+
+The compact setup and per-golfer scoring controls are presentation only:
+Select all retains custom units and excludes mode-incompatible specials.
+Automatic rule switches belong in setup, never disabled score-entry checkboxes.
+Bulk Par is explicit, draft-only and preserves saved values, intentional
+clears and other staged game edits. The same acknowledged Save & Next publishes
+the intended score/special changes; no new browser score persistence is added.
 
 ## Estimated round differentials
 

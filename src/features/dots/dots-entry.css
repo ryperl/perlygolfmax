@@ -1,0 +1,119 @@
+.dots-entry-dialog {
+  width: min(34rem, calc(100vw - .5rem));
+  max-width: calc(100% - .5rem);
+  max-height: calc(100dvh - .5rem);
+  overflow: auto;
+  color: var(--cp-text);
+  background: var(--cp-surface);
+  border: 1px solid var(--cp-border);
+  border-radius: 1rem;
+  padding: .75rem;
+}
+
+.dots-entry-dialog::backdrop {
+  background: color-mix(in srgb, var(--cp-text) 50%, transparent);
+}
+
+.dots-entry-dialog > header,
+.dots-count-control,
+.dots-count-stepper {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.dots-entry-dialog > header,
+.dots-count-control {
+  justify-content: space-between;
+}
+
+dialog.dots-entry-dialog fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+dialog.dots-entry-dialog fieldset > legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.dots-entry-dialog > header { position: sticky; top: 0; z-index: 1; background: var(--cp-surface); padding-block: .2rem; }
+.dots-entry-dialog > header h3 { min-width: 0; margin: 0; font-size: 1rem; line-height: 1.2; }
+.dots-entry-dialog > header button { flex-shrink: 0; align-self: start; white-space: nowrap; padding: .3rem .6rem; font-size: .8rem; }
+.dots-entry-partner { margin-block: .4rem; font-size: .85rem; }
+.dots-count-control > span { flex-shrink: 0; white-space: nowrap; font-size: .9rem; }
+
+.dots-player-controls {
+  display: grid;
+  gap: .6rem;
+  margin-block: .75rem;
+}
+
+.dots-count-stepper button,
+.dots-entry-dialog button {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.dots-entry-dialog .dots-count-stepper { flex-shrink: 0; gap: .25rem; }
+.dots-entry-dialog .dots-count-stepper button { width: 44px; height: 44px; padding: 0; }
+.dots-entry-dialog .dots-count-stepper input {
+  width: 3rem;
+  min-width: 44px;
+  padding: .3rem;
+  text-align: center;
+}
+
+.dots-quick-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .35rem;
+  min-width: 0;
+}
+
+.dots-player-controls .dots-special-choice {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  min-height: 44px;
+  padding: .3rem .4rem;
+  border: 1px solid var(--cp-border);
+  border-radius: .5rem;
+  font-size: .85rem;
+}
+
+.dots-special-choice:has(input:checked) {
+  background: var(--cp-accent-soft);
+  border-color: var(--cp-accent);
+}
+
+.dots-special-choice > span { min-width: 0; overflow-wrap: anywhere; }
+
+.dots-player-controls .dots-special-choice input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--cp-accent);
+}
+
+.dots-count-details > summary { min-height: 44px; cursor: pointer; }
+.dots-count-details > label { margin-block: .5rem; }
+.dots-entry-dialog small,
+.dots-player-controls small {
+  color: var(--cp-text-muted);
+}
+
+.dots-entry-error {
+  color: var(--cp-danger);
+}

@@ -33,11 +33,12 @@ import type { KpSelection, KpWriteResult } from '../../../src/domain/kp.js';
 import { calculateKp, calculateKpPayout, kpContext, sameKpEntry } from '../../../src/domain/kp.js';
 import { isKpSelection } from '../../../src/contracts/kp.js';
 import { configuredKpRounds, readKpPot } from './kp.js';
-import { GameDeclarationConflictError, gameAnchorPlayerId, nassauRecordsFor, sameNassauRecords, sameWolfRecords, scoreMatchesIntent } from '../../../src/domain/game-declarations.js';
+import { GameDeclarationConflictError, dotsRecordsFor, gameAnchorPlayerId, nassauRecordsFor, sameDotsRecords, sameNassauRecords, sameWolfRecords, scoreMatchesIntent } from '../../../src/domain/game-declarations.js';
 import { nassauConfigurationIssues, validateNassauManualPress } from '../../../src/domain/nassau.js';
 import { nassauRecordsMatchGame } from '../../../src/contracts/nassau.js';
 import { wolfForHole, wolfGroupMatchesRound } from '../../../src/domain/wolf.js';
 import { dotsDefinitionMatchesRound, dotsRecordsMatchGame } from '../../../src/contracts/dots.js';
+import { dotsDeclarationIssues, dotsFirstPlayedHole } from '../../../src/domain/dots.js';
 import { dotRound, definitionCards, validateInternalGameChanges } from './internal-games.js';
 import { buildDotAwardAudit } from './dot-audit.js';
 import { groupStartingHole } from '../../../src/domain/round-navigation.js';
@@ -265,7 +266,8 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       ...(kpPot ? { kpPot } : {}),
       churchyEnabled: this.churchyEnabled(),
       ...(!access.testerLink && this.churchyEnabled() ? { churchyRulesVersions: [1, 2] as const } : {}),
-      ...(!access.testerLink ? { wolfRulesVersions: [1, 2] as const, internalGamesSupported: true } : {}),
+      ...(!access.testerLink ? { wolfRulesVersions: [1, 2] as const, dotsRulesVersions: [1, 2] as const,
+        internalGamesSupported: true } : {}),
       supportedGameKinds: roundGameKinds.filter((kind) => (kind !== 'churchy' || this.churchyEnabled())
         && (!access.testerLink || kind !== 'wolf' && kind !== 'nassau' && kind !== 'dots')),
       gameInputContext: { courseVersionId: capturedRound.courseVersionId, teeProfileId: capturedRound.teeProfile.id },
@@ -589,7 +591,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     }
     const nassauChanged = !sameNassauRecords(savedScore.nassau, before.score.nassau);
     const wolfChanged = !sameWolfRecords(savedScore.wolf, before.score.wolf);
-    const dotsChanged = canonical(savedScore.dots ?? []) !== canonical(before.score.dots ?? []);
+    const dotsChanged = !sameDotsRecords(savedScore.dots, before.score.dots);
     if (score.dots !== undefined && state.testerLink) throw new ApiError(403, 'MATCH_DECLARATIONS_NOT_ALLOWED');
     if ((nassauChanged || wolfChanged) && state.testerLink) throw new ApiError(403, 'MATCH_DECLARATIONS_NOT_ALLOWED');
     for (const record of nassauChanged ? score.nassau ?? [] : []) {
@@ -659,15 +661,41 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       savedScore = { ...savedScore, wolf };
     }
     if (dotsChanged) {
-      const nextCards = cards.map((entry) => entry.playerId === playerId ? { ...entry,
-        holes: entry.holes.map((hole) => hole.number === holeNumber ? { ...hole, score: savedScore } : hole) } : entry);
-      const results = calculateGameResults(state.games?.games ?? [], state.round, nextCards);
+      const dots = [...(savedScore.dots ?? [])];
       for (const record of score.dots ?? []) {
+        const previous = before.score.dots?.find((entry) => entry.gameId === record.gameId);
+        if (previous && sameDotsRecords([record], [previous])) continue;
         const game = state.games?.games.find((entry) => entry.id === record.gameId);
         if (game?.kind !== 'dots' || record.gameEtag !== state.games?.etag || record.number !== holeNumber
           || state.round.groups.find((group) => group.number === game.groupNumber)?.playerIds[0] !== playerId) {
           throw new ApiError(409, 'DOTS_SETUP_CHANGED');
         }
+        for (const declaration of record.players) {
+          const prior = previous?.players.find((entry) => entry.playerId === declaration.playerId);
+          if ((game.version === 2 || canonical(declaration) !== canonical(prior ?? null))
+            && dotsDeclarationIssues(declaration).conflicts.length) throw new ApiError(409, 'DOTS_SETUP_CHANGED');
+        }
+        if (record.rotation) {
+          const receipt = dotsRecordsFor(game, state.round.groups, cards).find((entry) => entry.rotation);
+          if (receipt && receipt.number !== holeNumber) throw new ApiError(409, 'DOTS_ROTATION_CONFLICT');
+          if (!receipt) {
+            const firstPlayed = dotsFirstPlayedHole(dotRound(state.round, cards), game.groupNumber);
+            if (firstPlayed !== null && firstPlayed !== holeNumber) throw new ApiError(409, 'DOTS_SETUP_CHANGED');
+            const index = dots.findIndex((entry) => entry.gameId === game.id);
+            dots[index] = { ...record, rotation: { playerIds: record.rotation.playerIds,
+              ...(firstPlayed !== null ? { recordedLate: true as const } : {}) } };
+          }
+        }
+      }
+      savedScore = { ...savedScore, dots };
+      const nextCards = cards.map((entry) => entry.playerId === playerId ? { ...entry,
+        holes: entry.holes.map((hole) => hole.number === holeNumber ? { ...hole, score: savedScore } : hole) } : entry);
+      const results = calculateGameResults(state.games?.games ?? [], state.round, nextCards);
+      for (const record of score.dots ?? []) {
+        const previous = before.score.dots?.find((entry) => entry.gameId === record.gameId);
+        if (previous && sameDotsRecords([record], [previous])) continue;
+        const game = state.games?.games.find((entry) => entry.id === record.gameId);
+        if (game?.kind !== 'dots') throw new ApiError(409, 'DOTS_SETUP_CHANGED');
         const records = nextCards.find((entry) => entry.playerId === playerId)?.holes
           .flatMap((hole) => hole.score.dots?.filter((item) => item.gameId === game.id) ?? []) ?? [];
         const contexts = game.mode === 'linked'

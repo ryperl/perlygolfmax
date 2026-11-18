@@ -15,9 +15,13 @@ export function DotsResults({ game, result }: { readonly game: DotsGameDefinitio
   const name = (id: string) => result?.players.find((player) => player.playerId === id)?.displayName ?? 'Golfer unavailable';
   const label = (kind: string) => dotsSpecialCatalog.find((special) => special.kind === kind)?.label ?? 'Special';
   return <section className="game-results" aria-label={`${game.name} results`}>
-    <h3>{game.name}</h3><p>Separate earned specials · {game.mode === 'individual' ? 'Individual' : game.mode === 'fixed' ? 'Fixed partners' : 'Linked sides'}</p>
+    <h3>{game.name}</h3><p>Separate earned specials · {game.mode === 'individual' ? 'Individual' : game.mode === 'fixed' ? 'Fixed partners'
+      : game.mode === 'rotating' ? game.rotationHoles === 3 ? 'Modified Sixes · 3-hole partners' : 'Sixes · 6-hole partners' : 'Linked sides'}</p>
     {!result ? <p>Saved Dots results unavailable. Refresh to retry.</p> : <>
       <p>{result.status === 'complete' ? 'Complete saved results' : 'Provisional saved results'}</p>
+      {game.mode === 'rotating' && <p>{result.rotation?.rotation
+        ? `Cycle starts on hole ${String(result.rotation.firstHole)}${result.rotation.rotation.recordedLate ? ' · Order recovered after scoring started' : ''}`
+        : 'Partner order pending. No sharing is inferred.'}</p>}
       <div className="game-scroll" role="region" aria-label="Dots earned ledger" tabIndex={0}><table>
         <caption>Saved special dots · Includes individual round bonuses</caption><thead><tr><th scope="col">Golfer</th>
           <th scope="col">Earned dots</th><th scope="col">Holes</th></tr></thead>

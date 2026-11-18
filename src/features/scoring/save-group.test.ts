@@ -29,6 +29,31 @@ function harness(initial = fictionalRoundScores) {
       plan: planGroup(latest, playerIds, 1, drafts), signal: new AbortController().signal, refreshVersion: 0, ...callbacks }) };
 }
 describe('serialized group save protocol', () => {
+  it('prevents every group write for new source conflicts while retaining unchanged historical conflicts for other golfer edits', async () => {
+    const f = dotsFixture(), anchor = f.ids[0], peer = f.ids[1];
+    if (!anchor || !peer || !f.round.games) throw new Error('Missing fictional group.');
+    const record: DotsHoleRecord = { number: 1, gameId: f.game.id, gameEtag: 'fictional-game-revision',
+      players: [{ playerId: anchor, counts: { hogan: 1, seve: 1 }, calls: [] }], contests: [] };
+    const game = { ...f.game, specials: [...f.game.specials, { kind: 'hogan' as const, units: 1 }, { kind: 'seve' as const, units: 1 }] };
+    const round = { ...f.round, games: { ...f.round.games, configuration: { ...f.round.games.configuration, games: [game] } } };
+    const drafts = new Map(f.ids.map((id) => [entryKey(id, 1), { ...editedDraft('3', cardFor(round, id)),
+      ...(id === anchor ? { dots: [record] } : {}) }]));
+    const store = memoryScores(round);
+    const plan = planGroup(round, f.ids, 1, drafts);
+    expect(plan.invalid).toEqual([anchor]);
+    await expect(saveGroupEntries({ client: store.client, round, holeNumber: 1, plan, signal: new AbortController().signal,
+      refreshVersion: 0, onDraft: vi.fn(), onProjection: vi.fn() })).rejects.toThrow('Review all entries');
+    expect(store.client.save).not.toHaveBeenCalled();
+    const historical = { ...round, cards: round.cards.map((card) => card.playerId === anchor ? { ...card,
+      holes: card.holes.map((hole) => hole.number === 1 ? { ...hole, score: { ...hole.score, dots: [record] } } : hole) } : card) };
+    drafts.set(entryKey(anchor, 1), { ...editedDraft('3', cardFor(historical, anchor)), dots: [{ ...record,
+      players: [...record.players, { playerId: peer, counts: { sandy: 1 }, calls: [] }] }] });
+    expect(planGroup(historical, f.ids, 1, drafts).invalid).toEqual([]);
+    drafts.set(entryKey(anchor, 1), { ...editedDraft('3', cardFor(historical, anchor)), dots: [{ ...record,
+      players: [{ playerId: anchor, counts: { hogan: 1, seve: 1, sandy: 1 }, calls: [] }] }] });
+    expect(planGroup(historical, f.ids, 1, drafts).invalid).toEqual([anchor]);
+  });
+
   it('sends only explicit Dots game replacements, retaining hidden peer records and retrying an unconfirmed call once', async () => {
     const f = dotsFixture();
     const anchor = f.ids[0];

@@ -32,6 +32,28 @@ async function fixture() {
 }
 
 describe('Dots HTTP namespaces and public internal authority', () => {
+  it('accepts version-2 rotation with an order-only score and rejects forged receipts on the dedicated route', async () => {
+    const f = await fixture();
+    const game: DotsGameDefinition = { id: f.game.id, name: f.game.name, kind: 'dots', version: 2,
+      groupNumber: 1, playerIds: f.game.playerIds, mode: 'rotating', rotationHoles: 6,
+      stakeMinor: null, specials: f.game.specials };
+    expect(await f.call('games', { games: [game] }, 21600)).toMatchObject({ status: 200 });
+    const round = await f.scores.get(f.actor, event.id, f.roundId);
+    const record = { number: 1, gameId: game.id, gameEtag: round.games?.configuration.etag ?? '',
+      players: [], contests: [], rotation: { playerIds: game.playerIds } };
+    expect(await f.call('score-game-hole', { score: { kind: 'unplayed', dots: [{
+      ...record, rotation: { playerIds: [game.playerIds[0], game.playerIds[0], ...game.playerIds.slice(2)] },
+    }] } }, 21601)).toMatchObject({ status: 400 });
+    const score = { kind: 'unplayed', dots: [record] };
+    const saved = await f.call('score-game-hole', { score }, 21602);
+    expect(saved).toMatchObject({ status: 200, jsonBody: {
+      round: { dotsRulesVersions: [1, 2], setupLocked: true }, change: { after: score },
+    } });
+    expect(isScoreWriteResult(saved.jsonBody)).toBe(true);
+    expect(JSON.stringify(saved.jsonBody)).not.toContain('dotAwardAudit');
+    expect(await f.call('score-game-hole', { score }, 21602)).toEqual(saved);
+  });
+
   it('charges existing site/event budgets for ordinary internal setup and accepts Dots on the dedicated score route', async () => {
     const f = await fixture();
     const setup = await f.call('games', { games: [f.game] }, 21100);

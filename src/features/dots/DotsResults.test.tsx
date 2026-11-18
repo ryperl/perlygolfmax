@@ -1,12 +1,26 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import type { DotsResults as Results } from '../../domain/dots';
+import type { DotsGameDefinition, DotsResults as Results } from '../../domain/dots';
 import { calculateDotSettlement } from '../../domain/dot-settlement';
 import { DotsResults } from './DotsResults';
 import { InternalSettlement } from './InternalSettlement';
 import { dotsFixture } from './dots.test-support';
 
 describe('saved Dots awards and one internal settlement', () => {
+  it('labels rotating specials without claiming a base match and distinguishes missing order from server-marked late recovery', () => {
+    const f = dotsFixture();
+    const game: DotsGameDefinition = { ...f.game, version: 2, mode: 'rotating', rotationHoles: 3 };
+    const result: Results = { status: 'in-progress', holes: [], players: [], issues: [], unawarded: [], awards: [] };
+    const view = render(<DotsResults game={game} result={result} />);
+    expect(screen.getByText('Partner order pending. No sharing is inferred.')).toBeVisible();
+    expect(screen.getByText(/Modified Sixes · 3-hole partners/)).toBeVisible();
+    view.rerender(<DotsResults game={game} result={{ ...result, rotation: {
+      firstHole: 8, rotation: { playerIds: f.ids, recordedLate: true }, contexts: [],
+    } }} />);
+    expect(screen.getByText('Cycle starts on hole 8 · Order recovered after scoring started')).toBeVisible();
+    expect(screen.queryByText(/Partner order pending/)).not.toBeInTheDocument();
+  });
+
   it('explains round bonus units, recipients and source facts without showing identities or claiming historical audit', () => {
     const { game, f, ids } = dotsFixture();
     const id = ids[0] ?? '';

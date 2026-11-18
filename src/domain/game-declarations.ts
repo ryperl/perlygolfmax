@@ -26,7 +26,15 @@ export function sameDotsRecords(a: readonly DotsHoleRecord[] | undefined, b: rea
 
 export function mergeDotsRecords(edits: readonly DotsHoleRecord[], saved: readonly DotsHoleRecord[] = []): readonly DotsHoleRecord[] {
   const result = new Map(saved.map((record) => [record.gameId, record]));
-  for (const edit of edits) result.set(edit.gameId, edit);
+  for (const edit of edits) {
+    const previous = result.get(edit.gameId);
+    if (previous?.rotation && (previous.number !== edit.number || !edit.rotation
+      || !sameValue(previous.rotation.playerIds, edit.rotation.playerIds))) {
+      throw new GameDeclarationConflictError('A saved Dots rotation cannot be replaced.', 'DOTS_ROTATION_CONFLICT');
+    }
+    const rotation = previous?.rotation ?? edit.rotation;
+    result.set(edit.gameId, { ...edit, ...(rotation ? { rotation } : {}) });
+  }
   return [...result.values()];
 }
 
@@ -34,7 +42,7 @@ export type RoundGameScoringContext = Pick<RoundScores, 'roundId' | 'layout' | '
   | 'courseHandicaps' | 'teeStrokeAllocation' | 'gameInputContext' | 'inputRevision'>;
 
 export class GameDeclarationConflictError extends Error {
-  constructor(message: string, readonly code: 'NASSAU_PRESS_CONFLICT' | 'WOLF_COMEBACK_CONFLICT' = 'NASSAU_PRESS_CONFLICT') { super(message); }
+  constructor(message: string, readonly code: 'NASSAU_PRESS_CONFLICT' | 'WOLF_COMEBACK_CONFLICT' | 'DOTS_ROTATION_CONFLICT' = 'NASSAU_PRESS_CONFLICT') { super(message); }
 }
 
 function samePress(a: NassauManualPress, b: NassauManualPress): boolean {

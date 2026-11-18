@@ -41,7 +41,8 @@ function workspace(round: RoundScores): EventWorkspace {
     players: round.cards.map(({ playerId, displayName }) => ({ playerId, displayName, handicapIndexValue: '0' })) }] };
 }
 
-export async function openDotsFixture(page: Page, testInfo: TestInfo, scenario: 'setup' | 'linked' | 'old-api' = 'setup') {
+export async function openDotsFixture(page: Page, testInfo: TestInfo,
+  scenario: 'setup' | 'linked' | 'old-api' | 'rotating-3' | 'rotating-6' = 'setup') {
   const server = await createServer({ configFile: false, cacheDir: testInfo.outputPath('vite-cache'),
     server: { host: '127.0.0.1', port: 0, hmr: false }, esbuild: { jsx: 'automatic' },
     optimizeDeps: { noDiscovery: true, include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'] },
@@ -51,10 +52,17 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo, scenario: 
     cards: base.cards.map((card) => ({ ...card, etag: null, updatedAt: null,
       holes: card.holes.map((hole) => ({ ...hole, score: { kind: 'unplayed' } })) })),
     supportedGameKinds: scenario === 'old-api' ? ['skins'] : ['dots', 'wolf', 'skins'],
+    ...(scenario === 'old-api' ? {} : { dotsRulesVersions: [1, 2] as const }),
     internalGamesSupported: scenario !== 'old-api', wolfRulesVersions: scenario === 'old-api' ? [1] : [1, 2],
     permissions: { role: 'public', writePlayerIds: dotsPlayers, canManageGames: false, canManageInternalGames: scenario !== 'old-api' },
     gameInputContext: { courseVersionId: dotsFixture.snapshot.courseVersionId, teeProfileId: dotsFixture.snapshot.teeProfile.id } };
-  let stored = project(initial, scenario === 'setup' ? [dotsFixture.skins] : [dotsFixture.skins, wolf, dots]);
+  const rotating: DotsGameDefinition = { id: strokeGameId(962), name: 'Fictional rotating Dots', kind: 'dots',
+    version: 2, mode: 'rotating', rotationHoles: scenario === 'rotating-6' ? 6 : 3,
+    groupNumber: 1, playerIds: dotsPlayers, stakeMinor: 50,
+    specials: [...(['sandy', 'hogan', 'seve', 'pully', 'dime', 'super-dime', 'murphy', 'chippy', 'walk'] as const)
+      .map((kind) => ({ kind, units: 1 })), { kind: 'birdie', units: 2 }] };
+  let stored = project(initial, scenario.startsWith('rotating') ? [dotsFixture.skins, rotating]
+    : scenario === 'setup' ? [dotsFixture.skins] : [dotsFixture.skins, wolf, dots]);
   let writes = 0, configWrites = 0, failPaused = false;
   let releaseFailure: (() => void) | null = null;
   const requests: { readonly id: string; readonly playerId: string; readonly etag: string | null; readonly score: HoleScore }[] = [];

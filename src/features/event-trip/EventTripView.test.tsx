@@ -32,6 +32,20 @@ function roundCard(name: string) {
 }
 
 describe('saved event overview', () => {
+  it.each(['overview', 'rounds', 'group'] as const)('exposes Quick setup from %s without granting ordinary-event or tester management', (view) => {
+    const quick: EventWorkspace = { ...workspace, quickRound: true, publicAccess: true,
+      event: { ...workspace.event, role: 'viewer', quickRound: true } };
+    const rendered = render(<EventTripView workspace={quick} view={view} />);
+    expect(screen.getByRole('link', { name: 'Edit Quick round' }))
+      .toHaveAttribute('href', `#events?event=${encodeURIComponent(quick.event.id)}&quick=1`);
+    rendered.rerender(<EventTripView workspace={{ ...quick, testerAccess: true }} view={view} />);
+    expect(screen.queryByRole('link', { name: 'Edit Quick round' })).not.toBeInTheDocument();
+    rendered.rerender(<EventTripView workspace={{ ...workspace, event: { ...workspace.event, role: 'viewer' } }} view={view} />);
+    expect(screen.queryByRole('link', { name: 'Edit Quick round' })).not.toBeInTheDocument();
+    rendered.rerender(<EventTripView workspace={{ ...quick, event: { ...quick.event, role: 'owner', status: 'archived' } }} view={view} />);
+    expect(screen.queryByRole('link', { name: 'Edit Quick round' })).not.toBeInTheDocument();
+  });
+
   it('keeps round accents with their configured identities when dates reorder the visible cards', () => {
     const tone = (name: string) => screen.getByRole('heading', { name, level: 3 }).closest('[data-round-tone]')?.getAttribute('data-round-tone');
     const view = render(<EventTripView workspace={workspace} view="rounds" />);

@@ -41,6 +41,52 @@ function typeScore(index: number, value: string) {
 function pause(ms = 900) { act(() => { vi.advanceTimersByTime(ms); }); }
 afterEach(() => { vi.useRealTimers(); });
 describe('pure mobile group hole entry', () => {
+  it('fills only pristine blanks with each personal par in one keyboard-free action without saving', async () => {
+    const input = props();
+    const rows = input.rows.map((row, index) => ({ ...row, hole: { ...input.hole, par: index % 2 ? 3 : 5 } }));
+    render(<ControlledEntry {...input} rows={rows} />);
+    const button = screen.getByRole('button', { name: 'Par for blanks' });
+    const lastInput = screen.getAllByRole('textbox').at(-1);
+    expect(lastInput && lastInput.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await userEvent.click(button);
+    for (const row of rows.slice(0, 4)) {
+      expect(input.onEdit).toHaveBeenCalledWith(row.playerId, String(row.hole.par));
+      expect(screen.getByRole('textbox', { name: `${row.displayName} score` })).toHaveValue(String(row.hole.par));
+    }
+    expect(input.onSave).not.toHaveBeenCalled();
+    expect(screen.getAllByRole('textbox').every((field) => field !== document.activeElement)).toBe(true);
+    expect(button).toBeDisabled();
+  });
+
+  it('preserves saved scores, explicit clears and typed pickup exceptions when filling blanks', async () => {
+    const input = props();
+    const first = input.rows[0];
+    if (!first) throw new Error('Missing fictional player.');
+    const rows = [first, { ...first, playerId: 'fictional-saved', displayName: 'Fictional saved', saved: { kind: 'strokes', strokes: 6 } as const },
+      { ...first, playerId: 'fictional-clear', displayName: 'Fictional clear',
+        draft: { text: '', rawEdited: true, baseEtag: null, status: 'draft' } as const },
+      { ...first, playerId: 'fictional-pickup', displayName: 'Fictional pickup',
+        draft: { text: 'X7', rawEdited: true, baseEtag: null, status: 'draft' } as const }];
+    render(<GroupHoleEntry {...input} rows={rows} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Par for blanks' }));
+    expect(input.onEdit).toHaveBeenCalledExactlyOnceWith(first.playerId, String(input.hole.par));
+    expect(screen.getByRole('textbox', { name: 'Fictional saved score' })).toHaveValue('6');
+    expect(screen.getByRole('textbox', { name: 'Fictional clear score' })).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: 'Fictional pickup score' })).toHaveValue('X7');
+  });
+
+  it.each(['busy', 'readOnly', 'conflict'] as const)('blocks bulk par during %s without losing the static action', async (state) => {
+    const input = props();
+    render(<GroupHoleEntry {...input} busy={state === 'busy'} readOnly={state === 'readOnly'}
+      rows={input.rows.map((row, index) => state === 'conflict' && index === 0
+        ? { ...row, draft: { text: '', baseEtag: null, status: 'conflict' } } : row)} />);
+    const action = screen.getByRole('button', { name: 'Par for blanks' });
+    expect(action).toBeVisible();
+    expect(action).toBeDisabled();
+    await userEvent.click(action);
+    expect(input.onEdit).not.toHaveBeenCalled();
+  });
+
   it('places saved gross progress after Course Handicap without changing draft badges or input focus', () => {
     const input = props();
     const player = input.rows[0];

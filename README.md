@@ -299,6 +299,11 @@ and authoritative API capabilities used by ordinary rounds. Scores only is
 valid. Stableford, Skins, Ball Drop and enabled Churchy use their existing rules,
 team validation and settings; new supported game types use the shared path.
 Competition teams are separate from playing groups.
+Reopen **Edit Quick round** from the Events list or the active Quick round's
+Overview, Rounds or The Group page to change its roster before scoring.
+Creating the round alone does not lock golfers. The first saved score or
+scoring declaration captures the inputs; clearing scores afterward never unlocks
+the roster. Global player-profile editing remains protected catalog management.
 Churchy's explicit planned dollars-per-dot setting is part of shared game editing,
 not permission to manage purse pools or make payments.
 
@@ -649,7 +654,7 @@ ledgers/declarations and cannot submit new ones.
 
 **New Wolf games use version 2. Existing version-1 games are not converted**,
 even when unstarted. Their saved choices, signed transfer balances and old
-results keep their meaning. Dots is a separate version-1 game, not a Wolf preset
+results keep their meaning. Dots is an independent game, not a Wolf preset
 or an extension of Churchy. The two engines consume a neutral hole-side context
 only when explicitly linked.
 
@@ -682,6 +687,22 @@ Each golfer's achievement shares its full award with current teammates;
 Walk, selected Pickup and failed called challenges award opponents instead.
 Individual-play opponents are the other three golfers.
 
+New rotating Dots games use **version 2** for **Modified Sixes** (partners every
+three played holes) or **Sixes** (every six). Choose P1–P4 on the first played
+hole and save that order with the score. Pairs cycle P1/P2 vs P3/P4,
+P1/P3 vs P2/P4, P1/P4 vs P2/P3. The pairings repeat in blocks of the chosen
+length through the playing circuit.
+Until an order is acknowledged, sharing stays pending rather than guessing
+partners. The receipt fixes the cycle's first hole even after raw corrections;
+an absent order recovered after scores is server-marked late. Once saved,
+the order cannot be replaced or removed by clearing scores/specials.
+Past earned dots stay with their original recipients when partners change.
+Existing version-1 games are never silently converted.
+
+These are rotating **special-dot sharing** formats, not a separate Sixes
+match-points engine. They do not invent High/Low contests, Sweep or extra bets.
+Their multiplier is x1 and their foursome settles independently.
+
 Select enabled specials and whole-dot units before scoring. Defaults are 1,
 except Birdie 2 and Eagle 5. All of these rules use gross qualifications:
 
@@ -695,6 +716,12 @@ except Birdie 2 and Eagle 5. All of these rules use gross qualifications:
 - Pully/Pully Murphy specifically require their long gross par putt. Pully
   Murphy needs its own call and may stack with Pully/Murphy. SuperDime replaces
   Dime. Gorilla is a personal par-5 green in two regardless of final score.
+- New or changed declarations reject Hogan with Seve, Pully with Dime/SuperDime,
+  and Hogan with Murphy/Chippy for the **same qualifying golfer and hole**.
+  Different teammates may earn different specials and share them normally.
+  Hogan/Seve with Walk is a review warning, not a prohibition.
+  Historical version-1 inputs remain readable; these new checks do not silently
+  erase saved calls/awards or rewrite legacy results.
 - Birdie, Eagle and streaks derive from saved scores. Eagle does not also earn
   Birdie. String starts on the third exact gross par; BirdyString starts on
   the third birdie-or-better. Continue through the actual playing circuit,
@@ -711,7 +738,7 @@ except Birdie 2 and Eagle 5. All of these rules use gross qualifications:
   linked High and Low wins by the same pair; neither is invented for unsupported
   standalone/individual contexts.
 
-Thief, reusable presets and new Sixes engines are deferred. Dots cannot stack
+Thief, reusable presets and full Sixes match engines are deferred. Dots cannot stack
 with Churchy. A foursome chooses only one of the currently supported Wolf or
 Churchy internal base games; different foursomes remain independent. Ball Drop
 continues between four-person competition teams, not as pooled internal dots.
@@ -737,8 +764,25 @@ count, multiplier and recipients. Immutable private score/correction receipts
 retain original and replacement award snapshots; public explanation views show
 current awards, not protected historical actors or a historical audit browser.
 
-The API advertises `wolfRulesVersions`, `internalGamesSupported` and narrow
+Setup uses compact aligned rows, normal checkbox visuals with large hit areas,
+on-demand rule descriptions and **Select all** for the selected mode. Existing
+custom dot values are retained. Automatic-rule checkboxes only choose which
+rules are in play during setup; they are not score-entry chores.
+
+During scoring, each golfer's **Dots** action sits under their score alongside
+KP. Only enabled manual specials/calls need entry; Sandy has tap counters.
+**Par for blanks** fills untouched unplayed fields using each personal tee's
+par, without overwriting saved scores, explicit clears, pickups or other
+staged edits. It is an explicit draft action, never an automatic score.
+Adjust exceptions and acknowledge the same Save & Next; no separate Dots save
+or keyboard is required for the common path. Group contests and the first-hole
+partner order remain separate from per-golfer declarations and KP distances.
+
+The API advertises `dotsRulesVersions`, `wolfRulesVersions`,
+`internalGamesSupported` and narrow
 `canManageInternalGames` permission. Missing capability does not enable writes.
+Rotating Dots requires advertised version 2; legacy individual/fixed/linked games
+keep their existing version-1 behavior.
 Public internal configuration in ordinary events remains pre-scoring and
 cannot edit protected peer games or promote a public actor to organizer.
 Legacy tester views omit these game ledgers and cannot author their declarations.

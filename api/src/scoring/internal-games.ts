@@ -45,6 +45,9 @@ export function validateInternalGameChanges(
     if (previous?.kind === 'churchy' && game.kind === 'churchy' && previous.version !== game.version) {
       throw new ApiError(400, 'CHURCHY_REQUIRES_NEW_GAME');
     }
+    if (previous?.kind === 'dots' && game.kind === 'dots' && previous.version !== game.version) {
+      throw new ApiError(400, 'DOTS_REQUIRES_NEW_GAME');
+    }
     if (previous && sameGameDefinitions([previous], [game])) continue;
     if (game.kind === 'dots' || game.kind === 'wolf' || game.kind === 'churchy') {
       if (previous && previous.kind !== game.kind) throw new ApiError(400, 'INTERNAL_GAME_REQUIRES_NEW_GAME');

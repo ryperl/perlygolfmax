@@ -68,6 +68,7 @@ export interface RoundScores {
   readonly roundDifferentials?: readonly RoundDifferential[];
   readonly internalGamesSupported?: boolean;
   readonly wolfRulesVersions?: readonly (1 | 2)[];
+  readonly dotsRulesVersions?: readonly (1 | 2)[];
   readonly churchyRulesVersions?: readonly (1 | 2)[];
   readonly internalSettlements?: readonly InternalGameSettlement[];
   readonly supportedGameKinds?: readonly RoundGameKind[];

@@ -41,6 +41,7 @@ export interface GroupHoleEntryRow {
 }
 export interface GroupHoleEntryProps {
   readonly gameControls?: ReactNode;
+  readonly playerGameControls?: (playerId: string) => ReactNode;
   readonly kpEligible?: boolean;
   readonly kpClosed?: boolean;
   readonly onKpEdit?: (playerId: string, value: KpEntry | null) => void;
@@ -70,7 +71,7 @@ export interface GroupHoleEntryProps {
 
 export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, readOnly, unsavedCount, focusHole, feedbackState,
   onGroupChange, onHoleChange, onEdit, onReview, onDiscard, onDiscardAll, onSave, onRefresh, churchy, gameEtag, onDotsEdit,
-  kpEligible, kpClosed, onKpEdit, gameControls, churchyV2Supported = false }: GroupHoleEntryProps) {
+  kpEligible, kpClosed, onKpEdit, gameControls, playerGameControls, churchyV2Supported = false }: GroupHoleEntryProps) {
   const previous = adjacentHole(layout, hole.number, -1);
   const next = adjacentHole(layout, hole.number, 1);
   const last = next?.number === groupStartingHole(groups.find((group) => group.number === groupNumber), layout);
@@ -125,6 +126,10 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
     primaryAction.current?.focus();
   }
   const personalContext = rows.some((row) => row.teeLabel !== undefined);
+  const parCandidates = rows.slice(0, 4).filter((row) => row.saved.kind === 'unplayed' && !row.draft?.rawEdited
+    && !row.draft?.attempt?.sent && (!row.draft || row.draft.status === 'draft')
+    && parseScoreEntry(row.draft?.text ?? '')?.kind === 'unplayed');
+  const groupConflict = rows.some((row) => row.draft?.status === 'conflict');
   return <section className="group-hole-entry" aria-label="Group hole entry">
     <div className="score-selection">
       <label>View group<select value={groupNumber} disabled={busy} onChange={(event) => { onGroupChange(Number(event.target.value)); }}>
@@ -206,9 +211,12 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
               onEdit(row.playerId, pickedUp ? numeric === undefined ? '' : String(numeric) : numeric === undefined ? 'X' : `X${String(numeric)}`);
             }}>X</button>
           </div>
+          <div className="entry-player-actions" onFocusCapture={cancelMovement} onPointerDownCapture={cancelMovement}>
           {kpEligible && onKpEdit && <KpEntryButton name={row.displayName} disabled={disabled || kpClosed === true}
             value={row.draft?.kp !== undefined ? row.draft.kp : row.saved.kp} draft={row.draft?.kp !== undefined}
             onOpen={cancelMovement} onChange={(value) => { cancelMovement(); onKpEdit(row.playerId, value); }} />}
+          {playerGameControls?.(row.playerId)}
+          </div>
           {churchy?.kind === 'churchy' && churchy.playerIds.includes(row.playerId) && gameEtag && onDotsEdit && <>
             <p className="entry-tee">Churchy relative handicap: {row.churchyRelativeHandicap ?? 'unavailable'} · Relative strokes this hole: {
               row.churchyStrokesReceived ?? 'unavailable'}</p>
@@ -235,7 +243,13 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
       })}</div>
       {gameControls && <div onFocusCapture={cancelMovement} onPointerDownCapture={cancelMovement}>{gameControls}</div>}
       <div className="group-save-actions">
+        <div className="group-save-primary-actions">
+        <button type="button" disabled={disabled || groupConflict || parCandidates.length === 0} onClick={() => {
+          cancelMovement();
+          for (const row of parCandidates) onEdit(row.playerId, String((row.hole ?? hole).par));
+        }}>Par for blanks</button>
         <button ref={primaryAction} className="primary-score-action" disabled={disabled}>{last ? 'Save Hole' : 'Save & Next Hole'}</button>
+        </div>
         <div className="score-secondary-actions">
           <button className="refresh-score-action" type="button" aria-label="Refresh saved round" title="Refresh saved round" disabled={busy} onClick={onRefresh}>
             <ScoreActionIcon kind="refresh" /><span className="score-action-label">Refresh</span>

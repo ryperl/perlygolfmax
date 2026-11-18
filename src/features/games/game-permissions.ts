@@ -17,6 +17,7 @@ export function canManageRoundGames(round: RoundScores): boolean {
 export function canManageGame(round: RoundScores, game: RoundGameDefinition): boolean {
   if (round.eventStatus === 'archived') return false;
   if (game.kind === 'wolf' && game.version === 2 && !round.wolfRulesVersions?.includes(2)) return false;
+  if (game.kind === 'dots' && game.version === 2 && !round.dotsRulesVersions?.includes(2)) return false;
   if (game.kind === 'churchy' && (round.churchyEnabled !== true || game.version === 2 && !round.churchyRulesVersions?.includes(2))) return false;
   if (game.kind === 'dots' || game.kind === 'wolf' || game.kind === 'nassau') {
     if (round.setupLocked) return false;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateDots, dotsSpecialCatalog, dotsRecordsMatchGame } from './dots.js';
+import { calculateDots, dotsDeclarationIssues, dotsSpecialCatalog, dotsRecordsMatchGame } from './dots.js';
 import type { DotsContest, DotsGameDefinition, DotsHoleRecord, DotsPlayerDeclaration, DotsSpecialKind } from './dots.js';
 import type { DotHoleContext, DotRoundInput } from './dot-context.js';
 import type { HoleScore } from './scoring.js';
@@ -37,6 +37,51 @@ function linked(game: DotsGameDefinition): DotsGameDefinition {
 function context(number = 1, multiplier: 1 | 2 | 3 = 1, sides: readonly (readonly string[])[] = [['A', 'B'], ['C', 'D']]): DotHoleContext {
   return { number, status: 'ready', sides, multiplier, sourceGameId: 'base-A' };
 }
+
+describe('source-only Dots declaration review', () => {
+  it.each([
+    [{ hogan: 1, seve: 1 }, [], 'HOGAN_SEVE'],
+    [{ pully: 1, dime: 1 }, [], 'PULLY_DIME'],
+    [{ pully: 1, 'super-dime': 1 }, [], 'PULLY_DIME'],
+    [{ hogan: 1, chippy: 1 }, [], 'HOGAN_CHIPPY'],
+    [{ dime: 1, 'super-dime': 1 }, [], 'DIME_SUPER_DIME'],
+    [{ hogan: 1 }, [{ id: 'call', kind: 'murphy', result: 'pending' }], 'HOGAN_MURPHY'],
+    [{ hogan: 1 }, [{ id: 'call', kind: 'murphy', result: 'failure' }], 'HOGAN_MURPHY'],
+  ] satisfies readonly (readonly [DotsPlayerDeclaration['counts'], DotsPlayerDeclaration['calls'], string])[])(
+    'reports incompatible source declarations %j %j', (counts, calls, code) => {
+      expect(dotsDeclarationIssues(declaration('A', counts, calls))).toMatchObject({ conflicts: [{ code }], warnings: [] });
+    },
+  );
+
+  it('warns without forbidding Hogan/Seve and Walk, ignores zeros and unrelated calls', () => {
+    expect(dotsDeclarationIssues(declaration('A', { hogan: 1, walk: 1 }))).toEqual({
+      conflicts: [], warnings: [{ code: 'HOGAN_WALK', kinds: ['hogan', 'walk'] }],
+    });
+    expect(dotsDeclarationIssues(declaration('A', { seve: 1, walk: 1 }))).toEqual({
+      conflicts: [], warnings: [{ code: 'SEVE_WALK', kinds: ['seve', 'walk'] }],
+    });
+    expect(dotsDeclarationIssues(declaration('A', { hogan: 1, seve: 0 }, [
+      { id: 'call', kind: 'paree', result: 'success' },
+    ]))).toEqual({ conflicts: [], warnings: [] });
+    const { game, round } = fixture([5], ['hogan', 'walk']);
+    expect(totals(calculateDots(game, round, [record(1, [declaration('A', { hogan: 1, walk: 1 })])]))).toEqual([1, 1, 1, 1]);
+  });
+
+  it('does not retroactively invalidate or change v1 individual, fixed or linked awards', () => {
+    const { game, round } = fixture([4], ['hogan', 'seve', 'pully', 'dime', 'murphy', 'chippy']);
+    const records = [record(1, [declaration('A', { hogan: 1, seve: 1, pully: 1, dime: 1, chippy: 1 },
+      [{ id: 'call-A', kind: 'murphy', result: 'success' }])])];
+    expect(dotsDeclarationIssues(records[0]?.players[0] ?? declaration('A')).conflicts.length).toBe(4);
+    for (const candidate of [game, fixed(game), linked(game)]) {
+      expect(dotsRecordsMatchGame(records, candidate, round)).toBe(true);
+      const result = calculateDots(candidate, round, records, [context(1, 2)]);
+      expect(result.status).toBe('complete');
+      expect(result).not.toHaveProperty('rotation');
+      expect(result.players.map((player) => player.totalPoints)).toEqual(candidate.mode === 'individual'
+        ? [6, 0, 0, 0] : candidate.mode === 'fixed' ? [6, 6, 0, 0] : [12, 12, 0, 0]);
+    }
+  });
+});
 
 describe('independent Dots earning and declarations', () => {
   it('records three Sandys plus a separately called Paree, and each partner’s own achievements', () => {

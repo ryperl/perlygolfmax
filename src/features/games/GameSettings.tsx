@@ -28,6 +28,7 @@ interface GameSettingsProps {
   readonly internalOnly?: boolean;
   readonly wolfV2Supported?: boolean;
   readonly churchyV2Supported?: boolean;
+  readonly dotsV2Supported?: boolean;
   readonly existing?: boolean;
 }
 
@@ -44,7 +45,7 @@ function scoreLabel(value: number): string {
 export function GameSettings({
   draft, disabled, saveDisabled, cancelDisabled, retry, onChange, onSave, onCancel, roster = [],
   churchyEnabled = false, groups = [], setupLocked = false, allowChurchyCreation = false, supportedGameKinds,
-  games = [], internalOnly = false, wolfV2Supported = false, churchyV2Supported = false, existing = false,
+  games = [], internalOnly = false, wolfV2Supported = false, churchyV2Supported = false, dotsV2Supported = false, existing = false,
 }: GameSettingsProps) {
   const allowanceHint = useId();
   const stableford = draft.kind === undefined || draft.kind === 'stableford';
@@ -192,6 +193,7 @@ export function GameSettings({
           </>}
         </section>}
         {draft.kind === 'dots' && <DotsSettings draft={draft} groups={groups} players={roster}
+          v2Supported={dotsV2Supported}
           wolves={games.filter((game) => game.kind === 'wolf')} onChange={(patch) => { onChange({ ...draft, ...patch }); }} />}
         {draft.kind === 'churchy' && <section aria-label="Churchy setup">
           {draft.churchyGroup && <h3>Group {draft.churchyGroup} · Churchy Game</h3>}
@@ -338,6 +340,7 @@ export function GameSettings({
       {draft.kind !== 'churchy' && supportedGameKinds === undefined && <p>This API does not advertise Stroke Play, Wolf or Nassau support. Refresh after an API upgrade to configure these games.</p>}
       <div className="game-actions">
         <button type="submit" disabled={disabled || matchLocked || saveDisabled
+          || draft.kind === 'dots' && draft.dotsMode === 'rotating' && !dotsV2Supported
           || draft.kind === 'churchy' && draft.churchyVersion === 2 && !churchyV2Supported
           || draft.format !== undefined && !buildGame(draft, rosterIds)}>{retry ? 'Retry save' : 'Save game'}</button>
         <button type="button" disabled={cancelDisabled} onClick={onCancel}>Cancel editing</button>

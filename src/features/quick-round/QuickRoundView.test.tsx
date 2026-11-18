@@ -26,6 +26,27 @@ async function showGames() {
 }
 
 describe('public Quick round controller', () => {
+  it('lets a reopened unscored Quick round change golfers and retains the saved roster on another visit', async () => {
+    const source = quickSource();
+    const view = render(<QuickRoundView {...source} eventId={source.workspace.event.id} />);
+    const selected = await screen.findByRole('checkbox', { name: 'Fictional Player 1' });
+    await waitFor(() => { expect(selected).toBeEnabled(); });
+    expect(selected).toBeChecked();
+    fireEvent.click(selected);
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Save round' })).toBeEnabled(); });
+    fireEvent.click(screen.getByRole('button', { name: 'Save round' }));
+    await screen.findByText('Round setup saved. Choose games or start with scores only.');
+    const saved = vi.mocked(source.client.save).mock.lastCall?.[3];
+    expect(saved?.playerIds).not.toContain(fictionalId(1));
+    expect(saved?.rounds[0]?.groups.every((group) => !group.playerIds.includes(fictionalId(1)))).toBe(true);
+    expect(source.scores.save).not.toHaveBeenCalled();
+    view.unmount();
+    render(<QuickRoundView {...source} eventId={source.workspace.event.id} />);
+    const reopened = await screen.findByRole('checkbox', { name: 'Fictional Player 1' });
+    await waitFor(() => { expect(reopened).toBeEnabled(); });
+    expect(reopened).not.toBeChecked();
+  });
+
   it('prefers captured server Course Handicap when scoring locks after the workspace read', async () => {
     const source = quickSource();
     const current = await source.scores.load(source.workspace.event.id, source.workspace.rounds[0]?.id ?? '', new AbortController().signal);

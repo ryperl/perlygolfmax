@@ -1,10 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import type { WolfGameDefinition } from '../../domain/wolf';
 import { strokeGameId } from '../../domain/stroke-games.test-support';
 import { calculateDotSettlement } from '../../domain/dot-settlement';
-import type { DotsGameDefinition } from '../../domain/dots';
+import type { DotsGameDefinition, DotsHoleRecord } from '../../domain/dots';
 import { dotsFixture } from '../dots/dots.test-support';
 import { buildGame, draftFromGame, newGameDraft, setGameKind } from './game-draft';
 import { canManageGame, canManageRoundGames } from './game-permissions';
@@ -12,7 +12,74 @@ import { GameSettings } from './GameSettings';
 import { RoundGamesPanel } from './RoundGamesPanel';
 import { RoundGameHoleControls } from './RoundGameHoleControls';
 
+beforeAll(() => {
+  Object.defineProperties(HTMLDialogElement.prototype, {
+    showModal: { configurable: true, value(this: HTMLDialogElement) { this.setAttribute('open', ''); } },
+    close: { configurable: true, value(this: HTMLDialogElement) { this.removeAttribute('open'); } },
+  });
+});
+afterAll(() => {
+  Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal');
+  Reflect.deleteProperty(HTMLDialogElement.prototype, 'close');
+});
+
 describe('separate internal game setup and capability boundaries', () => {
+  it('visibly distinguishes multiple golfer Dots sources while keeping one compact and routing edits to the chosen game', () => {
+    const f = dotsFixture();
+    if (!f.round.games) throw new Error('Missing fictional games.');
+    const playerId = f.ids[0];
+    if (!playerId) throw new Error('Missing fictional golfer.');
+    const second = { ...f.game, id: strokeGameId(982), name: 'Fictional second specials' };
+    const onSpecialDotsChange = vi.fn<(records: readonly DotsHoleRecord[]) => void>();
+    const props = { round: f.round, groupNumber: 1, holeNumber: 1, playerId, saved: { kind: 'unplayed' as const },
+      disabled: false, onNassauChange: vi.fn(), onWolfChange: vi.fn(), onSpecialDotsChange };
+    const view = render(<RoundGameHoleControls {...props} />);
+    expect(screen.getByRole('button', { name: `Dots for Fictional golfer 1 · ${f.game.name}` })).toHaveTextContent(/^Dots$/);
+    view.rerender(<RoundGameHoleControls {...props} round={{ ...f.round, games: { ...f.round.games,
+      configuration: { ...f.round.games.configuration, games: [f.game, second] } } }} />);
+    expect(screen.getByRole('button', { name: `Dots for Fictional golfer 1 · ${f.game.name}` })).toHaveTextContent(`Dots · ${f.game.name}`);
+    const trigger = screen.getByRole('button', { name: `Dots for Fictional golfer 1 · ${second.name}` });
+    expect(trigger).toHaveTextContent(`Dots · ${second.name}`);
+    fireEvent.click(trigger);
+    expect(screen.queryByRole('checkbox', { name: /Birdie/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Increase Sandy for Fictional golfer 1' }));
+    expect(onSpecialDotsChange.mock.lastCall?.[0]).toMatchObject([{ gameId: second.id, players: [{ playerId, counts: { sandy: 1 } }] }]);
+  });
+
+  it('round-trips explicit new rotating rules without upgrading saved v1, and requires version-2 capability', () => {
+    const f = dotsFixture();
+    for (const rotationHoles of [3, 6] as const) {
+      const game: DotsGameDefinition = { ...f.game, version: 2, mode: 'rotating', rotationHoles };
+      expect(buildGame(draftFromGame(game), f.ids)).toEqual(game);
+      const fresh = { ...setGameKind(newGameDraft(), 'dots', 4), groupNumber: 1, dotsPlayers: f.ids,
+        dotsPlayerIds: f.ids, dotsMode: 'rotating' as const, dotsRotationHoles: rotationHoles, stake: '.50' };
+      expect(buildGame(fresh, f.ids)).toMatchObject({ version: 2, mode: 'rotating', rotationHoles, stakeMinor: 50 });
+      expect(buildGame({ ...draftFromGame(f.game), dotsMode: 'rotating', dotsRotationHoles: rotationHoles }, f.ids)).toBeNull();
+      expect(buildGame({ ...draftFromGame(game), dotsMode: 'individual' }, f.ids)).toBeNull();
+      const owner = { ...f.round, permissions: { role: 'owner' as const, writePlayerIds: f.ids, canManageGames: true } };
+      expect(canManageGame(owner, game)).toBe(false);
+      expect(canManageGame({ ...owner, dotsRulesVersions: [1, 2] }, game)).toBe(true);
+    }
+  });
+
+  it('keeps saved rotating contexts readable but disables every v2 scoring control unless capability is advertised', () => {
+    const f = dotsFixture();
+    if (!f.round.games) throw new Error('Missing fictional games.');
+    const game: DotsGameDefinition = { ...f.game, version: 2, mode: 'rotating', rotationHoles: 3 };
+    const round = { ...f.round, games: { ...f.round.games, configuration: { ...f.round.games.configuration, games: [game] } } };
+    const props = { round, groupNumber: 1, holeNumber: 1, saved: { kind: 'unplayed' as const }, disabled: false,
+      onNassauChange: vi.fn(), onWolfChange: vi.fn(), onSpecialDotsChange: vi.fn() };
+    const playerId = f.ids[0];
+    if (!playerId) throw new Error('Missing fictional golfer.');
+    const view = render(<><RoundGameHoleControls {...props} playerId={playerId} /><RoundGameHoleControls {...props} /></>);
+    expect(screen.getByRole('button', { name: `Dots for Fictional golfer 1 · ${game.name}` })).toBeDisabled();
+    expect(screen.getByLabelText('Dots P1')).toBeDisabled();
+    view.rerender(<><RoundGameHoleControls {...props} round={{ ...round, dotsRulesVersions: [1, 2] }} playerId={playerId} />
+      <RoundGameHoleControls {...props} round={{ ...round, dotsRulesVersions: [1, 2] }} /></>);
+    expect(screen.getByRole('button', { name: `Dots for Fictional golfer 1 · ${game.name}` })).toBeEnabled();
+    expect(screen.getByLabelText('Dots P1')).toBeEnabled();
+  });
+
   it('uses each personal hole par for Gorilla but the default par for category contests', () => {
     const f = dotsFixture();
     if (!f.round.games) throw new Error('Missing fictional games');
@@ -25,15 +92,21 @@ describe('separate internal game setup and capability boundaries', () => {
         holes: f.round.layout.map((hole) => ({ ...hole, par: 5 })) } }] };
     const props = { round, groupNumber: 1, holeNumber: 1, saved: { kind: 'unplayed' as const }, disabled: false,
       onNassauChange: vi.fn(), onWolfChange: vi.fn(), onSpecialDotsChange: vi.fn() };
-    const view = render(<RoundGameHoleControls {...props} />);
+    const view = render(<><RoundGameHoleControls {...props} playerId={playerId} /><RoundGameHoleControls {...props} /></>);
+    fireEvent.click(screen.getByRole('button', { name: `Dots for Fictional golfer 1 · ${game.name}` }));
     expect(screen.getByLabelText('Gorilla count · Fictional golfer 1')).toBeInTheDocument();
     expect(screen.queryByLabelText('Gorilla count · Fictional golfer 2')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Blue Plate result')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Long Drive result')).not.toBeInTheDocument();
-    view.rerender(<RoundGameHoleControls {...props} round={{ ...round,
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    const changed = { ...round,
       layout: round.layout.map((hole) => ({ ...hole, par: 5 })),
       playerTees: [{ playerId, profile: { ...f.f.snapshot.teeProfile,
-        holes: f.round.layout.map((hole) => ({ ...hole, par: 4 })) } }] }} />);
+        holes: f.round.layout.map((hole) => ({ ...hole, par: 4 })) } }] };
+    const second = f.ids[1];
+    if (!second) throw new Error('Missing fictional player.');
+    view.rerender(<><RoundGameHoleControls {...props} round={changed} playerId={second} /><RoundGameHoleControls {...props} round={changed} /></>);
+    fireEvent.click(screen.getByRole('button', { name: `Dots for Fictional golfer 2 · ${game.name}` }));
     expect(screen.queryByLabelText('Gorilla count · Fictional golfer 1')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Gorilla count · Fictional golfer 2')).toBeInTheDocument();
     expect(screen.getByLabelText('Blue Plate result')).toBeInTheDocument();

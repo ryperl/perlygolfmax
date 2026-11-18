@@ -170,6 +170,8 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     const playerId = group?.playerIds[0];
     if (!round || !hole || !playerId || busy || saving.current || !canEditGroup
       || !supportsRoundGame(round, patch.nassau !== undefined ? 'nassau' : patch.dots !== undefined ? 'dots' : 'wolf')) return;
+    if (patch.dots?.some((record) => round.games?.configuration.games.some((game) =>
+      game.kind === 'dots' && game.id === record.gameId && game.version === 2 && !round.dotsRulesVersions?.includes(2)))) return;
     const card = cardFor(round, playerId);
     const key = entryKey(playerId, hole.number);
     const previous = currentDrafts.current.get(key);
@@ -250,7 +252,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     if (!round || !group || !hole || busy || saving.current || !canEditGroup) return;
     const plan = planGroup(round, group.playerIds, hole.number, currentDrafts.current);
     if (plan.invalid.length > 0) {
-      setNotice({ kind: 'attention', message: 'Nothing sent. Check every intended entry, including Churchy counts. Counts must be nonnegative whole numbers; scores accept a positive number, X / X7, DNF, or blank.' });
+      setNotice({ kind: 'attention', message: 'Nothing sent. Check every intended entry, including Dots/Churchy counts, partner order and conflicting specials or calls. Counts must be nonnegative whole numbers; scores accept a positive number, X / X7, DNF, or blank.' });
       return;
     }
     if (plan.conflicts.length > 0) {
@@ -392,6 +394,13 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
       {screen === 'entry' && !canEditGroup && writeIds.length > 0 && !accessChanged && <p>This playing group is read-only. Select your assigned playing group to enter scores.</p>}
       {round.eventStatus === 'archived' && <p role="status">Archived event: owner read-only. Drafts cannot be saved.</p>}
       {screen === 'entry' && group && hole && <GroupHoleEntry groups={round.groups} groupNumber={group.number} layout={round.layout} hole={hole}
+        playerGameControls={(playerId) => group.playerIds[0] && <RoundGameHoleControls round={round} groupNumber={group.number}
+          holeNumber={hole.number} playerId={playerId} saved={savedHole(cardFor(round, group.playerIds[0]), hole.number)}
+          draft={drafts.get(entryKey(group.playerIds[0], hole.number))}
+          disabled={busy || !canEditGroup || drafts.get(entryKey(group.playerIds[0], hole.number))?.status === 'conflict'}
+          onNassauChange={(records) => { editMatch({ nassau: records }); }}
+          onSpecialDotsChange={(records) => { editMatch({ dots: records }); }}
+          onWolfChange={(records) => { editMatch({ wolf: records }); }} />}
         gameControls={group.playerIds[0] && <RoundGameHoleControls round={round} groupNumber={group.number} holeNumber={hole.number}
           saved={savedHole(cardFor(round, group.playerIds[0]), hole.number)}
           draft={drafts.get(entryKey(group.playerIds[0], hole.number))}

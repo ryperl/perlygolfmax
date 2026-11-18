@@ -196,7 +196,7 @@
   final played holes after 16/7 in 18/9 holes. Persist the pre-write candidate
   receipt, use the next printed rotation for ties, and preserve the chosen Wolf
   after final holes start even when earlier corrections change standings.
-- Dots is an independent version-1 game: individual, fixed partners, or explicit
+- Legacy Dots version 1 supports individual, fixed partners, or explicit
   linked neutral contexts, never a Wolf-owned special subsystem. Standalone
   contexts stay independent until explicitly linked. Each qualifying occurrence
   shares with current teammates; Walk, manual Pickup and failed called
@@ -212,6 +212,23 @@
   Assassin needs both approach qualifiers in a 2-v-2 side; Sweep needs real linked
   High/Low outcomes, not fabricated standalone contests. Thief/presets/Sixes
   engines remain deferred. Dots cannot stack with Churchy.
+- Rotating Dots version 2 shares specials for Modified Sixes (three played
+  holes) and Sixes (six), not a full base-match engine. First-played-hole P1–P4
+  order cycles 12/34, 13/24, 14/23 from an acknowledged canonical group-first
+  card receipt. Missing order is pending, never inferred fixed partners.
+  Preserve the immutable order/origin on clears/raw-only edits and mark absent
+  order recovery late on the server. No retrospective reshuffle or invented
+  High/Low/Sweep. Require explicit `dotsRulesVersions` support, keep legacy
+  definitions/results unchanged and retain group/input/revision/audit checks.
+  New/changed declarations enforce same-source-golfer/whole-hole exclusions:
+  Hogan/Seve, Pully with Dime/SuperDime, Hogan with Murphy/Chippy. Shared
+  teammate awards may differ. Hogan/Seve with Walk warns but is allowed.
+  Do not make old version-1 records unreadable or silently delete old awards.
+  Keep automatic-award choices in setup only; score entry has manual tap
+  choices/counters below each golfer alongside KP, not a keyboard-heavy form.
+  Select all applies only to compatible setup rules and preserves custom units.
+  Explicit Par for blanks fills untouched unplayed fields using personal par;
+  never overwrite saved/typed/cleared/pickup values or imply an automatic save.
 - Public pre-scoring internal-game setup in ordinary active events is explicitly
   allowed for Dots, new Wolf and enabled Churchy only. Check both old/new game
   scope, unchanged protected peers, actual saved groups, version and setup locks.

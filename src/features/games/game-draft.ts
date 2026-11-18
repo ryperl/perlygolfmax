@@ -16,6 +16,8 @@ export interface GameDraft {
   readonly wolfVersion?: 1 | 2;
   readonly stake?: string;
   readonly dotsMode?: DotsGameDefinition['mode'];
+  readonly dotsVersion?: 1 | 2;
+  readonly dotsRotationHoles?: 3 | 6;
   readonly dotsPlayers?: readonly string[];
   readonly dotsPlayerIds?: readonly string[];
   readonly dotsSpecials?: readonly DotsSpecialSelection[];
@@ -49,6 +51,7 @@ export interface GameDraft {
 
 export function draftFromGame(game: RoundGameDefinition): GameDraft {
   if (game.kind === 'dots') return { ...newGameDraft(), id: game.id, name: game.name, kind: 'dots',
+    dotsVersion: game.version, ...(game.version === 2 ? { dotsRotationHoles: game.rotationHoles } : {}),
     groupNumber: game.groupNumber, dotsMode: game.mode, dotsPlayers: game.mode === 'fixed' ? game.partnerIds : game.playerIds, dotsPlayerIds: game.playerIds,
     dotsSpecials: game.specials, ...(game.mode === 'linked' ? { linkedGameId: game.linkedGameId }
       : { stake: game.stakeMinor === null ? '' : moneyText(game.stakeMinor) }) };
@@ -172,9 +175,11 @@ export function buildGame(draft: GameDraft, playerIds: readonly string[] = []): 
   if (draft.kind === 'dots') {
     const stake = draft.stake?.trim() ? parseMoney(draft.stake) : null;
     if (draft.stake?.trim() && stake === null) return null;
-    const common = { id: draft.id, name: draft.name.trim(), kind: 'dots', version: 1,
+    if (draft.dotsVersion === 1 && draft.dotsMode === 'rotating' || draft.dotsVersion === 2 && draft.dotsMode !== 'rotating') return null;
+    const common = { id: draft.id, name: draft.name.trim(), kind: 'dots', version: draft.dotsMode === 'rotating' ? 2 : 1,
       groupNumber: draft.groupNumber, playerIds: draft.dotsPlayerIds ?? draft.dotsPlayers, specials: draft.dotsSpecials ?? [] };
-    const game = draft.dotsMode === 'linked' ? { ...common, mode: 'linked', linkedGameId: draft.linkedGameId }
+    const game = draft.dotsMode === 'rotating' ? { ...common, mode: 'rotating', rotationHoles: draft.dotsRotationHoles ?? 3, stakeMinor: stake }
+      : draft.dotsMode === 'linked' ? { ...common, mode: 'linked', linkedGameId: draft.linkedGameId }
       : draft.dotsMode === 'fixed' ? { ...common, mode: 'fixed', partnerIds: draft.dotsPlayers, stakeMinor: stake }
         : { ...common, mode: 'individual', stakeMinor: stake };
     return isDotsDefinition(game) && game.playerIds.every((id) => playerIds.includes(id)) ? game : null;
