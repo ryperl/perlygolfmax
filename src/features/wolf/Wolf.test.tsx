@@ -5,6 +5,7 @@ import { calculateWolf } from '../../domain/wolf';
 import { strokeGameFixture, strokeGameId } from '../../domain/stroke-games.test-support';
 import { WolfHoleControls } from './WolfHoleControls';
 import { WolfResults } from './WolfResults';
+import { WolfSoloProgress } from './WolfSoloProgress';
 
 function fixture() {
   const f = strokeGameFixture();
@@ -15,6 +16,31 @@ function fixture() {
 }
 
 describe('Wolf declarations and ledger', () => {
+  it('uses names only for partners and tracks acknowledged solo turns without counting a draft or blocking choices', () => {
+    const { f, game: legacy, wolfId } = fixture();
+    const game: WolfGameDefinition = { ...legacy, version: 2, stakeMinor: null };
+    const records: WolfHoleRecord[] = [{ number: 1, choice: { gameId: game.id, gameEtag: 'current', mode: 'pig' } }];
+    const result = calculateWolf(game, { layout: f.snapshot.teeProfile.holes, groups: f.snapshot.groups,
+      players: f.cards.map((card) => ({ playerId: card.playerId, displayName: card.displayName,
+        layout: f.snapshot.teeProfile.holes, strokeAllocation: true, handicap: 0 })) }, f.cards, records);
+    const props = { game, wolfId, holeNumber: 1, etag: 'current', saved: undefined, draft: records[0], players: f.cards,
+      disabled: false, onChange: vi.fn() };
+    const view = render(<WolfHoleControls {...props} holes={[]} />);
+    expect(screen.getByLabelText('Saved solo Wolf turns')).toHaveTextContent(f.cards[0]?.displayName ?? '');
+    expect(screen.getByRole('option', { name: f.cards[1]?.displayName ?? '' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Partner:|immediately after/ })).not.toBeInTheDocument();
+    view.rerender(<WolfHoleControls {...props} holes={result.holes} />);
+    expect(screen.getByLabelText('Saved solo Wolf turns')).not.toHaveTextContent(f.cards[0]?.displayName ?? '');
+    expect(screen.getByLabelText('Saved solo Wolf turns')).toHaveTextContent('Reminder only; play is not blocked.');
+    expect(screen.getByLabelText('Wolf declaration')).toBeEnabled();
+    const first = result.holes[0];
+    if (!first) throw new Error('Missing fictional Wolf hole');
+    view.rerender(<WolfSoloProgress game={game} players={f.cards} holes={game.playerIds.map((id, index) => ({
+      ...first, number: index + 1, wolfId: id, mode: index % 2 ? 'blind' : 'pig',
+    }))} />);
+    expect(screen.getByLabelText('Saved solo Wolf turns')).toHaveTextContent('Everyone has a saved solo Wolf or PIG turn.');
+  });
+
   it('stages an authoritative available comeback receipt for earned Wolf without exposing proof or legacy conceded outcomes', () => {
     const { f, game: legacy, wolfId } = fixture();
     const game: WolfGameDefinition = { ...legacy, version: 2, stakeMinor: null };
@@ -61,6 +87,7 @@ describe('Wolf declarations and ledger', () => {
       players: f.cards, disabled: false, onChange };
     const view = render(<WolfHoleControls {...props} />);
     expect(screen.getByLabelText('Wolf match outcome')).toBeDisabled();
+    fireEvent.click(screen.getByText('Timing & rules'));
     expect(screen.getByText(/before anyone tees off/)).toBeVisible();
     fireEvent.change(screen.getByLabelText('Wolf declaration'), { target: { value: 'pig' } });
     const staged = onChange.mock.calls[0]?.[0];

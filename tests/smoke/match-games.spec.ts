@@ -122,7 +122,7 @@ async function narrowControls(page: Page, scope: Locator) {
 }
 
 for (const theme of ['light', 'dark']) {
-  test(`Nassau and Wolf setup, below-score declarations and saved-only results at narrow ${theme}`, async ({ page }, testInfo) => {
+  test(`Nassau and Wolf setup, declaration placement and saved-only results at narrow ${theme}`, async ({ page }, testInfo) => {
     test.setTimeout(30000);
     const fixture = await openFixture(page, testInfo);
     try {
@@ -157,11 +157,27 @@ for (const theme of ['light', 'dark']) {
       const form = page.getByRole('form', { name: 'Group 1 hole 1 entry', exact: true });
       const controls = form.locator('.round-game-hole-controls');
       expect(await form.evaluate((element) => element.querySelector('form'))).toBeNull();
-      expect(await controls.evaluate((element) => {
+      const wolfControls = form.getByRole('group', { name: 'Wolf · Hole 1', exact: true });
+      const nassauControls = form.getByRole('group', { name: 'Nassau · Match outcomes and presses', exact: true });
+      expect(await wolfControls.evaluate((element) => {
+        const scores = element.closest('form')?.querySelector('.group-entry-rows');
+        return !!scores && (element.compareDocumentPosition(scores) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+      })).toBe(true);
+      expect((await wolfControls.boundingBox())?.height).toBeLessThanOrEqual(350);
+      expect(await nassauControls.evaluate((element) => {
         const scores = element.closest('form')?.querySelector('.group-entry-rows');
         return !!scores && (scores.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
       })).toBe(true);
       await narrowControls(page, controls);
+      if (testInfo.project.name === 'iphone-16-pro-webkit') {
+        await form.getByRole('combobox', { name: 'Wolf declaration', exact: true })
+          .evaluate((element) => { element.scrollIntoView({ block: 'center' }); });
+        await expect.poll(() => form.getByRole('combobox', { name: 'Wolf declaration', exact: true }).evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          return document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) === element;
+        })).toBe(true);
+        await wolfControls.screenshot({ path: `coverage/wolf-declaration-${theme}-phone.png` });
+      }
       await expect(form.locator('button[type="submit"], button:not([type])')).toHaveCount(1);
       await form.getByRole('combobox', { name: 'Wolf declaration', exact: true }).selectOption('pig');
       await form.getByRole('combobox', { name: 'Side A vs Side B · Hole 1', exact: true }).selectOption('side-a');

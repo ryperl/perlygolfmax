@@ -7,6 +7,35 @@ import { DotsHoleControls } from './DotsHoleControls';
 import { dotsFixture } from './dots.test-support';
 
 describe('separate Dots hole declarations', () => {
+  it.each([['kp', 'KP', 3], ['blue-plate', 'Blue Plate', 5], ['long-drive', 'Long Drive', 5]] as const)(
+    'offers optional second %s qualifiers only in partnered Assassin contexts and preserves the first winner on clear', (kind, label, par) => {
+      const f = dotsFixture();
+      const game: DotsGameDefinition = { ...f.game, mode: 'fixed', partnerIds: f.ids,
+        specials: [{ kind, units: 1 }, { kind: 'assassin', units: 1 }] };
+      const saved: DotsHoleRecord = { number: 1, gameId: game.id, gameEtag: 'fictional',
+        players: [], contests: [{ kind, status: 'awarded', winnerId: f.ids[0] ?? '' }] };
+      const onChange = vi.fn<(record: DotsHoleRecord) => void>();
+      const props = { players: f.round.cards, holeNumber: 1, par, etag: 'fictional', saved,
+        draft: undefined, groupOnly: true, disabled: false, onChange };
+      const view = render(<DotsHoleControls {...props} game={game} />);
+      const second = screen.getByLabelText(new RegExp(`${label} second-`));
+      expect(second).toHaveValue('');
+      expect(screen.getByRole('option', { name: 'Not relevant' })).toBeInTheDocument();
+      fireEvent.change(second, { target: { value: f.ids[1] } });
+      expect(onChange.mock.lastCall?.[0].contests).toEqual([{ kind, status: 'awarded', winnerId: f.ids[0], secondId: f.ids[1] }]);
+      view.rerender(<DotsHoleControls {...props} game={game} draft={onChange.mock.lastCall?.[0]} />);
+      fireEvent.change(screen.getByLabelText(new RegExp(`${label} second-`)), { target: { value: '' } });
+      expect(onChange.mock.lastCall?.[0].contests).toEqual(saved.contests);
+      view.rerender(<DotsHoleControls {...props} game={f.game} />);
+      expect(screen.queryByLabelText(new RegExp(`${label} second-`))).not.toBeInTheDocument();
+      const linked: DotsGameDefinition = { id: game.id, name: game.name, kind: 'dots', version: 1,
+        mode: 'linked', linkedGameId: 'fictional-wolf', groupNumber: 1, playerIds: f.ids, specials: game.specials };
+      view.rerender(<DotsHoleControls {...props} game={linked} context={{ number: 1, status: 'ready',
+        sides: [f.ids.slice(0, 1), f.ids.slice(1)], multiplier: 2 }} />);
+      expect(screen.queryByLabelText(new RegExp(`${label} second-`))).not.toBeInTheDocument();
+    },
+  );
+
   it.each(['individual', 'fixed'] as const)('omits empty %s group chrome on ordinary holes, including zero-only drafts', (mode) => {
     const f = dotsFixture();
     const game: DotsGameDefinition = mode === 'fixed' ? { ...f.game, mode, partnerIds: f.ids } : { ...f.game, mode };

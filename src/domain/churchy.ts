@@ -260,7 +260,7 @@ export function calculateChurchyResults(game: ChurchyGameDefinition, inputs: rea
       const sandy = extras?.version === 2 ? extras.sandyCount : extras?.sandy ? 1 : 0;
       for (const [count, special] of [[enabled('sandy') ? sandy : 0, 'Sandy'], [enabled('pully') && extras?.pully ? 1 : 0, 'Pully']] as const) {
         if (!count) continue;
-        if (gross === entry.hole.par) award(special, true, count);
+        if (gross === entry.hole.par || special === 'Pully' && gross === entry.hole.par - 1) award(special, true, count);
         else specials.push({ special, playerId: entry.id, outcome: 'ineligible', winners: [], dots: 0 });
       }
       if (enabled('birdie') && gross === entry.hole.par - 1) award('Birdie', true, game.version === 2 ? 2 : 1);

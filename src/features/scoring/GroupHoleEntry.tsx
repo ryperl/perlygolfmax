@@ -40,6 +40,7 @@ export interface GroupHoleEntryRow {
   readonly grossProgress?: SavedGrossProgress;
 }
 export interface GroupHoleEntryProps {
+  readonly beforeScores?: ReactNode;
   readonly gameControls?: ReactNode;
   readonly playerGameControls?: (playerId: string) => ReactNode;
   readonly kpEligible?: boolean;
@@ -71,7 +72,7 @@ export interface GroupHoleEntryProps {
 
 export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, readOnly, unsavedCount, focusHole, feedbackState,
   onGroupChange, onHoleChange, onEdit, onReview, onDiscard, onDiscardAll, onSave, onRefresh, churchy, gameEtag, onDotsEdit,
-  kpEligible, kpClosed, onKpEdit, gameControls, playerGameControls, churchyV2Supported = false }: GroupHoleEntryProps) {
+  kpEligible, kpClosed, onKpEdit, gameControls, playerGameControls, beforeScores, churchyV2Supported = false }: GroupHoleEntryProps) {
   const previous = adjacentHole(layout, hole.number, -1);
   const next = adjacentHole(layout, hole.number, 1);
   const last = next?.number === groupStartingHole(groups.find((group) => group.number === groupNumber), layout);
@@ -145,6 +146,7 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
       <button type="button" aria-label="Next hole" disabled={busy || !next || layout.length < 2} onClick={() => { if (next) onHoleChange(next.number); }}>→</button>
     </header>
     <form aria-label={`Group ${String(groupNumber)} hole ${String(hole.number)} entry`} onSubmit={(event) => { event.preventDefault(); onSave(); }}>
+      {beforeScores}
       <div className="group-entry-rows">{rows.slice(0, 4).map((row, rowIndex) => {
         const playerHole = row.hole ?? hole;
         const quickScores = [...new Set([playerHole.par - 1, playerHole.par, playerHole.par + 1, playerHole.par + 2])].filter((value) => value > 0);

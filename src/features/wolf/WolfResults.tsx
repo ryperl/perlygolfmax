@@ -1,4 +1,5 @@
 import type { WolfGameDefinition, WolfResults as Results } from '../../domain/wolf';
+import { WolfSoloProgress } from './WolfSoloProgress';
 
 export function WolfResults({ game, result }: {
   readonly game: WolfGameDefinition;
@@ -10,6 +11,7 @@ export function WolfResults({ game, result }: {
     <p>{game.basis === 'gross' ? 'Gross' : 'Net · 100% captured CH off lowest four'} · {game.version === 2 ? 'Saved earned dots' : 'Legacy transfer balance'} · Ties zero, no carry</p>
     {!result ? <p>Saved Wolf results unavailable. Refresh to retry.</p> : <>
       <p>{result.status}{game.version === 1 && ' · No dollar settlement'}</p>
+      <WolfSoloProgress game={game} holes={result.holes} players={result.players} />
       <div className="game-scroll" role="region" aria-label="Wolf ledger" tabIndex={0}><table>
         <caption>{game.version === 2 ? 'Saved earned base-game dots · Not transfers' : 'Saved zero-sum dot ledger'}</caption>
         <thead><tr><th scope="col">Golfer</th>{game.version === 1 && <><th scope="col">Won</th><th scope="col">Lost</th></>}

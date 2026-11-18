@@ -99,6 +99,32 @@ describe('optional independent Dots/Wolf composition', () => {
     expect(corrected?.holes.filter((hole) => hole.number >= 17).map((hole) => hole.wolfId)).toEqual([f.ids[2], f.ids[2]]);
   });
 
+  it('retains progressive linked dots and resolves hole 17 after a saved birdie Pully and all prefix declarations', () => {
+    const f = fixture();
+    const scorer = f.ids[2];
+    if (!scorer) throw new Error('Missing fictional golfer');
+    const dots: DotsGameDefinition = { ...f.dots, specials: [...f.dots.specials,
+      { kind: 'pully', units: 1 }, { kind: 'hogan', units: 1 }, { kind: 'birdie', units: 2 }] };
+    const cards = f.cards.map((card): Scorecard => ({ ...card, holes: card.holes.map((hole) => {
+      let score: HoleScore = hole.score;
+      if (hole.number === 15 && card.playerId === scorer) score = { ...score, kind: 'strokes', strokes: 3 };
+      if (hole.number === 15 && card.playerId === f.anchor) score = { ...score, dots: [{
+          number: 15, gameId: dots.id, gameEtag: 'fictional-game-revision',
+          players: [{ playerId: scorer, counts: { hogan: 1, pully: 1 }, calls: [] }], contests: [],
+        }] };
+      return { ...hole, score };
+    }) }));
+    const games = [f.wolf, dots];
+    const results = calculateInternalGameResults(games, f.round(cards, games));
+    expect(results.get(dots.id)?.dots?.issues).toEqual([]);
+    expect(results.get(dots.id)?.dots?.holes[0]?.points.map((point) => point.dots)).toEqual([1, 1, 0, 0]);
+    expect(results.get(f.wolf.id)?.wolf?.comeback?.status).toBe('available');
+    expect(results.get(f.wolf.id)?.wolf?.holes.find((hole) => hole.number === 17)?.wolfId).not.toBeNull();
+    const missingChoice = cards.map((card) => card.playerId === f.anchor ? { ...card,
+      holes: card.holes.map((hole) => hole.number === 16 ? { ...hole, score: { ...hole.score, wolf: [] } } : hole) } : card);
+    expect(calculateInternalGameResults(games, f.round(missingChoice, games)).get(f.wolf.id)?.wolf?.comeback?.status).toBe('pending');
+  });
+
   it('runs standalone Dots without any Wolf and keeps malformed linked games unavailable', () => {
     const f = fixture();
     const standalone: DotsGameDefinition = { id: f.dots.id, name: f.dots.name, kind: 'dots', version: 1,

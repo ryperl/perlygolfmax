@@ -35,7 +35,7 @@ describe('Churchy version 2 independent awards and money', () => {
     const birdie = calculateGameResults([f.game], f.snapshot,
       strokeGameCards(cards, 1, [{ kind: 'strokes', strokes: 3, churchy: { ...f.extras, sandyCount: 5, pully: true } }]))[0];
     expect(birdie?.churchy?.holes[0]?.specials).toContainEqual(expect.objectContaining({ special: 'Sandy', outcome: 'ineligible', dots: 0 }));
-    expect(birdie?.churchy?.holes[0]?.specials).toContainEqual(expect.objectContaining({ special: 'Pully', outcome: 'ineligible', dots: 0 }));
+    expect(birdie?.churchy?.holes[0]?.specials).toContainEqual(expect.objectContaining({ special: 'Pully', outcome: 'made', dots: 1 }));
   });
 
   it.each(['unplayed', 'picked-up', 'did-not-finish'] as const)(

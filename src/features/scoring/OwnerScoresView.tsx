@@ -394,6 +394,13 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
       {screen === 'entry' && !canEditGroup && writeIds.length > 0 && !accessChanged && <p>This playing group is read-only. Select your assigned playing group to enter scores.</p>}
       {round.eventStatus === 'archived' && <p role="status">Archived event: owner read-only. Drafts cannot be saved.</p>}
       {screen === 'entry' && group && hole && <GroupHoleEntry groups={round.groups} groupNumber={group.number} layout={round.layout} hole={hole}
+        beforeScores={group.playerIds[0] && <RoundGameHoleControls round={round} groupNumber={group.number} holeNumber={hole.number} placement="wolf"
+          saved={savedHole(cardFor(round, group.playerIds[0]), hole.number)}
+          draft={drafts.get(entryKey(group.playerIds[0], hole.number))}
+          disabled={busy || !canEditGroup || drafts.get(entryKey(group.playerIds[0], hole.number))?.status === 'conflict'}
+          onNassauChange={(records) => { editMatch({ nassau: records }); }}
+          onSpecialDotsChange={(records) => { editMatch({ dots: records }); }}
+          onWolfChange={(records) => { editMatch({ wolf: records }); }} />}
         playerGameControls={(playerId) => group.playerIds[0] && <RoundGameHoleControls round={round} groupNumber={group.number}
           holeNumber={hole.number} playerId={playerId} saved={savedHole(cardFor(round, group.playerIds[0]), hole.number)}
           draft={drafts.get(entryKey(group.playerIds[0], hole.number))}
@@ -401,7 +408,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
           onNassauChange={(records) => { editMatch({ nassau: records }); }}
           onSpecialDotsChange={(records) => { editMatch({ dots: records }); }}
           onWolfChange={(records) => { editMatch({ wolf: records }); }} />}
-        gameControls={group.playerIds[0] && <RoundGameHoleControls round={round} groupNumber={group.number} holeNumber={hole.number}
+        gameControls={group.playerIds[0] && <RoundGameHoleControls round={round} groupNumber={group.number} holeNumber={hole.number} placement="other"
           saved={savedHole(cardFor(round, group.playerIds[0]), hole.number)}
           draft={drafts.get(entryKey(group.playerIds[0], hole.number))}
           disabled={busy || !canEditGroup || drafts.get(entryKey(group.playerIds[0], hole.number))?.status === 'conflict'}

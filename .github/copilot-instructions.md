@@ -196,6 +196,9 @@
   final played holes after 16/7 in 18/9 holes. Persist the pre-write candidate
   receipt, use the next printed rotation for ties, and preserve the chosen Wolf
   after final holes start even when earlier corrections change standings.
+  Put Wolf declaration before scores with name-only partner options. Remind
+  who still needs a solo Wolf/PIG using acknowledged choices only; never block
+  play or override comeback selection to enforce the reminder.
 - Legacy Dots version 1 supports individual, fixed partners, or explicit
   linked neutral contexts, never a Wolf-owned special subsystem. Standalone
   contexts stay independent until explicitly linked. Each qualifying occurrence
@@ -203,13 +206,18 @@
   Paree/Murphy/Pully Murphy award opponents (other three in individual play).
   Count repeated fairway/greenside Sandys, including a separately called Paree.
   Hogan/Seve/Sandy/Paree/Murphy/Haz Par/Chippy allow gross par or better;
-  par-3 Hogan/Seve omit fairway conditions. Pully/Pully Murphy require their long
-  par putt. SuperDime replaces Dime; Eagle never also earns Birdie. Derive
+  par-3 Hogan/Seve omit fairway conditions. Pully allows its long par or birdie
+  putt; called Pully Murphy retains its long par requirement. Birdie does not
+  infer Hogan; a qualified manual Hogan may stack. SuperDime replaces Dime;
+  Eagle never also earns Birdie. Derive
   streaks from acknowledged scores and actual play order, not drafts.
   Category carries resolve independently in actual order; final unclaimed stays
   unawarded. King requires every eligible category-hole award owned directly or
   through carry, individual x1 only after complete inputs. No fixed hole counts.
-  Assassin needs both approach qualifiers in a 2-v-2 side; Sweep needs real linked
+  Assassin needs both approach qualifiers or both longest drives in a 2-v-2
+  side. Optional second KP/Blue Plate/Long Drive selections never win extra
+  category dots; absent seconds mean no Assassin, not a pending decision.
+  Hide seconds in individual/solo contexts. Sweep needs real linked
   High/Low outcomes, not fabricated standalone contests. Thief/presets/Sixes
   engines remain deferred. Dots cannot stack with Churchy.
 - Rotating Dots version 2 shares specials for Modified Sixes (three played
@@ -271,7 +279,8 @@
   lowest CH on each personal tee. High/Low carry independently across the turn;
   sweep is current stake only. Earned dots credit both partners in full, never
   netted. Calls Paree/Murphy are gross par-or-better; Murphy presses are explicit
-  initial/opposing/calling stages 1/2/3. Sandy/Pully require confirmed exact par;
+  initial/opposing/calling stages 1/2/3. Sandy requires confirmed exact par;
+  Pully allows confirmed par or birdie in either Churchy version.
   automatic birdie is exactly one under. Legacy version 1 has no eagle dots.
   Pickup/DNF
   loses High to an all-numeric pair; remaining numeric Low still competes.

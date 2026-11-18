@@ -11,6 +11,8 @@ import { canManageGame, canManageRoundGames } from './game-permissions';
 import { GameSettings } from './GameSettings';
 import { RoundGamesPanel } from './RoundGamesPanel';
 import { RoundGameHoleControls } from './RoundGameHoleControls';
+import { matchGamesFixture } from '../../domain/match-games.test-support';
+import { wolfForHole } from '../../domain/wolf';
 
 beforeAll(() => {
   Object.defineProperties(HTMLDialogElement.prototype, {
@@ -24,6 +26,34 @@ afterAll(() => {
 });
 
 describe('separate internal game setup and capability boundaries', () => {
+  it('identifies a missing hole-16 declaration before hole 17, then enables only the authoritative recovered choice', () => {
+    const f = matchGamesFixture();
+    const wolf: WolfGameDefinition = { ...f.wolf, version: 2, stakeMinor: null };
+    const anchor = f.ids[0];
+    if (!anchor) throw new Error('Missing fictional anchor');
+    const cards = f.cards.map((card) => card.playerId === anchor ? { ...card, holes: card.holes.map((hole) => {
+      const wolfId = wolfForHole(wolf, { layout: f.snapshot.teeProfile.holes, groups: f.snapshot.groups }, hole.number);
+      const partnerId = f.ids.find((id) => id !== wolfId);
+      if (!partnerId) throw new Error('Missing fictional partner');
+      return { ...hole, score: { ...hole.score, wolf: hole.number <= 15
+        ? [{ number: hole.number, choice: { gameId: wolf.id, gameEtag: 'fictional-game-revision', mode: 'partner' as const, partnerId } }] : [] } };
+    }) } : card);
+    const round = { ...f.round(cards, [wolf]), wolfRulesVersions: [1, 2] as const };
+    const props = { round, groupNumber: 1, holeNumber: 17, saved: { kind: 'strokes' as const, strokes: 4 },
+      disabled: false, onNassauChange: vi.fn(), onWolfChange: vi.fn() };
+    const view = render(<RoundGameHoleControls {...props} />);
+    expect(screen.getByRole('alert')).toHaveTextContent("Hole 16: record Fictional golfer 4's Wolf declaration.");
+    expect(screen.getByLabelText('Wolf declaration')).toBeDisabled();
+    const recovered = cards.map((card) => card.playerId === anchor ? { ...card, holes: card.holes.map((hole) =>
+      hole.number === 16 ? { ...hole, score: { ...hole.score, wolf: [{
+        number: 16, choice: { gameId: wolf.id, gameEtag: 'fictional-game-revision', mode: 'blind' as const },
+      }] } } : hole) } : card);
+    view.rerender(<RoundGameHoleControls {...props} round={{ ...round, ...f.round(recovered, [wolf]) }} />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Wolf declaration')).toBeEnabled();
+    expect(screen.getByText(/Comeback Wolf:/)).toBeVisible();
+  });
+
   it('visibly distinguishes multiple golfer Dots sources while keeping one compact and routing edits to the chosen game', () => {
     const f = dotsFixture();
     if (!f.round.games) throw new Error('Missing fictional games.');
@@ -228,7 +258,7 @@ describe('separate internal game setup and capability boundaries', () => {
     const props = { round: changed, groupNumber: 1, holeNumber: 1, saved: { kind: 'unplayed' as const },
       disabled: false, onNassauChange: vi.fn(), onWolfChange: vi.fn() };
     const view = render(<RoundGameHoleControls {...props} />);
-    expect(screen.getByText(`Wolf: ${round.cards.find((card) => card.playerId === selected)?.displayName ?? ''} · Wolf tees last. Timing is honor-system.`)).toBeVisible();
+    expect(screen.getByText(`Wolf: ${round.cards.find((card) => card.playerId === selected)?.displayName ?? ''} · Tees last`)).toBeVisible();
     expect(screen.queryByLabelText('Wolf match outcome')).not.toBeInTheDocument();
     expect(canManageGame({ ...changed, wolfRulesVersions: [1] }, wolf)).toBe(false);
     view.rerender(<RoundGameHoleControls {...props} round={{ ...changed, wolfRulesVersions: [1] }} />);

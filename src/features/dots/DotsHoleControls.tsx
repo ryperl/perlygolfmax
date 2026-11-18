@@ -73,15 +73,15 @@ export function DotsHoleControls({ game, holeNumber, par, playerPars, etag, save
         }}><option value="">Decision pending</option><option value="none">No qualifier · Carry category</option>
           {game.playerIds.map((id) => <option key={id} value={id}>{name(id)}</option>)}</select></label>
         <small>{kind === 'long-drive' ? 'Par-5 fairway qualifier.' : `Par-${kind === 'kp' ? '3' : '5'} GIR qualifier.`} Missing input is pending, never no qualifier.</small>
-        {kind !== 'long-drive' && enabled('assassin') && partnered && contest?.status === 'awarded' && <label>
-          {label} second-closest qualifier · Assassin<select value={contest.secondId ?? ''} onChange={(event) => {
+        {enabled('assassin') && partnered && contest?.status === 'awarded' && <label>
+          {label} {kind === 'long-drive' ? 'second-longest' : 'second-closest'} qualifier · Assassin<select value={contest.secondId ?? ''} onChange={(event) => {
             const secondId = event.target.value;
             const { secondId: previous, ...rest } = contest;
             void previous;
             changeContest(secondId ? { ...rest, secondId } : rest);
-          }}><option value="">Not confirmed</option>{game.playerIds.filter((id) => id !== contest.winnerId).map((id) =>
+          }}><option value="">Not relevant</option>{game.playerIds.filter((id) => id !== contest.winnerId).map((id) =>
             <option key={id} value={id}>{name(id)}</option>)}</select>
-          <small>Confirm both closest qualifying approaches; Assassin requires teammates ahead of both opponents.</small>
+          <small>Optional. Assassin requires teammates ahead of both opponents; only the first golfer wins the category.</small>
         </label>}
       </div>;
     })}

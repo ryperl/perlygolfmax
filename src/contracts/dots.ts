@@ -71,7 +71,7 @@ export function isDotsHoleRecord(value: unknown): value is DotsHoleRecord {
     contests.push(String(contest.kind));
     if (contest.status === 'awarded') {
       if (!isUuid(contest.winnerId) || contest.secondId !== undefined && (!isUuid(contest.secondId)
-        || contest.secondId === contest.winnerId || contest.kind === 'long-drive')) return false;
+        || contest.secondId === contest.winnerId)) return false;
     } else if (contest.status !== 'no-qualifier' || Object.hasOwn(contest, 'winnerId') || Object.hasOwn(contest, 'secondId')) return false;
   }
   return distinct(playerIds) && distinct(callIds) && distinct(contests);

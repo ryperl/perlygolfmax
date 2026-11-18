@@ -133,7 +133,7 @@ describe('shared match game setup and presentation', () => {
     const onWolfChange = vi.fn(), onNassauChange = vi.fn();
     render(<RoundGameHoleControls round={round} groupNumber={1} holeNumber={1} saved={{ kind: 'unplayed' }}
       draft={{ wolf: [sibling] }} disabled={false} onWolfChange={onWolfChange} onNassauChange={onNassauChange} />);
-    expect(screen.getByText('Wolf: Fictional golfer 4 · Wolf tees last. Timing is honor-system.')).toBeVisible();
+    expect(screen.getByText('Wolf: Fictional golfer 4 · Tees last')).toBeVisible();
     fireEvent.change(screen.getByLabelText('Wolf declaration'), { target: { value: 'pig' } });
     expect(onWolfChange).toHaveBeenCalledWith([sibling, { number: 1,
       choice: { gameId: wolf.id, gameEtag: 'fictional-game-v1', mode: 'pig' } }]);

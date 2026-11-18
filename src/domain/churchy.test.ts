@@ -95,8 +95,8 @@ describe('Churchy earned dots, independent carries and shared pot', () => {
     const result = calculateGameResults([f.game], f.snapshot, cards)[0];
     expect(result?.churchy?.holes.slice(0, 3).map((hole) => hole.specials.find((award) => award.special === 'Murphy')?.dots)).toEqual([1, 2, 3]);
     expect(result?.churchy?.holes[0]?.specials.map((award) => award.special)).toEqual(['Paree', 'Murphy', 'Sandy', 'Pully']);
-    expect(result?.churchy?.holes[3]?.specials.filter((award) => award.special !== 'Sweep' && award.outcome !== 'ineligible').map((award) => award.special)).toEqual(['Birdie']);
-    expect(result?.churchy?.holes[3]?.specials.filter((award) => award.outcome === 'ineligible').map((award) => award.special)).toEqual(['Sandy', 'Pully']);
+    expect(result?.churchy?.holes[3]?.specials.filter((award) => award.special !== 'Sweep' && award.outcome !== 'ineligible').map((award) => award.special)).toEqual(['Pully', 'Birdie']);
+    expect(result?.churchy?.holes[3]?.specials.filter((award) => award.outcome === 'ineligible').map((award) => award.special)).toEqual(['Sandy']);
     expect(result?.churchy?.holes[4]?.specials.filter((award) => award.special !== 'Sweep')).toEqual([]);
   });
   it('distinguishes NH/missing allocation/stale group from scratch, without fabricating dots or money', () => {

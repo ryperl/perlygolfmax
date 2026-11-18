@@ -713,8 +713,10 @@ except Birdie 2 and Eagle 5. All of these rules use gross qualifications:
   can earn three Sandys. A separately called Paree can additionally award for
   the same fairway bunker. Called Paree/Murphy/Pully Murphy have pending,
   successful and failed outcomes; failed calls award the opposing side.
-- Pully/Pully Murphy specifically require their long gross par putt. Pully
-  Murphy needs its own call and may stack with Pully/Murphy. SuperDime replaces
+- Pully requires a long putt for gross par or birdie. Called Pully Murphy still
+  requires its long gross par putt, needs its own call and may stack with
+  Pully/Murphy. A birdie may also earn a manually confirmed Hogan when the
+  fairway/GIR conditions are met; Birdie never invents Hogan. SuperDime replaces
   Dime. Gorilla is a personal par-5 green in two regardless of final score.
 - New or changed declarations reject Hogan with Seve, Pully with Dime/SuperDime,
   and Hogan with Murphy/Chippy for the **same qualifying golfer and hole**.
@@ -731,10 +733,15 @@ except Birdie 2 and Eagle 5. All of these rules use gross qualifications:
   Categories carry independently to their next eligible played hole, with
   the eventual winner's current teammates and multiplier. Final unclaimed
   units stay unawarded, not paid retroactively or rolled into another round.
+  In a partnered Assassin context, optionally select the second closest KP
+  or Blue Plate qualifier, or second longest fairway drive. The second golfer
+  receives no separate category award. Leave it Not relevant when unknown;
+  no Assassin is inferred. Individual and solo Wolf contexts omit these controls.
 - King is an individual x1 round-end bonus per category. One golfer must own
   every eligible hole's award directly or through carry; final unclaimed
   awards prevent that category's King. Actual layout counts determine coverage.
-  Assassin needs both closest qualifiers in a 2-v-2 side. Sweep needs actual
+  Assassin needs both closest approach qualifiers or both longest drives in a
+  2-v-2 side. Each category is checked independently. Sweep needs actual
   linked High and Low wins by the same pair; neither is invented for unsupported
   standalone/individual contexts.
 
@@ -975,7 +982,9 @@ pair, otherwise the opponents win. Murphy stages are initial 1, opposing-team
 press 2, calling-team press-back 3, with no further presses or verified
 individual attribution. Sandy requires confirmed greenside up-and-down at
 exact gross par; multiple qualifying Sandys can be recorded for the same golfer
-on one hole. Pully requires a confirmed par putt longer than the flagstick.
+on one hole. Pully requires a confirmed par or birdie putt longer than the
+flagstick. This applies to both Churchy versions without changing their
+separate points schedules or settlement formulas; Sandy still needs exact par.
 Enabled exact gross Birdie earns **2** automatically; Eagle earns **4** instead,
 never Eagle plus Birdie. **Sticky** is a scorer-confirmed approach inside the
 flagstick length, worth **1** without extra score qualification or measurement.

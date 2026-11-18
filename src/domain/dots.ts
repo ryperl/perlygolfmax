@@ -18,7 +18,7 @@ export const dotsSpecialCatalog: readonly {
   { kind: 'long-drive', label: 'Long Drive', description: 'Longest qualifying fairway drive on each par 5; category carry.', defaultUnits: 1, automatic: false },
   { kind: 'paree', label: 'Paree', description: 'Separately called fairway-bunker recovery, gross par or better; failure awards opponents.', defaultUnits: 1, automatic: false },
   { kind: 'sandy', label: 'Sandy', description: 'Each bunker recovery, gross par or better.', defaultUnits: 1, automatic: false },
-  { kind: 'pully', label: 'Pully', description: 'Hole a gross par putt longer than the flagstick.', defaultUnits: 1, automatic: false },
+  { kind: 'pully', label: 'Pully', description: 'Hole a putt longer than the flagstick for gross par or birdie.', defaultUnits: 1, automatic: false },
   { kind: 'dime', label: 'Dime', description: 'Approach inside the flagstick; replaced by SuperDime.', defaultUnits: 1, automatic: false },
   { kind: 'super-dime', label: 'SuperDime', description: 'Approach inside the putter, replacing Dime.', defaultUnits: 1, automatic: false },
   { kind: 'kp', label: 'KP', description: 'Closest qualifying GIR on each par 3; category carry.', defaultUnits: 1, automatic: false },
@@ -32,7 +32,7 @@ export const dotsSpecialCatalog: readonly {
   { kind: 'birdy-string', label: 'BirdyString', description: 'Third consecutive gross birdie or better, and every subsequent qualifying hole.', defaultUnits: 1, automatic: true },
   { kind: 'blue-plate', label: 'Blue Plate', description: 'Closest qualifying GIR on each par 5; category carry.', defaultUnits: 1, automatic: false },
   { kind: 'king-of-the-hill', label: 'King of the Hill', description: 'Individual round-end ownership of every award in a category; never shared or multiplied.', defaultUnits: 1, automatic: true },
-  { kind: 'assassin', label: 'Assassin', description: 'A partnered pair holds both closest qualifying approaches on a par 3 or 5.', defaultUnits: 1, automatic: true },
+  { kind: 'assassin', label: 'Assassin', description: 'A partnered pair holds both closest qualifying approaches or both longest qualifying par-5 drives.', defaultUnits: 1, automatic: true },
   { kind: 'walk', label: 'Walk', description: 'Manually declared three-putt awards the opposing side.', defaultUnits: 1, automatic: false },
   { kind: 'sweep', label: 'Sweep', description: 'The same partnered pair wins linked High and Low.', defaultUnits: 1, automatic: true },
   { kind: 'chippy', label: 'Chippy', description: 'Chip in, gross par or better.', defaultUnits: 1, automatic: false },
@@ -124,6 +124,8 @@ const exact = (value: bigint): number | null => value >= 0n && value <= BigInt(N
 const sum = (values: readonly number[]): number | null => exact(values.reduce((total, value) => total + BigInt(value), 0n));
 const unique = (values: readonly unknown[]) => new Set(values).size === values.length;
 const positive = (value: number) => Number.isSafeInteger(value) && value > 0;
+const pullyScore = (strokes: number | null, par: number | undefined) => par !== undefined
+  && (strokes === par || strokes === par - 1);
 const sameMembers = (left: readonly string[], right: readonly string[]) =>
   left.length === right.length && unique(left) && left.every((id) => right.includes(id));
 
@@ -193,7 +195,7 @@ export function dotsRecordsMatchGame(
         if (!count) continue;
         if (kind === 'gorilla' && par !== 5) return false;
         if (score?.kind === 'strokes' && (parQualified.some((entry) => entry === kind) && (par === undefined || score.strokes > par)
-          || kind === 'pully' && score.strokes !== par)) return false;
+          || kind === 'pully' && !pullyScore(score.strokes, par))) return false;
         if (score && score.kind !== 'unplayed' && score.kind !== 'strokes'
           && (parQualified.some((entry) => entry === kind) || kind === 'pully')) return false;
       }
@@ -212,7 +214,7 @@ export function dotsRecordsMatchGame(
       if (contest.status === 'awarded') {
         if (!contest.winnerId || !game.playerIds.includes(contest.winnerId)
           || contest.secondId !== undefined && (!game.playerIds.includes(contest.secondId)
-            || contest.secondId === contest.winnerId || contest.kind === 'long-drive')) return false;
+            || contest.secondId === contest.winnerId)) return false;
       } else if (contest.winnerId !== undefined || contest.secondId !== undefined) return false;
     }
     if (game.mode === 'linked' && contexts.length && contextFor(game, record.number, contexts).status === 'unavailable') return false;
@@ -299,7 +301,7 @@ export function calculateDots(
         if (kind === 'dime' && (declaration?.counts['super-dime'] ?? 0) > 0) continue;
         if ((parQualified.includes(kind) || kind === 'pully') && pending) { mark(hole, 'pending', 'special-needs-score'); continue; }
         if (parQualified.includes(kind) && (strokes === null || par === undefined || strokes > par)
-          || kind === 'pully' && strokes !== par || kind === 'gorilla' && par !== 5) continue;
+          || kind === 'pully' && !pullyScore(strokes, par) || kind === 'gorilla' && par !== 5) continue;
         add(kind, playerId, kind === 'walk' || kind === 'pickup' ? opponents(playerId) : own(playerId),
           count, 'manual', [hole.number], `Declared ${String(count)} ${kind}; qualifying gross facts are honor-system claims.`);
       }
@@ -331,11 +333,12 @@ export function calculateDots(
       const carry = carries.get(kind);
       if (!carry) continue;
       const contest = record?.contests.find((entry) => entry.kind === kind);
-      if (contest?.status === 'awarded' && contest.winnerId && kind !== 'long-drive' && contest.secondId
+      if (contest?.status === 'awarded' && contest.winnerId && contest.secondId
         && context.sides.length === 2 && context.sides.every((side) => side.length === 2)
         && own(contest.winnerId).includes(contest.secondId)) {
         add('assassin', contest.winnerId, own(contest.winnerId), 1, 'derived', [hole.number],
-          'Both closest qualifying approaches belong to the same pair.', kind);
+          kind === 'long-drive' ? 'Both longest qualifying drives belong to the same pair.'
+            : 'Both closest qualifying approaches belong to the same pair.', kind);
       }
       if (carry.blocked) { mark(hole, carry.blocked, 'earlier-contest-unresolved'); continue; }
       if (!contest) { carry.blocked = 'pending'; mark(hole, 'pending', 'missing-contest-decision'); continue; }

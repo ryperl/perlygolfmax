@@ -101,13 +101,13 @@ export function ChurchyDots({ name, number, value, disabled, onChange, game, cou
       }} />Sandy confirmed · greenside up-and-down · exact gross par</label>}
       {enabled('pully') && <label><input type="checkbox" checked={value.pully} onChange={(event) => {
         onChange({ ...value, pully: event.target.checked });
-      }} />Pully confirmed · par putt longer than flagstick</label>}
+      }} />Pully confirmed · par or birdie putt longer than flagstick</label>}
       <details><summary>Special rules</summary>
         <p>Save &amp; Next saves scores and specials together. Each award credits both current partners in full; enter it only for the golfer who earned it.</p>
         <p>Paree and Murphy require gross par or better. A missed call awards the opponents. Murphy presses progress 1 → 2 → 3.</p>
         {value.version === 2 ? <p>Enabled Birdie earns 2 on exactly one under; Eagle earns 4 on exactly two under, never both.
           Each Sandy is 1 on exact gross par. Sticky is scorer-confirmed, with no final-score restriction. Other accepts any nonnegative whole count.</p>
-          : <p>Birdie is automatic for 1 dot. Sandy and Pully require exact gross par. No eagle award or Paree presses.</p>}
+          : <p>Birdie is automatic for 1 dot. Sandy requires exact gross par; Pully allows par or birdie. No eagle award or Paree presses.</p>}
       </details>
       <button ref={close} type="button" onClick={() => { dialog.current?.close(); }}>Return to score entry</button>
     </dialog>

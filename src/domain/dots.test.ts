@@ -128,7 +128,7 @@ describe('independent Dots earning and declarations', () => {
     expect(totals(calculateDots(game, personal, [record(1, [declaration('A', { [kind]: 1 })])]))).toEqual([1, 0, 0, 0]);
   });
 
-  it('requires gross par for Pully/Pully Murphy and explicitly stacks independent calls', () => {
+  it('keeps called Pully Murphy at gross par and explicitly stacks independent calls', () => {
     const { game, round } = fixture([4], ['pully', 'murphy', 'pully-murphy']);
     const records = [record(1, [declaration('A', { pully: 1 }, [
       { id: 'call-A', kind: 'murphy', result: 'success' }, { id: 'call-B', kind: 'pully-murphy', result: 'success' },
@@ -137,6 +137,25 @@ describe('independent Dots earning and declarations', () => {
     expect(calculateDots(game, setScores(round, 'A', [{ kind: 'strokes', strokes: 3 }]), records).status).toBe('unavailable');
     const pending = [record(1, [declaration('A', {}, [{ id: 'call-A', kind: 'murphy', result: 'pending' }])])];
     expect(calculateDots(game, round, pending)).toMatchObject({ status: 'in-progress', awards: [] });
+  });
+
+  it('shares a declared birdie Pully and qualified Hogan alongside automatic Birdie without inventing Hogan', () => {
+    const { game, round } = fixture([4], ['pully', 'hogan', 'birdie']);
+    const birdie = setScores(round, 'A', [{ kind: 'strokes', strokes: 3 }]);
+    const records = [record(1, [declaration('A', { pully: 1, hogan: 1 })])];
+    expect(dotsRecordsMatchGame(records, game, birdie)).toBe(true);
+    for (const candidate of [fixed(game), linked(game)]) {
+      const result = calculateDots(candidate, birdie, records, [context()]);
+      expect(result.status).toBe('complete');
+      expect(result.awards.map((award) => [award.kind, award.dots])).toEqual([['hogan', 1], ['pully', 1], ['birdie', 2]]);
+      expect(totals(result)).toEqual([4, 4, 0, 0]);
+    }
+    const automatic = calculateDots(game, birdie, []);
+    expect(automatic.awards.map((award) => award.kind)).toEqual(['birdie']);
+    expect(totals(automatic)).toEqual([2, 0, 0, 0]);
+    for (const score of [{ kind: 'strokes', strokes: 5 }, { kind: 'picked-up' }, { kind: 'did-not-finish' }] satisfies readonly HoleScore[]) {
+      expect(dotsRecordsMatchGame(records, game, setScores(round, 'A', [score]))).toBe(false);
+    }
   });
 
   it('keeps stable call IDs only in ledger bookkeeping, not player-facing explanations', () => {
@@ -168,6 +187,27 @@ describe('independent Dots earning and declarations', () => {
 });
 
 describe('automatic gross awards and actual-order dependencies', () => {
+  it.each([['kp', 3], ['blue-plate', 5], ['long-drive', 5]] as const)(
+    'uses an optional second %s qualifier only for same-side Assassin, never a second category win', (kind, par) => {
+      const { game, round } = fixture([par], [kind, 'assassin']);
+      const candidate = fixed(game);
+      const first: DotsContest = { kind, status: 'awarded', winnerId: 'A' };
+      for (const secondId of [undefined, 'B', 'C']) {
+        const contest = { ...first, ...(secondId ? { secondId } : {}) };
+        const records = [record(1, [], [contest])];
+        const result = calculateDots(candidate, round, records);
+        const assassin = secondId === 'B' ? 1 : 0;
+        expect(result.awards.filter((award) => award.kind === kind)).toHaveLength(1);
+        expect(result.awards.filter((award) => award.kind === 'assassin')).toHaveLength(assassin);
+        expect(result.awards.filter((award) => award.kind === kind || award.kind === 'assassin')
+          .reduce((sum, award) => sum + award.dots, 0)).toBe(1 + assassin);
+      }
+      const solo = calculateDots(linked(game), round, [record(1, [], [{ ...first, secondId: 'B' }])],
+        [context(1, 2, [['A'], ['B', 'C', 'D']])]);
+      expect(solo.awards.some((award) => award.kind === 'assassin')).toBe(false);
+    },
+  );
+
   it('Eagle excludes Birdie but continues BirdyString; albatross has no invented base award', () => {
     const { game, round } = fixture([5, 5, 5, 5], ['birdie', 'eagle', 'birdy-string']);
     const result = calculateDots(game, setScores(round, 'A', [4, 3, 4, 2].map((strokes) => ({ kind: 'strokes', strokes }))), []);

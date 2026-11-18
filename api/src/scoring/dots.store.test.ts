@@ -42,6 +42,27 @@ function record(game: DotsGameDefinition, round: RoundScores, playerId: string, 
 }
 
 describe('persisted independent Dots and earned Wolf authority', () => {
+  it('accepts a confirmed birdie Pully with Hogan and preserves its automatic Birdie without accepting bogey Pully', async () => {
+    const f = await publicFixture();
+    const game = { ...dots(f.input.playerIds), specials: [
+      { kind: 'pully' as const, units: 1 }, { kind: 'hogan' as const, units: 1 }, { kind: 'birdie' as const, units: 2 },
+    ] };
+    const round = (await f.scores.saveGames(f.actor, event.id, f.roundId, [game], null, identifier(21200))).round;
+    const par = round.layout[0]?.par;
+    if (!par) throw new Error('Missing fictional par');
+    const special: DotsHoleRecord = { number: 1, gameId: game.id, gameEtag: round.games?.configuration.etag ?? '',
+      players: [{ playerId: f.playerId, counts: { hogan: 1, pully: 1 }, calls: [] }], contests: [] };
+    const saved = await f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+      { kind: 'strokes', strokes: par - 1, dots: [special] }, null, identifier(21201));
+    expect(saved.round.games?.results[0]?.dots?.awards.map((award) => [award.kind, award.dots]))
+      .toEqual([['hogan', 1], ['pully', 1], ['birdie', 2]]);
+    expect(saved.round.games?.results[0]?.dots?.issues).toEqual([]);
+    expect((await f.scores.get(f.actor, event.id, f.roundId)).games?.results).toEqual(saved.round.games?.results);
+    await expect(f.scores.write(f.actor, event.id, f.roundId, f.playerId, 2,
+      { kind: 'strokes', strokes: par + 1, dots: [{ ...special, number: 2 }] },
+      etag(saved.round, f.playerId), identifier(21202))).rejects.toMatchObject({ code: 'DOTS_SETUP_CHANGED' });
+  });
+
   it('does not let narrow public setup reorder protected event-wide games while adding an internal game', async () => {
     const f = await publicFixture();
     const protectedGames = [stableford(21100), stableford(21101)];

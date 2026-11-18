@@ -223,6 +223,24 @@ Bulk Par is explicit, draft-only and preserves saved values, intentional
 clears and other staged game edits. The same acknowledged Save & Next publishes
 the intended score/special changes; no new browser score persistence is added.
 
+Dots and Churchy Pully accepts a confirmed long putt for gross par or birdie.
+Do not invalidate a birdie Pully or erase its saved declaration. A manually
+qualified Hogan may stack with Birdie in Dots; gross score alone cannot prove
+fairway/GIR. Called Dots Pully Murphy retains its separate long-par requirement.
+Churchy Sandy, version-specific points and settlement math are unchanged.
+
+Optional second KP/Blue Plate/Long Drive qualifiers are Assassin evidence
+only in an actual partnered 2-v-2 context. The first golfer remains the sole
+category winner. Missing seconds are not relevant, never a pending requirement.
+Old records without seconds remain unchanged; each category can independently
+derive one Assassin award for its current pair. No shot distances are inferred.
+
+Wolf declaration appears before score fields without saving independently.
+Solo Wolf/PIG reminders count acknowledged choices, never drafts; they do not
+restrict declarations or change the final-two-hole comeback selection.
+Missing prefix choices/scores remain blockers and identify the earlier holes
+for review. Do not select a fabricated comeback Wolf to bypass missing data.
+
 ## Estimated round differentials
 
 The approved differential feature is a derived 18-hole, PCC-zero estimate, not

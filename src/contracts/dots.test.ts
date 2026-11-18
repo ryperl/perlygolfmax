@@ -157,6 +157,13 @@ describe('Dots network contracts', () => {
     expect(calculateDots(game, round, [corrected]).awards.find((award) => award.kind === 'paree')?.recipientIds).toEqual([B, C, D]);
   });
 
+  it.each(['kp', 'blue-plate', 'long-drive'])('accepts an optional distinct second %s qualifier without requiring one', (kind) => {
+    for (const secondId of [undefined, B]) expect(isDotsHoleRecord({ ...record, contests: [
+      { kind, status: 'awarded', winnerId: A, ...(secondId ? { secondId } : {}) },
+    ] })).toBe(true);
+    expect(isDotsHoleRecord({ ...record, contests: [{ kind, status: 'awarded', winnerId: A, secondId: A }] })).toBe(false);
+  });
+
   it.each(['birdie', 'eagle', 'string', 'birdy-string', 'king-of-the-hill', 'assassin', 'sweep', 'kp', 'blue-plate', 'long-drive', 'paree', 'murphy', 'pully-murphy', 'thief'])(
     'rejects automatic/contest/call kind %s in ordinary manual counts', (kind) => {
       expect(isDotsHoleRecord({ ...record, players: [{ playerId: A, counts: { [kind]: 1 }, calls: [] }] })).toBe(false);
@@ -178,7 +185,6 @@ describe('Dots network contracts', () => {
     [{ kind: 'kp', status: 'skip' }],
     [{ kind: 'kp', status: 'awarded' }],
     [{ kind: 'kp', status: 'awarded', winnerId: A, secondId: A }],
-    [{ kind: 'long-drive', status: 'awarded', winnerId: A, secondId: B }],
     [{ kind: 'kp', status: 'no-qualifier', winnerId: A }],
     [{ kind: 'kp', status: 'no-qualifier' }, { kind: 'kp', status: 'awarded', winnerId: A }],
   ])('rejects ambiguous/unsupported contest snapshots %j', (...contests) => {

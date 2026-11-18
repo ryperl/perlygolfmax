@@ -311,12 +311,21 @@ test('linked earned Wolf and Dots retain separate ledgers and one individual set
   const fixture = await openDotsFixture(page, testInfo, 'linked');
   try {
     const form = page.getByRole('form', { name: 'Group 1 hole 1 entry', exact: true });
-    await form.getByRole('combobox', { name: 'Wolf declaration', exact: true }).selectOption('pig');
+    const declaration = form.getByRole('combobox', { name: 'Wolf declaration', exact: true });
+    const declarationBox = await declaration.boundingBox(), scoreBox = await form.locator('.entry-value input').first().boundingBox();
+    expect(declarationBox && scoreBox && declarationBox.y < scoreBox.y).toBe(true);
+    await expect(declaration.getByRole('option', { name: 'Fictional golfer 2', exact: true })).toHaveCount(1);
+    await expect(declaration.getByRole('option', { name: /Partner:|immediately after/ })).toHaveCount(0);
+    await expect(form.getByLabel('Saved solo Wolf turns')).toContainText('Fictional golfer 1');
+    await declaration.selectOption('pig');
+    await expect(form.getByLabel('Saved solo Wolf turns')).toContainText('Fictional golfer 1');
     await expect(form.getByRole('combobox', { name: 'Wolf match outcome', exact: true })).toHaveCount(0);
     await stageSpecials(form, 'Fictional linked specials');
     for (const input of await form.locator('.group-entry-rows input[inputmode="numeric"]').all()) await input.fill('4');
     await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Hole 2', exact: true })).toBeVisible();
+    await expect(page.getByRole('form', { name: 'Group 1 hole 2 entry', exact: true })
+      .getByLabel('Saved solo Wolf turns')).not.toContainText('Fictional golfer 1');
     expect(fixture.counters().requests[0]?.score).toMatchObject({ dots: [{ players: [{ counts: { sandy: 3 } }, {}] }], wolf: [{ choice: { mode: 'pig' } }] });
     await page.getByRole('button', { name: 'Games', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Fictional earned Wolf results', exact: true }).getByRole('columnheader', { name: 'Earned dots', exact: true })).toBeVisible();
