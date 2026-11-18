@@ -417,6 +417,33 @@ The existing optional organizer index-refresh action remains setup-only and
 audited. Correcting a started round is a separately approved data repair, not
 ordinary catalog propagation, and must preserve raw cards, score audits and locks.
 
+The approved **The Group** shortcut is an explicit exception, not automatic
+catalog propagation. `GET /api/catalog/players/<player-id>` reads one protected
+profile. The client records a manual observation with local today/GHIN defaults,
+then `POST /api/events/<event-id>/players/<player-id>/handicap-refresh` sends only
+its acknowledged `observationId`, exact `If-Match` event revision and stable
+`Idempotency-Key`. Both handler and store require catalog-manager authority;
+event ownership alone is insufficient. Ready public Quick rounds do not need a
+fabricated owner row. No anonymous correction or public observation/history
+projection is introduced.
+
+The server validates the selected event's roster, authoritative catalog
+observation and saved score dispositions. It updates only unfinished started
+rounds in that event, atomically with the conditional event revision and private
+receipt. Every golfer must have every captured hole saved before a round is
+considered complete; pickup/DNF count as dispositions. A racing last score
+invalidates the event revision rather than letting a completed round be changed.
+Completed and archived rounds stay untouched. Original capture receipts, raw
+cards/ETags, tees/groups and locks remain; corrected input revisions reject stale
+scoring drafts. Net outcomes are derived again without altering strokes.
+
+Catalog and event writes cross partitions and are not represented as one atomic
+transaction. The UI distinguishes confirmed catalog success from an unconfirmed
+event refresh, retains retry identity/payload across midnight, and requires
+review after a revision conflict. The optional `/me`
+`playerHandicapUpdatesSupported` capability must be explicitly true before
+showing the shortcut. GHIN is a manual source label, not external verification.
+
 Organizer tools use MSAL authorization code with PKCE against a dedicated customer
 tenant's hosted email one-time-passcode flow. Golfers require no account or
 sign-in. Configure organizer OTP from the start; changing a password flow later does
@@ -641,7 +668,9 @@ Events have `active` or `archived` status. Existing records without a status
 are read as active; invalid stored values fail explicitly. The default list
 contains active events for authoritative members. `GET /api/events?status=archived`
 returns only archived events owned by the caller, with the same bounded paging.
-Archive discovery never grants access based on the global creator setting.
+Ordinary archive discovery never grants access based on the global creator
+setting. A separate organizer-only Quick-round directory exposes allowlisted
+active/archived summaries under the explicit recovery policy below.
 
 An event owner can `PATCH /api/events/<event-id>/status` with JSON
 `{"status":"archived"}` or `{"status":"active"}` and the event's exact `If-Match`
@@ -654,9 +683,35 @@ Nonowners cannot manage events, and nonmembers receive no event-existence detail
 Archiving hides an event from active lists and from ordinary members; restoring
 returns it to its existing members. Metadata, membership and other event data
 are not deleted. Creation retries do not restore an already archived event.
-There is no permanent-delete endpoint, automatic expiry, retention policy or
-new backup guarantee. Detail, score and invitation endpoints enforce
+There is no automatic expiry, retention schedule or new backup guarantee.
+Detail, score and invitation endpoints enforce
 these lifecycle rules independently of discovery.
+
+### Organizer Quick-round recovery and permanent deletion
+
+The bootstrapped organizer may list authoritative, fully published Quick-round
+headers in bounded pages, including legacy archives without an owner membership.
+This is a separate protected directory; it does not fabricate an owner or expose
+archived scorecards through public routes. The UI explicitly loads pages and
+retains progress for retries rather than publishing an incomplete list as a
+complete search. Ordinary owner discovery is unchanged.
+
+Quick-round restore is authenticated, revision-conditional and idempotent.
+It checks the stored Quick policy, retains all event data and records the real
+organizer actor. Anonymous visitors may still archive a ready active Quick
+round, but cannot list archives or restore. Ordinary event restore keeps its
+conditional owner-grant check.
+
+Permanent deletion is restricted to archived events and the global organizer;
+ordinary events additionally require current owner authority. The UI requires
+exact event-name confirmation. A conditional deletion claim fences reads,
+writes, restore and delayed retries before paginated cleanup removes event-owned
+rows, staged/private fragments, audit/capture data and external event locators.
+Shared player/course catalogs, unrelated events and shared request budgets remain.
+Partial failures are explicit and resumable, never acknowledged as completed.
+A minimal nonbusiness tombstone prevents identifier reuse/resurrection; platform
+backup/log erasure is not claimed. No real event is deleted by deploying the
+feature, and no migration or automatic retention policy is introduced.
 
 The current scoring slice is online: per-hole
 gross strokes, unplayed holes and explicit pickup/DNF dispositions with audited

@@ -60,9 +60,12 @@ describe('manager player catalog', () => {
     await user.click(screen.getByRole('button', { name: 'Resume player draft' }));
     expect(screen.getByLabelText('Player display name')).toHaveValue('Fictional draft');
     expect(screen.getByLabelText('Initial handicap index (optional)')).toHaveValue('0');
+    const date = screen.getByLabelText<HTMLInputElement>('Initial index effective date').value;
+    expect(date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(screen.getByLabelText('Initial index manual source')).toHaveValue('GHIN');
     await user.click(screen.getByRole('button', { name: 'Save player' }));
-    expect(screen.getByLabelText('Initial index effective date')).toBeInvalid();
-    expect(client.createPlayer).not.toHaveBeenCalled();
+    expect(client.createPlayer).toHaveBeenCalledWith('Fictional draft', expect.any(String), expect.any(AbortSignal),
+      { value: '0', effectiveDate: date, source: 'GHIN' });
   });
   it('preserves profile and handicap drafts across sections and requires an explicit discard before closing', async () => {
     const client = fakeCatalog();
@@ -110,8 +113,9 @@ describe('manager player catalog', () => {
     await waitFor(() => { expect(name).toBeEnabled(); });
     await user.type(name, 'Fictional Initial Player');
     await user.type(screen.getByLabelText('Initial handicap index (optional)'), '+1.2');
+    await user.clear(screen.getByLabelText('Initial index effective date'));
     await user.type(screen.getByLabelText('Initial index effective date'), '2026-01-02');
-    expect(screen.getByLabelText('Initial index manual source')).toHaveValue('Manual organizer entry');
+    expect(screen.getByLabelText('Initial index manual source')).toHaveValue('GHIN');
     await user.click(screen.getByRole('button', { name: 'Save player' }));
     await screen.findByText('Atomic creation response lost.');
     expect(name).toHaveValue('Fictional Initial Player');
@@ -121,17 +125,17 @@ describe('manager player catalog', () => {
     expect(name).toBeDisabled();
     const calls = vi.mocked(client.createPlayer).mock.calls;
     expect(calls[0]?.[1]).toBe(calls[1]?.[1]);
-    expect(calls[1]?.[3]).toEqual({ value: '+1.2', effectiveDate: '2026-01-02', source: 'Manual organizer entry' });
+    expect(calls[1]?.[3]).toEqual({ value: '+1.2', effectiveDate: '2026-01-02', source: 'GHIN' });
     const requestId = calls[1]?.[1];
     if (!requestId) throw new Error('Missing fictional request ID.');
     await act(async () => {
-      finish?.({ ...player, id: requestId, displayName: 'Fictional Initial Player', currentIndex: { ...observation, id: requestId, source: 'Manual organizer entry' } });
+      finish?.({ ...player, id: requestId, displayName: 'Fictional Initial Player', currentIndex: { ...observation, id: requestId, source: 'GHIN' } });
       await saved;
     });
     await screen.findByText('Player and initial manual handicap observation saved together.');
     expect(name).toHaveValue('');
     expect(screen.getByLabelText('Initial handicap index (optional)')).toHaveValue('');
-    expect(screen.getByLabelText('Initial index effective date')).toHaveValue('');
+    expect(screen.getByLabelText<HTMLInputElement>('Initial index effective date').value).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(client.recordIndex).not.toHaveBeenCalled();
     expect(screen.getByRole('heading', { name: 'Fictional Initial Player' })).toBeVisible();
   });
@@ -145,6 +149,7 @@ describe('manager player catalog', () => {
     await waitFor(() => { expect(screen.getByLabelText('Player display name')).toBeEnabled(); });
     await user.type(screen.getByLabelText('Player display name'), 'Fictional Optional Player');
     await user.type(screen.getByLabelText('Initial handicap index (optional)'), '12.3');
+    await user.clear(screen.getByLabelText('Initial index effective date'));
     await user.click(screen.getByRole('button', { name: 'Save player' }));
     expect(screen.getByLabelText('Initial index effective date')).toBeInvalid();
     expect(client.createPlayer).not.toHaveBeenCalled();
@@ -271,7 +276,9 @@ describe('manager player catalog', () => {
     expect(client.history).toHaveBeenCalledTimes(1);
     await act(async () => { finish?.({ observations: [observation] }); await initial; });
     await user.type(screen.getByLabelText('Handicap index (explicit + supported)'), '+2.1');
+    await user.clear(screen.getByLabelText('Effective date'));
     await user.type(screen.getByLabelText('Effective date'), '2026-01-02');
+    await user.clear(screen.getByLabelText('Manual source'));
     await user.type(screen.getByLabelText('Manual source'), 'Fictional self-report');
     await user.click(screen.getByRole('checkbox', { name: /I confirm/ }));
     await user.click(screen.getByRole('button', { name: 'Save manual index' }));
@@ -338,7 +345,9 @@ describe('manager player catalog', () => {
     await user.click(screen.getByRole('button', { name: 'Handicap' }));
     expect(screen.getByRole('button', { name: 'Save manual index' })).toBeDisabled();
     await user.type(screen.getByLabelText('Handicap index (explicit + supported)'), '+1.2');
+    await user.clear(screen.getByLabelText('Effective date'));
     await user.type(screen.getByLabelText('Effective date'), '2026-01-02');
+    await user.clear(screen.getByLabelText('Manual source'));
     await user.type(screen.getByLabelText('Manual source'), 'Fictional self-report');
     await user.click(screen.getByRole('checkbox', { name: /I confirm this manual observation/ }));
     await user.click(screen.getByRole('button', { name: 'Save manual index' }));
@@ -350,7 +359,7 @@ describe('manager player catalog', () => {
     await user.click(screen.getByText('Observation details', { selector: 'summary' }));
     expect(screen.getByText(/recorded by/)).toHaveTextContent(observation.recordedBy.objectId);
     await user.click(screen.getByRole('button', { name: 'Handicap' }));
-    expect(screen.getByText(/Captured round inputs do not automatically change/)).toBeVisible();
+    expect(screen.getByText(/Use The Group to also update unfinished rounds/)).toBeVisible();
     expect(screen.getByRole('checkbox', { name: /I confirm/ })).not.toBeChecked();
   });
 
@@ -362,7 +371,9 @@ describe('manager player catalog', () => {
     await user.click(await screen.findByRole('button', { name: 'Edit Fictional Player 1' }));
     await user.click(screen.getByRole('button', { name: 'Handicap' }));
     await user.type(screen.getByLabelText('Handicap index (explicit + supported)'), '12.3');
+    await user.clear(screen.getByLabelText('Effective date'));
     await user.type(screen.getByLabelText('Effective date'), '2026-01-02');
+    await user.clear(screen.getByLabelText('Manual source'));
     await user.type(screen.getByLabelText('Manual source'), 'Fictional manual report');
     await user.click(screen.getByRole('checkbox', { name: /I confirm/ }));
     await user.click(screen.getByRole('button', { name: 'Save manual index' }));
@@ -391,7 +402,9 @@ describe('manager player catalog', () => {
     await user.click(await screen.findByRole('button', { name: 'Edit Fictional Player 1' }));
     await user.click(screen.getByRole('button', { name: 'Handicap' }));
     await user.type(screen.getByLabelText('Handicap index (explicit + supported)'), '5');
+    await user.clear(screen.getByLabelText('Effective date'));
     await user.type(screen.getByLabelText('Effective date'), '2026-01-02');
+    await user.clear(screen.getByLabelText('Manual source'));
     await user.type(screen.getByLabelText('Manual source'), 'Fictional report');
     await user.click(screen.getByRole('checkbox', { name: /I confirm/ }));
     await user.click(screen.getByRole('button', { name: 'Save manual index' }));

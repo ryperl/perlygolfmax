@@ -28,6 +28,47 @@ function fixture() {
 }
 
 describe('bounded authorized catalog/setup HTTP handlers', () => {
+  it('reads one private player without a catalog directory scan and preserves manager authentication', async () => {
+    const f = fixture();
+    const player = await f.players.create(creator, identifier(200), 'Fictional Single Player');
+    expect(await f.call('player', 'GET', undefined, { playerId: player.id })).toMatchObject({ status: 200, jsonBody: player });
+    expect(f.list).not.toHaveBeenCalled();
+    f.api.verify.mockResolvedValue(member);
+    expect(await f.call('player', 'GET', undefined, { playerId: player.id })).toMatchObject({ status: 403 });
+  });
+
+  it('validates narrow event-player refresh requests, authenticates managers and charges setup budgets', async () => {
+    const f = fixture();
+    const params = { id: event.id, playerId: identifier(200) };
+    const headers = { 'If-Match': 'fictional-event-revision', 'Idempotency-Key': identifier(900) };
+    const body = { observationId: identifier(800) };
+    const refresh = vi.spyOn(f.workspace, 'refreshPlayerIndex').mockImplementation(async (_identity, _eventId, _playerId,
+      _observationId, _etag, _requestId, chargeRound) => {
+      await chargeRound?.();
+      return { eventId: event.id, playerId: params.playerId, etag: 'fictional-new-revision',
+        updatedRoundIds: [identifier(500)], completedRoundIds: [] };
+    });
+    expect(await f.call('event-player-index-refresh', 'POST', body, params, headers)).toMatchObject({ status: 200 });
+    expect(refresh).toHaveBeenCalledWith(creator, event.id, params.playerId, body.observationId,
+      headers['If-Match'], headers['Idempotency-Key'], expect.any(Function));
+    expect(f.api.limiter.check).toHaveBeenCalledWith(creator, 'setup-write');
+    expect(f.api.limiter.check).toHaveBeenCalledWith(creator, 'setup-read');
+    refresh.mockClear();
+    for (const invalid of [{}, null, { observationId: 'invalid' }, { ...body, value: '18' },
+      { ...body, recordedBy: creator }, { ...body, applyToStarted: true }]) {
+      expect(await f.call('event-player-index-refresh', 'POST', invalid, params, headers)).toMatchObject({ status: 400 });
+    }
+    expect(await f.call('event-player-index-refresh', 'POST', body, params, { ...headers, 'If-Match': '*' })).toMatchObject({ status: 400 });
+    expect(await f.call('event-player-index-refresh', 'POST', body, params, { ...headers, 'Idempotency-Key': '*' })).toMatchObject({ status: 400 });
+    expect(await f.call('event-player-index-refresh', 'GET', undefined, params, headers)).toMatchObject({ status: 405 });
+    expect(await f.call('event-player-index-refresh', 'POST', `${JSON.stringify(body)}${' '.repeat(4096)}`, params, headers)).toMatchObject({ status: 413 });
+    expect(refresh).not.toHaveBeenCalled();
+    f.api.verify.mockResolvedValue(member);
+    expect(await f.call('event-player-index-refresh', 'POST', body, params, headers)).toMatchObject({ status: 403 });
+    f.api.verify.mockRejectedValue(new ApiError(401, 'AUTHENTICATION_REQUIRED'));
+    expect(await f.call('event-player-index-refresh', 'POST', body, params, headers)).toMatchObject({ status: 401 });
+    expect(refresh).not.toHaveBeenCalled();
+  });
   it('saves and reloads a five-round twelve-golfer setup above the old host ceiling with course-local tee times', async () => {
     const f = fixture();
     f.seedEvent();

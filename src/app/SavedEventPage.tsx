@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import type { CatalogClient } from '../client/catalog';
 import { SessionExpiredError } from '../client/events';
 import type { SetupClient } from '../client/setup';
 import type { ScoresClient } from '../client/scoring';
@@ -7,18 +8,21 @@ import type { EventWorkspace } from '../domain/setup';
 import { EventTripView, summarizeEntryProgress } from '../features/event-trip';
 import type { EventEntryProgress, RoundEntryProgressState } from '../features/event-trip';
 import type { EventTab } from './navigation';
+const PlayerHandicapDialog = lazy(async () => ({ default: (await import('../features/catalog')).PlayerHandicapDialog }));
 
 type SavedEventState =
   | { readonly kind: 'loading' }
   | { readonly kind: 'ready'; readonly workspace: EventWorkspace }
   | { readonly kind: 'error'; readonly message: string };
 
-export function SavedEventPage({ client, scores, eventId, view, onSessionExpired }: {
+export function SavedEventPage({ client, scores, catalog, eventId, view, onSessionExpired, onHandicapAccessLost }: {
   readonly client: SetupClient;
   readonly scores?: ScoresClient;
   readonly eventId: string;
   readonly view: EventTab;
   readonly onSessionExpired: (message: string) => void;
+  readonly catalog?: CatalogClient | undefined;
+  readonly onHandicapAccessLost?: ((message: string) => void) | undefined;
 }) {
   const [refresh, setRefresh] = useState(0);
   const [result, setResult] = useState<{
@@ -30,6 +34,18 @@ export function SavedEventPage({ client, scores, eventId, view, onSessionExpired
   const state: SavedEventState = result?.client === client && result.eventId === eventId && result.refresh === refresh
     ? result.state : { kind: 'loading' };
   const workspace = state.kind === 'ready' ? state.workspace : null;
+  const [editing, setEditing] = useState<{ readonly eventId: string; readonly catalog: CatalogClient; readonly playerId: string }>();
+  const [notice, setNotice] = useState<{ readonly eventId: string; readonly text: string }>();
+  const selected = editing?.eventId === eventId && editing.catalog === catalog && view === 'group'
+    && workspace?.event.status === 'active' ? workspace.roster.find((entry) => entry.playerId === editing.playerId) : undefined;
+  const section = useRef<HTMLElement>(null);
+  const returnFocus = useRef<string | null>(null);
+  useEffect(() => {
+    if (!workspace || !returnFocus.current) return;
+    const button = section.current?.querySelector(`[data-hi-player="${returnFocus.current}"]`);
+    if (button instanceof HTMLButtonElement) button.focus();
+    returnFocus.current = null;
+  }, [workspace]);
   const [progressResult, setProgressResult] = useState<{
     readonly workspace: EventWorkspace;
     readonly client: SetupClient;
@@ -104,10 +120,24 @@ export function SavedEventPage({ client, scores, eventId, view, onSessionExpired
     for (let index = 0; index < Math.min(3, workspace.rounds.length); index++) void worker();
     return () => { controller.abort(); };
   }, [workspace, client, scores, eventId, refresh]);
-  return <section>
-    <div className="event-actions"><button disabled={state.kind === 'loading'} onClick={() => { setRefresh((value) => value + 1); }}>Refresh event</button></div>
+  return <section ref={section}>
+    <div className="event-actions"><button disabled={state.kind === 'loading' || selected !== undefined} onClick={() => { setRefresh((value) => value + 1); }}>Refresh event</button></div>
+    {notice?.eventId === eventId && <p role="status">{notice.text}</p>}
     {state.kind === 'loading' && <p role="status">Loading saved event…</p>}
     {state.kind === 'error' && <div className="panel"><p role="alert">{state.message}</p><a href="#events">Choose another event</a></div>}
-    {state.kind === 'ready' && <EventTripView workspace={state.workspace} view={view} progress={progress} />}
+    {state.kind === 'ready' && <EventTripView workspace={state.workspace} view={view} progress={progress}
+      onEditHandicap={catalog ? (playerId) => { setEditing({ eventId, catalog, playerId }); setNotice(undefined); } : undefined} />}
+    {selected && catalog && <Suspense fallback={<p role="status">Loading HI editor…</p>}>
+      <PlayerHandicapDialog client={catalog} setup={client} eventId={eventId} playerId={selected.playerId}
+        displayName={selected.displayName} onSessionExpired={onHandicapAccessLost ?? onSessionExpired}
+        onClose={() => { setEditing(undefined); }}
+        onSaved={(result) => {
+          returnFocus.current = selected.playerId;
+          setEditing(undefined);
+          setNotice({ eventId, text: result.updatedRoundIds.length
+            ? 'HI saved and unfinished rounds updated. Completed rounds unchanged.' : 'HI saved. Completed rounds unchanged.' });
+          setRefresh((previous) => previous + 1);
+        }} />
+    </Suspense>}
   </section>;
 }

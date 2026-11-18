@@ -30,6 +30,8 @@ export interface EventMembership {
 export interface EventCapabilities {
   readonly canCreateEvents: boolean;
   readonly canManageCatalog: boolean;
+  readonly playerHandicapUpdatesSupported?: boolean;
+  readonly eventAdministrationSupported?: boolean;
 }
 
 export interface EventPage {

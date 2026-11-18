@@ -9,6 +9,21 @@ const player = fictionalPlayers[0];
 if (!player) throw new Error('Missing fictional player');
 
 describe('focused player editor', () => {
+  it('keeps untouched defaults clean and saves HI with today/GHIN without requiring date or source editing', async () => {
+    const client = fakeCatalog(), dirty = vi.fn(), user = userEvent.setup();
+    render(<PlayerEditor client={client} player={player} onSaved={vi.fn()} onBusy={vi.fn()} onDirty={dirty} blocked={false} onClose={vi.fn()} />);
+    await screen.findByText('Current HI:', { exact: false });
+    expect(dirty).toHaveBeenLastCalledWith(false);
+    await user.click(screen.getByRole('button', { name: 'Handicap' }));
+    const date = screen.getByLabelText<HTMLInputElement>('Effective date').value;
+    expect(date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(screen.getByLabelText('Manual source')).toHaveValue('GHIN');
+    await user.type(screen.getByLabelText('Handicap index (explicit + supported)'), '0');
+    await user.click(screen.getByRole('checkbox', { name: /I confirm/ }));
+    await user.click(screen.getByRole('button', { name: 'Save manual index' }));
+    expect(client.recordIndex).toHaveBeenCalledWith(player,
+      { value: '0', effectiveDate: date, source: 'GHIN' }, expect.any(String), expect.any(AbortSignal));
+  });
   it('keeps edits locked until initial history settles and hides audit identities behind history details', async () => {
     const client = fakeCatalog();
     let finish: ((history: PlayerIndexHistory) => void) | undefined;
@@ -43,7 +58,9 @@ describe('focused player editor', () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Handicap' }));
     await user.type(screen.getByLabelText('Handicap index (explicit + supported)'), '+1.2');
+    await user.clear(screen.getByLabelText('Effective date'));
     await user.type(screen.getByLabelText('Effective date'), '2026-01-01');
+    await user.clear(screen.getByLabelText('Manual source'));
     await user.type(screen.getByLabelText('Manual source'), 'Fictional report');
     await user.click(screen.getByRole('checkbox', { name: /I confirm/ }));
     await user.click(screen.getByRole('button', { name: 'Save manual index' }));

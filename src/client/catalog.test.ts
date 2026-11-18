@@ -12,6 +12,37 @@ const url = 'https://fictional.example.test/api';
 const token = () => Promise.resolve('fictional-token');
 
 describe('catalog API client', () => {
+  it('reads one protected player and conditionally refreshes only the selected event from an acknowledged observation', async () => {
+    const player = fictionalPlayers[0];
+    if (!player) throw new Error('Missing fictional player.');
+    const eventId = fictionalId(50), observationId = fictionalId(800), operationId = fictionalId(801);
+    const saved = { eventId, playerId: player.id, etag: 'event-v2',
+      updatedRoundIds: [fictionalId(70)], completedRoundIds: [fictionalId(71)] };
+    const send = vi.fn<typeof fetch>().mockResolvedValueOnce(response(player)).mockResolvedValueOnce(response(saved));
+    const client = createCatalogClient(url, token, send);
+    await expect(client.player(player.id, signal())).resolves.toEqual(player);
+    await expect(client.refreshEventIndex(eventId, player.id, observationId, 'event-v1', operationId, signal())).resolves.toEqual(saved);
+    expect(send.mock.calls.map(([path]) => path)).toEqual([
+      `${url}/catalog/players/${player.id}`, `${url}/events/${eventId}/players/${player.id}/handicap-refresh`,
+    ]);
+    expect(send.mock.calls[1]?.[1]).toMatchObject({ method: 'POST', cache: 'no-store', credentials: 'omit',
+      body: JSON.stringify({ observationId }), headers: { Authorization: 'Bearer fictional-token',
+        'If-Match': 'event-v1', 'Idempotency-Key': operationId } });
+  });
+  it('rejects mismatched protected player/event acknowledgements and invalid refresh identifiers before sending', async () => {
+    const player = fictionalPlayers[0];
+    if (!player) throw new Error('Missing fictional player.');
+    const send = vi.fn<typeof fetch>().mockResolvedValueOnce(response({ ...player, id: fictionalId(999) }))
+      .mockResolvedValueOnce(response({ eventId: fictionalId(99), playerId: player.id, etag: 'v2',
+        updatedRoundIds: [], completedRoundIds: [] }));
+    const client = createCatalogClient(url, token, send);
+    await expect(client.player(player.id, signal())).rejects.toThrow('Invalid player response');
+    await expect(client.refreshEventIndex(fictionalId(50), player.id, fictionalId(800), 'v1', fictionalId(801), signal()))
+      .rejects.toThrow('Round update was not confirmed');
+    await expect(client.refreshEventIndex('bad', player.id, fictionalId(800), 'v1', fictionalId(801), signal()))
+      .rejects.toThrow('Invalid catalog request');
+    expect(send).toHaveBeenCalledTimes(2);
+  });
   it('uses staged manifest/profile/publication requests with stable identity and exact expected revision', async () => {
     const send = vi.fn<typeof fetch>().mockResolvedValueOnce(response(fictionalImport))
       .mockResolvedValueOnce(response({ ...fictionalImport, profilesReceived: [fictionalProfile.id] }))

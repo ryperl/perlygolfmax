@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { TransactionAction } from '@azure/data-tables';
 import { describe, expect, it } from 'vitest';
 import type { EventSetupInput } from '../../../src/domain/setup.js';
 import type { TeamGameDefinition } from '../../../src/domain/games.js';
@@ -45,6 +46,11 @@ function envelopes(input: EventSetupInput) {
   return { manifest, parts: Array.from({ length: manifest.parts }, (_, index) => ({ privateUpload: {
     ...manifest, index, content: bytes.subarray(index * privateWritePartBytes, (index + 1) * privateWritePartBytes).toString('base64'),
   } })) };
+}
+
+function isPublication(actions: readonly TransactionAction[]): boolean {
+  return actions.some(([operation, row]) => operation === 'update'
+    && row.partitionKey === event.id && row.rowKey === 'event');
 }
 
 describe('large event capacity and atomic publication', () => {
@@ -105,15 +111,35 @@ describe('large event capacity and atomic publication', () => {
     }
     const received = await f.workspace.receive(creator, event.id, { privateCommit: u.manifest }, f.empty.etag);
     if (received.kind !== 'value' || !received.publication) throw new Error('Missing fictional publication');
-    f.submit.mockImplementationOnce((actions) => {
-      f.apply(actions);
-      return Promise.reject(new Error('Fictional lost commit response'));
+    const ownerRevision = f.rows.get(`${event.id}|member:${creator.objectId}`)?.etag;
+    if (!ownerRevision) throw new Error('Missing fictional owner grant revision');
+    const submit = f.submit.getMockImplementation();
+    if (!submit) throw new Error('Missing fictional transaction');
+    let responseLost = false;
+    f.submit.mockImplementation((actions) => {
+      if (!responseLost && isPublication(actions)) {
+        responseLost = true;
+        f.apply(actions);
+        return Promise.reject(new Error('Fictional lost commit response'));
+      }
+      return submit(actions);
     });
     const saved = await f.workspace.save(creator, event.id, f.input, f.empty.etag, received.publication);
     expect(saved.roster).toHaveLength(120);
     expect(saved.rounds.map((round) => round.groups)).toEqual(f.input.rounds.map((round) => round.groups));
     expect(await f.workspace.save(creator, event.id, f.input, f.empty.etag, received.publication)).toEqual(saved);
-    expect(f.submit).toHaveBeenCalledOnce();
+    expect(responseLost).toBe(true);
+    const publications = f.submit.mock.calls.filter(([actions]) => isPublication(actions));
+    expect(publications).toHaveLength(1);
+    expect(publications[0]?.[0]).toEqual(expect.arrayContaining([
+      ['update', expect.objectContaining({ rowKey: 'event' }), 'Merge', { etag: f.empty.etag }],
+      ['update', expect.objectContaining({ rowKey: `member:${creator.objectId}` }), 'Merge', { etag: ownerRevision }],
+      ['upsert', expect.objectContaining({ rowKey: 'workspace' }), 'Replace'],
+      ['create', expect.objectContaining({ rowKey: `setup-receipt:${received.publication.id}` })],
+    ]));
+    for (const round of f.input.rounds) {
+      expect(publications[0]?.[0]).toContainEqual(['upsert', expect.objectContaining({ rowKey: `round:${round.id}` }), 'Replace']);
+    }
     await expect(f.workspace.save(creator, event.id, { ...f.input, location: 'Fictional changed' }, f.empty.etag, received.publication))
       .rejects.toMatchObject({ code: 'PRIVATE_UPLOAD_CONFLICT' });
     const roundId = saved.rounds[0]?.id;
@@ -130,9 +156,16 @@ describe('large event capacity and atomic publication', () => {
     const f = await fixture(120);
     const publication = { id: identifier(9900), sha256: createHash('sha256').update(JSON.stringify(f.input)).digest('hex') };
     const previous = new Map(f.rows);
-    if (failure === 'fragment') f.create.mockRejectedValueOnce(new Error('Fictional fragment failure'));
-    else if (failure === 'commit') f.submit.mockRejectedValueOnce(new Error('Fictional commit failure'));
-    else f.submit.mockImplementationOnce((actions) => {
+    const submit = f.submit.getMockImplementation();
+    if (!submit) throw new Error('Missing fictional transaction');
+    let injected = false;
+    f.submit.mockImplementation((actions) => {
+      const target = failure === 'fragment'
+        ? actions.some(([operation, row]) => operation === 'create' && row.kind === 'private-fragment')
+        : isPublication(actions);
+      if (injected || !target) return submit(actions);
+      injected = true;
+      if (failure === 'fragment' || failure === 'commit') return Promise.reject(new Error(`Fictional ${failure} failure`));
       const key = `${event.id}|${failure === 'event' ? 'event' : `member:${creator.objectId}`}`;
       const row = f.rows.get(key);
       if (!row) throw new Error('Missing fictional race row');
@@ -141,6 +174,7 @@ describe('large event capacity and atomic publication', () => {
       return Promise.reject(new Error('Unexpected successful conditional write'));
     });
     await expect(f.workspace.save(creator, event.id, f.input, f.empty.etag, publication)).rejects.toThrow();
+    expect(injected).toBe(true);
     expect(f.rows.has(`${event.id}|workspace`)).toBe(false);
     expect(f.rows.has(`${event.id}|setup-receipt:${publication.id}`)).toBe(false);
     expect(f.rows.has(`${event.id}|round:${identifier(500)}`)).toBe(false);
@@ -163,8 +197,22 @@ describe('large event capacity and atomic publication', () => {
         playerIds: f.input.playerIds.slice(team * 4, (team + 1) * 4) })),
     }));
     expect(Buffer.byteLength(JSON.stringify({ games }))).toBeGreaterThan(12288);
-    f.submit.mockRejectedValueOnce(new Error('Fictional game commit failure'));
+    const submit = f.submit.getMockImplementation();
+    if (!submit) throw new Error('Missing fictional transaction');
+    let injected = false;
+    f.submit.mockImplementation((actions) => {
+      if (!injected && isPublication(actions)) {
+        injected = true;
+        expect(actions).toEqual(expect.arrayContaining([
+          ['create', expect.objectContaining({ rowKey: `round-games:${roundId}` })],
+          ['create', expect.objectContaining({ rowKey: `game-change:${roundId}:${identifier(9000)}` })],
+        ]));
+        return Promise.reject(new Error('Fictional game commit failure'));
+      }
+      return submit(actions);
+    });
     await expect(f.scores.saveGames(creator, event.id, roundId, games, null, identifier(9000))).rejects.toThrow('Fictional game commit failure');
+    expect(injected).toBe(true);
     expect(f.rows.has(`${event.id}|round-games:${roundId}`)).toBe(false);
     expect(f.rows.has(`${event.id}|game-change:${roundId}:${identifier(9000)}`)).toBe(false);
     const result = await f.scores.saveGames(creator, event.id, roundId, games, null, identifier(9000));

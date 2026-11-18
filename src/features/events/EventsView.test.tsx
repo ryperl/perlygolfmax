@@ -9,6 +9,22 @@ const actions = {
   view: 'active', onViewChange: vi.fn(), onStatusChange: vi.fn(),
 } as const;
 describe('EventsView', () => {
+  it('gates optional permanent deletion on organizer authority, explicit API support, ownership and archive status', () => {
+    const saved = { id: 'fictional', name: 'Fictional Archived', createdAt: '2026-01-01', role: 'owner', status: 'archived', etag: 'v1' } as const;
+    const renderDeletion = vi.fn(() => <button>Fictional permanent deletion</button>);
+    const { rerender } = render(<EventsView {...actions} state={{ kind: 'ready',
+      page: { events: [saved] }, capabilities: { canCreateEvents: true, canManageCatalog: true } }}
+      busy={false} notice="" renderArchivedDeletion={renderDeletion} />);
+    expect(renderDeletion).not.toHaveBeenCalled();
+    rerender(<EventsView {...actions} state={{ kind: 'ready', page: { events: [saved] },
+      capabilities: { canCreateEvents: true, canManageCatalog: true, eventAdministrationSupported: true } }}
+      busy={false} notice="" renderArchivedDeletion={renderDeletion} />);
+    expect(screen.getByRole('button', { name: 'Fictional permanent deletion' })).toBeVisible();
+    rerender(<EventsView {...actions} state={{ kind: 'ready', page: { events: [{ ...saved, role: 'member' }] },
+      capabilities: { canCreateEvents: true, canManageCatalog: true, eventAdministrationSupported: true } }}
+      busy={false} notice="" renderArchivedDeletion={renderDeletion} />);
+    expect(screen.queryByRole('button', { name: 'Fictional permanent deletion' })).not.toBeInTheDocument();
+  });
   it('shows a saved event date as calendar text without deriving a date for undated events', () => {
     render(<EventsView {...actions} state={{ kind: 'ready', capabilities: { canCreateEvents: false, canManageCatalog: false },
       page: { events: [{ id: 'fictional', name: 'Fictional Dated', startDate: '2024-02-29', createdAt: '2026-01-01', role: 'owner', status: 'active', etag: 'v1' }] },

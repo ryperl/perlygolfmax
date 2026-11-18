@@ -9,7 +9,7 @@ import type { EventDirectoryProgress } from '../client/event-directory';
 import { sortEventsByStartDate } from '../domain/event-schedule';
 import type { EventStatus } from '../domain/events';
 import type { EventSession } from '../client/identity';
-import { configureEventServices } from './event-services';
+import { configuredEventServices } from './event-services';
 import type { CatalogClient } from '../client/catalog';
 import type { SetupClient } from '../client/setup';
 import type { ScoresClient } from '../client/scoring';
@@ -25,12 +25,12 @@ import type { AdmissionsClient } from '../client/admission';
 import { clearInvitationReturn } from '../client/invitation-return';
 import type { TesterAccessClient } from '../client/test-access';
 import type { RoundCorrectionsClient } from '../client/round-corrections';
+import type { EventAdministrationClient } from '../client/event-administration';
+import { ArchivedEventDeletion, QuickRoundAdministration } from '../features/event-administration';
 const PursePage = lazy(async () => ({ default: (await import('./PursePage')).PursePage }));
 const JoinEventPage = lazy(async () => ({ default: (await import('./JoinEventPage')).JoinEventPage }));
 const PlayerAccessPage = lazy(async () => ({ default: (await import('./PlayerAccessPage')).PlayerAccessPage }));
 const TesterEntry = lazy(async () => ({ default: (await import('../features/test-access')).TesterEntry }));
-
-const configuredServices = configureEventServices(import.meta.env);
 
 interface AccountPlacement {
   readonly onSignedOut?: (() => void) | undefined;
@@ -39,10 +39,11 @@ interface AccountPlacement {
 }
 
 export function ConfiguredEventsPage(props: AccountPlacement) {
-  return <EventsPage {...configuredServices} {...props} />;
+  return <EventsPage {...configuredEventServices} {...props} />;
 }
 
 export interface EventServices {
+  readonly administration?: EventAdministrationClient;
   readonly corrections?: RoundCorrectionsClient;
   readonly session: EventSession;
   readonly events: EventsClient;
@@ -76,6 +77,7 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
   const [admissionRevision, setAdmissionRevision] = useState(0);
   const [state, setState] = useState<EventsState>({ kind: 'loading' });
   const [busy, setBusy] = useState(false);
+  const [administrationBusy, setAdministrationBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [view, setView] = useState<EventStatus>('active');
   const [identity, setIdentity] = useState<{ readonly services: EventServices; readonly signedIn: boolean }>();
@@ -305,7 +307,8 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
           ? <EventLeaderboardPage eventSkins={kind === 'event-skins'} key={eventId} eventId={eventId} client={services.leaderboard} onSessionExpired={expire} />
           : <p role="alert">Overall results are unavailable in this connection. No scores were loaded.</p>
         : isEventTab(kind) && eventId ? <SavedEventPage key={eventId} eventId={eventId} view={kind}
-          client={services.setup} scores={services.scores} onSessionExpired={expire} />
+          client={services.setup} scores={services.scores} onSessionExpired={expire}
+          catalog={state.capabilities.canManageCatalog && state.capabilities.playerHandicapUpdatesSupported === true ? services.catalog : undefined} />
         : route.startsWith('score:') ? <OwnerRoundScoresPage key={eventId} eventId={route.split(':')[1] ?? ''} roundId={route.split(':')[2] ?? ''}
           setup={services.setup} scores={services.scores} corrections={services.corrections} onSessionExpired={expire} />
         : route.startsWith('event:') ? <EventWorkspaceView key={route} eventId={route.slice(6)}
@@ -351,10 +354,18 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
     });
   }
 
+  const administration = state.kind === 'ready' && state.capabilities.canManageCatalog
+    && state.capabilities.eventAdministrationSupported === true ? services?.administration : undefined;
   return <>{accountControl}<EventsView
     eventHref={(event) => `#organizer?event=${event.id}`}
     state={services ? state : { kind: 'unconfigured', message: configurationError ?? 'Identity and API settings have not been supplied.' }}
-    busy={busy} notice={notice} view={view}
+    busy={busy || administrationBusy} notice={notice} view={view}
+    renderArchivedDeletion={(event) => administration ? <ArchivedEventDeletion client={administration} event={event}
+      disabled={busy} onBusyChange={setAdministrationBusy} onDeleted={() => {
+        setState((previous) => previous.kind === 'ready' ? { ...previous, page: { ...previous.page,
+          events: previous.page.events.filter((entry) => entry.id !== event.id) } } : previous);
+        setNotice('Event permanently deleted.');
+      }} /> : null}
     onReload={() => { reloadDirectory(); }}
     onRestart={() => { reloadDirectory(true); }}
     onCreate={(name) => {
@@ -396,5 +407,7 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
         setNotice(status === 'archived' ? 'Event archived. Its data was preserved.' : 'Event restored to Active events.');
       }
     }); }}
-  /></>;
+  />
+    {administration && <QuickRoundAdministration client={administration} />}
+  </>;
 }

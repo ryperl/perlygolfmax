@@ -27,7 +27,8 @@ export interface CatalogSetupApi {
 }
 
 export type CatalogAction = 'courses' | 'course-version' | 'imports' | 'import'
-  | 'import-profile' | 'import-publish' | 'players' | 'player' | 'indices' | 'workspace' | 'round-indices-refresh';
+  | 'import-profile' | 'import-publish' | 'players' | 'player' | 'indices' | 'workspace' | 'round-indices-refresh'
+  | 'event-player-index-refresh';
 
 function uuid(value: unknown): string {
   if (!isUuid(value)) throw new ApiError(400, 'INVALID_REQUEST_ID');
@@ -43,7 +44,8 @@ function etag(request: HttpRequest): string {
 const methods: Readonly<Record<CatalogAction, readonly string[]>> = {
   courses: ['GET'], 'course-version': ['GET'], imports: ['POST'], import: ['GET'],
   'import-profile': ['PUT'], 'import-publish': ['POST'], players: ['GET', 'POST'],
-  player: ['PATCH'], indices: ['GET', 'POST'], workspace: ['GET', 'PUT'], 'round-indices-refresh': ['POST'],
+  player: ['GET', 'PATCH'], indices: ['GET', 'POST'], workspace: ['GET', 'PUT'], 'round-indices-refresh': ['POST'],
+  'event-player-index-refresh': ['POST'],
 };
 
 export function createCatalogHandler(resolveApi: () => CatalogSetupApi, action: CatalogAction) {
@@ -52,11 +54,23 @@ export function createCatalogHandler(resolveApi: () => CatalogSetupApi, action: 
       const api = resolveApi();
       const identity = await api.verify(request.headers.get('authorization'));
       const write = request.method !== 'GET';
-      const setup = action === 'workspace' || action === 'round-indices-refresh';
-      if (!setup) requireManager(identity, api.canManageCatalog);
+      const setup = action === 'workspace' || action === 'round-indices-refresh' || action === 'event-player-index-refresh';
+      if (!setup || action === 'event-player-index-refresh') requireManager(identity, api.canManageCatalog);
       await api.limiter.check(identity, setup
         ? write ? 'setup-write' : 'setup-read' : write ? 'catalog-write' : 'catalog-read');
       if (!methods[action].includes(request.method)) return response(405, { code: 'METHOD_NOT_ALLOWED' });
+      if (action === 'event-player-index-refresh') {
+        const id = uuid(request.params.id);
+        const playerId = uuid(request.params.playerId);
+        const requestId = uuid(request.headers.get('Idempotency-Key'));
+        const expected = etag(request);
+        const body = await readJson(request);
+        if (!isRecord(body) || Object.keys(body).length !== 1 || !isUuid(body.observationId)) {
+          throw new ApiError(400, 'INVALID_PLAYER_INDEX_REFRESH');
+        }
+        return response(200, await api.workspace.refreshPlayerIndex(identity, id, playerId, body.observationId,
+          expected, requestId, () => api.limiter.check(identity, 'setup-read')));
+      }
       if (action === 'round-indices-refresh') {
         const id = uuid(request.params.id);
         const roundId = uuid(request.params.roundId);
@@ -120,6 +134,7 @@ export function createCatalogHandler(resolveApi: () => CatalogSetupApi, action: 
       }
       const playerId = uuid(request.params.playerId);
       if (action === 'player') {
+        if (!write) return response(200, await api.players.get(identity, playerId));
         const expected = etag(request);
         const body = await readJson(request);
         if (!isRecord(body) || !boundedText(body.displayName)) throw new ApiError(400, 'INVALID_PLAYER_NAME');

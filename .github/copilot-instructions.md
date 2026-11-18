@@ -81,15 +81,33 @@
   immutable course versions and captured round inputs. Active unstarted rounds
   use current catalog HI; atomically freeze all indexes with the first saved
   score, immutable capture receipt and setup lock. Started/archived rounds never
-  adopt later catalog changes. Explicit owner corrections are event-local,
+  automatically adopt later catalog changes. The explicit manager-only roster
+  HI shortcut may apply its acknowledged catalog observation to unfinished
+  started rounds in the selected active event; completed rounds remain frozen.
+  Complete requires every golfer/hole to have a saved non-unplayed disposition.
+  Guard completion with the same conditional event transaction; preserve original
+  captures/cards/locks, issue corrected input revisions and retain private audits.
+  Keep catalog/event acknowledgements and retries separate, with explicit partial
+  success and conflict review. Default manual HI metadata to local today/GHIN,
+  never claim GHIN verification; quick entry exposes only HI. Old APIs require
+  explicit capability. No anonymous or ordinary-owner catalog authority.
+  Explicit owner corrections are event-local,
   conditional/idempotent/audited and retain the roster and captured course/version.
   Author changed HI observations on the server; never reuse an observation ID
   for a different value or trust client-authored observation identities.
   Preserve original capture receipts, raw cards and scoring locks. Bind score
   writes/drafts to corrected input revisions, including unsigned public writes.
-- Keep archived events owner-only. Archive/restore must conditionally check
-  both event and owner-grant revisions. Deletion or retention rules require
-  a separate scope decision.
+- Keep ordinary archived events owner-only. Ordinary archive/restore must
+  conditionally check both event and owner-grant revisions. The bootstrapped
+  organizer may separately list ready Quick-round archive summaries and restore
+  them under their authoritative stored policy, never through public routes or
+  fabricated ownership. Only that organizer may permanently delete an archived
+  event; ordinary events also require current owner authority. Require exact-name
+  confirmation and a conditional claim before resumable fenced cleanup of all
+  event-owned data/locators. Never delete shared catalogs or unrelated events,
+  acknowledge partial cleanup as success, or allow old/delayed writes to recreate
+  data. Retain only the minimal technical tombstone needed for safe recovery.
+  No automatic retention or provider backup/log erasure is implied.
 - Public app access is an explicit product decision: any visitor may read all
   active events/rosters/cards/standings/purse amounts and score any saved group,
   without accounts or links. Public roster/group displays may publish only the

@@ -1,5 +1,6 @@
 import type { EventCapabilities, EventPage, EventStatus, EventSummary } from '../../domain/events';
 import { eventStartDateLabel } from '../../domain/event-schedule';
+import type { ReactNode } from 'react';
 
 export type EventsState =
   | { readonly kind: 'unconfigured'; readonly message: string }
@@ -19,9 +20,10 @@ interface EventsViewProps {
   readonly onViewChange: (status: EventStatus) => void;
   readonly onStatusChange: (event: EventSummary, status: EventStatus) => void;
   readonly eventHref?: (event: EventSummary) => string;
+  readonly renderArchivedDeletion?: (event: EventSummary) => ReactNode;
 }
 
-export function EventsView({ state, busy, notice, view, onReload, onRestart, onCreate, onViewChange, onStatusChange, eventHref }: EventsViewProps) {
+export function EventsView({ state, busy, notice, view, onReload, onRestart, onCreate, onViewChange, onStatusChange, eventHref, renderArchivedDeletion }: EventsViewProps) {
   return <section>
     <p className="eyebrow">Organizer workspace</p>
     <h1>Events</h1>
@@ -50,6 +52,8 @@ export function EventsView({ state, busy, notice, view, onReload, onRestart, onC
               onStatusChange(event, event.status === 'active' ? 'archived' : 'active');
             }} aria-label={`${event.status === 'active' ? 'Archive' : 'Restore'} ${event.name}`}>{event.status === 'active' ? 'Archive event' : 'Restore event'}</button>}
           </div>
+          {event.status === 'archived' && event.role === 'owner' && state.capabilities.canManageCatalog
+            && state.capabilities.eventAdministrationSupported === true && renderArchivedDeletion?.(event)}
         </li>)}</ul>}
       {view === 'active' && state.capabilities.canCreateEvents && <form className="panel event-form" onSubmit={(event) => {
         event.preventDefault();

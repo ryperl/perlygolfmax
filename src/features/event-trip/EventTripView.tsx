@@ -16,6 +16,7 @@ interface EventTripViewProps {
   readonly workspace: EventWorkspace;
   readonly view: 'overview' | 'rounds' | 'group';
   readonly progress?: EventEntryProgress;
+  readonly onEditHandicap?: ((playerId: string) => void) | undefined;
 }
 
 function teeTimeLabel(time: string): string {
@@ -176,7 +177,7 @@ function SavedRounds({ workspace, showGroups, progress }: {
   );
 }
 
-export function EventTripView({ workspace, view, progress }: EventTripViewProps) {
+export function EventTripView({ workspace, view, progress, onEditHandicap }: EventTripViewProps) {
   const { event } = workspace;
   const archived = event.status === 'archived';
   if (archived && event.role !== 'owner') return <p role="alert">Archived events are available to the event owner only.</p>;
@@ -219,7 +220,12 @@ export function EventTripView({ workspace, view, progress }: EventTripViewProps)
           <h2>Event roster</h2>
           {workspace.roster.length === 0 ? <p>No golfers saved to this event roster.</p> : (
             <ul className="event-trip-roster">
-              {workspace.roster.map((player) => <li key={player.playerId}><span className="event-trip-player-name">{player.displayName}</span>
+              {workspace.roster.map((player) => <li key={player.playerId}>
+                {onEditHandicap && !archived && !workspace.testerAccess
+                  ? <button className="event-trip-player-name event-trip-player-edit" data-hi-player={player.playerId}
+                    aria-label={`Update Handicap Index for ${player.displayName}`}
+                    onClick={() => { onEditHandicap(player.playerId); }}>{player.displayName}</button>
+                  : <span className="event-trip-player-name">{player.displayName}</span>}
                 {' '}<HandicapIndexBadge value={player.handicapIndexValue} context="current" /></li>)}
             </ul>
           )}

@@ -22,7 +22,8 @@ export function createHandler(resolveApi: () => EventApi, action: 'me' | 'events
       const api = resolveApi();
       const identity = await api.verify(request.headers.get('authorization'));
       await api.limiter.check(identity, action === 'me' ? 'identity-read' : action === 'event-status' ? 'events-manage' : request.method === 'POST' ? 'events-create' : 'events-read');
-      if (action === 'me') return response(200, { canCreateEvents: api.canCreate(identity), canManageCatalog: api.canManageCatalog(identity) });
+      if (action === 'me') return response(200, { canCreateEvents: api.canCreate(identity),
+        canManageCatalog: api.canManageCatalog(identity), playerHandicapUpdatesSupported: true, eventAdministrationSupported: true });
       if (action === 'event-status') {
         if (request.method !== 'PATCH') return response(405, { code: 'METHOD_NOT_ALLOWED' });
         const id = request.params.id;

@@ -63,7 +63,12 @@ describe('purse browser/HTTP/storage contract', () => {
     expect(result.change.after.plan).toEqual(plan);
     expect(result.current.view?.calculation.allocatedMinor).toBe(9000 * poolCount);
     expect(result.current.view?.calculation.unallocatedMinor).toBe(poolCount);
-    expect(f.submit).toHaveBeenCalledOnce();
+    const publications = f.submit.mock.calls.map(([actions]) => actions)
+      .filter((actions) => actions.some(([, row]) => row.rowKey === 'purse'));
+    expect(publications).toHaveLength(1);
+    expect(publications[0]?.map(([, row]) => row.rowKey)).toEqual(expect.arrayContaining([
+      'event', `member:${creator.objectId}`, 'purse', `purse-change:${identifier(800)}`,
+    ]));
     const stored = f.rows.get(`${event.id}|purse`);
     const audit = f.rows.get(`${event.id}|purse-change:${identifier(800)}`);
     expect(JSON.parse(String(stored?.content))).toMatchObject({ privateValue: 1 });

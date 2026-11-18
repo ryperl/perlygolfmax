@@ -72,9 +72,9 @@ from npm installation and must also comply with your machine's policies.
 - Strict checks, component/module tests, production-browser smoke tests, and CI.
 - Public Events navigation with explicit unconfigured/loading/empty/error states.
   Separate **Organizer tools** use email-code sign-in for management and creation.
-- Active/Archived event lists with owner-only archive and restore. Archived
-  events stay private to their owners, preserve their data, and can be restored.
-  Permanent deletion is not implemented.
+- Ordinary event Active/Archived lists retain owner-only archive and restore.
+  The organizer also has protected active/archived Quick-round lists, recovery
+  and confirmed permanent deletion of archived events.
 - An independent TypeScript Functions workspace with strict JWT validation,
   Table event/membership transactions, idempotent create requests, bounded
   pagination/body sizes and shared ETag-based per-user request limits.
@@ -317,7 +317,8 @@ retains its retry identity in memory. Concurrent changes require explicit
 refresh/review; scoring navigation does not imply a failed game save succeeded.
 No drafts or scores are stored offline. First saved scoring still freezes
 **every golfer's** round handicap inputs and locks setup, even after clearing
-scores. Later global HI edits affect only unstarted rounds.
+scores. Ordinary catalog HI edits affect only unstarted rounds; the manager's
+explicit roster shortcut can also refresh unfinished rounds in that event.
 
 Any visitor can **Archive** a Quick round from its event card or saved setup,
 after explicit confirmation. Archiving conditionally checks the event revision,
@@ -333,6 +334,29 @@ bounded staged transports, event/card revisions, idempotency receipts and durabl
 site/event quotas remain enforced. The server persists an explicit Quick-round
 policy so future account-based restrictions can change without replacing the
 scoring model; no owner account or membership is fabricated.
+
+### Organizer recovery and permanent deletion
+
+The signed-in organizer has separate **Active Quick rounds** and **Archived
+Quick rounds** lists, including rounds created anonymously. **Load Quick rounds**
+starts a bounded paginated read; continue loading or retry an interrupted page.
+This does not turn a Quick round into a privately owned event. Only the organizer
+can restore a Quick round; anonymous visitors cannot browse archives or restore.
+Ordinary private-event archive/restore permissions stay owner-only.
+
+The organizer may permanently delete an **archived** Quick round, or an archived
+ordinary event they own, after explicit event-name confirmation. Active events
+must be archived first. This removes event-owned scores, rounds, captures,
+specials, purse, invitations/access records, audits, staged fragments and
+discovery links, never shared course/player catalogs or unrelated events.
+It is irreversible, unlike Archive. This feature does not automatically delete
+any existing event.
+
+Interrupted deletions remain unavailable and can be resumed from **Unfinished
+deletions**. Completion is acknowledged only after cleanup; a minimal technical
+tombstone prevents an old request from recreating the event. This is application
+data deletion, not a claim that Azure platform logs or backups have been erased.
+No automatic expiry, retention schedule or new backup guarantee is introduced.
 
 Previously issued tester/admission links open their public event (or its saved
 scoring position), remove the secret fragment and do not request account creation.
@@ -1213,6 +1237,10 @@ not zero, and plus-index notation is preserved without calculating handicaps.
 An optional starting index can be entered when creating a player; the player
 and first audited observation are saved together. **Add player** starts with a
 name and optional HI; date/source fields appear only when an HI is supplied.
+New manual observations default to today's local date and **GHIN** as the source
+label; neither field needs editing for a normal update. Historical dates and
+other manual sources remain available in the catalog editor. This is manual
+entry, not an automatic GHIN lookup or verification.
 Catalog and Quick-round player lists sort by last name before pagination;
 full setup keeps selected players first and sorts each selection list by surname.
 Profiles store one display name, so sorting uses the final name component
@@ -1229,16 +1257,35 @@ Backdated observations remain in history rather than replacing a newer current
 observation. Active rounds that have not started use the latest current catalog
 observation, including NH when no observation exists. The first saved score
 atomically captures all round indexes with the score, audit and setup lock.
-Later catalog changes do not alter started or archived rounds. Official index
+Ordinary catalog changes do not alter started or archived rounds. Official index
 verification/posting remains outside this increment.
+
+On **The Group**, a signed-in catalog manager can tap a roster player's name
+and change just their **Handicap Index**. Date and source are not fields in this
+quick editor: they default to today/GHIN. Saving first records the catalog
+observation, then conditionally applies that exact observation to this event's
+unfinished started rounds. Their Course Handicaps and derived net results,
+including already-saved holes, recalculate on fresh reads; raw strokes never
+change. Completed rounds keep their saved HI, and unstarted rounds continue to
+use current catalog HI. Completion means every golfer has a saved disposition
+on every captured hole, including pickup/DNF, not a calendar date or formal
+finalization. Other events are not scanned or retroactively corrected.
+
+Catalog and event updates are separate acknowledgements. If the second step
+fails, the editor explicitly reports that the player HI was saved, retains the
+same event retry, and offers reload/review for a conflict. It never claims both
+steps succeeded prematurely. Original captures, score locks and raw card
+revisions remain intact; older scoring drafts must refresh corrected inputs.
+Anonymous visitors, testers and ordinary event owners do not acquire global
+catalog rights. Older APIs without the explicit capability hide the shortcut.
 
 The manager's owner workspace distinguishes current unstarted-round inputs from
 frozen started-round captures. An optional confirmed setup refresh can also
 persist current observations for one unstarted round, preserving the previous
 stored inputs in an audit record. No refresh is required to use current indexes
 before scoring. Course/tee/group selections and global profiles are unchanged.
-Correcting a started round requires a separately authorized, audited correction;
-ordinary catalog updates never unlock or recalculate it.
+The roster shortcut is a narrowly authorized, audited HI refresh; ordinary
+catalog updates never unlock or recalculate a started round.
 
 An active event owner can open **Correct saved handicap, tees or groups** from
 round scoring after scoring starts. This separate correction workflow keeps the

@@ -7,6 +7,7 @@ import { isRecord } from '../../src/contracts/events.js';
 import { isSha256, maximumPrivateValueBytes } from '../../src/contracts/private-values.js';
 import { canonical, decode, isConflict, optionalRow } from './catalog/entities.js';
 import { ApiError } from './errors.js';
+import { createEventOwnedEntity } from './event-administration/writes.js';
 
 const fragmentBytes = 16 * 1024;
 const inlineUtf16Bytes = 48 * 1024;
@@ -51,7 +52,7 @@ export async function stagePrivateContent(table: TableClient, eventId: string, t
     const entity = { partitionKey: eventId, rowKey, kind: 'private-fragment', target, version, index,
       ...('kind' in owner ? { ownerActor: canonical(owner) }
         : { ownerTenantId: owner.tenantId, ownerObjectId: owner.objectId }), content, sha256: hash(content) };
-    try { await table.createEntity(entity); }
+    try { await createEventOwnedEntity(table, eventId, entity); }
     catch (error) {
       if (!isConflict(error)) throw error;
       const saved = await optionalRow(table, eventId, rowKey);

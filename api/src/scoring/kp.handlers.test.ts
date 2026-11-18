@@ -15,6 +15,9 @@ describe('KP bounded owner HTTP lifecycle', () => {
     const handler = createScoringHandler(() => api, 'round-kp');
     const context = new InvocationContext({ invocationId: 'fictional-kp-staged', logHandler: () => undefined });
     const selection = { ...f.selection, status: 'closed' };
+    const eventRevision = f.rows.get(`${event.id}|event`)?.etag;
+    const ownerRevision = f.rows.get(`${event.id}|member:${creator.objectId}`)?.etag;
+    if (!eventRevision || !ownerRevision) throw new Error('Missing fictional authority revisions');
     const bytes = Buffer.from(JSON.stringify(selection));
     const upload = { id: identifier(992), bytes: bytes.length, parts: 1, sha256: createHash('sha256').update(bytes).digest('hex') };
     const call = (body: unknown) => handler(new HttpRequest({
@@ -26,7 +29,12 @@ describe('KP bounded owner HTTP lifecycle', () => {
     expect(await call({ privateUpload: { ...upload, index: 0, content: bytes.toString('base64') } }))
       .toMatchObject({ status: 200, jsonBody: { privateStaged: { id: upload.id, index: 0 } } });
     expect((await f.scores.get(creator, event.id, f.roundId)).kp?.status).toBe('open');
-    expect(f.submit).not.toHaveBeenCalled();
+    const publications = () => f.submit.mock.calls.filter(([actions]) =>
+      actions.some(([, row]) => row.partitionKey === event.id && row.rowKey === 'event'));
+    expect(publications()).toHaveLength(0);
+    expect(f.submit.mock.calls.every(([actions]) => actions.length === 2
+      && actions[0]?.[1].rowKey === 'event-write-fence'
+      && actions[1]?.[0] === 'create' && actions[1][1].rowKey.startsWith('private-upload:'))).toBe(true);
     const saved = await call({ privateCommit: upload });
     expect(saved).toMatchObject({ status: 200, jsonBody: { selection, requestId: identifier(993) } });
     if (!isRecord(saved.jsonBody)) throw new Error('Missing fictional KP receipt');
@@ -34,7 +42,13 @@ describe('KP bounded owner HTTP lifecycle', () => {
     if (format) expect(saved.jsonBody.round).toMatchObject({ kind: 'round-scores-lean' });
     expect((await f.scores.get(creator, event.id, f.roundId)).kp?.status).toBe('closed');
     expect(await call({ privateCommit: upload })).toMatchObject({ status: 200, jsonBody: { requestId: identifier(993) } });
-    expect(f.submit).toHaveBeenCalledOnce();
+    expect(publications()).toHaveLength(1);
+    expect(publications()[0]?.[0]).toEqual(expect.arrayContaining([
+      ['update', expect.objectContaining({ rowKey: 'event' }), 'Merge', { etag: eventRevision }],
+      ['update', expect.objectContaining({ rowKey: `member:${creator.objectId}` }), 'Merge', { etag: ownerRevision }],
+      ['update', expect.objectContaining({ rowKey: `round-kp:${f.roundId}` }), 'Replace', { etag: f.configured.round.kp?.etag }],
+      ['create', expect.objectContaining({ rowKey: `kp-change:${identifier(993)}` })],
+    ]));
   });
   it('requires JWT owner authority, explicit revision, exact idempotent receipt and ordinary scoring quotas', async () => {
     const f = await kpStoreFixture();

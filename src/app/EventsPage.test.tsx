@@ -8,6 +8,7 @@ import { EventChangedError, SessionExpiredError } from '../client/events';
 import { PrivateRequestError } from '../client/private-request';
 import { fakeCatalog, fakeSetup, fictionalEvent, fictionalWorkspace } from '../client/catalog.test-support';
 import { fakeScores, fictionalRoundScores, scoreResult } from '../client/scoring.test-support';
+import { createEventAdministrationClient } from '../client/event-administration';
 
 const saved: EventSummary = { id: '00000000-0000-4000-8000-000000000001', name: 'Fictional Open', createdAt: '2026-01-01', role: 'owner', status: 'active', etag: 'fictional-v1' };
 function service(): EventServices {
@@ -19,6 +20,33 @@ function service(): EventServices {
 }
 beforeEach(() => { window.history.replaceState(null, '', '/'); });
 describe('EventsPage composition', () => {
+  it.each([
+    ['manager with support', true, true, true],
+    ['nonmanager', false, true, false],
+    ['older API', true, undefined, false],
+  ] as const)('loads protected Quick round administration only for %s', async (_label, manager, supported, expected) => {
+    const services = service();
+    const send = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ code: 'FICTIONAL_UNAVAILABLE' }), { status: 503 }));
+    const administration = createEventAdministrationClient('https://fictional.example.test/api', () => Promise.resolve('fictional-token'), send);
+    vi.mocked(services.events.capabilities).mockResolvedValue({ canCreateEvents: true, canManageCatalog: manager,
+      ...(supported === undefined ? {} : { eventAdministrationSupported: supported }) });
+    render(<EventsPage services={{ ...services, administration }} />);
+    await screen.findByRole('heading', { name: 'Events' });
+    if (expected) {
+      await userEvent.click(await screen.findByRole('button', { name: 'Load Quick rounds' }));
+      await waitFor(() => { expect(send).toHaveBeenCalledTimes(2); });
+      expect(send.mock.calls.map(([url]) => url)).toEqual([
+        'https://fictional.example.test/api/administration/quick-rounds?status=active',
+        'https://fictional.example.test/api/administration/deletions',
+      ]);
+      for (const [, options] of send.mock.calls) expect(options).toMatchObject({
+        cache: 'no-store', credentials: 'omit', headers: { Authorization: 'Bearer fictional-token' } });
+      await waitFor(() => { expect(screen.getAllByRole('alert')).toHaveLength(2); });
+    } else {
+      await waitFor(() => { expect(services.events.list).toHaveBeenCalledOnce(); });
+      expect(send).not.toHaveBeenCalled();
+    }
+  });
   it('loads the complete owner directory before showing globally dated order and resumes a failed unread page', async () => {
     const services = service();
     vi.mocked(services.events.list).mockResolvedValueOnce({ events: [{ ...saved, startDate: '2026-11-08' }], continuationToken: 'next' })

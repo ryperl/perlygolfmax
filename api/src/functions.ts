@@ -32,10 +32,13 @@ import { createPublicApi } from './public-access/runtime.js';
 import { createCorrectionsHandler } from './corrections/handlers.js';
 import { createQuickRoundHandler } from './quick-round/handlers.js';
 import type { QuickRoundAction } from './quick-round/handlers.js';
+import { TableEventAdministration } from './event-administration/store.js';
+import { registerEventAdministration } from './event-administration/handlers.js';
 
 type RuntimeApi = EventApi & CatalogSetupApi & ScoringApi & PurseApi & {
   readonly admissions: AdmissionStore;
   readonly testers: TableTesterAccessStore;
+  readonly administration: TableEventAdministration;
 };
 let api: RuntimeApi | undefined;
 
@@ -57,6 +60,7 @@ function resolveApi(): RuntimeApi {
     workspace, scores, purse: new TablePurseStore(table, workspace, scores),
     admissions: new TableAdmissionStore(table),
     testers: new TableTesterAccessStore(table),
+    administration: new TableEventAdministration(table, manager),
   };
   return api;
 }
@@ -64,6 +68,7 @@ function resolveApi(): RuntimeApi {
 app.http('currentUser', { route: 'me', methods: ['GET'], authLevel: 'anonymous', handler: createHandler(resolveApi, 'me') });
 app.http('events', { route: 'events', methods: ['GET', 'POST'], authLevel: 'anonymous', handler: createHandler(resolveApi, 'events') });
 app.http('eventStatus', { route: 'events/{id}/status', methods: ['PATCH'], authLevel: 'anonymous', handler: createHandler(resolveApi, 'event-status') });
+registerEventAdministration(resolveApi);
 
 const catalogRoutes: readonly { readonly action: CatalogAction; readonly route: string; readonly methods: ('GET' | 'POST' | 'PUT' | 'PATCH')[] }[] = [
   { action: 'courses', route: 'catalog/courses', methods: ['GET'] },
@@ -73,10 +78,11 @@ const catalogRoutes: readonly { readonly action: CatalogAction; readonly route: 
   { action: 'import-profile', route: 'catalog/courses/imports/{importId}/profiles/{profileId}', methods: ['PUT'] },
   { action: 'import-publish', route: 'catalog/courses/imports/{importId}/publish', methods: ['POST'] },
   { action: 'players', route: 'catalog/players', methods: ['GET', 'POST'] },
-  { action: 'player', route: 'catalog/players/{playerId}', methods: ['PATCH'] },
+  { action: 'player', route: 'catalog/players/{playerId}', methods: ['GET', 'PATCH'] },
   { action: 'indices', route: 'catalog/players/{playerId}/indices', methods: ['GET', 'POST'] },
   { action: 'workspace', route: 'events/{id}/workspace', methods: ['GET', 'PUT'] },
   { action: 'round-indices-refresh', route: 'events/{id}/workspace/rounds/{roundId}/indices/refresh', methods: ['POST'] },
+  { action: 'event-player-index-refresh', route: 'events/{id}/players/{playerId}/handicap-refresh', methods: ['POST'] },
 ];
 for (const item of catalogRoutes) {
   app.http(`setup-${item.action}`, { route: item.route, methods: item.methods, authLevel: 'anonymous', handler: createCatalogHandler(resolveApi, item.action) });

@@ -11,6 +11,7 @@ import { isEventTesterIdentity } from '../../src/contracts/test-access.js';
 import { readTesterAccess } from './test-access/authority.js';
 import { isPublicScoreIdentity } from '../../src/contracts/public-access.js';
 import { readPublicAccess } from './public-access/authority.js';
+import { assertEventNotDeleting } from './event-administration/guards.js';
 
 export interface EventAccess {
   readonly event: StoredRow;
@@ -99,6 +100,7 @@ export async function readEventAccess(table: TableClient, identity: ScoreActor, 
   }
   const event = await optionalRow(table, eventId, 'event');
   if (!event) throw new ApiError(404, 'EVENT_NOT_FOUND');
+  assertEventNotDeleting(event);
   const candidate = await optionalRow(table, eventId, `member:${identity.objectId}`);
   const member = candidate && candidate.tenantId === identity.tenantId && candidate.objectId === identity.objectId
     && (candidate.revoked === undefined || candidate.revoked === false)

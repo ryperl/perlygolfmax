@@ -8,6 +8,7 @@ import { createPurseClient } from '../client/purse';
 import { createAdmissionsClient } from '../client/admission';
 import { createTesterAccessClient } from '../client/test-access';
 import { createRoundCorrectionsClient } from '../client/round-corrections';
+import { createEventAdministrationClient } from '../client/event-administration';
 import { createEventSession } from '../client/identity';
 import type { EventServices } from './EventsPage';
 
@@ -18,6 +19,7 @@ export function configureEventServices(env: Record<string, unknown>): { readonly
     const session = createEventSession(settings);
     const token = () => session.token();
     return { services: { session, events: createEventsClient(settings.apiUrl, token),
+      administration: createEventAdministrationClient(settings.apiUrl, token),
       catalog: createCatalogClient(settings.apiUrl, token), setup: createSetupClient(settings.apiUrl, token),
       scores: createScoresClient(settings.apiUrl, token), corrections: createRoundCorrectionsClient(settings.apiUrl, token),
       leaderboard: createEventLeaderboardClient(settings.apiUrl, token), purse: createPurseClient(settings.apiUrl, token),
@@ -26,4 +28,7 @@ export function configureEventServices(env: Record<string, unknown>): { readonly
   } catch {
     return { services: undefined, configurationError: 'Identity/API configuration is invalid. No event connection was started.' };
   }
+
 }
+
+export const configuredEventServices = configureEventServices(import.meta.env);

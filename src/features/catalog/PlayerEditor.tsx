@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CatalogClient, ManualIndexInput } from '../../client/catalog';
 import type { PlayerIndexHistory, PlayerProfile } from '../../domain/catalog';
+import { defaultManualIndex } from '../../client/manual-index';
 import { useOperation } from './useOperation';
 
 export function PlayerEditor({ client, player, onSaved, onBusy, onDirty, blocked, onClose }: {
@@ -16,19 +17,20 @@ export function PlayerEditor({ client, player, onSaved, onBusy, onDirty, blocked
   const [confirmClose, setConfirmClose] = useState(false);
   const [name, setName] = useState(player.displayName);
   const [value, setValue] = useState('');
-  const [date, setDate] = useState('');
-  const [source, setSource] = useState('');
+  const [date, setDate] = useState<string>();
+  const [source, setSource] = useState<string>();
   const [correction, setCorrection] = useState(false);
   const [history, setHistory] = useState<PlayerIndexHistory | null>(null);
   const [historyError, setHistoryError] = useState('');
   const [settledHistoryClient, setSettledHistoryClient] = useState<CatalogClient | null>(null);
   const initialHistoryPending = settledHistoryClient !== client;
-  const pending = useRef<{ readonly key: string; readonly id: string } | null>(null);
+  const pending = useRef<{ readonly key: string; readonly id: string; readonly input: ManualIndexInput } | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const focused = useRef(false);
   const { busy, notice, conflict, run, setNotice, setConflict } = useOperation();
   const controlsBusy = busy || initialHistoryPending || blocked;
-  const dirty = name !== player.displayName || value !== '' || date !== '' || source !== '' || correction;
+  const dirty = name !== player.displayName || value !== '' || date !== undefined || source !== undefined || correction;
+  const defaults = defaultManualIndex(value);
   useEffect(() => { onDirty(dirty); }, [dirty, onDirty]);
   useEffect(() => {
     if (!controlsBusy && !focused.current) { heading.current?.focus(); focused.current = true; }
@@ -91,12 +93,13 @@ export function PlayerEditor({ client, player, onSaved, onBusy, onDirty, blocked
       event.preventDefault();
       if (controlsBusy || conflict || !correction) return;
       void run(async (signal) => {
-        const input: ManualIndexInput = { value: value.trim(), effectiveDate: date, source: source.trim() };
-        const key = JSON.stringify(input);
-        if (pending.current?.key !== key) pending.current = { key, id: crypto.randomUUID() };
-        const updated = await client.recordIndex(player, input, pending.current.id, signal);
+        const key = JSON.stringify({ value: value.trim(), date, source });
+        if (pending.current?.key !== key) pending.current = { key, id: crypto.randomUUID(),
+          input: { ...defaultManualIndex(value), ...(date === undefined ? {} : { effectiveDate: date }),
+            ...(source === undefined ? {} : { source: source.trim() }) } };
+        const updated = await client.recordIndex(player, pending.current.input, pending.current.id, signal);
         signal.throwIfAborted();
-        onSaved(updated); pending.current = null; setCorrection(false); setValue(''); setDate(''); setSource('');
+        onSaved(updated); pending.current = null; setCorrection(false); setValue(''); setDate(undefined); setSource(undefined);
         setNotice('Manual index observation saved. Captured round inputs are unchanged.');
         setHistory(null);
         try {
@@ -107,10 +110,10 @@ export function PlayerEditor({ client, player, onSaved, onBusy, onDirty, blocked
         }
       });
     }}>
-      <p className="catalog-hint">Record a dated manual observation. Captured round inputs do not automatically change.</p>
+      <p className="catalog-hint">Today and GHIN are filled in for manual entry, not automatic GHIN verification. Use The Group to also update unfinished rounds in an event.</p>
       <label>Handicap index (explicit + supported)<input required pattern={'\\+?(0|[1-9][0-9]?)(\\.[0-9])?'} disabled={controlsBusy} value={value} onChange={(event) => { setValue(event.target.value); setCorrection(false); }} /></label>
-      <label>Effective date<input required type="date" disabled={controlsBusy} value={date} onChange={(event) => { setDate(event.target.value); setCorrection(false); }} /></label>
-      <label>Manual source<input required maxLength={200} disabled={controlsBusy} value={source} onChange={(event) => { setSource(event.target.value); setCorrection(false); }} /></label>
+      <label>Effective date<input required type="date" disabled={controlsBusy} value={date ?? defaults.effectiveDate} onChange={(event) => { setDate(event.target.value); setCorrection(false); }} /></label>
+      <label>Manual source<input required maxLength={200} disabled={controlsBusy} value={source ?? defaults.source} onChange={(event) => { setSource(event.target.value); setCorrection(false); }} /></label>
       <label className="catalog-check"><input type="checkbox" disabled={controlsBusy || conflict} checked={correction} onChange={(event) => { setCorrection(event.target.checked); }} />I confirm this manual observation, including replacing any observation on the same effective date.</label>
       <button className="catalog-primary" disabled={controlsBusy || conflict || !correction}>Save manual index</button>
     </form>

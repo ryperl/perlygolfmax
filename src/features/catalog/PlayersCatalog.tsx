@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CatalogClient, ManualIndexInput } from '../../client/catalog';
 import type { PlayerProfile } from '../../domain/catalog';
+import { defaultManualIndex } from '../../client/manual-index';
 import { comparePlayerNames } from '../../domain/player-order';
 import { useOperation } from './useOperation';
 import { PlayerEditor } from './PlayerEditor';
@@ -21,14 +22,14 @@ function PlayersCatalogSession({ client }: { readonly client: CatalogClient }) {
   const [selectedId, setSelectedId] = useState('');
   const [name, setName] = useState('');
   const [initialValue, setInitialValue] = useState('');
-  const [initialDate, setInitialDate] = useState('');
-  const [initialSource, setInitialSource] = useState('Manual organizer entry');
+  const [initialDate, setInitialDate] = useState<string>();
+  const [initialSource, setInitialSource] = useState<string>();
   const [loadError, setLoadError] = useState('');
   const [settledClient, setSettledClient] = useState<CatalogClient | null>(null);
   const initialPending = settledClient !== client;
   const [editorBusy, setEditorBusy] = useState(false);
   const [editorDirty, setEditorDirty] = useState(false);
-  const pending = useRef<{ readonly key: string; readonly id: string } | null>(null);
+  const pending = useRef<{ readonly key: string; readonly id: string; readonly initialIndex?: ManualIndexInput } | null>(null);
   const directory = useRef(catalogDirectoryProgress<PlayerProfile>());
   const editButtons = useRef(new Map<string, HTMLButtonElement>());
   const focusAfterClose = useRef<string | null>(null);
@@ -71,6 +72,7 @@ function PlayersCatalogSession({ client }: { readonly client: CatalogClient }) {
   const selected = players?.find((player) => player.id === selectedId);
   const creationBlocked = busy || initialPending || !catalogComplete || players === null || editorBusy;
   const hasCreateDraft = name !== '' || initialValue !== '';
+  const defaults = defaultManualIndex(initialValue);
   const matches = catalogComplete ? players?.filter((player) => player.displayName.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
     .sort(comparePlayerNames) : players;
   return <section className="catalog-view">
@@ -115,17 +117,18 @@ function PlayersCatalogSession({ client }: { readonly client: CatalogClient }) {
           event.preventDefault();
           if (creationBlocked) return;
           void run(async (signal) => {
-            const initialIndex: ManualIndexInput | undefined = initialValue.trim() ? {
-              value: initialValue.trim(), effectiveDate: initialDate, source: initialSource.trim(),
-            } : undefined;
             const displayName = name.trim();
-            const key = JSON.stringify({ displayName, initialIndex });
-            if (pending.current?.key !== key) pending.current = { key, id: crypto.randomUUID() };
+            const key = JSON.stringify({ displayName, initialValue: initialValue.trim(), initialDate, initialSource });
+            if (pending.current?.key !== key) pending.current = { key, id: crypto.randomUUID(),
+              ...(initialValue.trim() ? { initialIndex: { ...defaultManualIndex(initialValue),
+                ...(initialDate === undefined ? {} : { effectiveDate: initialDate }),
+                ...(initialSource === undefined ? {} : { source: initialSource.trim() }) } } : {}) };
+            const initialIndex = pending.current.initialIndex;
             const player = initialIndex
               ? await client.createPlayer(displayName, pending.current.id, signal, initialIndex)
               : await client.createPlayer(displayName, pending.current.id, signal);
             if (!signal.aborted) {
-              upsert(player); setName(''); setInitialValue(''); setInitialDate(''); setInitialSource('Manual organizer entry');
+              upsert(player); setName(''); setInitialValue(''); setInitialDate(undefined); setInitialSource(undefined);
               pending.current = null;
               setNotice(initialIndex ? 'Player and initial manual handicap observation saved together.'
                 : 'Player saved. Handicap index is unknown until manually recorded.');
@@ -138,8 +141,8 @@ function PlayersCatalogSession({ client }: { readonly client: CatalogClient }) {
           <label>Initial handicap index (optional)<input pattern={'\\+?(0|[1-9][0-9]?)(\\.[0-9])?'} disabled={creationBlocked} value={initialValue} onChange={(event) => { setInitialValue(event.target.value); if (!pending.current) setNotice(''); }} /></label>
           <p className="catalog-hint">Leave HI blank for Unknown, never zero. A supplied index is a manual observation, not verified GHIN data.</p>
           <div className="catalog-form" hidden={!initialValue.trim()}>
-            <label>Initial index effective date<input type="date" required={initialValue.trim() !== ''} disabled={creationBlocked} value={initialDate} onChange={(event) => { setInitialDate(event.target.value); if (!pending.current) setNotice(''); }} /></label>
-            <label>Initial index manual source<input maxLength={200} required={initialValue.trim() !== ''} disabled={creationBlocked} value={initialSource} onChange={(event) => { setInitialSource(event.target.value); if (!pending.current) setNotice(''); }} /></label>
+            <label>Initial index effective date<input type="date" required={initialValue.trim() !== ''} disabled={creationBlocked} value={initialDate ?? defaults.effectiveDate} onChange={(event) => { setInitialDate(event.target.value); if (!pending.current) setNotice(''); }} /></label>
+            <label>Initial index manual source<input maxLength={200} required={initialValue.trim() !== ''} disabled={creationBlocked} value={initialSource ?? defaults.source} onChange={(event) => { setInitialSource(event.target.value); if (!pending.current) setNotice(''); }} /></label>
           </div>
           <button className="catalog-primary" disabled={creationBlocked || !name.trim()}>Save player</button>
           <p role="status">{busy ? 'Working...' : notice}</p>

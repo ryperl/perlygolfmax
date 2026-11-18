@@ -54,3 +54,5 @@
   .event-trip-stats { gap: 12px; }
   .event-trip-stats > div { padding: 16px; }
 }
+.event-trip-player-edit { padding: .25rem 0; min-height: 44px; margin: 0; border: 0; border-radius: .25rem; background: transparent; color: var(--cp-accent); text-align: left; text-decoration: underline; text-underline-offset: .2em; font: inherit; }
+.event-trip-player-edit:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }

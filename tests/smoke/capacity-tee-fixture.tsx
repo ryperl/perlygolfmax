@@ -32,7 +32,7 @@ const version: CourseVersion = {
 };
 const unavailable = () => Promise.reject(new Error('Not implemented by this fictional fixture.'));
 const catalog: CatalogClient = {
-  version: () => Promise.resolve(version), courses: unavailable, players: unavailable,
+  version: () => Promise.resolve(version), courses: unavailable, players: unavailable, player: unavailable, refreshEventIndex: unavailable,
   beginImport: unavailable, importStatus: unavailable, uploadProfile: unavailable, publish: unavailable,
   createPlayer: unavailable, renamePlayer: unavailable, history: unavailable, recordIndex: unavailable,
 };

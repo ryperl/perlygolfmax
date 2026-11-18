@@ -4,6 +4,8 @@ import {
   isPlayerProfile, isTeeProfile, isVersionId,
 } from '../contracts/catalog';
 import { isEventRevision, isUuid } from '../contracts/events';
+import { isEventHandicapRefreshResult } from '../contracts/player-handicap-update';
+import type { EventHandicapRefreshResult } from '../domain/player-handicap-update';
 import type {
   CourseCatalogPage, CourseImportManifest, CourseImportSession, CourseVersion,
   IndexObservation, ManualIndexInput, PlayerCatalogPage, PlayerIndexHistory, PlayerProfile, TeeProfile,
@@ -18,6 +20,9 @@ export interface CatalogClient {
   readonly uploadProfile: (id: string, profile: TeeProfile, signal: AbortSignal) => Promise<CourseImportSession>;
   readonly publish: (id: string, expectedEtag: string | null, signal: AbortSignal) => Promise<CourseVersion>;
   readonly players: (signal: AbortSignal, cursor?: string) => Promise<PlayerCatalogPage>;
+  readonly player: (playerId: string, signal: AbortSignal) => Promise<PlayerProfile>;
+  readonly refreshEventIndex: (eventId: string, playerId: string, observationId: string,
+    etag: string, requestId: string, signal: AbortSignal) => Promise<EventHandicapRefreshResult>;
   readonly createPlayer: (displayName: string, requestId: string, signal: AbortSignal, initialIndex?: ManualIndexInput) => Promise<PlayerProfile>;
   readonly renamePlayer: (player: PlayerProfile, displayName: string, signal: AbortSignal) => Promise<PlayerProfile>;
   readonly history: (playerId: string, signal: AbortSignal, cursor?: string) => Promise<PlayerIndexHistory>;
@@ -87,6 +92,22 @@ export function createCatalogClient(apiUrl: string, getToken: () => Promise<stri
     async players(signal, cursor) {
       const value = await request(pagePath('catalog/players', cursor), signal);
       if (!isPlayerCatalogPage(value)) throw new Error('Invalid player catalog response.');
+      return value;
+    },
+    async player(playerId, signal) {
+      requireValid(isUuid(playerId));
+      const value = await request(`catalog/players/${encodeURIComponent(playerId)}`, signal);
+      if (!isPlayerProfile(value) || value.id !== playerId) throw new Error('Invalid player response. Nothing was loaded.');
+      return value;
+    },
+    async refreshEventIndex(eventId, playerId, observationId, etag, requestId, signal) {
+      requireValid(isUuid(eventId) && isUuid(playerId) && isUuid(observationId) && isEventRevision(etag) && isUuid(requestId));
+      const value = await request(`events/${encodeURIComponent(eventId)}/players/${encodeURIComponent(playerId)}/handicap-refresh`, signal, {
+        method: 'POST', body: { observationId }, etag, requestId,
+      });
+      if (!isEventHandicapRefreshResult(value) || value.eventId !== eventId || value.playerId !== playerId) {
+        throw new Error('Round update was not confirmed. Retry the same operation before making another change.');
+      }
       return value;
     },
     async createPlayer(displayName, requestId, signal, initialIndex) {

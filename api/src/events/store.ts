@@ -5,6 +5,7 @@ import { isEventRevision, isEventSummary, isRecord } from '../../../src/contract
 import { ApiError } from '../errors.js';
 import { isMissingTableEntity } from '../table-errors.js';
 import { assertEventAccessUnchanged, readEventAccess } from '../event-access.js';
+import { assertEventNotDeleting } from '../event-administration/guards.js';
 
 export interface EventStore {
   list(identity: AccountIdentity, continuationToken?: string, status?: EventStatus): Promise<EventPage>;
@@ -70,6 +71,7 @@ export class TableEventStore implements EventStore {
       if (!isRecord(error) || error.statusCode !== 409) throw error;
     }
     const stored = await this.table.getEntity(event.id, 'event');
+    assertEventNotDeleting(stored);
     if (stored.creatorTenantId !== identity.tenantId || stored.creatorObjectId !== identity.objectId || stored.name !== event.name) {
       throw new ApiError(409, 'EVENT_REQUEST_CONFLICT');
     }
@@ -89,6 +91,7 @@ export class TableEventStore implements EventStore {
       if (isMissingTableEntity(error)) throw new ApiError(404, 'EVENT_NOT_FOUND');
       throw error;
     }
+    assertEventNotDeleting(stored);
     const current = summary(id, stored, member);
     if (current.etag !== etag) throw new ApiError(409, 'EVENT_CHANGED');
     if (current.status === status) return current;

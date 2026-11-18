@@ -83,7 +83,26 @@ describe('bounded private transport', () => {
     if (!row) throw new Error('Missing fictional stored part');
     f.seed({ ...row, content: 'AAAA' });
     await expect(receive({ privateCommit: u.manifest })).rejects.toMatchObject({ code: 'PRIVATE_UPLOAD_INCOMPLETE' });
-    expect(f.submit).not.toHaveBeenCalled();
+    expect(f.submit.mock.calls.every(([actions]) => actions.length === 2 && actions[0]?.[1].rowKey === 'event-write-fence')).toBe(true);
+    expect(f.rows.has(`${event.id}|workspace`)).toBe(false);
+  });
+
+  it('fences late upload manifests and parts against an atomic permanent-deletion claim', async () => {
+    const f = memoryTable();
+    const u = upload({ fictional: 'F'.repeat(20_000) });
+    const receive = (body: unknown) => receivePrivateWrite(f.table, creator, event.id, 'workspace', 'v1', null, body);
+    await receive(u.parts[0]);
+    const original = f.submit.getMockImplementation();
+    if (!original) throw new Error('Missing fictional transaction');
+    f.submit.mockImplementationOnce((actions) => {
+      f.seed({ partitionKey: event.id, rowKey: 'event-write-fence', state: 'blocked' });
+      for (const [key, row] of f.rows) if (row.rowKey !== 'event-write-fence') f.rows.delete(key);
+      f.seed({ partitionKey: event.id, rowKey: 'event', status: 'deleted', kind: 'event-deletion' });
+      return original(actions);
+    });
+    await expect(receive(u.parts[1])).rejects.toMatchObject({ code: 'EVENT_DELETION_IN_PROGRESS' });
+    expect([...f.rows.values()].map((row) => row.rowKey).sort()).toEqual(['event', 'event-write-fence']);
+    await expect(receive({ privateCommit: u.manifest })).rejects.toMatchObject({ code: 'EVENT_DELETION_IN_PROGRESS' });
   });
 
   it('returns digest-bound read pages, preserves small legacy responses and rejects revision/page drift', () => {

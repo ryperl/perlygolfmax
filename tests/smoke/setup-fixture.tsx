@@ -43,7 +43,7 @@ let workspace: EventWorkspace = {
 const unavailable = () => Promise.reject(new Error('This fictional browser fixture does not implement that operation.'));
 const catalog: CatalogClient = {
   courses: () => Promise.resolve({ courses: [{ id: version.courseId, name: course.name, location: course.city, currentVersionId: version.id, etag: 'fixture-course-v1' }] }),
-  players: () => Promise.resolve({ players }), version: () => Promise.resolve(version),
+  players: () => Promise.resolve({ players }), version: () => Promise.resolve(version), player: unavailable, refreshEventIndex: unavailable,
   beginImport: unavailable, importStatus: unavailable, uploadProfile: unavailable, publish: unavailable,
   createPlayer: unavailable, renamePlayer: unavailable, history: unavailable, recordIndex: unavailable,
 };

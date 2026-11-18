@@ -25,7 +25,8 @@ describe('event API handlers', () => {
     api.canManageCatalog.mockReturnValue(false);
     expect(await createHandler(() => api, 'me')(new HttpRequest({
       url: 'https://fictional.example.test/api/me', method: 'GET',
-    }), context)).toMatchObject({ status: 200, jsonBody: { canCreateEvents: true, canManageCatalog: false } });
+    }), context)).toMatchObject({ status: 200, jsonBody: { canCreateEvents: true, canManageCatalog: false,
+      playerHandicapUpdatesSupported: true, eventAdministrationSupported: true } });
   });
   it('uses only verified server identity, never client-supplied owner or principal headers', async () => {
     const { api, request, context } = fixture();

@@ -14,6 +14,8 @@ describe('large-value installed Table SDK loopback', () => {
     const rows = new Map<string, Record<string, unknown>>();
     const writes: string[] = [];
     let failNext = false;
+    let revision = 0;
+    let blockNextBatch = false;
     const server = createServer((request, response) => {
       if (request.method === 'GET') {
         const match = /PartitionKey='([^']+)',RowKey='([^']+)'/.exec(decodeURIComponent(request.url ?? ''));
@@ -32,6 +34,56 @@ describe('large-value installed Table SDK loopback', () => {
           response.end(JSON.stringify({ 'odata.error': { code: 'ServerBusy', message: { value: 'Fictional transport failure' } } }));
           return;
         }
+        if (request.url?.includes('$batch')) {
+          if (blockNextBatch) {
+            blockNextBatch = false;
+            rows.set(`${event.id}|event-write-fence`, { PartitionKey: event.id, RowKey: 'event-write-fence',
+              state: 'blocked', 'odata.etag': `W/"fictional-${String(++revision)}"` });
+          }
+          const pending = new Map(rows);
+          const results: { readonly status: number; readonly etag?: string; readonly error?: string }[] = [];
+          const pendingWrites: string[] = [];
+          for (const part of text.split(/--changeset_[^\r\n]+/)) {
+            const method = /^(POST|PATCH|PUT) .+ HTTP\/1\.1\r?$/m.exec(part)?.[1];
+            const content = part.split(/\r?\n/).find((line) => line.startsWith('{'));
+            if (!method || !content) continue;
+            const entity: unknown = JSON.parse(content);
+            if (!isRecord(entity) || typeof entity.PartitionKey !== 'string' || typeof entity.RowKey !== 'string') {
+              results.push({ status: 400, error: 'InvalidInput' }); break;
+            }
+            const key = `${entity.PartitionKey}|${entity.RowKey}`;
+            const saved = pending.get(key);
+            const expected = /^if-match: (.+)\r?$/im.exec(part)?.[1]?.trim();
+            if (method === 'POST' && saved) { results.push({ status: 409, error: 'EntityAlreadyExists' }); break; }
+            if (method !== 'POST' && (!saved || expected !== saved['odata.etag'])) {
+              results.push({ status: saved ? 412 : 404, error: saved ? 'UpdateConditionNotSatisfied' : 'ResourceNotFound' }); break;
+            }
+            const etag = `W/"fictional-${String(++revision)}"`;
+            pending.set(key, { ...(method === 'PATCH' ? saved : {}), ...entity, 'odata.etag': etag });
+            pendingWrites.push(content);
+            results.push({ status: 204, etag });
+          }
+          if (!results.length) { response.writeHead(400); response.end(); return; }
+          if (results.every((result) => result.status === 204)) {
+            rows.clear();
+            pending.forEach((value, key) => rows.set(key, value));
+            writes.push(...pendingWrites);
+          }
+          const failed = results.find((result) => result.error);
+          const body = [
+            '--batchresponse_fictional', 'Content-Type: multipart/mixed; boundary=changesetresponse_fictional', '',
+            ...(failed ? [failed] : results).flatMap((result) => [
+              '--changesetresponse_fictional', 'Content-Type: application/http', 'Content-Transfer-Encoding: binary', '',
+              `HTTP/1.1 ${String(result.status)} ${result.error ?? 'No Content'}`,
+              ...(result.etag ? [`ETag: ${result.etag}`] : ['Content-Type: application/json']), '',
+              ...(result.error ? [JSON.stringify({ 'odata.error': { code: result.error, message: { value: 'Fictional conditional batch rejected' } } })] : []),
+            ]),
+            '--changesetresponse_fictional--', '--batchresponse_fictional--', '',
+          ].join('\r\n');
+          response.writeHead(202, { 'Content-Type': 'multipart/mixed; boundary=batchresponse_fictional' });
+          response.end(body);
+          return;
+        }
         const entity: unknown = JSON.parse(text);
         if (request.method !== 'POST' || !isRecord(entity) || typeof entity.PartitionKey !== 'string' || typeof entity.RowKey !== 'string') {
           response.writeHead(400); response.end(); return;
@@ -43,8 +95,9 @@ describe('large-value installed Table SDK loopback', () => {
           return;
         }
         writes.push(text);
-        rows.set(key, { ...entity, 'odata.etag': 'W/"fictional"' });
-        response.writeHead(204, { ETag: 'W/"fictional"' });
+        const etag = `W/"fictional-${String(++revision)}"`;
+        rows.set(key, { ...entity, 'odata.etag': etag });
+        response.writeHead(204, { ETag: etag });
         response.end();
       });
     });
@@ -80,6 +133,10 @@ describe('large-value installed Table SDK loopback', () => {
       await expect(privateContent(table, event.id, 'workspace', pointer)).rejects.toMatchObject({ code: 'INVALID_PRIVATE_FRAGMENT' });
       failNext = true;
       await expect(stagePrivateContent(table, event.id, 'round:fictional', creator, text)).rejects.toMatchObject({ statusCode: 503 });
+      const count = rows.size;
+      blockNextBatch = true;
+      await expect(stagePrivateContent(table, event.id, 'round:late', creator, text)).rejects.toMatchObject({ code: 'EVENT_DELETION_IN_PROGRESS' });
+      expect(rows.size).toBe(count);
       expect(rows.has(`${event.id}|workspace`)).toBe(false);
     } finally {
       server.closeAllConnections();

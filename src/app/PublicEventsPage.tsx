@@ -20,6 +20,7 @@ import { PublicLeaderboardPage } from './PublicLeaderboardPage';
 import { clearScoreLocation, loadScoreLocation, readScoreLocation, saveScoreLocation, scoreLocationHref } from './score-resume';
 import { browserDotPresets } from './dot-presets';
 const PublicPursePage = lazy(async () => ({ default: (await import('./PublicPursePage')).PublicPursePage }));
+const PublicGroupPage = lazy(async () => ({ default: (await import('./PublicGroupPage')).PublicGroupPage }));
 
 function configuration(): { readonly services?: PublicServices; readonly error?: string } {
   try {
@@ -59,6 +60,9 @@ export function PublicEventsPage({ services: override }: { readonly services?: P
   if ((kind === 'leaderboard' || kind === 'event-skins') && eventId) return <PublicLeaderboardPage eventSkins={kind === 'event-skins'} client={services.leaderboard} eventId={eventId} onSessionExpired={ended} />;
   if (kind === 'purse' && eventId) return <Suspense fallback={<p role="status">Loading winnings…</p>}>
     <PublicPursePage client={services.purse} eventId={eventId} onSessionExpired={ended} />
+  </Suspense>;
+  if (kind === 'group' && eventId) return <Suspense fallback={<p role="status">Loading group…</p>}>
+    <PublicGroupPage services={services} eventId={eventId} onUnavailable={ended} />
   </Suspense>;
   if (isEventTab(kind) && eventId) return <SavedEventPage client={services.setup} scores={services.scores}
     eventId={eventId} view={kind} onSessionExpired={ended} />;

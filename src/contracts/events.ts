@@ -45,7 +45,9 @@ export function isEventSummary(value: unknown): value is EventSummary {
 }
 
 export function isEventCapabilities(value: unknown): value is EventCapabilities {
-  return isRecord(value) && typeof value.canCreateEvents === 'boolean' && typeof value.canManageCatalog === 'boolean';
+  return isRecord(value) && typeof value.canCreateEvents === 'boolean' && typeof value.canManageCatalog === 'boolean'
+    && (value.playerHandicapUpdatesSupported === undefined || typeof value.playerHandicapUpdatesSupported === 'boolean')
+    && (value.eventAdministrationSupported === undefined || typeof value.eventAdministrationSupported === 'boolean');
 }
 
 export function isEventPage(value: unknown): value is EventPage {

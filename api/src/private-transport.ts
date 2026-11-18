@@ -8,6 +8,7 @@ import {
 import { isRecord } from '../../src/contracts/events.js';
 import { canonical, isConflict, optionalRow } from './catalog/entities.js';
 import { ApiError } from './errors.js';
+import { createEventOwnedEntity } from './event-administration/writes.js';
 
 export const maximumInlineReadBytes = 256 * 1024;
 
@@ -34,7 +35,7 @@ export async function receivePrivateWrite(table: TableClient, identity: ScoreAct
   const prefix = `private-upload:${upload.id}:`;
   // The manifest reserves this operation ID for exactly one actor, target, revision and byte sequence.
   const manifest = { partitionKey: eventId, rowKey: `${prefix}manifest`, binding };
-  try { await table.createEntity(manifest); }
+  try { await createEventOwnedEntity(table, eventId, manifest); }
   catch (error) {
     if (!isConflict(error)) throw error;
     const saved = await optionalRow(table, eventId, manifest.rowKey);
@@ -47,7 +48,7 @@ export async function receivePrivateWrite(table: TableClient, identity: ScoreAct
       throw new ApiError(400, 'INVALID_PRIVATE_UPLOAD');
     }
     const entity = { partitionKey: eventId, rowKey: `${prefix}${String(upload.index).padStart(6, '0')}`, binding, content: upload.content };
-    try { await table.createEntity(entity); }
+    try { await createEventOwnedEntity(table, eventId, entity); }
     catch (error) {
       if (!isConflict(error)) throw error;
       const saved = await optionalRow(table, eventId, entity.rowKey);

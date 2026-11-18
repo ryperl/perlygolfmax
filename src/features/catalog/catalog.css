@@ -1,4 +1,9 @@
 .catalog-view { display: grid; gap: 1rem; min-width: 0; overflow-wrap: anywhere; }
+.player-handicap-dialog { width: min(28rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); margin: auto; padding: 1.25rem; overflow: auto; overflow-wrap: anywhere; border: 1px solid var(--cp-border-strong); border-radius: 1rem; background: var(--cp-surface); color: var(--cp-text); }
+.player-handicap-dialog::backdrop { background: var(--cp-overlay); }
+.player-handicap-dialog > :is(h2, p) { margin-bottom: 1rem; }
+.player-handicap-dialog h2 { font-size: 1.2rem; }
+.player-handicap-dialog button, .player-handicap-dialog input { min-height: 48px; }
 .catalog-view [hidden] { display: none; }
 .catalog-view h1 { font-size: clamp(1.6rem, 3vw, 2rem); line-height: 1.2; letter-spacing: -.03em; }
 .catalog-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; }

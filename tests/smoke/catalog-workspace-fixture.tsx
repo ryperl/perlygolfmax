@@ -29,6 +29,11 @@ function createFictionalCatalog(): CatalogClient {
       return found;
     }
     return {
+      player: (id) => {
+        const found = players.find((player) => player.id === id);
+        return found ? Promise.resolve(found) : Promise.reject(new Error('Fictional player missing'));
+      },
+      refreshEventIndex: () => Promise.reject(new Error('Event HI updates are not implemented by this catalog-only fixture.')),
       courses: (_signal, cursor) => { const result = page(courses, cursor); return Promise.resolve({ courses: result.values, ...('continuationToken' in result ? { continuationToken: result.continuationToken } : {}) }); },
       players: (_signal, cursor) => { const result = page(players, cursor); return Promise.resolve({ players: result.values, ...('continuationToken' in result ? { continuationToken: result.continuationToken } : {}) }); },
       version: (id, versionId) => {

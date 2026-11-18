@@ -42,6 +42,12 @@ import type { PublicScoreIdentity } from '../../../src/domain/public-access.js';
 import { dotsDefinitionMatchesRound } from '../../../src/contracts/dots.js';
 import { definitionCards, dotRound } from '../scoring/internal-games.js';
 import { buildDotAwardAudit, correctionAuditCards } from '../scoring/dot-audit.js';
+import type { EventHandicapRefreshResult } from '../../../src/domain/player-handicap-update.js';
+import { readPublicAccess } from '../public-access/authority.js';
+import {
+  acknowledgePlayerIndexRefresh, playerIndexRefreshKey, playerIndexRefreshReplay, validateRefreshCapture,
+} from './player-index-refresh.js';
+import type { PlayerIndexRefreshReceipt } from './player-index-refresh.js';
 
 interface WorkspaceHeader {
   readonly eventSkins?: EventSkinsConfiguration;
@@ -81,6 +87,12 @@ function correctionInput(round: RoundSnapshot, games?: readonly RoundGameDefinit
     } : {}),
     ...(gameTeams.length ? { gameTeams } : {}),
   };
+}
+
+function sameIndexValue(before: string | undefined, after: string): boolean {
+  if (before === undefined) return false;
+  const signedValue = (value: string) => Number(value) * (value.startsWith('+') ? -1 : 1);
+  return signedValue(before) === signedValue(after);
 }
 
 export class TableWorkspaceStore {
@@ -166,13 +178,15 @@ export class TableWorkspaceStore {
     return change;
   }
 
-  private async load(summary: EventSummary, currentUnstartedIndices = true): Promise<EventWorkspace> {
+  private async load(summary: EventSummary, currentUnstartedIndices = true,
+    chargeRound?: () => Promise<void>): Promise<EventWorkspace> {
     const header = await optionalRow(this.table, summary.id, 'workspace');
     if (!header) return { event: summary, location: '', roster: [], rounds: [], etag: summary.etag };
     const saved = decode(await privateContent(this.table, summary.id, 'workspace', header.content), isHeader);
     const rounds: unknown[] = [];
     const locks = new Map<string, ScoringLock>();
     for (const id of saved.roundIds) {
+      await chargeRound?.();
       const row = await optionalRow(this.table, summary.id, `round:${id}`);
       if (!row || typeof row.content !== 'string') throw new ApiError(503, 'INVALID_STORED_WORKSPACE');
       let round: unknown;
@@ -325,6 +339,90 @@ export class TableWorkspaceStore {
       message: 'Corrected inputs may change payouts; review purse and unresolved decisions.',
     });
     return warnings;
+  }
+
+  async refreshPlayerIndex(
+    identity: AccountIdentity, eventId: string, playerId: string, observationId: string,
+    etag: string, requestId: string, chargeRound?: () => Promise<void>,
+  ): Promise<EventHandicapRefreshResult> {
+    requireManager(identity, this.allowed);
+    if (!isUuid(identity.tenantId) || !isUuid(identity.objectId)
+      || !isUuid(eventId) || !isUuid(playerId) || !isUuid(observationId) || !isUuid(requestId)
+      || !isEventRevision(etag)) throw new ApiError(400, 'INVALID_PLAYER_INDEX_REFRESH');
+    const access = await readPublicAccess(this.table, { kind: 'public-score', eventId }, eventId);
+    if (access.event.quickRound === true && access.event.quickRoundReady !== true) {
+      throw new ApiError(403, 'PUBLIC_EVENT_NOT_AVAILABLE');
+    }
+    const replay = () => playerIndexRefreshReplay(this.table, identity, eventId, playerId, observationId, etag, requestId);
+    const previous = await replay();
+    if (previous) return acknowledgePlayerIndexRefresh(this.table, previous);
+    if (access.summary.etag !== etag) throw new ApiError(409, 'EVENT_CHANGED');
+    const workspace = await this.load(access.summary, false, chargeRound);
+    if (!workspace.roster.some((player) => player.playerId === playerId)) throw new ApiError(404, 'PLAYER_NOT_IN_EVENT');
+    const current = await this.players.get(identity, playerId);
+    if (current.currentIndex?.id !== observationId) throw new ApiError(409, 'PLAYER_INDEX_CHANGED');
+    const recordedAt = new Date().toISOString();
+    const updatedRoundIds: string[] = [];
+    const completedRoundIds: string[] = [];
+    const corrections: RoundCorrectionReceipt[] = [];
+    const actions: TransactionAction[] = [
+      ['update', { partitionKey: eventId, rowKey: 'event', playerIndexUpdatedAt: recordedAt }, 'Merge', { etag }],
+    ];
+    for (const round of workspace.rounds) {
+      const selected = round.players.find((player) => player.playerId === playerId);
+      if (!selected || !round.scoringStarted) continue;
+      const lock = await scoringLock(this.table, eventId, round.id);
+      if (!lock) throw new ApiError(503, 'INVALID_STORED_SCORE_LOCK');
+      await validateRefreshCapture(this.table, eventId, round, lock);
+      const cards = await correctionAuditCards(this.table, eventId, round, lock);
+      if (cards.every((card) => card.holes.every((hole) => hole.score.kind !== 'unplayed'))) {
+        completedRoundIds.push(round.id);
+        continue;
+      }
+      if (sameIndexValue(selected.handicapIndex?.value, current.currentIndex.value)) continue;
+      if (round.inputRevision === requestId) throw new ApiError(409, 'PLAYER_INDEX_REFRESH_REQUEST_CONFLICT');
+      const row = await optionalRow(this.table, eventId, `round:${round.id}`);
+      if (!row) throw new ApiError(503, 'INVALID_STORED_WORKSPACE');
+      const games = await readGameConfiguration(this.table, eventId, round.id, configuredGameRounds(access.event.gameRoundIds));
+      const updated: RoundSnapshot = { ...round, inputRevision: requestId,
+        players: round.players.map((player) => player.playerId === playerId
+          ? { ...player, handicapIndex: current.currentIndex } : player) };
+      const warnings = [...(round.reviewWarnings ?? [])];
+      for (const warning of this.reviewWarnings(round, updated, false, games?.games.some((game) => game.kind === 'churchy') ?? false)) {
+        if (!warnings.some((previousWarning) => previousWarning.code === warning.code)) warnings.push(warning);
+      }
+      const after: RoundSnapshot = { ...updated, reviewWarnings: warnings };
+      const dotAwardAudit = buildDotAwardAudit(games?.games ?? [], round, after, cards, cards, games?.etag ?? null);
+      corrections.push({
+        id: requestId, eventId, roundId: round.id,
+        expected: { eventEtag: etag, roundEtag: revision(row), gamesEtag: games?.etag ?? null,
+          inputRevision: round.inputRevision ?? null },
+        before: correctionInput(round, games?.games), after: correctionInput(after, games?.games),
+        reason: 'Apply the acknowledged catalog Handicap Index to an unfinished round.',
+        warnings, recordedAt, recordedBy: { tenantId: identity.tenantId, objectId: identity.objectId },
+        ...(dotAwardAudit.length ? { dotAwardAudit } : {}),
+      });
+      updatedRoundIds.push(round.id);
+      actions.push(['update', { partitionKey: eventId, rowKey: `round:${round.id}`,
+        content: await stagePrivateContent(this.table, eventId, `round:${round.id}`, identity, canonical(after)) },
+      'Merge', { etag: revision(row) }]);
+    }
+    const receipt: PlayerIndexRefreshReceipt = { id: requestId, eventId, playerId, observationId, expectedEtag: etag,
+      recordedAt, recordedBy: { tenantId: identity.tenantId, objectId: identity.objectId },
+      updatedRoundIds, completedRoundIds, corrections };
+    const key = playerIndexRefreshKey(requestId);
+    actions.push(['create', { partitionKey: eventId, rowKey: key, kind: 'player-index-refresh',
+      content: await stagePrivateContent(this.table, eventId, key, identity, canonical(receipt)) }]);
+    requireManager(identity, this.allowed);
+    try { await this.table.submitTransaction(actions); }
+    catch (error) {
+      requireManager(identity, this.allowed);
+      const committed = await replay();
+      if (committed) return acknowledgePlayerIndexRefresh(this.table, committed);
+      if (isConflict(error)) throw new ApiError(409, 'EVENT_CHANGED');
+      throw error;
+    }
+    return acknowledgePlayerIndexRefresh(this.table, receipt);
   }
 
   async correctionModel(identity: AccountIdentity, eventId: string, roundId: string): Promise<RoundCorrectionReadModel> {

@@ -167,6 +167,9 @@ describe('authoritative team games persistence', () => {
   it('saves configurations above the ordinary request budget and reloads them exactly', async () => {
     const f = await scoringFixture();
     const base = teamGame(await capturedZeroIndices(f));
+    const eventRevision = f.rows.get(`${event.id}|event`)?.etag;
+    const ownerRevision = f.rows.get(`${event.id}|member:${creator.objectId}`)?.etag;
+    if (!eventRevision || !ownerRevision) throw new Error('Missing fictional authority revisions');
     const large: readonly RoundGameDefinition[] = Array.from({ length: 16 }, (_, index) => ({
       ...base, id: identifier(700 + index), points: {
         ...base.points, rows: Array.from({ length: 32 }, (_, row) => ({ scoreToPar: row, points: 1_000_000_000_000 })),
@@ -180,6 +183,14 @@ describe('authoritative team games persistence', () => {
     if (!stored) throw new Error('Missing fictional configuration.');
     f.seed({ ...stored, content: canonical({ eventId: event.id, roundId: f.roundId, games: large }) });
     expect((await f.scores.get(creator, event.id, f.roundId)).games?.configuration.games).toEqual(large);
-    expect(f.submit).toHaveBeenCalledOnce();
+    const publications = f.submit.mock.calls.filter(([actions]) =>
+      actions.some(([, row]) => row.partitionKey === event.id && row.rowKey === 'event'));
+    expect(publications).toHaveLength(1);
+    expect(publications[0]?.[0]).toEqual(expect.arrayContaining([
+      ['update', expect.objectContaining({ rowKey: 'event' }), 'Merge', { etag: eventRevision }],
+      ['update', expect.objectContaining({ rowKey: `member:${creator.objectId}` }), 'Merge', { etag: ownerRevision }],
+      ['create', expect.objectContaining({ rowKey: gameConfigurationKey(f.roundId) })],
+      ['create', expect.objectContaining({ rowKey: `game-change:${f.roundId}:${identifier(1000)}` })],
+    ]));
   });
 });
