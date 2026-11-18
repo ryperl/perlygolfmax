@@ -28,7 +28,7 @@ import { assertEventAccessUnchanged, readEventAccess } from '../event-access.js'
 import type { EventAccess } from '../event-access.js';
 import { publishedCourseHandicaps, publishedPlayingHandicaps } from '../../../src/domain/playing-handicaps.js';
 import { activeTesterLink, testerLinkKey } from '../test-access/authority.js';
-import { churchySpecialsMatchGame, sameChurchySpecials } from '../../../src/domain/churchy.js';
+import { churchySpecialsMatchGame, sameChurchySpecials, churchyV3Records, churchyV3RecordsMatchGame } from '../../../src/domain/churchy.js';
 import type { KpSelection, KpWriteResult } from '../../../src/domain/kp.js';
 import { calculateKp, calculateKpPayout, kpContext, sameKpEntry } from '../../../src/domain/kp.js';
 import { isKpSelection } from '../../../src/contracts/kp.js';
@@ -38,7 +38,7 @@ import { nassauConfigurationIssues, validateNassauManualPress } from '../../../s
 import { nassauRecordsMatchGame } from '../../../src/contracts/nassau.js';
 import { wolfForHole, wolfGroupMatchesRound } from '../../../src/domain/wolf.js';
 import { dotsDefinitionMatchesRound, dotsRecordsMatchGame } from '../../../src/contracts/dots.js';
-import { dotsDeclarationIssues, dotsFirstPlayedHole } from '../../../src/domain/dots.js';
+import { dotsDeclarationIssues, dotsFirstPlayedHole, dotsSpecialCatalog } from '../../../src/domain/dots.js';
 import { dotRound, definitionCards, validateInternalGameChanges } from './internal-games.js';
 import { buildDotAwardAudit } from './dot-audit.js';
 import { groupStartingHole } from '../../../src/domain/round-navigation.js';
@@ -257,7 +257,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     const kpPot = access.testerLink || !kpProjection.kp ? undefined : await readKpPot(this.table, workspace.event.id, round.id, access.event.purseConfigured);
     const visibleGames = access.testerLink && games ? games.games.filter((game) =>
       game.kind !== 'wolf' && game.kind !== 'nassau' && game.kind !== 'dots'
-      && !(game.kind === 'churchy' && game.version === 2)) : games?.games;
+      && !(game.kind === 'churchy' && game.version !== 1)) : games?.games;
     const projection: RoundScores = {
       ...(access.event.quickRound === true ? { quickRound: true as const } : {}),
       kpEnabled: true,
@@ -265,9 +265,10 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       ...(access.testerLink && kpProjection.kp ? { kp: { ...kpProjection.kp, decisions: [] } } : kpProjection),
       ...(kpPot ? { kpPot } : {}),
       churchyEnabled: this.churchyEnabled(),
-      ...(!access.testerLink && this.churchyEnabled() ? { churchyRulesVersions: [1, 2] as const } : {}),
+      ...(!access.testerLink && this.churchyEnabled() ? { churchyRulesVersions: [1, 2, 3] as const } : {}),
       ...(!access.testerLink ? { wolfRulesVersions: [1, 2] as const, dotsRulesVersions: [1, 2] as const,
         dotsIndividualPlayerCounts: [1, 2, 3, 4] as const,
+        dotsSpecialKinds: dotsSpecialCatalog.map((entry) => entry.kind),
         internalGamesSupported: true } : {}),
       supportedGameKinds: roundGameKinds.filter((kind) => (kind !== 'churchy' || this.churchyEnabled())
         && (!access.testerLink || kind !== 'wolf' && kind !== 'nassau' && kind !== 'dots')),
@@ -425,6 +426,8 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     }
     for (const game of nextChurchy) {
       const previous = savedChurchy.find((entry) => entry.id === game.id);
+      if (state.round.scoringStarted && (game.version === 3 || previous?.version === 3)
+        && (!previous || !sameGameDefinitions([game], [previous]))) throw new ApiError(409, 'CHURCHY_SETUP_LOCKED');
       if (!previous && state.games?.games.some((saved) => saved.id === game.id)) {
         throw new ApiError(400, 'CHURCHY_REQUIRES_NEW_GAME');
       }
@@ -438,7 +441,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
             && canonical(previous.enabledSpecials) !== canonical(game.enabledSpecials))) {
         throw new ApiError(409, 'CHURCHY_SETUP_LOCKED');
       }
-      if (state.round.scoringStarted && !previous && game.version === 2) {
+      if (state.round.scoringStarted && !previous && game.version !== 1) {
         throw new ApiError(409, 'CHURCHY_SETUP_LOCKED');
       }
     }
@@ -579,7 +582,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     const before = card.holes.find((hole) => hole.number === holeNumber);
     if (!before) throw new ApiError(503, 'INVALID_STORED_SCORECARD');
     // Legacy/raw-only clients never erase hidden specials.
-    if (state.testerLink && score.churchy?.version === 2) throw new ApiError(403, 'MATCH_DECLARATIONS_NOT_ALLOWED');
+    if (state.testerLink && score.churchy && score.churchy.version !== undefined) throw new ApiError(403, 'MATCH_DECLARATIONS_NOT_ALLOWED');
     let savedScore: HoleScore;
     try { savedScore = preserveScoreExtras(score, before.score); }
     catch (error) {
@@ -727,6 +730,28 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       const group = state.round.groups.find((entry) => entry.number === game.groupNumber);
       if (!group || group.playerIds.length !== 4 || !group.playerIds.every((id) => game.playerIds.includes(id))) {
         throw new ApiError(409, 'CHURCHY_SETUP_CHANGED');
+      }
+      if (game.version === 3) {
+        if (extras.version !== 3 || extras.number !== holeNumber || group.playerIds[0] !== playerId) {
+          throw new ApiError(409, 'CHURCHY_SETUP_CHANGED');
+        }
+        const previous = before.score.churchy;
+        const receipts = churchyV3Records(game, state.round.groups, cards);
+        const receipt = receipts.find((record) => record.rotation);
+        if (extras.rotation && receipt && receipt.number !== holeNumber) throw new ApiError(409, 'CHURCHY_ORDER_CONFLICT');
+        if (extras.rotation && !receipt) {
+          if (holeNumber !== groupStartingHole(group, state.round.teeProfile.holes)) throw new ApiError(409, 'CHURCHY_SETUP_CHANGED');
+          const late = game.playerIds.some((id) => cards.find((card) => card.playerId === id)?.holes.some((hole) => hole.score.kind !== 'unplayed'));
+          savedScore = { ...savedScore, churchy: { ...extras, rotation: { playerIds: extras.rotation.playerIds,
+            ...(late ? { recordedLate: true as const } : {}) } } };
+        } else if (previous?.version === 3 && previous.rotation && savedScore.churchy?.version === 3) {
+          savedScore = { ...savedScore, churchy: { ...savedScore.churchy, rotation: previous.rotation } };
+        }
+        const nextCards = cards.map((card) => card.playerId === playerId ? { ...card,
+          holes: card.holes.map((hole) => hole.number === holeNumber ? { ...hole, score: savedScore } : hole) } : card);
+        if (!churchyV3RecordsMatchGame(churchyV3Records(game, state.round.groups, nextCards), game, dotRound(state.round, nextCards))) {
+          throw new ApiError(409, 'CHURCHY_SETUP_CHANGED');
+        }
       }
     }
     const recordedAt = new Date().toISOString();

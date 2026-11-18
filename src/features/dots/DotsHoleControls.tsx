@@ -1,12 +1,13 @@
 import { dotsSpecialCatalog } from '../../domain/dots';
-import type { DotsContest, DotsGameDefinition, DotsHoleRecord, DotsPlayerDeclaration, DotsRotationContext } from '../../domain/dots';
+import type { DotsContest, DotsGameDefinition, DotsHoleRecord, DotsPlayerDeclaration, DotsRotationContext, DotsSpecialKind } from '../../domain/dots';
 import type { DotHoleContext } from '../../domain/dot-context';
 import { DotsPlayerControls } from './DotsPlayerControls';
 import { DotsRotationControls } from './DotsRotationControls';
 import './dots-entry.css';
 
 export function DotsHoleControls({ game, holeNumber, par, playerPars, etag, saved, draft, players, context, disabled, onChange,
-  playerId: selectedPlayerId, groupOnly = false, rotation, rotationLocked = false }: {
+  playerId: selectedPlayerId, groupOnly = false, rotation, rotationLocked = false, specialLabels, contextLabel = 'Wolf',
+  contextPreview = false, allowMurphyPresses = false }: {
   readonly game: DotsGameDefinition;
   readonly holeNumber: number;
   readonly par: number;
@@ -22,6 +23,10 @@ export function DotsHoleControls({ game, holeNumber, par, playerPars, etag, save
   readonly groupOnly?: boolean;
   readonly rotation?: DotsRotationContext | undefined;
   readonly rotationLocked?: boolean;
+  readonly specialLabels?: Readonly<Partial<Record<DotsSpecialKind, string>>> | undefined;
+  readonly contextLabel?: string;
+  readonly contextPreview?: boolean;
+  readonly allowMurphyPresses?: boolean;
 }) {
   const record = draft ?? saved ?? { number: holeNumber, gameId: game.id, gameEtag: etag, players: [], contests: [] };
   const enabled = (kind: string) => game.specials.some((special) => special.kind === kind);
@@ -57,17 +62,18 @@ export function DotsHoleControls({ game, holeNumber, par, playerPars, etag, save
       Fixed partner: {teammates.map(name).join(' + ')} · All round
     </p>}
     {selectedPlayerId && game.mode === 'linked' && <p className="dots-entry-partner">{context?.status !== 'ready'
-      ? 'Partners pending saved Wolf choice'
+      ? `Partners pending saved ${contextLabel} choice`
       : teammates.length === 0 ? `Solo · ×${String(context.multiplier)}`
-        : `${teammates.length === 1 ? 'Partner' : 'Teammates'}: ${teammates.map(name).join(' + ')} · ×${String(context.multiplier)}`}</p>}
+        : `${teammates.length === 1 ? 'Partner' : 'Teammates'}: ${teammates.map(name).join(' + ')} · ×${String(context.multiplier)}${contextPreview ? ' · Unsaved partner preview' : ''}`}</p>}
     {!selectedPlayerId && game.mode === 'linked' && <p>{context?.status === 'ready'
-      ? `${context.sides.map((side) => side.map(name).join(' + ')).join(' vs ')} · ×${String(context.multiplier)}`
-      : 'Linked sides are pending saved Wolf choices. Results use the authoritative saved context.'}</p>}
+      ? `${context.sides.map((side) => side.map(name).join(' + ')).join(' vs ')} · ×${String(context.multiplier)}${contextPreview ? ' · Unsaved partner preview' : ''}`
+      : `Linked sides are pending saved ${contextLabel} choices. Results use the authoritative saved context.`}</p>}
     {!groupOnly && game.playerIds.filter((playerId) => !selectedPlayerId || selectedPlayerId === playerId).map((playerId) => {
       const declaration = record.players.find((entry) => entry.playerId === playerId) ?? { playerId, counts: {}, calls: [] };
       const controls = <DotsPlayerControls game={game} declaration={declaration} name={name(playerId)}
         par={playerPars?.find((entry) => entry.playerId === playerId)?.par ?? par}
-        saved={saved?.players.find((entry) => entry.playerId === playerId)} onChange={changePlayer} />;
+        saved={saved?.players.find((entry) => entry.playerId === playerId)} onChange={changePlayer} specialLabels={specialLabels}
+        allowMurphyPresses={allowMurphyPresses} />;
       return selectedPlayerId ? <div key={playerId}>{controls}</div>
         : <details key={playerId}><summary>{name(playerId)} · Specials and calls</summary>{controls}</details>;
     })}

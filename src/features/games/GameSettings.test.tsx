@@ -30,7 +30,7 @@ describe('GameSettings', () => {
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ churchySpecials: defaultChurchySpecials.filter((key) => key !== 'eagle') }));
     expect(screen.queryByLabelText(/custom|reason/i)).toBeNull();
     view.rerender(<GameSettings {...props} setupLocked />);
-    expect(screen.getByLabelText('Churchy playing group')).toBeDisabled();
+    expect(screen.getByLabelText('Churcie playing group')).toBeDisabled();
     expect(screen.getByLabelText('P1')).toBeDisabled();
     expect(screen.getByLabelText('Eagle · 4')).toBeDisabled();
     expect(screen.getByLabelText('USD per dot')).toBeEnabled();

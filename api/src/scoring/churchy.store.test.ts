@@ -52,7 +52,7 @@ describe('Churchy atomic audited storage and authoritative kill switch', () => {
       const protectedPeer = await f.scores.saveGames(creator, event.id, f.roundId, [ballDrop], null, identifier(809));
       const configured = await f.scores.saveGames(f.actor, event.id, f.roundId, [ballDrop, ...definitions],
         protectedPeer.round.games?.configuration.etag ?? null, identifier(810));
-      expect(configured.round).toMatchObject({ churchyRulesVersions: [1, 2], churchyEnabled: true,
+      expect(configured.round).toMatchObject({ churchyRulesVersions: [1, 2, 3], churchyEnabled: true,
         permissions: { role: 'public', canManageGames: false, canManageInternalGames: true } });
       expect(isRoundScores(configured.round)).toBe(true);
       const revision = configured.round.games?.configuration.etag ?? '';

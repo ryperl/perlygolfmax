@@ -3,7 +3,7 @@ import { scorecardHoles, scorecardTee } from '../../domain/tees';
 import { ScorecardNine } from './ScorecardNine';
 import { scorecardGame, scorecardGameWarnings, summarizeCard } from './scorecard-presentation';
 import './scorecard-recap.css';
-import { gameScoringLabel } from '../games';
+import { gameDisplayName, gameScoringLabel } from '../games';
 import { PlayerDifferential } from '../differentials';
 
 export function PlayerScorecardRecap({ round, card, gameId }: {
@@ -24,7 +24,7 @@ export function PlayerScorecardRecap({ round, card, gameId }: {
       <div><h3>{card.displayName}</h3><p>{round.roundName} — {round.courseName}</p>
         <p>{tee?.name ?? round.teeName} / {tee?.category ?? round.teeCategory}{totalRating ? ` · Course rating ${String(totalRating.course)} · Slope ${String(totalRating.slope)}` : ''}
           {(round.playerTees?.length ?? 0) > 0 ? tee ? ' · personal tee' : ' · default tee' : ''}</p>
-        {game && <p className="scorecard-game-context">{game.definition.name} · {game.definition.kind === 'ball-drop' || game.definition.kind === 'skins' || game.definition.kind === 'churchy' || game.definition.kind === 'stroke-play' || game.definition.kind === 'wolf' || game.definition.kind === 'dots'
+        {game && <p className="scorecard-game-context">{gameDisplayName(game.definition)} · {game.definition.kind === 'ball-drop' || game.definition.kind === 'skins' || game.definition.kind === 'churchy' || game.definition.kind === 'stroke-play' || game.definition.kind === 'wolf' || game.definition.kind === 'dots'
           ? gameScoringLabel(game.definition) : `${game.definition.basis === 'net' ? 'Net' : 'Gross'} points`}</p>}
       </div>
       <p className="recap-total">{summary.complete ? 'Gross total' : 'Recorded total'}:

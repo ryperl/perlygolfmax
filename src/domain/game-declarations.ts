@@ -7,6 +7,7 @@ import type { GamePlayerResult } from './games.js';
 import type { WolfResults } from './wolf.js';
 import type { DotsGameDefinition, DotsHoleRecord } from './dots.js';
 import type { DotRoundInput } from './dot-context.js';
+import { sameChurchySpecials } from './churchy.js';
 
 function sameValue(left: unknown, right: unknown): boolean {
   if (Array.isArray(left)) return Array.isArray(right) && left.length === right.length
@@ -42,7 +43,7 @@ export type RoundGameScoringContext = Pick<RoundScores, 'roundId' | 'layout' | '
   | 'courseHandicaps' | 'teeStrokeAllocation' | 'gameInputContext' | 'inputRevision'>;
 
 export class GameDeclarationConflictError extends Error {
-  constructor(message: string, readonly code: 'NASSAU_PRESS_CONFLICT' | 'WOLF_COMEBACK_CONFLICT' | 'DOTS_ROTATION_CONFLICT' = 'NASSAU_PRESS_CONFLICT') { super(message); }
+  constructor(message: string, readonly code: 'NASSAU_PRESS_CONFLICT' | 'WOLF_COMEBACK_CONFLICT' | 'DOTS_ROTATION_CONFLICT' | 'CHURCHY_ORDER_CONFLICT' = 'NASSAU_PRESS_CONFLICT') { super(message); }
 }
 
 function samePress(a: NassauManualPress, b: NassauManualPress): boolean {
@@ -114,6 +115,13 @@ export function mergeWolfRecords(edits: readonly WolfHoleRecord[], saved: readon
 
 export function scoreMatchesIntent(saved: HoleScore, intent: HoleScore): boolean {
   try {
+    if (intent.churchy?.version === 3) {
+      if (saved.churchy?.version !== 3 || saved.churchy.gameId !== intent.churchy.gameId
+        || saved.churchy.number !== intent.churchy.number
+        || intent.churchy.rotation && !sameValue(intent.churchy.rotation.playerIds, saved.churchy.rotation?.playerIds)
+        || !sameChurchySpecials(saved.churchy, { ...intent.churchy,
+          ...(saved.churchy.rotation ? { rotation: saved.churchy.rotation } : {}) })) return false;
+    } else if (intent.churchy && saved.churchy?.version === 3) return false;
     return sameNassauRecords(mergeNassauRecords(intent.nassau ?? [], saved.nassau), saved.nassau)
       && sameWolfRecords(mergeWolfRecords(intent.wolf ?? [], saved.wolf), saved.wolf)
       && sameDotsRecords(mergeDotsRecords(intent.dots ?? [], saved.dots), saved.dots);
@@ -183,8 +191,9 @@ export function wolfResultPlayers(wolf: WolfResults): readonly GamePlayerResult[
 
 /** Unchanged namespaces need not be echoed into bounded raw-score requests. */
 export function scoreDeclarationIntent(score: HoleScore, saved: HoleScore): HoleScore {
-  const { nassau, wolf, dots, ...raw } = score;
+  const { nassau, wolf, dots, churchy, ...raw } = score;
   return { ...raw,
+    ...(churchy && (churchy.version !== 3 || !sameChurchySpecials(churchy, saved.churchy)) ? { churchy } : {}),
     ...(nassau && !sameNassauRecords(mergeNassauRecords(nassau, saved.nassau), saved.nassau) ? { nassau } : {}),
     ...(wolf && !sameWolfRecords(mergeWolfRecords(wolf, saved.wolf), saved.wolf) ? { wolf } : {}),
     ...(dots && !sameDotsRecords(mergeDotsRecords(dots, saved.dots), saved.dots) ? { dots } : {}),

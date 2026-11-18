@@ -4,7 +4,7 @@ import type { ChurchyCountTexts } from './churchy-counts';
 import { churchyCount } from './churchy-counts';
 import './churchy.css';
 
-export function ChurchyDots({ name, number, value, disabled, onChange, game, counts }: {
+interface ChurchyDotsProps {
   readonly name: string;
   readonly number: number;
   readonly value: ChurchySpecials;
@@ -12,6 +12,15 @@ export function ChurchyDots({ name, number, value, disabled, onChange, game, cou
   readonly game?: ChurchyGameDefinition;
   readonly counts?: ChurchyCountTexts | undefined;
   readonly onChange: (value: ChurchySpecials, counts?: ChurchyCountTexts) => void;
+}
+
+export function ChurchyDots(props: ChurchyDotsProps) {
+  if (props.value.version === 3) return null;
+  return <LegacyChurchyDots {...props} value={props.value} />;
+}
+
+function LegacyChurchyDots({ name, number, value, disabled, onChange, game, counts }: Omit<ChurchyDotsProps, 'value'> & {
+  readonly value: Exclude<ChurchySpecials, { readonly version: 3 }>;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);

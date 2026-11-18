@@ -45,15 +45,17 @@ export function buildDotAwardAudit(
   games: readonly RoundGameDefinition[], beforeRound: RoundSnapshot, afterRound: RoundSnapshot,
   beforeCards: readonly Scorecard[], afterCards: readonly Scorecard[], gameEtag: string | null,
 ): readonly DotAwardAudit[] {
-  if (!games.some((game) => game.kind === 'dots' || game.kind === 'wolf' && game.version === 2)) return [];
+  if (!games.some((game) => game.kind === 'dots' || game.kind === 'wolf' && game.version === 2
+    || game.kind === 'churchy' && game.version === 3)) return [];
   const before = calculateGameResults(games, beforeRound, beforeCards);
   const after = calculateGameResults(games, afterRound, afterCards);
   return games.flatMap((game): readonly DotAwardAudit[] => {
-    if (game.kind !== 'dots' && !(game.kind === 'wolf' && game.version === 2)) return [];
+    if (game.kind !== 'dots' && !(game.kind === 'wolf' && game.version === 2)
+      && !(game.kind === 'churchy' && game.version === 3)) return [];
     const previous = before.find((result) => result.gameId === game.id);
     const next = after.find((result) => result.gameId === game.id);
-    const previousAwards = previous?.dots?.awards ?? previous?.wolf?.awards ?? [];
-    const nextAwards = next?.dots?.awards ?? next?.wolf?.awards ?? [];
+    const previousAwards = previous?.dots?.awards ?? previous?.wolf?.awards ?? previous?.churchy?.awards ?? [];
+    const nextAwards = next?.dots?.awards ?? next?.wolf?.awards ?? next?.churchy?.awards ?? [];
     if (canonical(previousAwards) === canonical(nextAwards)) return [];
     return [{ gameId: game.id, kind: game.kind, version: game.version, configuration: game, gameEtag,
       inputRevision: afterRound.inputRevision ?? null, before: previousAwards, after: nextAwards }];

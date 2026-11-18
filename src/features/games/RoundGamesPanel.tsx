@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { EventChangedError } from '../../client/events';
+import type { DotPresetStore } from '../../client/dot-presets';
 import type { RoundGameDefinition } from '../../domain/games';
 import { maximumGamesPerRound, sameGameDefinitions, visibleGames } from '../../domain/games';
 import type { GameWriteResult, RoundScores } from '../../domain/scoring';
-import { scorePermissions, supportsIndividualDotsPlayerCount, supportsRoundGame } from '../../domain/scoring';
+import { scorePermissions, supportsDotsSpecials, supportsIndividualDotsPlayerCount, supportsRoundGame } from '../../domain/scoring';
 import type { GameDraft } from './game-draft';
 import { buildGame, draftFromGame, newGameDraft, replaceGame, setGameKind } from './game-draft';
 import { GameResults } from './GameResults';
 import { GameSettings } from './GameSettings';
 import { canManageAllRoundGames, canManageGame, canManageRoundGames } from './game-permissions';
 import { InternalSettlement } from '../dots';
+import { gameDisplayName } from './game-presentation';
+import { dotsSpecialCatalog } from '../../domain/dots';
 import './games.css';
 
 export interface RoundGamesPanelProps {
@@ -18,6 +21,7 @@ export interface RoundGamesPanelProps {
   readonly onDirtyChange: (dirty: boolean) => void;
   readonly onSave: (games: readonly RoundGameDefinition[], etag: string | null, requestId: string) => Promise<GameWriteResult | null>;
   readonly onRefresh: () => Promise<RoundScores | null>;
+  readonly presetStore?: DotPresetStore | undefined;
 }
 
 interface Attempt {
@@ -37,13 +41,13 @@ interface Editor {
   readonly context: RoundScores;
 }
 
-export function RoundGamesPanel({ round, busy, onDirtyChange, onSave, onRefresh }: RoundGamesPanelProps) {
+export function RoundGamesPanel({ round, busy, onDirtyChange, onSave, onRefresh, presetStore }: RoundGamesPanelProps) {
   if (round.eventStatus === 'archived' && scorePermissions(round).role !== 'owner') return <p role="alert">Archived game results are available to the event owner only.</p>;
   return <RoundGamesController key={JSON.stringify([scorePermissions(round), round.quickRound === true])} round={round} busy={busy}
-    onDirtyChange={onDirtyChange} onSave={onSave} onRefresh={onRefresh} />;
+    onDirtyChange={onDirtyChange} onSave={onSave} onRefresh={onRefresh} presetStore={presetStore} />;
 }
 
-function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }: RoundGamesPanelProps) {
+function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, presetStore }: RoundGamesPanelProps) {
   const [editor, setEditor] = useState<Editor | null>(null);
   const [message, setMessage] = useState('');
   const [working, setWorking] = useState(false);
@@ -90,7 +94,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
       return;
     }
     if (editor.draft.kind === 'churchy' && round.churchyEnabled !== true) {
-      setMessage('Churchy disabled. Cancel editing and refresh; ordinary scores and other games remain available.');
+      setMessage('Churcie disabled. Cancel editing and refresh; ordinary scores and other games remain available.');
       return;
     }
     const game = buildGame(editor.draft, editor.roster.map((card) => card.playerId));
@@ -106,10 +110,16 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
       setMessage('Rotating Dots requires API rules support. Saved rules versions cannot be converted.');
       return;
     }
-    if (game?.kind === 'churchy' && (previousGame?.kind === 'churchy' && previousGame.version !== game.version
-      || previousGame === undefined && (game.version !== 2 || round.setupLocked || editingRound.setupLocked)
-      || game.version === 2 && (!round.churchyRulesVersions?.includes(2) || !editingRound.churchyRulesVersions?.includes(2)))) {
-      setMessage('Churchy rules support is required before creating or editing this game. Saved rules versions cannot be converted.');
+    if (game?.kind === 'dots' && (!supportsDotsSpecials(round, game.specials) || !supportsDotsSpecials(editingRound, game.specials))) {
+      setMessage('These Dots specials require advertised API support. Your draft is retained.');
+      return;
+    }
+    const explicitChurchyUpgrade = previousGame?.kind === 'churchy' && previousGame.version === 2
+      && game?.kind === 'churchy' && game.version === 3 && !round.setupLocked && !editingRound.setupLocked;
+    if (game?.kind === 'churchy' && (previousGame?.kind === 'churchy' && previousGame.version !== game.version && !explicitChurchyUpgrade
+      || previousGame === undefined && (game.version !== 3 || round.setupLocked || editingRound.setupLocked)
+      || game.version !== 1 && (!round.churchyRulesVersions?.includes(game.version) || !editingRound.churchyRulesVersions?.includes(game.version)))) {
+      setMessage('Churcie rules support is required before creating or editing this game. Saved rules versions cannot be converted.');
       return;
     }
     if (game?.kind === 'churchy') {
@@ -120,7 +130,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
       }
       if ((round.setupLocked || editingRound.setupLocked) && previousGame?.kind === 'churchy'
         && !sameGameDefinitions([game], [{ ...previousGame, amountPerDotMinor: game.amountPerDotMinor }])) {
-        setMessage('Saved scoring locks the Churchy foursome, order and enabled specials. Only the planned rate can change.');
+        setMessage('Saved scoring locks the Churcie foursome, order and enabled specials. Only the planned rate can change.');
         return;
       }
     }
@@ -147,7 +157,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
       if (peers.some((peer) => (peer.kind === 'churchy' || peer.kind === 'wolf' || peer.kind === 'dots')
         && peer.groupNumber === game.groupNumber && (game.kind === 'churchy' || peer.kind === 'churchy'
           || game.kind === 'wolf' && peer.kind === 'wolf'))) {
-        setMessage('Choose one internal base game per playing group. Churchy cannot accompany Wolf or Dots; Ball Drop remains separate.');
+        setMessage('Choose one internal base game per playing group. Churcie cannot accompany Wolf or Dots; Ball Drop remains separate.');
         return;
       }
       if (game.kind === 'dots' && game.mode === 'linked' && !peers.some((peer) => peer.kind === 'wolf'
@@ -163,7 +173,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
         ? 'Check the game name, saved playing group, distinct participants and order. Enter USD dollars and cents, or choose No planned money.'
         : editor.draft.kind === 'dots' ? 'Choose a saved playing group, compatible mode and enabled specials with positive whole units. Solo play is stats-only; otherwise use a valid optional USD rate with at most two decimal places.'
         : editor.draft.kind === 'churchy'
-        ? 'Choose a complete saved foursome, order all four golfers, and enter USD dollars and cents per dot (zero or more). Choose one Churchy game per group.'
+        ? 'Choose a complete saved foursome, order all four golfers, and enter USD dollars and cents per dot (zero or more). Choose one Churcie game per group.'
         : editor.draft.kind === 'stroke-play' ? 'Check the game name (1–100 characters) and gross or net score basis. Net uses 100% captured Course Handicap.'
         : editor.draft.kind === 'ball-drop' || editor.draft.kind === 'skins'
         ? 'Check the game name (1–100 characters), supported format, and complete four-person Ball Drop teams. Skins are individual; net always uses 100% Course Handicap.'
@@ -260,17 +270,20 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
         settlement={settlement} sourceLabels={settlement.gameIds.length === 2 ? ['Wolf', 'Dots'] : ['Base', 'Specials']}
         provisional={settlement.gameIds.some((id) => !round.games?.results.find((entry) => entry.gameId === id)
           ?.players.every((player) => player.status === 'complete'))}
-        gameNames={settlement.gameIds.map((id) => games.find((game) => game.id === id)?.name ?? 'Game unavailable')} />)}
+        gameNames={settlement.gameIds.map((id) => {
+          const game = games.find((game) => game.id === id);
+          return game ? gameDisplayName(game) : 'Game unavailable';
+        })} />)}
       {visibleGames(games, round.churchyEnabled).map((game) => <div className="round-game" key={game.id}>
         {round.internalSettlements?.some((settlement) => settlement.gameIds.includes(game.id)) ? <details>
-          <summary>{game.name} · Game standings</summary>
+          <summary>{gameDisplayName(game)} · Game standings</summary>
           <GameResults game={game} result={round.games?.results.find((result) => result.gameId === game.id)}
             holeNumbers={round.layout.map((hole) => hole.number)} players={round.cards} />
         </details> : <GameResults game={game} result={round.games?.results.find((result) => result.gameId === game.id)}
           holeNumbers={round.layout.map((hole) => hole.number)} players={round.cards} />}
         {canManage && (canManageAllRoundGames(round) || canManageGame(round, game)) && <button type="button"
           disabled={disabled || editor !== null || !supportsRoundGame(round, game.kind ?? 'stableford') || !canManageGame(round, game)}
-          onClick={() => { open(game); }}>Edit {game.name}{game.kind === 'churchy'
+          onClick={() => { open(game); }}>Edit {gameDisplayName(game)}{game.kind === 'churchy'
             && games.filter((entry) => entry.kind === 'churchy').length > 1 ? ` · Group ${String(game.groupNumber)}` : ''}</button>}
         {!supportsRoundGame(round, game.kind ?? 'stableford') && <p>This API does not advertise support for editing this game.</p>}
       </div>)}
@@ -291,6 +304,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
           </div>
         </div>}
         <GameSettings draft={editor.draft} disabled={disabled || editor.latest?.eventStatus === 'archived'}
+          presetStore={presetStore}
           roster={editor.roster}
           churchyEnabled={round.churchyEnabled === true} groups={editingRound.groups}
           supportedGameKinds={round.supportedGameKinds?.filter((kind) => supportsRoundGame(editingRound, kind))}
@@ -298,9 +312,13 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
           existing={editor.base.some((game) => game.id === editor.draft.id)}
           wolfV2Supported={round.wolfRulesVersions?.includes(2) === true && editingRound.wolfRulesVersions?.includes(2) === true}
           dotsV2Supported={round.dotsRulesVersions?.includes(2) === true && editingRound.dotsRulesVersions?.includes(2) === true}
+          dotsSpecialKinds={dotsSpecialCatalog.filter(({ kind }) => supportsDotsSpecials(round, [{ kind, units: 1 }])
+            && supportsDotsSpecials(editingRound, [{ kind, units: 1 }])).map((special) => special.kind)}
           dotsIndividualPlayerCounts={([1, 2, 3, 4] as const).filter((count) =>
             supportsIndividualDotsPlayerCount(round, count) && supportsIndividualDotsPlayerCount(editingRound, count))}
           churchyV2Supported={round.churchyRulesVersions?.includes(2) === true && editingRound.churchyRulesVersions?.includes(2) === true}
+          churchyV3Supported={round.churchyRulesVersions?.includes(3) === true && editingRound.churchyRulesVersions?.includes(3) === true}
+          holeNumbers={editingRound.layout.map((hole) => hole.number)}
           setupLocked={round.setupLocked || editingRound.setupLocked}
           allowChurchyCreation={!editor.base.some((game) => game.id === editor.draft.id)}
           saveDisabled={editor.conflict} cancelDisabled={working} retry={editor.attempt !== null}
@@ -311,7 +329,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
           }} />
       </>}
       {editor?.draft.kind === 'churchy' && round.churchyEnabled !== true && <button type="button" disabled={working}
-        onClick={() => { setEditor(null); onDirtyChange(false); }}>Cancel unavailable Churchy edit</button>}
+        onClick={() => { setEditor(null); onDirtyChange(false); }}>Cancel unavailable Churcie edit</button>}
     </section>
   );
 }

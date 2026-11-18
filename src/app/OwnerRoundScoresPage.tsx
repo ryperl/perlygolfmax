@@ -9,6 +9,7 @@ import { groupStartingHole } from '../domain/round-navigation';
 import { OwnerScoresView } from '../features/scoring';
 import type { RoundCorrectionsClient } from '../client/round-corrections';
 import { roundToneFor } from '../features/round-theme';
+import { browserDotPresets } from './dot-presets';
 
 const RoundCorrectionsDialog = lazy(async () => ({ default: (await import('../features/corrections')).RoundCorrectionsDialog }));
 
@@ -62,7 +63,7 @@ export function OwnerRoundScoresPage({ setup, scores, corrections, eventId, roun
   const startingHole = groupStartingHole(firstGroup, selected.teeProfile.holes);
   const initialLocation = firstGroup && startingHole !== undefined
     ? { groupNumber: firstGroup.number, holeNumber: startingHole, view } : undefined;
-  return <OwnerScoresView client={scores} eventId={eventId} roundId={roundId}
+  return <OwnerScoresView client={scores} eventId={eventId} roundId={roundId} presetStore={browserDotPresets}
     roundTone={roundToneFor(roundId, workspace.rounds)}
     initialLocation={initialLocation} onLocationChange={rememberView} onSessionExpired={onSessionExpired}
     onNavigationBlockedChange={setBlocked} overviewHref={`#overview?event=${encodeURIComponent(eventId)}`}

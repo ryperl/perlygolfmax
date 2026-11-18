@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { DotsGameDefinition, DotsPlayerDeclaration } from '../../domain/dots';
 import { DotsPlayerControls } from './DotsPlayerControls';
 
@@ -17,6 +17,22 @@ function Editor() {
 }
 
 describe('quick per-golfer Dots choices', () => {
+  it('uses the Sticky alias without emitting a disabled SuperDime claim, but still clears a selected unsaved alternative', async () => {
+    const user = userEvent.setup(), onChange = vi.fn<(value: DotsPlayerDeclaration) => void>();
+    const props = { game: { ...game, specials: [{ kind: 'dime' as const, units: 1 }] },
+      declaration: { playerId: 'a', counts: {}, calls: [] }, saved: undefined,
+      name: 'Fictional golfer', par: 4, specialLabels: { dime: 'Sticky' }, onChange };
+    const view = render(<DotsPlayerControls {...props} />);
+    await user.click(screen.getByRole('checkbox', { name: 'Sticky for Fictional golfer' }));
+    expect(onChange).toHaveBeenLastCalledWith({ playerId: 'a', counts: { dime: 1 }, calls: [] });
+    expect(screen.queryByRole('checkbox', { name: 'Dime for Fictional golfer' })).not.toBeInTheDocument();
+    view.rerender(<DotsPlayerControls {...props}
+      game={{ ...game, specials: [{ kind: 'dime', units: 1 }, { kind: 'super-dime', units: 1 }] }}
+      declaration={{ playerId: 'a', counts: { 'super-dime': 1 }, calls: [] }} />);
+    await user.click(screen.getByRole('checkbox', { name: 'Sticky for Fictional golfer' }));
+    expect(onChange).toHaveBeenLastCalledWith({ playerId: 'a', counts: { 'super-dime': 0, dime: 1 }, calls: [] });
+  });
+
   it('keeps common choices and the Sandy counter visible while optional count editing stays collapsed', async () => {
     const user = userEvent.setup();
     render(<Editor />);

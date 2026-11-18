@@ -89,7 +89,8 @@ describe('owner gross scoring network contracts', () => {
       expect(isRoundScores(legacyCapability)).toBe(true);
       expect(isRoundScores({ ...legacyCapability, churchyEnabled: false })).toBe(true);
       expect(isRoundScores({ ...legacyCapability, churchyEnabled: false, churchyRulesVersions: [] })).toBe(true);
-      for (const versions of [null, true, [2, 2], [1, 3], ['2'], 2]) {
+      expect(isRoundScores({ ...value, churchyRulesVersions: [1, 2, 3] })).toBe(true);
+      for (const versions of [null, true, [2, 2], [1, 4], ['2'], 2]) {
         expect(isRoundScores({ ...value, churchyRulesVersions: versions })).toBe(false);
       }
       expect(isRoundScores({ ...value, churchyEnabled: false })).toBe(false);

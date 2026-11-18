@@ -2,13 +2,14 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import type { ReactNode } from 'react';
 import { adjacentHole, groupStartingHole } from '../../domain/round-navigation';
 import type { ScoresClient } from '../../client/scoring';
+import type { DotPresetStore } from '../../client/dot-presets';
 import { EventChangedError } from '../../client/events';
 import type { GameWriteResult, RoundScores } from '../../domain/scoring';
 import type { RoundGameDefinition } from '../../domain/games';
 import type { ScoreLocation, ScoreView } from '../../domain/score-location';
 import { RoundGamesPanel, RoundGameHoleControls, canManageRoundGames } from '../games';
 import { RoundLeaderboard } from '../leaderboard';
-import { sameHoleScore, scorePermissions, supportsIndividualDotsPlayerCount, supportsRoundGame } from '../../domain/scoring';
+import { sameHoleScore, scorePermissions, supportsDotsSpecials, supportsIndividualDotsPlayerCount, supportsRoundGame } from '../../domain/scoring';
 import { scoreAccessKey, writablePlayerIds } from './score-access';
 import { scorecardHoles, scorecardTee } from '../../domain/tees';
 import { useOwnerScores } from './useOwnerScores';
@@ -45,6 +46,7 @@ export interface OwnerScoresViewProps {
   readonly roundPicker?: ReactNode;
   readonly roundTone?: RoundTone | undefined;
   readonly onNavigationBlockedChange?: (blocked: boolean) => void;
+  readonly presetStore?: DotPresetStore | undefined;
 }
 
 export function OwnerScoresView(props: OwnerScoresViewProps) {
@@ -53,7 +55,7 @@ export function OwnerScoresView(props: OwnerScoresViewProps) {
   return <OwnerScoresController key={`${props.eventId}:${props.roundId}:${String(identity.generation)}`} {...props} />;
 }
 
-function OwnerScoresController({ client, eventId, roundId, onSessionExpired, overviewHref, initialLocation, onLocationChange, roundTools, roundPicker, roundTone, onNavigationBlockedChange }: OwnerScoresViewProps) {
+function OwnerScoresController({ client, eventId, roundId, onSessionExpired, overviewHref, initialLocation, onLocationChange, roundTools, roundPicker, roundTone, onNavigationBlockedChange, presetStore }: OwnerScoresViewProps) {
   const [drafts, setDrafts] = useState<ReadonlyMap<string, HoleDraft>>(new Map());
   const currentDrafts = useRef(drafts);
   const draftAccess = useRef<string | null>(null);
@@ -144,11 +146,25 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     if (!round || !hole || round.churchyEnabled !== true || busy || saving.current || !canEditGroup) return;
     const game = round.games?.configuration.games.find((entry) => entry.kind === 'churchy' && entry.id === churchy.gameId
       && entry.groupNumber === group.number && entry.playerIds.includes(playerId));
-    if (game?.kind !== 'churchy' || game.version === 2 && !round.churchyRulesVersions?.includes(2)
-      || !churchySpecialsMatchGame(churchy, game)) return;
+    if (game?.kind !== 'churchy' || game.version !== 1 && !round.churchyRulesVersions?.includes(game.version)
+      || (churchy.version === 3 ? game.version !== 3 || churchy.number !== hole.number
+        : !churchySpecialsMatchGame(churchy, game))) return;
     const card = cardFor(round, playerId);
     const key = entryKey(playerId, hole.number);
     const previous = currentDrafts.current.get(key);
+    if (churchy.version === 3 && !churchy.rotation && churchy.contests.length === 0
+      && !churchy.players.some((player) => player.calls.length > 0 || Object.values(player.counts).some((count) => count !== 0))
+      && savedHole(card, hole.number).churchy === undefined) {
+      const { churchy: discarded, churchyCounts: discardedCounts, ...rest } = editedDraft(
+        previous?.text ?? scoreEntryText(savedHole(card, hole.number)), card, previous, false);
+      void discarded;
+      void discardedCounts;
+      const empty = rest.status === 'draft' && !rest.rawEdited && !rest.mustWrite && !rest.acknowledged
+        && rest.kp === undefined && rest.nassau === undefined && rest.wolf === undefined && rest.dots === undefined;
+      update(key, empty ? null : rest);
+      setNotice(null);
+      return;
+    }
     if (currentDrafts.current.size === 0) draftAccess.current = scoreAccessKey(round);
     pauseForEdit();
     update(key, { ...editedDraft(previous?.text ?? scoreEntryText(savedHole(card, hole.number)), card, previous, false), churchy,
@@ -172,6 +188,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
       || !supportsRoundGame(round, patch.nassau !== undefined ? 'nassau' : patch.dots !== undefined ? 'dots' : 'wolf')) return;
     if (patch.dots?.some((record) => round.games?.configuration.games.some((game) =>
       game.kind === 'dots' && game.id === record.gameId && (game.version === 2 && !round.dotsRulesVersions?.includes(2)
+        || !supportsDotsSpecials(round, game.specials)
         || game.mode === 'individual' && !supportsIndividualDotsPlayerCount(round, game.playerIds.length))))) return;
     const card = cardFor(round, playerId);
     const key = entryKey(playerId, hole.number);
@@ -215,7 +232,8 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
       ? scoreEntryText(savedHole(currentCard, hole.number)) : local.text,
       baseEtag: currentCard.etag, status: 'draft', mustWrite: true,
       ...(local.rawEdited ? { rawEdited: true } : {}),
-      ...(local.churchy ? { churchy: local.churchy } : {}), ...(local.kp !== undefined ? { kp: local.kp } : {}),
+      ...(local.churchy ? { churchy: local.churchy.version === 3 ? { ...local.churchy, gameEtag: gameEtag ?? local.churchy.gameEtag }
+        : local.churchy } : {}), ...(local.kp !== undefined ? { kp: local.kp } : {}),
       ...(local.churchyCounts ? { churchyCounts: local.churchyCounts } : {}),
       ...(local.nassau ? { nassau: local.nassau.map((record) => ({ ...record, gameEtag: gameEtag ?? record.gameEtag })) } : {}),
       ...(local.dots ? { dots: local.dots.map((record) => ({ ...record, gameEtag: gameEtag ?? record.gameEtag })) } : {}),
@@ -253,7 +271,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     if (!round || !group || !hole || busy || saving.current || !canEditGroup) return;
     const plan = planGroup(round, group.playerIds, hole.number, currentDrafts.current);
     if (plan.invalid.length > 0) {
-      setNotice({ kind: 'attention', message: 'Nothing sent. Check every intended entry, including Dots/Churchy counts, partner order and conflicting specials or calls. Counts must be nonnegative whole numbers; scores accept a positive number, X / X7, DNF, or blank.' });
+      setNotice({ kind: 'attention', message: 'Nothing sent. Check every intended entry, including Dots/Churcie counts, partner order and conflicting specials or calls. Counts must be nonnegative whole numbers; scores accept a positive number, X / X7, DNF, or blank.' });
       return;
     }
     if (plan.conflicts.length > 0) {
@@ -395,12 +413,13 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
       {screen === 'entry' && !canEditGroup && writeIds.length > 0 && !accessChanged && <p>This playing group is read-only. Select your assigned playing group to enter scores.</p>}
       {round.eventStatus === 'archived' && <p role="status">Archived event: owner read-only. Drafts cannot be saved.</p>}
       {screen === 'entry' && group && hole && <GroupHoleEntry groups={round.groups} groupNumber={group.number} layout={round.layout} hole={hole}
-        beforeScores={group.playerIds[0] && <RoundGameHoleControls round={round} groupNumber={group.number} holeNumber={hole.number} placement="wolf"
+        beforeScores={group.playerIds[0] && <RoundGameHoleControls round={round} groupNumber={group.number} holeNumber={hole.number} placement="before"
           saved={savedHole(cardFor(round, group.playerIds[0]), hole.number)}
           draft={drafts.get(entryKey(group.playerIds[0], hole.number))}
           disabled={busy || !canEditGroup || drafts.get(entryKey(group.playerIds[0], hole.number))?.status === 'conflict'}
           onNassauChange={(records) => { editMatch({ nassau: records }); }}
           onSpecialDotsChange={(records) => { editMatch({ dots: records }); }}
+          onChurchyChange={(record) => { if (group.playerIds[0]) editDots(group.playerIds[0], record); }}
           onWolfChange={(records) => { editMatch({ wolf: records }); }} />}
         playerGameControls={(playerId) => group.playerIds[0] && <RoundGameHoleControls round={round} groupNumber={group.number}
           holeNumber={hole.number} playerId={playerId} saved={savedHole(cardFor(round, group.playerIds[0]), hole.number)}
@@ -408,6 +427,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
           disabled={busy || !canEditGroup || drafts.get(entryKey(group.playerIds[0], hole.number))?.status === 'conflict'}
           onNassauChange={(records) => { editMatch({ nassau: records }); }}
           onSpecialDotsChange={(records) => { editMatch({ dots: records }); }}
+          onChurchyChange={(record) => { if (group.playerIds[0]) editDots(group.playerIds[0], record); }}
           onWolfChange={(records) => { editMatch({ wolf: records }); }} />}
         gameControls={group.playerIds[0] && <RoundGameHoleControls round={round} groupNumber={group.number} holeNumber={hole.number} placement="other"
           saved={savedHole(cardFor(round, group.playerIds[0]), hole.number)}
@@ -415,6 +435,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
           disabled={busy || !canEditGroup || drafts.get(entryKey(group.playerIds[0], hole.number))?.status === 'conflict'}
           onNassauChange={(records) => { editMatch({ nassau: records }); }}
           onSpecialDotsChange={(records) => { editMatch({ dots: records }); }}
+          onChurchyChange={(record) => { if (group.playerIds[0]) editDots(group.playerIds[0], record); }}
           onWolfChange={(records) => { editMatch({ wolf: records }); }} />}
         kpEligible={round.kpEnabled === true && calculateKp(round).status !== 'unavailable' && hole.par === 3}
         kpClosed={round.kp?.status === 'closed'}
@@ -477,7 +498,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
         }} onReview={review} onUseSaved={(playerId) => { if (!busy) update(entryKey(playerId, hole.number), null); }}
         onPendingChange={setKpDirty} /></div>}
       <div hidden={screen !== 'games'}>
-        <RoundGamesPanel round={round} busy={busy} onDirtyChange={gameDirtyChanged}
+        <RoundGamesPanel round={round} busy={busy} onDirtyChange={gameDirtyChanged} presetStore={presetStore}
           onSave={saveGameSettings} onRefresh={refreshSavedRound} />
       </div>
       <div hidden={screen !== 'leaderboard'}>

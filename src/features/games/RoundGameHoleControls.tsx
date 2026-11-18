@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
 import type { NassauHoleRecord } from '../../domain/nassau';
 import type { HoleScore, RoundScores } from '../../domain/scoring';
-import { supportsIndividualDotsPlayerCount, supportsRoundGame } from '../../domain/scoring';
+import { supportsDotsSpecials, supportsIndividualDotsPlayerCount, supportsRoundGame } from '../../domain/scoring';
 import type { WolfHoleRecord } from '../../domain/wolf';
 import { wolfForHole } from '../../domain/wolf';
 import { NassauHoleControls } from '../nassau';
@@ -10,30 +10,43 @@ import type { DotsHoleRecord } from '../../domain/dots';
 import { dotsRotationContext } from '../../domain/dots';
 import { DotsEntryButton, DotsHoleControls } from '../dots';
 import { groupStartingHole } from '../../domain/round-navigation';
+import type { ChurchySpecials, ChurchySpecialsV3 } from '../../domain/churchy';
+import { ChurcieEntryControls } from '../churchy';
 
 export interface RoundGameHoleControlsProps {
   readonly round: RoundScores;
   readonly groupNumber: number;
   readonly holeNumber: number;
   readonly playerId?: string;
-  readonly placement?: 'wolf' | 'other';
+  readonly placement?: 'before' | 'other';
   readonly saved: HoleScore;
-  readonly draft?: { readonly nassau?: readonly NassauHoleRecord[]; readonly wolf?: readonly WolfHoleRecord[]; readonly dots?: readonly DotsHoleRecord[] } | undefined;
+  readonly draft?: { readonly nassau?: readonly NassauHoleRecord[]; readonly wolf?: readonly WolfHoleRecord[]; readonly dots?: readonly DotsHoleRecord[];
+    readonly churchy?: ChurchySpecials } | undefined;
   readonly disabled: boolean;
   readonly onNassauChange: (records: readonly NassauHoleRecord[]) => void;
   readonly onWolfChange: (records: readonly WolfHoleRecord[]) => void;
   readonly onSpecialDotsChange?: (records: readonly DotsHoleRecord[]) => void;
+  readonly onChurchyChange?: (record: ChurchySpecialsV3) => void;
 }
 
-export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, draft, disabled, onNassauChange, onWolfChange, onSpecialDotsChange, playerId, placement }: RoundGameHoleControlsProps) {
+export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, draft, disabled, onNassauChange, onWolfChange, onSpecialDotsChange, onChurchyChange, playerId, placement }: RoundGameHoleControlsProps) {
   const games = round.games?.configuration.games.filter((game) =>
-    (game.kind === 'nassau' || game.kind === 'wolf' || game.kind === 'dots') && game.groupNumber === groupNumber
-    && (placement === undefined || (game.kind === 'wolf') === (placement === 'wolf'))
-    && (!playerId || game.kind === 'dots' && game.playerIds.includes(playerId))) ?? [];
+    (game.kind === 'nassau' || game.kind === 'wolf' || game.kind === 'dots'
+      || game.kind === 'churchy' && game.version === 3 && round.churchyEnabled === true) && game.groupNumber === groupNumber
+    && (placement !== 'before' || game.kind === 'wolf' || game.kind === 'churchy')
+    && (placement !== 'other' || game.kind !== 'wolf')
+    && (!playerId || (game.kind === 'dots' || game.kind === 'churchy') && game.playerIds.includes(playerId))) ?? [];
   const etag = round.games?.configuration.etag;
   if (games.length === 0) return null;
   return <div className="round-game-hole-controls">{games.map((game) => {
     const locked = disabled || round.eventStatus === 'archived' || !etag || !supportsRoundGame(round, game.kind ?? 'stableford');
+    if (game.kind === 'churchy' && game.version === 3) {
+      return <ChurcieEntryControls key={game.id} round={round} game={game} holeNumber={holeNumber}
+        saved={saved.churchy?.version === 3 && saved.churchy.gameId === game.id ? saved.churchy : undefined}
+        draft={draft?.churchy?.version === 3 && draft.churchy.gameId === game.id ? draft.churchy : undefined}
+        playerId={playerId} orderOnly={placement === 'before'} disabled={locked || !onChurchyChange}
+        onChange={(record) => { onChurchyChange?.(record); }} />;
+    }
     if (game.kind === 'nassau') return <div key={game.id}>
       {!supportsRoundGame(round, 'nassau') && <p>Nassau declarations unavailable: API support is required.</p>}
       <NassauHoleControls game={game} result={round.games?.results.find((result) => result.gameId === game.id)?.nassau}
@@ -82,7 +95,8 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
         ? [...records.filter((record) => record.number !== holeNumber), staged] : records) : undefined;
       const rotationLocked = records.some((record) => record.rotation !== undefined);
       const individualUnsupported = game.mode === 'individual' && !supportsIndividualDotsPlayerCount(round, game.playerIds.length);
-      const dotsLocked = locked || !onSpecialDotsChange || individualUnsupported || game.version === 2 && !round.dotsRulesVersions?.includes(2);
+      const dotsLocked = locked || !onSpecialDotsChange || individualUnsupported || !supportsDotsSpecials(round, game.specials)
+        || game.version === 2 && !round.dotsRulesVersions?.includes(2);
       const controls = <DotsHoleControls game={game} holeNumber={holeNumber}
       par={round.layout.find((hole) => hole.number === holeNumber)?.par ?? 0} etag={etag ?? ''} players={round.cards}
       playerPars={game.playerIds.map((playerId) => ({ playerId,

@@ -16,6 +16,10 @@ export function gameUnavailableMessage(reason: StrokeGameUnavailableReason | und
   return reasons[reason ?? 'missing-score-data'];
 }
 
+export function gameDisplayName(game: RoundGameDefinition): string {
+  return game.kind === 'churchy' ? 'Churcie' : game.name;
+}
+
 export function gameScoringLabel(game: RoundGameDefinition): string {
   if (game.kind === 'dots') return 'Dots · Separate earned specials';
   if (game.kind === 'wolf') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Wolf${game.allowPig ? ' / PIG' : ''} · ${game.version === 2 ? 'Earned dots' : 'Legacy dot balance'}`;

@@ -36,7 +36,7 @@ export function leanRoundScores(round: RoundScores) {
             holes: result.dots.holes.map((hole) => without(hole, 'awards')) } } : {}),
           ...(result.wolf?.rulesVersion === 2 ? { wolf: leanWolf(result.wolf,
             games.configuration.games.find((game): game is WolfGameDefinition => game.kind === 'wolf' && game.id === result.gameId), round) } : {}),
-          ...(result.churchy ? { churchy: { ...result.churchy,
+          ...(result.churchy ? { churchy: { ...without(result.churchy, 'awards'),
             holes: result.churchy.holes.map((hole) => without(hole, 'specials')) } } : {}),
         })),
       } } : {}),
@@ -95,13 +95,16 @@ export function restoreLeanRoundGames(value: unknown, context: RoundGameScoringC
         return { playerId: card.playerId, displayName: card.displayName, layout: personal?.holes ?? context.layout,
           handicap: !(personal?.strokeAllocation ?? context.teeStrokeAllocation)
             ? 'missing-stroke-index' : published?.courseHandicap ?? 'missing-handicap-index' };
-      }), context.cards, group?.playerIds.length === 4 && group.playerIds.every((id) => game.playerIds.includes(id)));
+      }), context.cards, group?.playerIds.length === 4 && group.playerIds.every((id) => game.playerIds.includes(id)),
+      context.groups, context.layout);
       const holes: unknown[] = [];
       for (const hole of result.churchy.holes) {
         if (!isRecord(hole) || Object.hasOwn(hole, 'specials')) return null;
         holes.push({ ...hole, specials: expected.churchy?.holes.find((entry) => entry.number === hole.number)?.specials });
       }
-      results.push({ ...result, churchy: { ...result.churchy, holes } });
+      if (game.version === 3 && Object.hasOwn(result.churchy, 'awards')) return null;
+      results.push({ ...result, churchy: { ...result.churchy, holes,
+        ...(game.version === 3 ? { awards: expected.churchy?.awards } : {}) } });
     } else results.push(result);
   }
   return { ...value, results };

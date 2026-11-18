@@ -49,7 +49,7 @@ export async function openChurchyV2Fixture(page: Page, testInfo: TestInfo, scena
     cards: base.cards.map((card) => ({ ...card, etag: null, updatedAt: null,
       holes: card.holes.map((hole) => ({ ...hole, score: { kind: 'unplayed' } })) })),
     supportedGameKinds: ['churchy', 'dots', 'wolf', 'ball-drop'],
-    churchyEnabled: true, churchyRulesVersions: [1, 2], internalGamesSupported: true, wolfRulesVersions: [1, 2],
+    churchyEnabled: true, churchyRulesVersions: scenario === 'setup' ? [1, 2, 3] : [1, 2], internalGamesSupported: true, wolfRulesVersions: [1, 2],
     permissions: { role: 'public', writePlayerIds: churchyPlayers, canManageGames: false, canManageInternalGames: true },
     gameInputContext: { courseVersionId: fixture.snapshot.courseVersionId, teeProfileId: fixture.snapshot.teeProfile.id },
   }, [fixture.ballDrop, ...(scenario === 'configured' ? churchyGames : [])]);

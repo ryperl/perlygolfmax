@@ -442,7 +442,9 @@ export class TableWorkspaceStore {
     const churchyGames = state.games?.games.filter((game) => game.kind === 'churchy') ?? [];
     for (const churchy of churchyGames) {
       const group = updatedRound.groups.find((entry) => entry.number === churchy.groupNumber);
-      if (!group || group.playerIds.length !== 4 || group.playerIds.some((id, index) => id !== churchy.playerIds[index])) {
+      if (!group || group.playerIds.length !== 4 || (churchy.version === 3
+        ? !group.playerIds.every((id) => churchy.playerIds.includes(id))
+        : group.playerIds.some((id, index) => id !== churchy.playerIds[index]))) {
         throw new ApiError(409, 'CHURCHY_SETUP_CHANGED');
       }
     }

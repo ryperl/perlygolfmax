@@ -97,7 +97,7 @@ for (const theme of ['light', 'dark'] as const) {
         .map((result) => result.players.map((player) => player.totalPoints))).toEqual([[6, 6, 0, 0], [2, 2, 0, 0]]);
       await page.getByRole('button', { name: 'Games', exact: true }).click();
       await expect(page.getByText(/experimental/i)).toHaveCount(0);
-      const results = page.getByRole('region', { name: 'Churchy Game · Group 1 results', exact: true });
+      const results = page.getByRole('region', { name: 'Churcie · Group 1 results', exact: true });
       await expect(results.getByRole('list', { name: 'Combined standings', exact: true })).toBeVisible();
       await expect(results.getByText('Rate and settlement method').locator('..')).not.toHaveAttribute('open', '');
       await results.getByText('Rate and settlement method').click();
@@ -112,7 +112,7 @@ for (const theme of ['light', 'dark'] as const) {
   });
 }
 
-test('Churchy setup saves separate fixed-value special choices for both foursomes beside Ball Drop', async ({ page }, testInfo) => {
+test('Churcie setup saves shared special choices for both foursomes beside Ball Drop without changing legacy games', async ({ page }, testInfo) => {
   test.setTimeout(30000);
   const fixture = await openChurchyV2Fixture(page, testInfo, 'setup');
   try {
@@ -126,17 +126,18 @@ test('Churchy setup saves separate fixed-value special choices for both foursome
       await page.getByRole('button', { name: 'Add game', exact: true }).click();
       const editor = page.getByRole('form', { name: 'Game settings', exact: true });
       await editor.getByRole('combobox', { name: 'Game type', exact: true }).selectOption('churchy');
-      await editor.getByRole('combobox', { name: 'Churchy playing group', exact: true }).selectOption(String(groupNumber));
+      await editor.getByRole('combobox', { name: 'Churcie playing group', exact: true }).selectOption(String(groupNumber));
       await editor.getByLabel('USD per dot', { exact: true }).fill('.50');
-      if (groupNumber === 1) await editor.getByLabel(/Sticky/).uncheck();
+      await editor.getByText(/^Specials and presets/).click();
+      if (groupNumber === 1) await editor.getByRole('checkbox', { name: 'Sticky', exact: true }).uncheck();
       await fits(page, editor);
       await editor.getByRole('button', { name: 'Save game', exact: true }).click();
       await expect(page.getByText('Game settings saved.', { exact: true })).toBeVisible();
     }
     const games = fixture.read().games?.configuration.games.filter((game) => game.kind === 'churchy');
-    expect(games?.map((game) => [game.version, game.groupNumber, game.amountPerDotMinor])).toEqual([[2, 1, 50], [2, 2, 50]]);
-    expect(games?.[0]?.version === 2 && games[0].enabledSpecials.includes('sticky')).toBe(false);
-    expect(games?.[1]?.version === 2 && games[1].enabledSpecials.includes('sticky')).toBe(true);
+    expect(games?.map((game) => [game.version, game.groupNumber, game.amountPerDotMinor])).toEqual([[3, 1, 50], [3, 2, 50]]);
+    expect(games?.[0]?.version === 3 && games[0].specials.some((special) => special.kind === 'dime')).toBe(false);
+    expect(games?.[1]?.version === 3 && games[1].specials.some((special) => special.kind === 'dime')).toBe(true);
     expect(fixture.counters().configWrites).toBe(2);
     expect(fixture.counters().writes).toBe(0);
     await expect(page.getByText(/experimental/i)).toHaveCount(0);

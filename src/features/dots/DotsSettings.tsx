@@ -1,9 +1,10 @@
-import { useId, useState } from 'react';
-import { dotsSpecialCatalog } from '../../domain/dots';
 import type { DotsGameDefinition, DotsSpecialKind, DotsSpecialSelection } from '../../domain/dots';
+import type { DotPresetStore } from '../../client/dot-presets';
 import type { RoundGroup } from '../../domain/setup';
 import type { WolfGameDefinition } from '../../domain/wolf';
 import { formatMoney } from '../../domain/money';
+import { DotSpecialsSettings } from './DotSpecialsSettings';
+import { dotSpecialModeCompatible } from './dot-preset-options';
 import './dots-settings.css';
 
 export interface DotsSetupDraft {
@@ -18,7 +19,8 @@ export interface DotsSetupDraft {
   readonly stake?: string;
 }
 
-export function DotsSettings({ draft, groups, players, wolves, onChange, v2Supported = false, individualPlayerCounts = [4] }: {
+export function DotsSettings({ draft, groups, players, wolves, onChange, v2Supported = false, individualPlayerCounts = [4],
+  supportedKinds, presetStore }: {
   readonly draft: DotsSetupDraft;
   readonly groups: readonly RoundGroup[];
   readonly players: readonly { readonly playerId: string; readonly displayName: string }[];
@@ -26,9 +28,9 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
   readonly onChange: (patch: DotsSetupDraft) => void;
   readonly v2Supported?: boolean;
   readonly individualPlayerCounts?: readonly number[];
+  readonly supportedKinds?: readonly DotsSpecialKind[];
+  readonly presetStore?: DotPresetStore;
 }) {
-  const [expanded, setExpanded] = useState<DotsSpecialKind | null>(null);
-  const helpId = useId();
   const group = groups.find((entry) => entry.number === draft.groupNumber);
   const linked = wolves.find((game) => game.id === draft.linkedGameId);
   const specials = draft.dotsSpecials ?? [];
@@ -37,10 +39,7 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
   const smallGroup = group !== undefined && group.playerIds.length !== 4;
   const supportsGroup = (size: number) => mode === 'individual'
     ? size >= 1 && size <= 4 && individualPlayerCounts.includes(size) : size === 4;
-  const compatible = (kind: DotsSpecialKind, selectedMode: DotsGameDefinition['mode']) =>
-    (kind !== 'sweep' || selectedMode === 'linked') && (kind !== 'assassin' || selectedMode !== 'individual');
-  const available = dotsSpecialCatalog.filter((special) => compatible(special.kind, mode));
-  const allSelected = available.every((special) => specials.some((entry) => entry.kind === special.kind));
+  const compatible = dotSpecialModeCompatible;
   return <section className="dots-settings" aria-label="Dots setup">
     <div className="dots-setup-fields">
     <label>Dots playing group<select value={draft.groupNumber ?? ''} onChange={(event) => {
@@ -96,48 +95,9 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
         onChange={(event) => { onChange({ stake: event.target.value }); }} /></span></label>
       <small>Blank or 0: points only. Enter dollars, e.g. .50.</small>
     </>}
-    <fieldset className="dots-specials" aria-label="Enabled specials and whole-dot units">
-      <legend>Specials</legend>
-      <div className="dots-specials-toolbar">
-        <small>{specials.length} selected · Whole-dot values</small>
-        <button type="button" disabled={allSelected} onClick={() => {
-          onChange({ dotsSpecials: [...specials, ...available.filter((special) =>
-            !specials.some((entry) => entry.kind === special.kind)).map((special) => ({
-            kind: special.kind, units: special.defaultUnits,
-          }))] });
-        }}>Select all</button>
-      </div>
-      <div className="dots-specials-grid">{dotsSpecialCatalog.map((special) => {
-      const selected = specials.find((entry) => entry.kind === special.kind);
-      const incompatible = !compatible(special.kind, mode);
-      const descriptionId = `${helpId}-${special.kind}`;
-      return <div className="dots-special" key={special.kind}>
-        <div className="dots-special-row">
-        <label className="dots-special-toggle"><input type="checkbox" checked={selected !== undefined}
-          aria-label={`${special.label}${special.automatic ? ' · Automatic' : ''}`}
-          disabled={incompatible}
-          onChange={(event) => { onChange({ dotsSpecials: event.target.checked
-            ? [...specials, { kind: special.kind, units: special.defaultUnits }] : specials.filter((entry) => entry.kind !== special.kind) }); }} />
-          <span>{special.label}{special.automatic && <span className="dots-special-auto" aria-hidden="true">Auto</span>}</span>
-        </label>
-        {selected && <input className="dots-special-units" aria-label={`${special.label} units`} type="number" min="1" step="1" value={selected.units}
-          disabled={incompatible}
-          onChange={(event) => { onChange({ dotsSpecials: specials.map((entry) => entry.kind === special.kind
-            ? { ...entry, units: event.target.value === '' ? 0 : Number(event.target.value) } : entry) }); }} />}
-        <button type="button" className="dots-special-info" aria-label={`About ${special.label}`}
-          aria-expanded={expanded === special.kind} aria-controls={descriptionId}
-          onClick={() => { setExpanded((current) => current === special.kind ? null : special.kind); }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" /><path d="M12 11v6" />
-            <circle cx="12" cy="7" r=".8" fill="currentColor" stroke="none" />
-          </svg>
-        </button>
-        </div>
-        {expanded === special.kind && <p className="dots-special-description" id={descriptionId}>{special.description}</p>}
-        {incompatible && <small className="dots-special-reason">{special.kind === 'sweep' ? 'Sweep requires a linked game with actual High and Low results.'
-          : 'Assassin requires partnered 2-v-2 play, not individual mode.'}
-          {selected && ' This saved selection is retained for review; change mode before saving.'}</small>}
-      </div>;
-    })}</div></fieldset>
+    <DotSpecialsSettings specials={specials} mode={mode}
+      {...(supportedKinds === undefined ? {} : { supportedKinds })}
+      {...(presetStore === undefined ? {} : { presetStore })}
+      onChange={(dotsSpecials) => { onChange({ dotsSpecials }); }} />
   </section>;
 }

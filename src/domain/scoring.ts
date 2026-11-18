@@ -5,10 +5,11 @@ import type { RoundGroup } from './setup.js';
 import type { GameChange, GameUnavailableReason, RoundGamesView, RoundGameKind } from './games.js';
 import type { NassauHoleRecord } from './nassau.js';
 import type { WolfHoleRecord } from './wolf.js';
-import type { DotsHoleRecord } from './dots.js';
+import type { DotsHoleRecord, DotsSpecialKind, DotsSpecialSelection } from './dots.js';
+import { dotsSpecialCatalog } from './dots.js';
 import type { InternalGameSettlement } from './dot-settlement.js';
 import type { DotAwardAudit } from './dot-audit.js';
-import { mergeDotsRecords, mergeNassauRecords, mergeWolfRecords, sameDotsRecords, sameNassauRecords, sameWolfRecords } from './game-declarations.js';
+import { GameDeclarationConflictError, mergeDotsRecords, mergeNassauRecords, mergeWolfRecords, sameDotsRecords, sameNassauRecords, sameWolfRecords } from './game-declarations.js';
 import type { PlayerTeeProfile } from './tees.js';
 import type { ChurchySpecials } from './churchy.js';
 import type { RoundDifferential } from './round-differential.js';
@@ -70,7 +71,8 @@ export interface RoundScores {
   readonly wolfRulesVersions?: readonly (1 | 2)[];
   readonly dotsRulesVersions?: readonly (1 | 2)[];
   readonly dotsIndividualPlayerCounts?: readonly (1 | 2 | 3 | 4)[];
-  readonly churchyRulesVersions?: readonly (1 | 2)[];
+  readonly dotsSpecialKinds?: readonly DotsSpecialKind[];
+  readonly churchyRulesVersions?: readonly (1 | 2 | 3)[];
   readonly internalSettlements?: readonly InternalGameSettlement[];
   readonly supportedGameKinds?: readonly RoundGameKind[];
   readonly gameInputContext?: { readonly courseVersionId: string; readonly teeProfileId: number };
@@ -117,6 +119,12 @@ export function supportsRoundGame(round: Pick<RoundScores, 'supportedGameKinds' 
   if (kind === 'churchy' && round.churchyEnabled !== true) return false;
   return round.supportedGameKinds !== undefined ? round.supportedGameKinds.includes(kind)
     : kind === 'churchy' || kind === 'stableford' || kind === 'ball-drop' || kind === 'skins';
+}
+
+export function supportsDotsSpecials(round: Pick<RoundScores, 'dotsSpecialKinds'>,
+  specials: readonly DotsSpecialSelection[]): boolean {
+  const supported = round.dotsSpecialKinds ?? dotsSpecialCatalog.filter((entry) => entry.kind !== 'other').map((entry) => entry.kind);
+  return specials.every((special) => supported.includes(special.kind));
 }
 export interface ScoreChange {
   readonly dotAwardAudit?: readonly DotAwardAudit[];
@@ -175,7 +183,20 @@ export function sameHoleScore(left: HoleScore, right: HoleScore): boolean {
 
 /** Omission by older clients preserves independently saved extras; explicit KP null clears. */
 export function preserveScoreExtras(score: HoleScore, saved: HoleScore): HoleScore {
+  const savedChurchy = saved.churchy?.version === 3 ? saved.churchy : undefined;
+  const churchy = score.churchy?.version === 3 && saved.churchy?.version === 3 && saved.churchy.rotation
+    ? { ...score.churchy, rotation: saved.churchy.rotation } : score.churchy;
+  if (score.churchy?.version === 3 && saved.churchy?.version === 3 && saved.churchy.rotation
+    && (score.churchy.gameId !== saved.churchy.gameId || score.churchy.number !== saved.churchy.number
+      || score.churchy.rotation && (score.churchy.rotation.playerIds.length !== saved.churchy.rotation.playerIds.length
+        || score.churchy.rotation.playerIds.some((id, i) => id !== savedChurchy?.rotation?.playerIds[i])))) {
+    throw new GameDeclarationConflictError('A saved Churcie order cannot be replaced.', 'CHURCHY_ORDER_CONFLICT');
+  }
+  if (savedChurchy?.rotation && score.churchy && score.churchy.version !== 3) {
+    throw new GameDeclarationConflictError('A saved Churcie order cannot be replaced.', 'CHURCHY_ORDER_CONFLICT');
+  }
   return { ...score,
+    ...(churchy ? { churchy } : {}),
     ...(score.churchy === undefined && saved.churchy ? { churchy: saved.churchy } : {}),
     ...(score.kp === undefined && saved.kp !== undefined ? { kp: saved.kp } : {}),
     ...(score.nassau !== undefined ? { nassau: mergeNassauRecords(score.nassau, saved.nassau) }

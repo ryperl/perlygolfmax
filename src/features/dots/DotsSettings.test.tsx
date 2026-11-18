@@ -7,6 +7,21 @@ import { dotsFixture } from './dots.test-support';
 import { dotsSpecialCatalog } from '../../domain/dots';
 
 describe('Dots special mode compatibility', () => {
+  it('forwards advertised special kinds without changing unsupported loaded selections', () => {
+    const f = dotsFixture(), onChange = vi.fn<(draft: DotsSetupDraft) => void>();
+    const draft: DotsSetupDraft = { dotsMode: 'individual', dotsSpecials: [{ kind: 'other', units: 3 }] };
+    const props = { draft, groups: f.round.groups, players: f.round.cards, wolves: [], onChange };
+    const view = render(<DotsSettings {...props} />);
+    expect(screen.getByLabelText('Other')).toBeChecked();
+    expect(screen.getByLabelText('Other units')).toBeDisabled();
+    expect(screen.getByLabelText('Other units')).toHaveValue(3);
+    expect(onChange).not.toHaveBeenCalled();
+    view.rerender(<DotsSettings {...props} supportedKinds={dotsSpecialCatalog.map((entry) => entry.kind)} />);
+    expect(screen.getByLabelText('Other units')).toBeEnabled();
+    fireEvent.change(screen.getByLabelText('Other units'), { target: { value: '5' } });
+    expect(onChange).toHaveBeenLastCalledWith({ dotsSpecials: [{ kind: 'other', units: 5 }] });
+  });
+
   it.each([1, 2, 3])('offers %i-player individual groups without enabling any partner mode', (count) => {
     const f = dotsFixture(), ids = f.ids.slice(0, count), onChange = vi.fn<(draft: DotsSetupDraft) => void>();
     function Editor() {
@@ -97,7 +112,8 @@ describe('Dots special mode compatibility', () => {
     const button = screen.getByRole('button', { name: 'Select all' });
     fireEvent.click(button);
     const selected = onChange.mock.lastCall?.[0].dotsSpecials;
-    const expected = dotsSpecialCatalog.filter((special) => (special.kind !== 'sweep' || mode === 'linked')
+    const expected = dotsSpecialCatalog.filter((special) => special.kind !== 'other'
+      && (special.kind !== 'sweep' || mode === 'linked')
       && (special.kind !== 'assassin' || mode !== 'individual')).map((special) => special.kind);
     expect(selected?.map((special) => special.kind).sort()).toEqual([...expected].sort());
     expect(screen.getByLabelText('Sandy units')).toHaveValue(3);

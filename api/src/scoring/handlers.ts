@@ -122,7 +122,7 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
       }
       const parsed = parseScoreWriteBody(body);
       if (action === 'score-game-hole' && !parsed.score.nassau?.length && !parsed.score.wolf?.length
-        && !parsed.score.dots?.length) throw new ApiError(400, 'INVALID_GAME_SCORE');
+        && !parsed.score.dots?.length && parsed.score.churchy?.version !== 3) throw new ApiError(400, 'INVALID_GAME_SCORE');
       const result = await api.scores.write(identity, eventId, roundId, playerId, Number(rawHole),
         parsed.score, expectedEtag, requestId, parsed.inputRevision);
       return response(200, lean ? leanScoreWriteResult(result) : result);

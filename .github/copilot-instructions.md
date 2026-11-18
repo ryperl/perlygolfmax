@@ -59,7 +59,7 @@
   Show one net money amount per golfer, with optional calculation details.
   Combine standings only for an authoritative explicit Wolf/Dots link, never
   unrelated games or foursomes; retain pending/unavailable/points-only states.
-  Common Dots/Churchy entry uses 44px touch choices/steppers without a keyboard.
+  Common Dots/Churcie entry uses 44px touch choices/steppers without a keyboard.
   Preserve custom/invalid count drafts, explicit saves, retries and focus.
 - Add co-located success and edge-case tests for each changed component/module.
 - Run `npm run check:lockfile`, `npm run typecheck`, `npm run lint`, `npm test`,
@@ -232,8 +232,8 @@
   side. Optional second KP/Blue Plate/Long Drive selections never win extra
   category dots; absent seconds mean no Assassin, not a pending decision.
   Hide seconds in individual/solo contexts. Sweep needs real linked
-  High/Low outcomes, not fabricated standalone contests. Thief/presets/Sixes
-  engines remain deferred. Dots cannot stack with Churchy.
+  High/Low outcomes, not fabricated standalone contests. Thief/full Sixes
+  match engines remain deferred. Dots cannot stack with Churcie.
 - Rotating Dots version 2 shares specials for Modified Sixes (three played
   holes) and Sixes (six), not a full base-match engine. First-played-hole P1–P4
   order cycles 12/34, 13/24, 14/23 from an acknowledged canonical group-first
@@ -252,7 +252,7 @@
   Explicit Par for blanks fills untouched unplayed fields using personal par;
   never overwrite saved/typed/cleared/pickup values or imply an automatic save.
 - Public pre-scoring internal-game setup in ordinary active events is explicitly
-  allowed for Dots, new Wolf and enabled Churchy only. Check both old/new game
+  allowed for Dots, new Wolf and enabled Churcie only. Check both old/new game
   scope, unchanged protected peers, actual saved groups, version and setup locks.
   No legacy Wolf conversion, protected game-ID conversion, owner promotion,
   general setup, catalog, Ball Drop administration, purse or archive authority.
@@ -262,7 +262,7 @@
   N remains four for partnered games; solo never settles money.
   Blank/zero is points-only.
   User money input is dollars (`1`, `.50`), storage stays exact integer cents;
-  dot units remain whole points. Preserve all legacy Churchy math/saved values.
+  dot units remain whole points. Preserve all legacy Churcie math/saved values.
   Total to settle sums positive net balances, never absolute balances or dots.
   Immutable private score/correction receipts retain changed award snapshots
   with rule/input bindings; public views explain current awards without private
@@ -270,9 +270,34 @@
 - Skins leaderboards omit known zero awards from standings/search/pages only.
   Preserve awarded ranks/ties, pending/unavailable displays and underlying
   game/purse results; hidden search controls must not hide refreshed winners.
-- Legacy Churchy version 1 retains its original definition, declarations,
+- Display the game as Churcie; keep internal `churchy` kinds/keys and the
+  `CHURCHY_GAME_ENABLED` switch compatible. New games use version 3 with
+  explicitly advertised `churchyRulesVersions` support. Never silently
+  rescore v1/v2. Only explicit unstarted v2-to-v3 upgrades are allowed;
+  preserve their initial partnership sequence from the selected start.
+  V3 supports tee order or approach ranking on the group's first played hole.
+  Rank 1 closest through 4 farthest; pair 1+4/2+3, then 1+3/2+4, then 1+2/3+4
+  in three-played-hole blocks, repeating after nine. Stakes/carries use the
+  actual circuit, not printed hole numbering. Approach order is a conditional
+  immutable receipt on the canonical group-first card's starting hole, not
+  a setup edit. Other groups starting cannot block it. Missing order leaves
+  results pending but raw scoring available; late recovery is server-marked.
+  Clearing specials/raw-only edits never erase or reshuffle the order.
+  V3 reuses Dots configuration/qualifications: Sticky is canonical Dime, Sandy
+  allows par or better, and same-golfer exclusions apply. All compatible
+  specials are selectable; defaults retain the familiar subset, Birdie 2/
+  Eagle 4/other units 1. Murphy stages scale configured units by 1/2/3;
+  Sweep scales units by the current stake. Neither changes ordinary Dots.
+  Category holes use the captured default tee; source qualifications use
+  personal tees. Shared presets copy configuration into games, never bind
+  live settings. Custom presets are device-local config/units only, injected
+  from app/client adapters, with explicit storage errors and draft retention.
+  No public preset catalog, scores/identities/money in preset storage, or
+  implicit offline scoring. New Other in ordinary Dots requires explicit
+  `dotsSpecialKinds` support; missing capability retains legacy kinds.
+- Legacy Churcie version 1 retains its original definition, declarations,
   one-dot Birdie, single Sandy and shared-pot math; never silently convert it.
-  New Churchy version 2 supports one independent game per saved foursome, with
+  Legacy Churcie version 2 supports one independent game per saved foursome, with
   distinct configuration, carry, standings and settlement. Named specials are
   enabled/disabled before scoring at fixed values: Birdie 2, Eagle 4 without
   Birdie overlap, manual Sticky 1, repeated exact-gross-par Sandy and shared
@@ -283,20 +308,20 @@
   Preserve legacy and new extras on raw-only saves; validate game version,
   enabled fields, group, revision and counters authoritatively. Keep all setup,
   capture, concurrency, retry and audit safeguards. Version 2 requires explicit
-  `churchyRulesVersions` support, not just the general Churchy flag.
+  `churchyRulesVersions` support, not just the general Churcie flag.
   New money uses `(4*d_i - sum(d)) * rateMinor`, source-aware earned dots and
   net due/owed, points-only at zero, no second settlement or payments. Keep
-  Churchy independent from Dots/Wolf; Ball Drop stays between foursomes.
+  Churcie independent from Dots/Wolf; Ball Drop stays between foursomes.
   Present compact accessible controls/results without Experimental labels,
   redundant copy or hidden essential state. The kill switch remains intact.
-- Shared Churchy gameplay retains
+- Legacy Churcie v1/v2 gameplay retains
   Explicit P1–P4 order rotates partners in three-hole blocks; stakes 1/2/3 repeat.
   Net compares max/min numeric strokes using captured CH minus the foursome's
   lowest CH on each personal tee. High/Low carry independently across the turn;
   sweep is current stake only. Earned dots credit both partners in full, never
   netted. Calls Paree/Murphy are gross par-or-better; Murphy presses are explicit
   initial/opposing/calling stages 1/2/3. Sandy requires confirmed exact par;
-  Pully allows confirmed par or birdie in either Churchy version.
+  Pully allows confirmed par or birdie in either Churcie version.
   automatic birdie is exactly one under. Legacy version 1 has no eagle dots.
   Pickup/DNF
   loses High to an all-numeric pair; remaining numeric Low still competes.
@@ -309,7 +334,7 @@
   overall Stableford. Setup/order lock after scoring; stake edits require owner
   authority except for explicitly collaborative Quick-round game management.
   The authoritative API defaults on; `CHURCHY_GAME_ENABLED=false` kills all
-  Churchy surfaces and specific mutations without erasing saved definitions,
+  Churcie surfaces and specific mutations without erasing saved definitions,
   specials or audits, or blocking ordinary score/other game edits. UI missing
   capability is disabled for old APIs; never infer backend support from a
   frontend default. Unknown configured flag values fail closed.
@@ -318,7 +343,7 @@
   Keep scratch/plus values distinct from NH and other unavailable inputs.
   Scorecard stroke dots use full server Course Handicap and the captured
   personal/default tee's complete stroke allocation, never game allowances,
-  current catalog HI or Churchy earned dots. Use shared allocation math;
+  current catalog HI or Churcie earned dots. Use shared allocation math;
   never halve an already-calculated nine-hole CH again. Bound visual counts,
   preserve gross marks/counting badges and surface unavailable allocation.
 - Score-entry headers show saved numeric gross-to-personal-par progress after
@@ -409,7 +434,7 @@
   with cents to longest winning default-tee hole then harder/lower stroke index.
   Ambiguous required inputs block allocation; all-empty stays unawarded without
   rollover. Unresolved/stale ties never claim fully allocated money. Preserve
-  existing public/legacy permissions, ordinary captures, Churchy and other purses.
+  existing public/legacy permissions, ordinary captures, Churcie and other purses.
 - Event-wide skins is an independently enabled version-1 event competition,
   never a replacement for primary overall or round Skins games.
   Details use captured-hole navigation and one saved comparison, without row

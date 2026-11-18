@@ -11,7 +11,7 @@ import { strokeGameCards, strokeGameId } from '../domain/stroke-games.test-suppo
 describe('Churchy v2 runtime and static contracts', () => {
   it('narrows versioned definitions/declarations while keeping the legacy declaration versionless', () => {
     function count(value: ChurchySpecials) {
-      return value.version === 2 ? value.sandyCount + value.otherDots : Number(value.sandy);
+      return value.version === 2 ? value.sandyCount + value.otherDots : value.version === 3 ? 0 : Number(value.sandy);
     }
     function enabled(value: ChurchyGameDefinition) {
       return value.version === 2 ? value.enabledSpecials.includes('eagle') : false;

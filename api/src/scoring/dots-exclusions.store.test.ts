@@ -32,6 +32,36 @@ async function fixture(version: 1 | 2) {
 }
 
 describe('new Dots declaration exclusions with legacy preservation', () => {
+  it.each([1, 2] as const)('rejects Churcie-only press stages from ordinary Dots v%i writes and marks malformed saved records unavailable', async (version) => {
+    const f = await fixture(version);
+    for (const murphyPresses of [0, 1, 2] as const) {
+      const record = f.record([{ playerId: f.playerId, counts: {}, calls: [{
+        id: identifier(22800), kind: 'murphy', result: 'pending', murphyPresses,
+      }] }]);
+      await expect(f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+        { kind: 'strokes', strokes: 4, dots: [record] }, null, identifier(22801 + murphyPresses)))
+        .rejects.toMatchObject({ code: 'DOTS_SETUP_CHANGED' });
+    }
+    const record = f.record([{ playerId: f.playerId, counts: {}, calls: [{
+      id: identifier(22805), kind: 'murphy', result: 'pending',
+    }] }]);
+    const saved = await f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+      { kind: 'strokes', strokes: 4, dots: [record] }, null, identifier(22806));
+    const card = saved.round.cards.find((entry) => entry.playerId === f.playerId);
+    if (!card) throw new Error('Missing fictional card');
+    const malformed = { ...record, players: record.players.map((player) => ({ ...player,
+      calls: player.calls.map((call) => ({ ...call, murphyPresses: 2 as const })) })) };
+    f.seed({ ...f.row(`score-card:${f.roundId}:${f.playerId}`), content: JSON.stringify({
+      playerId: card.playerId, displayName: card.displayName, updatedAt: card.updatedAt,
+      holes: card.holes.map((hole) => hole.number === 1 ? { ...hole,
+        score: { kind: 'strokes', strokes: 4, dots: [malformed] } } : hole),
+    }) });
+    const read = await f.scores.get(f.actor, event.id, f.roundId);
+    expect(read.games?.results[0]?.dots?.status).toBe('unavailable');
+    expect(read.games?.results[0]?.dots?.awards).toEqual([]);
+    expect(isRoundScores(read)).toBe(true);
+  });
+
   it.each([1, 2] as const)('rejects new same-golfer conflicts for version %i but permits teammates and warning-only Walk', async (version) => {
     const f = await fixture(version);
     const conflicts: readonly DotsPlayerDeclaration[] = [

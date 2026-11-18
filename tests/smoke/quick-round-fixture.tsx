@@ -49,7 +49,7 @@ const base = createPublicServices(`${window.location.origin}/__unused-public-api
 const scores: ScoresClient = {
   ...base.scores,
   load: (eventId, roundId) => Promise.resolve({ ...fictionalGamesRound, eventId, roundId, quickRound: true, churchyEnabled: true,
-    churchyRulesVersions: [1, 2],
+    churchyRulesVersions: [1, 2, 3],
     eventName: setupInput?.name ?? 'Fictional Quick round', groups: setupInput?.rounds[0]?.groups ?? [],
     cards: players.filter((player) => setupInput?.playerIds.includes(player.id)).map((player) => ({ playerId: player.id, displayName: player.displayName, etag: null, updatedAt: null,
       holes: fictionalCapturedRound.teeProfile.holes.map((hole) => ({ number: hole.number, score: { kind: 'unplayed' } })) })),

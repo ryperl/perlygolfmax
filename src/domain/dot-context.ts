@@ -10,6 +10,7 @@ export interface DotHoleContext {
   readonly multiplier: DotMultiplier;
   readonly highWinnerIds?: readonly string[];
   readonly lowWinnerIds?: readonly string[];
+  readonly sweepMultiplier?: DotMultiplier;
   readonly sourceGameId?: string;
   readonly reason?: string;
 }

@@ -39,6 +39,31 @@ function context(number = 1, multiplier: 1 | 2 | 3 = 1, sides: readonly (readonl
 }
 
 describe('source-only Dots declaration review', () => {
+  it.each([0, 1, 2] as const)('rejects Churcie-only Murphy stage %i in ordinary individual, fixed, linked and rotating Dots', (murphyPresses) => {
+    const f = fixture([4], ['murphy']);
+    const rotating: DotsGameDefinition = { id: f.game.id, name: f.game.name, kind: 'dots', version: 2,
+      mode: 'rotating', rotationHoles: 3, groupNumber: 1, playerIds: ids, specials: f.game.specials, stakeMinor: null };
+    for (const game of [f.game, fixed(f.game), linked(f.game), rotating]) {
+      const records = [{ ...record(1, [declaration('A', {}, [{
+        id: 'murphy-call', kind: 'murphy', result: 'success', murphyPresses,
+      }])]), ...(game.version === 2 ? { rotation: { playerIds: ids } } : {}) }];
+      expect(dotsRecordsMatchGame(records, game, f.round, [context(1, 2)])).toBe(false);
+      const result = calculateDots(game, f.round, records, [context(1, 2)]);
+      expect(result.status).toBe('unavailable');
+      expect(result.awards).toEqual([]);
+    }
+  });
+
+  it('keeps current-stake Sweep confined to the internal Churcie profile, preserving ordinary linked multipliers', () => {
+    const f = fixture([4], ['sweep']);
+    const game = linked({ ...f.game, specials: [{ kind: 'sweep', units: 2 }] });
+    const contexts: readonly DotHoleContext[] = [{ ...context(1, 2), sweepMultiplier: 3,
+      highWinnerIds: ['A', 'B'], lowWinnerIds: ['A', 'B'] }];
+    expect(calculateDots(game, f.round, [], contexts).awards[0]).toMatchObject({ kind: 'sweep', count: 1, dots: 4 });
+    expect(calculateDots(game, f.round, [], contexts, 'churcie-v3').awards[0])
+      .toMatchObject({ kind: 'sweep', count: 3, dots: 12 });
+  });
+
   it.each([
     [{ hogan: 1, seve: 1 }, [], 'HOGAN_SEVE'],
     [{ pully: 1, dime: 1 }, [], 'PULLY_DIME'],

@@ -175,7 +175,8 @@ export function calculateGameResults(
         return { playerId: player.playerId, displayName: player.displayName, layout: tee.holes,
           handicap: !tee.strokeAllocation ? 'missing-stroke-index' : player.handicapIndex == null ? 'missing-handicap-index'
             : calculateCourseHandicap(player.handicapIndex.value, tee) };
-      }), cards, group?.playerIds.length === 4 && group.playerIds.every((id) => game.playerIds.includes(id)));
+      }), cards, group?.playerIds.length === 4 && group.playerIds.every((id) => game.playerIds.includes(id)),
+      round.groups, round.teeProfile.holes);
     }
     if (!isStablefordGame(game)) return calculateStrokeGameResults(game, round.players.map((player) => {
       const tee = playerTee(round, player.playerId);

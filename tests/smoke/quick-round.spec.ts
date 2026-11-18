@@ -126,6 +126,12 @@ for (const width of [320, 1280]) {
       await expect(page.getByRole('button', { name: 'Start scoring' })).toBeDisabled();
       const kinds = page.getByRole('combobox', { name: 'Game type', exact: true });
       for (const kind of ['stableford', 'ball-drop', 'skins', 'churchy']) await expect(kinds.locator(`option[value="${kind}"]`)).toHaveCount(1);
+      await kinds.selectOption('churchy');
+      await page.getByRole('combobox', { name: 'Churcie playing group', exact: true }).selectOption('1');
+      await expect(page.getByRole('combobox', { name: 'Choose Churcie partners', exact: true })).toHaveValue('approach');
+      await page.getByText(/^Specials and presets ·/).click();
+      await expect(page.getByRole('combobox', { name: 'Specials preset', exact: true })).toBeVisible();
+      await expect(page.getByText('Custom presets unavailable here. Built-in presets still work.', { exact: true })).toHaveCount(0);
       await page.getByRole('button', { name: 'Cancel editing', exact: true }).click();
       await page.getByLabel('Scores only').check();
       await expect(page.getByRole('button', { name: 'Add game' })).not.toBeVisible();

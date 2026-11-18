@@ -4,6 +4,12 @@ import type { Scorecard } from './scoring.js';
 import { handicapStrokesForHole } from './stableford.js';
 import { calculateDotSettlement } from './dot-settlement.js';
 import type { InternalGameSettlement } from './dot-settlement.js';
+import type { DotsHoleRecord, DotsSpecialSelection, DotsRotationStart } from './dots.js';
+import type { DotAward } from './dot-context.js';
+import type { RoundGroup } from './setup.js';
+import { calculateChurchyV3Results } from './churchy-v3.js';
+import { sameDotsRecords } from './game-declarations.js';
+export { churchyDotsDefinition, churchyV3Context, churchyV3Records, churchyV3RecordsMatchGame } from './churchy-v3.js';
 
 interface CommonChurchyGameDefinition {
   readonly id: string;
@@ -33,7 +39,18 @@ export interface ChurchyGameDefinitionV2 extends CommonChurchyGameDefinition {
   readonly version: 2;
   readonly enabledSpecials: readonly ChurchySpecialKey[];
 }
-export type ChurchyGameDefinition = ChurchyGameDefinitionV1 | ChurchyGameDefinitionV2;
+export interface ChurchyGameDefinitionV3 extends CommonChurchyGameDefinition {
+  readonly version: 3;
+  readonly orderMode: 'tee' | 'approach';
+  readonly specials: readonly DotsSpecialSelection[];
+  readonly enabledSpecials?: never;
+}
+export const defaultChurchySpecialSelections: readonly DotsSpecialSelection[] = [
+  { kind: 'paree', units: 1 }, { kind: 'murphy', units: 1 }, { kind: 'sandy', units: 1 },
+  { kind: 'pully', units: 1 }, { kind: 'birdie', units: 2 }, { kind: 'eagle', units: 4 },
+  { kind: 'dime', units: 1 }, { kind: 'sweep', units: 1 }, { kind: 'other', units: 1 },
+];
+export type ChurchyGameDefinition = ChurchyGameDefinitionV1 | ChurchyGameDefinitionV2 | ChurchyGameDefinitionV3;
 
 /** The revision binds a special edit to the saved game/order, not an award supplied by a client. */
 interface CommonChurchySpecials {
@@ -54,15 +71,28 @@ export interface ChurchySpecialsV2 extends CommonChurchySpecials {
   readonly sticky: boolean;
   readonly otherDots: number;
 }
-export type ChurchySpecials = ChurchySpecialsV1 | ChurchySpecialsV2;
+export interface ChurchySpecialsV3 extends DotsHoleRecord { readonly version: 3 }
+export type ChurchySpecials = ChurchySpecialsV1 | ChurchySpecialsV2 | ChurchySpecialsV3;
 
 export function emptyChurchySpecials(game: ChurchyGameDefinition, gameEtag: string): ChurchySpecials {
+  if (game.version === 3) return { version: 3, gameId: game.id, gameEtag, number: 1, players: [], contests: [] };
   const common = { gameId: game.id, gameEtag, paree: false, murphy: false, murphyPresses: 0 as const, pully: false };
   return game.version === 2 ? { ...common, version: 2, sandyCount: 0, sticky: false, otherDots: 0 }
     : { ...common, sandy: false };
 }
 
 export function churchySpecialsMatchGame(value: ChurchySpecials, game: ChurchyGameDefinition): boolean {
+  if (value.version === 3 || game.version === 3) return value.version === 3 && game.version === 3
+    && value.gameId === game.id && (game.orderMode !== 'tee' || value.rotation === undefined)
+    && (!value.rotation || value.rotation.playerIds.length === 4 && new Set(value.rotation.playerIds).size === 4
+      && value.rotation.playerIds.every((id) => game.playerIds.includes(id)))
+    && new Set(value.players.map((player) => player.playerId)).size === value.players.length
+    && value.players.every((player) => game.playerIds.includes(player.playerId)
+      && Object.entries(player.counts).every(([kind, count]) => Number.isSafeInteger(count) && count >= 0
+        && game.specials.some((special) => special.kind === kind))
+      && player.calls.every((call) => game.specials.some((special) => special.kind === call.kind)))
+    && value.contests.every((contest) => (!contest.winnerId || game.playerIds.includes(contest.winnerId))
+      && (!contest.secondId || game.playerIds.includes(contest.secondId)));
   if (value.gameId !== game.id || (value.version === 2) !== (game.version === 2)
     || ![0, 1, 2].includes(value.murphyPresses) || !value.murphy && value.murphyPresses !== 0) return false;
   if (value.version !== 2 || game.version !== 2) return true;
@@ -84,7 +114,7 @@ export interface ChurchyLane {
   readonly carry: number | null;
 }
 export interface ChurchyAward {
-  readonly special: 'Paree' | 'Murphy' | 'Sandy' | 'Pully' | 'Birdie' | 'Eagle' | 'Sticky' | 'Other' | 'Sweep';
+  readonly special: string;
   readonly playerId: string | null;
   readonly outcome: 'made' | 'missed' | 'ineligible';
   readonly winners: readonly string[];
@@ -93,7 +123,7 @@ export interface ChurchyAward {
 export interface ChurchyHoleReceipt {
   readonly number: number;
   readonly stake: number;
-  readonly pairs: readonly [ChurchyPair, ChurchyPair];
+  readonly pairs: readonly ChurchyPair[];
   readonly high: ChurchyLane;
   readonly low: ChurchyLane;
   readonly specials: readonly ChurchyAward[];
@@ -102,6 +132,8 @@ export interface ChurchyHoleReceipt {
   readonly awards: readonly { readonly playerId: string; readonly dots: number | null }[];
 }
 export interface ChurchyResults {
+  readonly awards?: readonly DotAward[];
+  readonly order?: DotsRotationStart;
   readonly internalSettlement?: InternalGameSettlement;
   readonly holes: readonly ChurchyHoleReceipt[];
   readonly status: 'complete' | 'in-progress' | 'unavailable';
@@ -131,6 +163,8 @@ export function churchyPairs(ids: readonly string[], number: number): readonly [
 }
 
 export function sameChurchySpecials(a: ChurchySpecials | undefined, b: ChurchySpecials | undefined): boolean {
+  if (a?.version === 3 || b?.version === 3) return a?.version === 3 && b?.version === 3
+    && sameDotsRecords([a], [b]);
   return a === undefined || b === undefined ? a === b
     : a.gameId === b.gameId && a.gameEtag === b.gameEtag && a.paree === b.paree
       && a.murphy === b.murphy && a.murphyPresses === b.murphyPresses && a.pully === b.pully
@@ -143,7 +177,7 @@ function exactSum(values: readonly number[]): number | null {
   return total <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(total) : null;
 }
 
-export function calculateChurchyInternalSettlement(game: ChurchyGameDefinitionV2,
+export function calculateChurchyInternalSettlement(game: ChurchyGameDefinitionV2 | ChurchyGameDefinitionV3,
   players: readonly GamePlayerResult[], holes: readonly ChurchyHoleReceipt[], status: ChurchyResults['status']): InternalGameSettlement {
   return calculateDotSettlement({
     groupNumber: game.groupNumber, gameIds: [game.id], stakeMinor: game.amountPerDotMinor,
@@ -175,7 +209,9 @@ export function churchySettlement(totals: readonly (number | null)[], amount: nu
 }
 
 export function calculateChurchyResults(game: ChurchyGameDefinition, inputs: readonly ChurchyPlayerInput[],
-  cards: readonly Scorecard[], groupValid = true): RoundGameResult {
+  cards: readonly Scorecard[], groupValid = true, groups: readonly RoundGroup[] = [],
+  defaultLayout: readonly CourseHole[] = []): RoundGameResult {
+  if (game.version === 3) return calculateChurchyV3Results(game, inputs, cards, groups, defaultLayout, groupValid);
   const selected = game.playerIds.map((id) => inputs.find((entry) => entry.playerId === id));
   const known = selected.flatMap((entry) => entry ? [entry] : []);
   const validHandicaps = selected.length === 4 && selected.every((entry) =>
@@ -242,7 +278,8 @@ export function calculateChurchyResults(game: ChurchyGameDefinition, inputs: rea
       if (!groupValid || invalidSpecials || !entry.hole || !entry.saved
         || game.version === 1 && entry.saved.score.kind === 'unplayed') continue;
       const score = entry.saved.score;
-      const extras = score.churchy?.gameId === game.id && (score.churchy.version === 2) === (game.version === 2) ? score.churchy : undefined;
+      const extras = score.churchy?.version !== 3 && score.churchy?.gameId === game.id
+        && (score.churchy.version === 2) === (game.version === 2) ? score.churchy : undefined;
       const own = pairs.find((pair) => pair.includes(entry.id));
       const other = pairs.find((pair) => !pair.includes(entry.id));
       if (!own || !other) continue;

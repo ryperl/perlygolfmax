@@ -61,7 +61,7 @@ export function createScoresClient(apiUrl: string, getToken: () => Promise<strin
       if (!isUuid(playerId) || !Number.isInteger(holeNumber) || holeNumber < 1 || holeNumber > 18
         || !isHoleScore(score) || etag !== null && !isEventRevision(etag) || !isUuid(requestId)
         || inputRevision !== undefined && inputRevision !== null && !isUuid(inputRevision)) throw new Error('Invalid hole save request. Nothing was sent.');
-      const hasDeclarations = Boolean(score.nassau?.length || score.wolf?.length || score.dots?.length);
+      const hasDeclarations = Boolean(score.nassau?.length || score.wolf?.length || score.dots?.length || score.churchy?.version === 3);
       const target = `${base}/players/${encodeURIComponent(playerId)}/holes/${String(holeNumber)}${hasDeclarations ? '/games' : ''}?format=lean`;
       const options = {
         method: 'PUT', body: { score, ...(inputRevision === undefined ? {} : { inputRevision }) }, requestId, ...(etag === null ? { createOnly: true } : { etag }),

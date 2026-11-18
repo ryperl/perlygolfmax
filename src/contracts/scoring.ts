@@ -18,6 +18,7 @@ import type { RoundGameScoringContext } from '../domain/game-declarations.js';
 import { isNassauHoleRecord } from './nassau.js';
 import { isWolfRecord } from './wolf.js';
 import { isDotsHoleRecord } from './dots.js';
+import { dotsSpecialCatalog } from '../domain/dots.js';
 import { isDotAwardAudit } from './dot-audit.js';
 import { calculateInternalSettlements } from '../domain/internal-games.js';
 import { calculateStrokeGameResults } from '../domain/stroke-games.js';
@@ -125,9 +126,12 @@ export function decodeRoundScores(value: unknown): RoundScores | null {
 }
 
 function validateRoundScores(value: unknown, lean = false): value is RoundScores {
+  if (isRecord(value) && value.dotsSpecialKinds !== undefined && (!Array.isArray(value.dotsSpecialKinds)
+    || !value.dotsSpecialKinds.every((kind: unknown) => dotsSpecialCatalog.some((entry) => entry.kind === kind))
+    || new Set(value.dotsSpecialKinds).size !== value.dotsSpecialKinds.length)) return false;
   if (isRecord(value) && value.churchyRulesVersions !== undefined
     && (!Array.isArray(value.churchyRulesVersions)
-      || !value.churchyRulesVersions.every((version: unknown) => version === 1 || version === 2)
+      || !value.churchyRulesVersions.every((version: unknown) => version === 1 || version === 2 || version === 3)
       || new Set(value.churchyRulesVersions).size !== value.churchyRulesVersions.length
       || value.churchyRulesVersions.length > 0 && value.churchyEnabled !== true)) return false;
   if (isRecord(value) && (value.internalGamesSupported !== undefined && typeof value.internalGamesSupported !== 'boolean'
@@ -293,7 +297,8 @@ function validateRoundScores(value: unknown, lean = false): value is RoundScores
       ...(typeof group.startingHole === 'number' ? { startingHole: group.startingHole } : {}) });
   }
   if (groupNumbers.size !== value.groups.length || assigned.length !== ids.length || new Set(assigned).size !== ids.length) return false;
-  if (value.games === undefined && cards.some((card) => card.holes.some((hole) => hole.score.churchy?.version === 2))) return false;
+  if (value.games === undefined && cards.some((card) => card.holes.some((hole) =>
+    hole.score.churchy?.version === 2 || hole.score.churchy?.version === 3))) return false;
   if (value.games !== undefined) {
     const context: RoundGameScoringContext = { roundId: value.roundId, groups, layout, cards,
       ...(value.playerTees ? { playerTees: value.playerTees } : {}), ...(courseHandicaps ? { courseHandicaps } : {}),
@@ -321,9 +326,12 @@ function validateRoundScores(value: unknown, lean = false): value is RoundScores
         const extras = hole.score.churchy;
         if (!extras) continue;
         const game = value.games.configuration.games.find((entry) => entry.id === extras.gameId);
-        if (extras.version !== 2 && !(game?.kind === 'churchy' && game.version === 2)) continue;
+        if (extras.version !== 2 && extras.version !== 3
+          && !(game?.kind === 'churchy' && game.version !== 1)) continue;
         if (game?.kind !== 'churchy' || !churchySpecialsMatchGame(extras, game)
           || !game.playerIds.includes(card.playerId)
+          || extras.version === 3 && (game.version !== 3 || extras.number !== hole.number
+            || groups.find((group) => group.number === game.groupNumber)?.playerIds[0] !== card.playerId)
           || !groups.some((group) => group.number === game.groupNumber && group.playerIds.length === 4
             && group.playerIds.every((id) => game.playerIds.includes(id)))) return false;
       }
@@ -342,7 +350,7 @@ function validateRoundScores(value: unknown, lean = false): value is RoundScores
             handicap: !(playerAllocations.get(card.playerId) ?? value.teeStrokeAllocation)
               ? 'missing-stroke-index' : published?.courseHandicap ?? 'missing-handicap-index' };
         }), cards, isRecord(group) && Array.isArray(group.playerIds) && group.playerIds.length === 4
-          && group.playerIds.every((id: unknown) => typeof id === 'string' && game.playerIds.includes(id)));
+          && group.playerIds.every((id: unknown) => typeof id === 'string' && game.playerIds.includes(id)), groups, layout);
         if (!sameJsonValue(result, expected)) return false;
         continue;
       }

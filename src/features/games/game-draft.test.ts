@@ -2,12 +2,24 @@ import { describe, expect, it } from 'vitest';
 import { fictionalId } from '../../client/catalog.test-support';
 import { maximumExactGamePoints, teamSize } from '../../domain/games';
 import { teamLeaderboardGame, teamLeaderboardRound } from '../../client/leaderboard.test-support';
-import { addBand, buildGame, draftFromGame, newGameDraft, replaceGame, resetTeamAssignments, setFormat, setGameKind, setPreset, teamDraftFeedback } from './game-draft';
+import { addBand, buildGame, draftFromGame, newGameDraft, replaceGame, resetTeamAssignments, setFormat, setGameKind, setPreset, teamDraftFeedback, upgradeChurchyDraft } from './game-draft';
 import { churchyFixture } from '../../domain/churchy.test-support';
-import { defaultChurchySpecials } from '../../domain/churchy';
+import { churchyPairs, defaultChurchySpecials, defaultChurchySpecialSelections } from '../../domain/churchy';
 
 describe('game drafts', () => {
-  it('creates Churchy v2 defaults without converting saved v1, and retains independent group definitions', () => {
+  it.each([1, 4, 7, 10, 13, 16])('explicitly upgrades an unstarted legacy order while preserving its first partnership at hole %i', (startingHole) => {
+    const f = churchyFixture();
+    const legacy = { ...f.game, version: 2 as const, enabledSpecials: defaultChurchySpecials };
+    const draft = draftFromGame(legacy);
+    const upgraded = buildGame(upgradeChurchyDraft(draft, startingHole), legacy.playerIds);
+    const originalPairs = churchyPairs(legacy.playerIds, startingHole);
+    if (upgraded?.kind !== 'churchy' || !originalPairs) throw new Error('Missing fictional game');
+    expect(new Set([upgraded.playerIds[0], upgraded.playerIds[3]])).toEqual(new Set(originalPairs[0]));
+    expect(draft.churchyVersion).toBe(2);
+    expect(upgraded).toMatchObject({ version: 3, orderMode: 'tee' });
+  });
+
+  it('creates Churcie v3 defaults without converting saved legacy games, and retains independent groups', () => {
     const f = churchyFixture();
     const legacy = draftFromGame(f.game);
     expect(legacy.churchyVersion).toBe(1);
@@ -16,11 +28,20 @@ describe('game drafts', () => {
     const draft = { ...setGameKind(newGameDraft(), 'churchy', f.cards.length),
       churchyGroup: 2, churchyPlayers: f.cards.slice(4).map((card) => card.playerId), amountPerDotMinor: '.50' };
     const built = buildGame(draft, f.cards.map((card) => card.playerId));
-    expect(built).toMatchObject({ version: 2, enabledSpecials: defaultChurchySpecials, amountPerDotMinor: 50, groupNumber: 2 });
-    if (!built || built.kind !== 'churchy') throw new Error('Missing fictional v2 game.');
+    expect(built).toMatchObject({ version: 3, name: 'Churcie', orderMode: 'approach',
+      specials: defaultChurchySpecialSelections, amountPerDotMinor: 50, groupNumber: 2 });
+    if (!built || built.kind !== 'churchy') throw new Error('Missing fictional v3 game.');
     expect(buildGame(draftFromGame(built), f.cards.map((card) => card.playerId))).toEqual(built);
     expect(replaceGame([f.game], built)).toEqual([f.game, built]);
     expect(replaceGame([f.game], { ...built, groupNumber: 1, playerIds: f.game.playerIds })).toBeNull();
+    const v2 = { ...f.game, version: 2 as const, enabledSpecials: defaultChurchySpecials };
+    expect(buildGame(draftFromGame(v2), f.game.playerIds)).toEqual(v2);
+    const upgraded = buildGame(upgradeChurchyDraft(draftFromGame(v2)), f.game.playerIds);
+    expect(upgraded).toMatchObject({ version: 3, name: 'Churcie', orderMode: 'tee',
+      specials: defaultChurchySpecialSelections });
+    expect(upgraded?.kind === 'churchy' && upgraded.playerIds).toEqual([
+      f.game.playerIds[0], f.game.playerIds[3], f.game.playerIds[2], f.game.playerIds[1],
+    ]);
   });
   it.each([2, 12, 40])('builds exact two-person teams for a %i-golfer full roster without an arbitrary cap', (count) => {
     const ids = Array.from({ length: count }, (_, index) => fictionalId(index + 1));

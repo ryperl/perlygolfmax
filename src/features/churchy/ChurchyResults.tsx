@@ -8,30 +8,33 @@ export function ChurchyResults({ game, result }: {
   readonly result: RoundGameResult | undefined;
 }) {
   const receipt = result?.churchy;
-  if (!receipt) return <p>Churchy results unavailable. Refresh saved scores.</p>;
+  if (!receipt) return <p>Churcie results unavailable. Refresh saved scores.</p>;
   const names = (ids: readonly string[]) => ids.map((id) => result.players.find((player) => player.playerId === id)?.displayName ?? 'Golfer unavailable').join(' + ');
   const ranked = result.players.filter((player) => player.status !== 'unavailable' && player.totalPoints !== null)
     .sort((a, b) => (b.totalPoints ?? 0) - (a.totalPoints ?? 0));
   function money(minor: number | null) {
     return minor === null ? 'Unavailable' : `$${String(Math.floor(minor / 100))}.${String(minor % 100).padStart(2, '0')}`;
   }
-  return <section className="churchy-results" aria-label={`Churchy Game · Group ${String(game.groupNumber)} results`}>
-    <h3>Churchy Game · Group {game.groupNumber}</h3>
+  return <section className="churchy-results" aria-label={`Churcie · Group ${String(game.groupNumber)} results`}>
+    <h3>Churcie · Group {game.groupNumber}</h3>
     <p>{receipt.status === 'complete' ? 'Saved earned dots'
       : receipt.status === 'unavailable' ? 'Unavailable comparisons: no final total or settlement.' : 'Provisional: pending holes are not ties.'}</p>
-    {game.version === 1 && <ol aria-label="Churchy standings">
+    {game.version === 3 && game.orderMode === 'approach' && !receipt.order && <p className="game-hint">
+      Partner order is not saved. Choose the approach order on hole {receipt.holes[0]?.number ?? '—'} in score entry.
+    </p>}
+    {game.version === 1 && <ol aria-label="Churcie standings">
       {ranked.map((player) => {
         const position = ranked.findIndex((other) => other.totalPoints === player.totalPoints) + 1;
         const tied = ranked.filter((other) => other.totalPoints === player.totalPoints).length > 1;
         return <li key={player.playerId}>{tied ? 'T' : ''}{position} · {player.displayName}: {player.totalPoints} earned dots
-          {' '}· Churchy relative handicap {player.playingHandicap ?? 'unavailable'} · {player.holesScored}/{player.totalHoles} holes</li>;
+          {' '}· Churcie relative handicap {player.playingHandicap ?? 'unavailable'} · {player.holesScored}/{player.totalHoles} holes</li>;
       })}
     </ol>}
     {game.version === 1 && result.players.filter((player) => !ranked.includes(player)).map((player) => <p key={player.playerId}>
-      {player.displayName}: {player.status === 'unavailable' ? 'unavailable' : 'awaiting saved results'} · Churchy relative handicap {player.playingHandicap ?? 'unavailable'}
+      {player.displayName}: {player.status === 'unavailable' ? 'unavailable' : 'awaiting saved results'} · Churcie relative handicap {player.playingHandicap ?? 'unavailable'}
     </p>)}
-    {game.version === 2 ? receipt.internalSettlement && result.version === 2
-      ? <InternalSettlement settlement={receipt.internalSettlement} gameNames={['Churchy Game']} ranked
+    {game.version !== 1 ? receipt.internalSettlement && result.version === game.version
+      ? <InternalSettlement settlement={receipt.internalSettlement} gameNames={['Churcie']} ranked
         provisional={receipt.status !== 'complete'}
         progress={result.players.map((player) => ({ playerId: player.playerId,
           label: `${String(player.holesScored)}/${String(player.totalHoles)} holes · CH ${String(player.playingHandicap ?? 'unavailable')}`,

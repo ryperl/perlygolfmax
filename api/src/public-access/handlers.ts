@@ -125,7 +125,7 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
       }
       const body = parseScoreWriteBody(raw);
       if (action === 'score-game-hole' && !body.score.nassau?.length && !body.score.wolf?.length
-        && !body.score.dots?.length) throw new ApiError(400, 'INVALID_GAME_SCORE');
+        && !body.score.dots?.length && body.score.churchy?.version !== 3) throw new ApiError(400, 'INVALID_GAME_SCORE');
       const result = await api.scores.write(identity, eventId, roundId, playerId, Number(hole), body.score, etag, requestId, body.inputRevision);
       return response(200, lean ? leanScoreWriteResult(result) : result);
     } catch (error) {

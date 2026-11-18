@@ -1,7 +1,7 @@
 import type { ScoresClient } from '../../client/scoring';
 import { EventChangedError } from '../../client/events';
 import type { HoleScore, RoundScores, ScoreChange } from '../../domain/scoring';
-import { sameHoleScore, preserveScoreExtras, supportsIndividualDotsPlayerCount } from '../../domain/scoring';
+import { sameHoleScore, preserveScoreExtras, supportsDotsSpecials, supportsIndividualDotsPlayerCount } from '../../domain/scoring';
 import { scoreDeclarationIntent } from '../../domain/game-declarations';
 import { cardFor, conflictedDraft, entryKey, entryScore, savedHole } from './entry-state';
 import type { HoleDraft } from './entry-state';
@@ -39,12 +39,13 @@ export function planGroup(round: RoundScores, playerIds: readonly string[], hole
       const specials = draft.churchy;
       const game = round.games?.configuration.games.find((game) => game.kind === 'churchy' && game.id === specials.gameId);
       if (round.churchyEnabled !== true || game?.kind !== 'churchy'
-        || game.version === 2 && !round.churchyRulesVersions?.includes(2)
+        || game.version !== 1 && !round.churchyRulesVersions?.includes(game.version)
         || !churchySpecialsMatchGame(specials, game)) { invalid.push(playerId); continue; }
     }
     if (draft?.dots?.some((record) => {
       const game = round.games?.configuration.games.find((game) => game.kind === 'dots' && game.id === record.gameId);
       if (game?.kind !== 'dots' || game.version === 2 && !round.dotsRulesVersions?.includes(2)
+        || !supportsDotsSpecials(round, game.specials)
         || game.mode === 'individual' && !supportsIndividualDotsPlayerCount(round, game.playerIds.length)) return true;
       const previous = saved.dots?.find((entry) => entry.gameId === record.gameId && entry.number === record.number);
       return record.players.some((player) => dotsDeclarationIssues(player).conflicts.length > 0

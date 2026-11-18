@@ -6,7 +6,7 @@ import { NassauResults } from '../nassau';
 import type { RoundScores } from '../../domain/scoring';
 import { scorePermissions } from '../../domain/scoring';
 import { scorecardTee } from '../../domain/tees';
-import { canManageRoundGames, gameScoringLabel, gameUnavailableMessage } from '../games';
+import { canManageRoundGames, gameDisplayName, gameScoringLabel, gameUnavailableMessage } from '../games';
 import { InternalSettlement } from '../dots';
 import { gameStandings } from './standings';
 import './leaderboard.css';
@@ -103,7 +103,7 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
         setGameId(event.target.value); setPageIndex(0); setQuery('');
       }}>
         {combinations.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
-        {games.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}{
+        {games.map((entry) => <option key={entry.id} value={entry.id}>{gameDisplayName(entry)}{
           combinations.some((combined) => combined.settlement.gameIds.includes(entry.id)) ? ' only' : ''} · {gameScoringLabel(entry)}</option>)}
       </select></label>
       {combined ? <InternalSettlement settlement={combined.settlement} gameNames={combined.names} ranked sourceLabels={['Wolf', 'Dots']}

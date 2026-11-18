@@ -1,0 +1,11 @@
+.churcie-order { margin-block: .75rem; padding: .8rem; border: 1px solid var(--cp-border); border-radius: .75rem; }
+.churcie-order h3 { margin-top: 0; font-size: 1rem; }
+.churcie-order summary { min-height: 44px; padding-block: .65rem; cursor: pointer; font-weight: 650; }
+.churcie-order-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: .65rem; }
+.churcie-order-fields label { display: grid; align-content: start; gap: .3rem; min-width: 0; }
+.churcie-order-fields select { width: 100%; min-height: 44px; }
+.churcie-order button { min-height: 44px; }
+.churcie-pair-preview { margin: .4rem 0; padding-left: 1.25rem; }
+.churcie-pair-preview li { margin-block: .5rem; }
+.churcie-pair-preview span { display: block; overflow-wrap: anywhere; }
+.churcie-pair-preview span:first-child { font-size: .85rem; font-weight: 650; color: var(--cp-text-muted); }

@@ -5,11 +5,11 @@ import type { GameTeam, RoundGameDefinition, StablefordPreset, CompetitionTeamFo
 import { defaultHandicapAllowancePercent, defaultTeamHandicapAllowancePercent, gameTeamsMatchRoster, isStablefordGame, isTeamGameDefinition, maximumPointsRows, teamSize } from '../../domain/games';
 import { stablefordPoints } from '../../domain/stableford';
 import type { NassauSide, NassauVariant } from '../../domain/nassau';
-import type { DotsGameDefinition, DotsSpecialSelection } from '../../domain/dots';
+import type { DotsGameDefinition, DotsSpecialKind, DotsSpecialSelection } from '../../domain/dots';
 import { isDotsDefinition } from '../../contracts/dots';
 import { moneyText, parseMoney } from '../../domain/money';
 import type { ChurchySpecialKey } from '../../domain/churchy';
-import { defaultChurchySpecials } from '../../domain/churchy';
+import { defaultChurchySpecials, defaultChurchySpecialSelections } from '../../domain/churchy';
 
 export interface GameDraft {
   readonly kind?: 'stableford' | 'ball-drop' | 'skins' | 'churchy' | 'stroke-play' | 'wolf' | 'nassau' | 'dots';
@@ -31,8 +31,10 @@ export interface GameDraft {
   readonly automaticPresses?: boolean;
   readonly churchyGroup?: number;
   readonly churchyPlayers?: readonly string[];
-  readonly churchyVersion?: 1 | 2;
+  readonly churchyVersion?: 1 | 2 | 3;
   readonly churchySpecials?: readonly ChurchySpecialKey[];
+  readonly churchyOrderMode?: 'tee' | 'approach';
+  readonly churchySpecialSelections?: readonly DotsSpecialSelection[];
   readonly amountPerDotMinor?: string;
   readonly carryovers?: boolean;
   readonly id: string;
@@ -64,7 +66,8 @@ export function draftFromGame(game: RoundGameDefinition): GameDraft {
     automaticPresses: game.automaticPresses };
   if (game.kind === 'churchy') return { ...newGameDraft(), id: game.id, name: game.name, kind: 'churchy', basis: 'net',
     churchyGroup: game.groupNumber, churchyPlayers: game.playerIds, amountPerDotMinor: moneyText(game.amountPerDotMinor),
-    churchyVersion: game.version, ...(game.version === 2 ? { churchySpecials: game.enabledSpecials } : {}) };
+    churchyVersion: game.version, ...(game.version === 2 ? { churchySpecials: game.enabledSpecials }
+      : game.version === 3 ? { churchyOrderMode: game.orderMode, churchySpecialSelections: game.specials.map((special) => ({ ...special })) } : {}) };
   if (!isStablefordGame(game)) return {
     ...newGameDraft(), id: game.id, name: game.name, kind: game.kind, basis: game.basis,
     allowance: '100', allowanceConfigured: true,
@@ -123,12 +126,27 @@ export function setGameKind(draft: GameDraft, kind: NonNullable<GameDraft['kind'
   if (kind === 'dots') return { ...reset, kind, name: 'Dots', dotsMode: 'individual', dotsPlayers: [], dotsSpecials: [], stake: '' };
   if (kind === 'nassau') return setNassauVariant({ ...reset, kind, name: 'Nassau', basis: 'net',
     nassauStakes: ['', '', ''], automaticPresses: false }, 'singles');
-  if (kind === 'churchy') return { ...reset, kind, name: 'Churchy Game', basis: 'net', amountPerDotMinor: '',
-    churchyPlayers: [], churchyVersion: 2, churchySpecials: defaultChurchySpecials };
+  if (kind === 'churchy') return { ...reset, kind, name: 'Churcie', basis: 'net', amountPerDotMinor: '',
+    churchyPlayers: [], churchyVersion: 3, churchyOrderMode: 'approach',
+    churchySpecialSelections: defaultChurchySpecialSelections.map((special) => ({ ...special })) };
   return kind === 'ball-drop'
     ? { ...setFormat(reset, 'ball-drop-net-gross', rosterCount), kind, name: 'Ball Drop', allowance: '100' }
     : { ...reset, kind, name: kind === 'skins' ? 'Skins' : kind === 'stroke-play' ? 'Stroke Play' : 'Standard Stableford',
       ...(kind === 'skins' ? { carryovers: false, allowance: '100' } : {}) };
+}
+
+export function upgradeChurchyDraft(draft: GameDraft, startingHole = 1): GameDraft {
+  if (draft.kind !== 'churchy' || draft.churchyVersion !== 2) return draft;
+  const enabled = new Set<DotsSpecialKind>((draft.churchySpecials ?? defaultChurchySpecials)
+    .map((kind) => kind === 'sticky' ? 'dime' : kind));
+  const [a, b, c, d] = draft.churchyPlayers ?? [];
+  const block = Math.floor((startingHole - 1) / 3) % 3;
+  const order = a && b && c && d ? block === 0 ? [a, d, c, b] : block === 1 ? [a, b, d, c] : [a, c, b, d]
+    : draft.churchyPlayers ?? [];
+  return { ...draft, name: 'Churcie', churchyVersion: 3, churchyOrderMode: 'tee',
+    churchyPlayers: order,
+    churchySpecialSelections: defaultChurchySpecialSelections.filter((special) => special.kind === 'other'
+      || enabled.has(special.kind)).map((special) => ({ ...special })) };
 }
 
 export function setNassauVariant(draft: GameDraft, variant: NassauVariant): GameDraft {
@@ -204,10 +222,12 @@ export function buildGame(draft: GameDraft, playerIds: readonly string[] = []): 
     return isRoundGameDefinition(game) ? game : null;
   }
   if (draft.kind === 'churchy') {
-    const game = { id: draft.id, name: 'Churchy Game', kind: 'churchy', version: draft.churchyVersion ?? 1, basis: 'net',
+    const game = { id: draft.id, name: draft.churchyVersion === 3 ? 'Churcie' : 'Churchy Game', kind: 'churchy', version: draft.churchyVersion ?? 1, basis: 'net',
       groupNumber: draft.churchyGroup, playerIds: draft.churchyPlayers, currency: 'USD',
-      amountPerDotMinor: parseMoney(draft.amountPerDotMinor ?? ''),
-      ...(draft.churchyVersion === 2 ? { enabledSpecials: draft.churchySpecials ?? defaultChurchySpecials } : {}) };
+      amountPerDotMinor: draft.churchyVersion === 3 && !draft.amountPerDotMinor?.trim() ? 0 : parseMoney(draft.amountPerDotMinor ?? ''),
+      ...(draft.churchyVersion === 2 ? { enabledSpecials: draft.churchySpecials ?? defaultChurchySpecials }
+        : draft.churchyVersion === 3 ? { orderMode: draft.churchyOrderMode ?? 'approach',
+          specials: draft.churchySpecialSelections ?? defaultChurchySpecialSelections } : {}) };
     return isRoundGameDefinition(game)
       && game.playerIds.every((id) => playerIds.includes(id)) ? game : null;
   }

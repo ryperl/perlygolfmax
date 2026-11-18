@@ -18,6 +18,7 @@ import type { EventTab } from './navigation';
 import { SavedEventPage } from './SavedEventPage';
 import { PublicLeaderboardPage } from './PublicLeaderboardPage';
 import { clearScoreLocation, loadScoreLocation, readScoreLocation, saveScoreLocation, scoreLocationHref } from './score-resume';
+import { browserDotPresets } from './dot-presets';
 const PublicPursePage = lazy(async () => ({ default: (await import('./PublicPursePage')).PublicPursePage }));
 
 function configuration(): { readonly services?: PublicServices; readonly error?: string } {
@@ -51,7 +52,7 @@ export function PublicEventsPage({ services: override }: { readonly services?: P
   if (unavailable?.route === current) return <section><p role="alert">{unavailable.message}</p><a href="#events?choose=1">Choose an active event</a></section>;
   const [kind, eventId, roundId] = current.split(':');
   if (kind === 'quick') return services.quickRounds
-    ? <QuickRoundView key={current} client={services.quickRounds} scores={services.scores} eventId={eventId} />
+    ? <QuickRoundView key={current} client={services.quickRounds} scores={services.scores} eventId={eventId} presetStore={browserDotPresets} />
     : <section><h1>Quick rounds unavailable</h1><p>This service does not support public Quick round setup.</p><a href="#events?choose=1">Choose an event</a></section>;
   if (kind === 'score' && eventId && roundId) return <PublicRoundPage key={`${eventId}:${roundId}`}
     services={services} eventId={eventId} roundId={roundId} onUnavailable={ended} />;
@@ -162,7 +163,7 @@ function PublicRoundPage({ services, eventId, roundId, onUnavailable }: {
     {workspace && <>
       {workspace.quickRound && services.quickRounds && <a aria-disabled={blocked} href={blocked ? undefined : `#events?event=${eventId}&quick=1`}
         onClick={(event) => { if (blocked) event.preventDefault(); }}>Edit Quick round setup & games</a>}
-      <OwnerScoresView client={services.scores} eventId={eventId} roundId={roundId}
+      <OwnerScoresView client={services.scores} eventId={eventId} roundId={roundId} presetStore={browserDotPresets}
         roundTone={roundToneFor(roundId, workspace.rounds)}
         onNavigationBlockedChange={setBlocked}
         roundPicker={

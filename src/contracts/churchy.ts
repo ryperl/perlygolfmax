@@ -4,6 +4,9 @@ import { isEventRevision, isRecord, isUuid } from './events.js';
 import { boundedText } from './catalog.js';
 import { calculateChurchyInternalSettlement, churchyPairs, churchySettlement, defaultChurchySpecials } from '../domain/churchy.js';
 import { sameJsonValue } from './round-context.js';
+import { dotsSpecialCatalog } from '../domain/dots.js';
+import { isDotsHoleRecord } from './dots.js';
+import { isChurchyV3Result } from './churchy-v3.js';
 
 function exact(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
@@ -24,6 +27,19 @@ function earnedDots(hole: Record<string, unknown>, playerId: unknown): bigint {
 }
 
 export function isChurchyDefinition(value: unknown): value is ChurchyGameDefinition {
+  if (isRecord(value) && value.version === 3) {
+    const { basis, currency, amountPerDotMinor, orderMode } = value;
+    return keys(value, ['id', 'name', 'kind', 'version', 'basis', 'currency', 'groupNumber',
+      'amountPerDotMinor', 'playerIds', 'orderMode', 'specials'])
+      && value.name === 'Churcie' && basis === 'net' && currency === 'USD' && exact(amountPerDotMinor)
+      && (orderMode === 'tee' || orderMode === 'approach')
+      && isUuid(value.id) && value.kind === 'churchy' && exact(value.groupNumber) && value.groupNumber > 0
+      && Array.isArray(value.playerIds) && value.playerIds.length === 4 && value.playerIds.every(isUuid)
+      && new Set(value.playerIds).size === 4 && Array.isArray(value.specials)
+      && value.specials.every((entry: unknown) => isRecord(entry) && keys(entry, ['kind', 'units'])
+        && dotsSpecialCatalog.some((special) => special.kind === entry.kind) && exact(entry.units) && entry.units > 0)
+      && new Set(value.specials.map((entry: { readonly kind: string }) => entry.kind)).size === value.specials.length;
+  }
   return isRecord(value) && keys(value, value.version === 2
     ? ['id', 'name', 'kind', 'version', 'basis', 'currency', 'groupNumber', 'amountPerDotMinor', 'playerIds', 'enabledSpecials']
     : ['id', 'name', 'kind', 'version', 'basis', 'currency', 'groupNumber', 'amountPerDotMinor', 'playerIds'])
@@ -39,6 +55,10 @@ export function isChurchyDefinition(value: unknown): value is ChurchyGameDefinit
 }
 
 export function isChurchySpecials(value: unknown): value is ChurchySpecials {
+  if (isRecord(value) && value.version === 3) {
+    const record = Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'version'));
+    return isDotsHoleRecord(record);
+  }
   return isRecord(value) && keys(value, value.version === 2
     ? ['version', 'gameId', 'gameEtag', 'paree', 'murphy', 'murphyPresses', 'sandyCount', 'pully', 'sticky', 'otherDots']
     : ['gameId', 'gameEtag', 'paree', 'murphy', 'murphyPresses', 'sandy', 'pully'])
@@ -52,6 +72,7 @@ export function isChurchySpecials(value: unknown): value is ChurchySpecials {
 
 /** Full receipts are recomputed against captured round inputs in isRoundScores. */
 export function isChurchyResult(value: unknown, game: ChurchyGameDefinition): value is RoundGameResult {
+  if (game.version === 3) return isChurchyV3Result(value, game);
   if (!isChurchyResultShape(value, game)) return false;
   if (game.version === 1) return true;
   const data = value.churchy;

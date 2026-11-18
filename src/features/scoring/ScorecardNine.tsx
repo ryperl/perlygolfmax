@@ -4,7 +4,7 @@ import type { HoleScore, PlayerCourseHandicap, Scorecard } from '../../domain/sc
 import type { PlayerTeeProfile } from '../../domain/tees';
 import { ballDropContribution, ballDropScoreText, cardTotalText, pointsTotalText, scorecardBallDropTeams, scorecardGamePlayer, scorecardHandicapStrokes } from './scorecard-presentation';
 import type { ScorecardGame } from './scorecard-presentation';
-import { gameUnavailableMessage } from '../games';
+import { gameDisplayName, gameUnavailableMessage } from '../games';
 import { gameResultTotal, gameResultUnit } from '../../domain/games';
 import { CourseHandicap } from './CourseHandicap';
 import './scorecard-recap.css';
@@ -114,13 +114,13 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
               })}
               <td className="recap-subtotal">{cardTotalText(card, layout)}</td>{showTotal && <td className="recap-subtotal">{cardTotalText(card, fullLayout)}</td>}
             </tr>
-            {game && !ballDrop && <tr className="recap-game-row" aria-label={`${card.displayName} · ${game.definition.name} ${unit}`}>
+            {game && !ballDrop && <tr className="recap-game-row" aria-label={`${card.displayName} · ${gameDisplayName(game.definition)} ${unit}`}>
               <th scope="row" aria-label={`${card.displayName} game ${unit}`}
                 title={!available ? gameUnavailableMessage(player?.strokeGame?.unavailableReason ?? player?.unavailableReason) : undefined}>
                 {game.definition.kind === 'wolf' && game.definition.version === 1 ? 'DOT BALANCE' : unit === 'dots' ? 'Earned dots' : unit === 'points' ? 'Points' : unit === 'strokes' ? `${game.definition.basis === 'net' ? 'Net' : 'Gross'} strokes` : unit === 'skins' ? 'Skins' : 'Team to par'}
                 {game.definition.kind === 'dots' && <small>Total includes round bonuses</small>}
                 {game.definition.kind === 'churchy' && player && 'playingHandicap' in player
-                  && <small>Churchy relative handicap {player.playingHandicap ?? 'unavailable'}</small>}
+                  && <small>Churcie relative handicap {player.playingHandicap ?? 'unavailable'}</small>}
                 {player && 'teamId' in player && <small>{player.displayName}</small>}{!available && <small>Unavailable</small>}</th>
               {layout.map((hole) => {
                 const points = holePoints.get(hole.number);

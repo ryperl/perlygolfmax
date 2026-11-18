@@ -185,7 +185,10 @@ describe('serialized group save protocol', () => {
     const calls = vi.mocked(store.client.save).mock.calls;
     expect(calls[1]?.[6]).toBe(retryId);
     expect(calls[2]?.[6]).toBe(retryId);
-    expect(calls.every((call) => call[4].churchy?.murphyPresses === 2)).toBe(true);
+    expect(calls.every((call) => {
+      const specials = call[4].churchy;
+      return specials !== undefined && specials.version !== 3 && specials.murphyPresses === 2;
+    })).toBe(true);
     expect(mutable.size).toBe(0);
   });
   it('plans blank as unplayed, skips unchanged blanks, and prevalidates every intended row before sending anything', async () => {

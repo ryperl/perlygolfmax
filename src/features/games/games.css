@@ -58,3 +58,7 @@
 .game-settings label > input[type="checkbox"] { flex: 0 0 1.25rem; width: 1.25rem; height: 1.25rem; min-height: 0; padding: 0; accent-color: var(--cp-round-line, var(--cp-accent)); }
 .game-settings details > summary { min-height: 44px; align-content: center; cursor: pointer; }
 .game-settings details > summary:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
+.game-specials-disclosure > summary { min-height: 44px; padding-block: .65rem; cursor: pointer; font-weight: 650; }
+.game-settings .churcie-specials-container { container-type: inline-size; }
+.game-settings .churcie-specials-container,
+.game-settings .churcie-specials-container .dots-specials { margin-inline: 0; padding: 0; border: 0; }

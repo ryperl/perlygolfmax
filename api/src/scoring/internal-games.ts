@@ -43,7 +43,8 @@ export function validateInternalGameChanges(
       throw new ApiError(400, 'WOLF_REQUIRES_NEW_GAME');
     }
     if (previous?.kind === 'churchy' && game.kind === 'churchy' && previous.version !== game.version) {
-      throw new ApiError(400, 'CHURCHY_REQUIRES_NEW_GAME');
+      if (previous.version !== 2 || game.version !== 3) throw new ApiError(400, 'CHURCHY_REQUIRES_NEW_GAME');
+      if (round.scoringStarted) throw new ApiError(409, 'CHURCHY_SETUP_LOCKED');
     }
     if (previous?.kind === 'dots' && game.kind === 'dots' && previous.version !== game.version) {
       throw new ApiError(400, 'DOTS_REQUIRES_NEW_GAME');

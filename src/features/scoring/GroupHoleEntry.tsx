@@ -220,14 +220,14 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
           {playerGameControls?.(row.playerId)}
           </div>
           {churchy?.kind === 'churchy' && churchy.playerIds.includes(row.playerId) && gameEtag && onDotsEdit && <>
-            <p className="entry-tee">Churchy relative handicap: {row.churchyRelativeHandicap ?? 'unavailable'} · Relative strokes this hole: {
+            <p className="entry-tee">Churcie relative handicap: {row.churchyRelativeHandicap ?? 'unavailable'} · Relative strokes this hole: {
               row.churchyStrokesReceived ?? 'unavailable'}</p>
-            <ChurchyDots name={row.displayName} number={hole.number} game={churchy}
+            {churchy.version !== 3 && <ChurchyDots name={row.displayName} number={hole.number} game={churchy}
               disabled={disabled || churchy.version === 2 && !churchyV2Supported}
               counts={row.draft?.churchyCounts} value={
                 row.draft?.churchy ?? row.saved.churchy ?? emptyChurchySpecials(churchy, gameEtag)
-              } onChange={(value, counts) => { cancelMovement(); onDotsEdit(row.playerId, { ...value, gameId: churchy.id, gameEtag }, counts); }} />
-            {churchy.version === 2 && !churchyV2Supported && <p className="entry-error">Churchy edits require API rules support. Refresh before editing specials.</p>}
+              } onChange={(value, counts) => { cancelMovement(); onDotsEdit(row.playerId, { ...value, gameId: churchy.id, gameEtag }, counts); }} />}
+            {churchy.version === 2 && !churchyV2Supported && <p className="entry-error">Churcie edits require API rules support. Refresh before editing specials.</p>}
           </>}
           {rows.length === 1 && <div className="quick-scores" aria-label={`Quick scores for ${row.displayName}`}>{quickScores.map((value) => <button type="button" key={value}
             aria-label={`${pickedUp ? 'X' : ''}${String(value)} ${pickedUp ? 'pickup' : 'strokes'} for ${row.displayName}`}

@@ -5,7 +5,7 @@ import { visibleGames } from '../../domain/games';
 import { ChurchyResults } from '../churchy';
 import { DotsResults } from '../dots';
 import { RoundDifferentials } from '../differentials';
-import { gameScoringLabel } from '../games';
+import { gameDisplayName, gameScoringLabel } from '../games';
 import { PlayerScorecardRecap } from './PlayerScorecardRecap';
 import { ScorecardNine } from './ScorecardNine';
 import { cardFor } from './entry-state';
@@ -52,7 +52,7 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
     {games.length > 0 && <section className="scorecard-game-summary" aria-label="Round games">
       <h3>Round games</h3>
       <ul role="list">{games.map((entry) => <li key={entry.id}>
-        {entry.name} · {gameScoringLabel(entry)}
+        {gameDisplayName(entry)} · {gameScoringLabel(entry)}
       </li>)}</ul>
     </section>}
     <div className="scorecard-controls">
@@ -66,7 +66,7 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
         setGameId(event.target.value || null);
       }}>
         <option value="">Strokes only</option>
-        {games.map((entry) => <option value={entry.id} key={entry.id}>{entry.name} · {gameScoringLabel(entry)}</option>)}
+        {games.map((entry) => <option value={entry.id} key={entry.id}>{gameDisplayName(entry)} · {gameScoringLabel(entry)}</option>)}
       </select></label>}
     </div>
     {game?.definition.kind === 'ball-drop' && <p className="scorecard-game-context">

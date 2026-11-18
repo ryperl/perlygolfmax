@@ -7,7 +7,7 @@ export type { DotsRotationContext } from './dots-rotation.js';
 
 export type DotsSpecialKind = 'hogan' | 'seve' | 'long-drive' | 'paree' | 'sandy' | 'pully' | 'dime'
   | 'super-dime' | 'kp' | 'murphy' | 'pully-murphy' | 'haz-par' | 'gorilla' | 'birdie' | 'eagle'
-  | 'string' | 'birdy-string' | 'blue-plate' | 'king-of-the-hill' | 'assassin' | 'walk' | 'sweep' | 'chippy' | 'pickup';
+  | 'string' | 'birdy-string' | 'blue-plate' | 'king-of-the-hill' | 'assassin' | 'walk' | 'sweep' | 'chippy' | 'pickup' | 'other';
 
 export const dotsSpecialCatalog: readonly {
   readonly kind: DotsSpecialKind; readonly label: string; readonly description: string;
@@ -37,6 +37,7 @@ export const dotsSpecialCatalog: readonly {
   { kind: 'sweep', label: 'Sweep', description: 'The same partnered pair wins linked High and Low.', defaultUnits: 1, automatic: true },
   { kind: 'chippy', label: 'Chippy', description: 'Chip in, gross par or better.', defaultUnits: 1, automatic: false },
   { kind: 'pickup', label: 'Pickup', description: 'Explicitly selected pickup awards opponents; never inferred from a score.', defaultUnits: 1, automatic: false },
+  { kind: 'other', label: 'Other', description: 'Manually agreed whole-count catch-all, entered once for the earning golfer.', defaultUnits: 1, automatic: false },
 ];
 
 export interface DotsSpecialSelection { readonly kind: DotsSpecialKind; readonly units: number }
@@ -62,6 +63,7 @@ export interface DotsRotationStart {
 export interface DotsCall {
   readonly id: string; readonly kind: 'paree' | 'murphy' | 'pully-murphy';
   readonly result: 'pending' | 'success' | 'failure';
+  readonly murphyPresses?: 0 | 1 | 2;
 }
 export interface DotsPlayerDeclaration {
   readonly playerId: string; readonly counts: Readonly<Partial<Record<DotsSpecialKind, number>>>;
@@ -116,7 +118,7 @@ export function dotsDeclarationIssues(declaration: DotsPlayerDeclaration): {
 }
 
 export const dotsManualKinds: readonly DotsSpecialKind[] = [
-  'hogan', 'seve', 'sandy', 'pully', 'dime', 'super-dime', 'haz-par', 'gorilla', 'walk', 'chippy', 'pickup',
+  'hogan', 'seve', 'sandy', 'pully', 'dime', 'super-dime', 'haz-par', 'gorilla', 'walk', 'chippy', 'pickup', 'other',
 ];
 const categories: readonly DotsContest['kind'][] = ['kp', 'blue-plate', 'long-drive'];
 const parQualified: readonly DotsSpecialKind[] = ['hogan', 'seve', 'sandy', 'haz-par', 'chippy'];
@@ -128,6 +130,7 @@ const pullyScore = (strokes: number | null, par: number | undefined) => par !== 
   && (strokes === par || strokes === par - 1);
 const sameMembers = (left: readonly string[], right: readonly string[]) =>
   left.length === right.length && unique(left) && left.every((id) => right.includes(id));
+type DotsRulesProfile = 'dots' | 'churcie-v3';
 
 export function dotsDefinitionMatchesRound(game: DotsGameDefinition, round: DotRoundInput): boolean {
   const groups = round.groups.filter((group) => group.number === game.groupNumber);
@@ -174,7 +177,7 @@ function contextFor(game: DotsGameDefinition, number: number, contexts: readonly
 /** Semantic write validation. Read projections can still represent historical invalid input as unavailable. */
 export function dotsRecordsMatchGame(
   records: readonly DotsHoleRecord[], game: DotsGameDefinition, round: DotRoundInput,
-  contexts: readonly DotHoleContext[] = [],
+  contexts: readonly DotHoleContext[] = [], profile: DotsRulesProfile = 'dots',
 ): boolean {
   if (!dotsDefinitionMatchesRound(game, round) || !unique(records.map((record) => record.number))) return false;
   const rotations = records.filter((record) => record.rotation !== undefined);
@@ -205,7 +208,8 @@ export function dotsRecordsMatchGame(
       if ((player.counts.dime ?? 0) > 0 && (player.counts['super-dime'] ?? 0) > 0) return false;
       for (const call of player.calls) {
         callIds.push(call.id);
-        if (!enabled.has(call.kind)) return false;
+        if (!enabled.has(call.kind) || call.murphyPresses !== undefined
+          && (profile !== 'churcie-v3' || call.kind !== 'murphy' || ![0, 1, 2].includes(call.murphyPresses))) return false;
         if (call.result === 'success' && score && score.kind !== 'unplayed'
           && (score.kind !== 'strokes' || par === undefined
             || (call.kind === 'pully-murphy' ? score.strokes !== par : score.strokes > par))) return false;
@@ -227,13 +231,13 @@ export function dotsRecordsMatchGame(
 
 export function calculateDots(
   game: DotsGameDefinition, round: DotRoundInput, records: readonly DotsHoleRecord[],
-  contexts: readonly DotHoleContext[] = [],
+  contexts: readonly DotHoleContext[] = [], profile: DotsRulesProfile = 'dots',
 ): DotsResults {
   const issues: string[] = [];
   const rotation = game.version === 2 ? dotsRotationContext(game, round, records) : undefined;
   const effectiveContexts = rotation?.contexts ?? contexts;
   const valid = dotsDefinitionMatchesRound(game, round);
-  const recordsValid = valid && dotsRecordsMatchGame(records, game, round);
+  const recordsValid = valid && dotsRecordsMatchGame(records, game, round, [], profile);
   if (!valid) issues.push('invalid-dots-group');
   else if (!recordsValid) issues.push('invalid-dots-records');
   const units = new Map(game.specials.map((special) => [special.kind, special.units]));
@@ -312,7 +316,7 @@ export function calculateDots(
         if (call.result === 'pending') { mark(hole, 'pending', 'unresolved-call'); continue; }
         if (call.result === 'success' && pending) { mark(hole, 'pending', 'call-needs-score'); continue; }
         add(call.kind, playerId, call.result === 'failure' ? opponents(playerId) : own(playerId),
-          1, 'manual', [hole.number], `${dotsSpecialCatalog.find((entry) => entry.kind === call.kind)?.label ?? call.kind} call: ${call.result}.`, call.id);
+          1 + (profile === 'churcie-v3' ? call.murphyPresses ?? 0 : 0), 'manual', [hole.number], `${dotsSpecialCatalog.find((entry) => entry.kind === call.kind)?.label ?? call.kind} call: ${call.result}.`, call.id);
       }
       if (strokes !== null && par !== undefined) {
         if (strokes === par - 1) add('birdie', playerId, own(playerId), 1, 'automatic', [hole.number], 'Exactly one under personal gross par.');
@@ -358,7 +362,8 @@ export function calculateDots(
       if (context.highWinnerIds === undefined || context.lowWinnerIds === undefined) {
         mark(hole, 'pending', 'missing-sweep-outcome');
       } else if (context.highWinnerIds.length === 2 && sameMembers(context.highWinnerIds, context.lowWinnerIds)) {
-        add('sweep', null, context.highWinnerIds, 1, 'derived', [hole.number], 'The same linked pair won High and Low.');
+        add('sweep', null, context.highWinnerIds, profile === 'churcie-v3' ? context.sweepMultiplier ?? 1 : 1,
+          'derived', [hole.number], 'The same linked pair won High and Low.');
       }
     }
   }

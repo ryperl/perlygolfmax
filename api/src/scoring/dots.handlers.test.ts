@@ -1,6 +1,7 @@
 import { HttpRequest, InvocationContext } from '@azure/functions';
 import { describe, expect, it, vi } from 'vitest';
 import type { DotsGameDefinition } from '../../../src/domain/dots.js';
+import type { ChurchyGameDefinitionV3 } from '../../../src/domain/churchy.js';
 import { decodeRoundScores, isScoreWriteResult } from '../../../src/contracts/scoring.js';
 import { isRecord } from '../../../src/contracts/events.js';
 import { maximumGameConfigurationBytes } from '../../../src/domain/games.js';
@@ -33,6 +34,34 @@ async function fixture() {
 }
 
 describe('Dots HTTP namespaces and public internal authority', () => {
+  it.each(['owner', 'public'] as const)('accepts Churcie v3 canonical declarations on the dedicated %s route without raising ordinary limits', async (role) => {
+    const f = await fixture();
+    const game: ChurchyGameDefinitionV3 = { id: f.game.id, name: 'Churcie', kind: 'churchy', version: 3,
+      basis: 'net', currency: 'USD', amountPerDotMinor: 50, groupNumber: 1, playerIds: f.game.playerIds,
+      orderMode: 'approach', specials: [{ kind: 'dime', units: 1 }, { kind: 'murphy', units: 2 }] };
+    const configured = await f.scores.saveGames(f.actor, event.id, f.roundId, [game], null, identifier(24500));
+    const score = { kind: 'strokes', strokes: 4, churchy: { version: 3, number: 1, gameId: game.id,
+      gameEtag: configured.round.games?.configuration.etag ?? '', rotation: { playerIds: game.playerIds },
+      contests: [], players: [{ playerId: f.playerId, counts: { dime: 1 },
+        calls: Array.from({ length: 60 }, (_, index) => ({ id: identifier(24510 + index), kind: 'murphy', result: 'pending', murphyPresses: 2 })) }],
+    } };
+    const ownerApi = { verify: vi.fn().mockResolvedValue(creator), limiter: f.api.limiter, scores: f.scores };
+    const ordinary = role === 'owner' ? createScoringHandler(() => ownerApi, 'score-hole')
+      : createPublicHandler(() => f.api, 'score-hole');
+    const dedicated = role === 'owner' ? createScoringHandler(() => ownerApi, 'score-game-hole')
+      : createPublicHandler(() => f.api, 'score-game-hole');
+    expect(await ordinary(f.request({ score }, 24501), f.context)).toMatchObject({ status: 413 });
+    const saved = await dedicated(f.request({ score }, 24502, {}, '?format=lean'), f.context);
+    expect(saved.status).toBe(200);
+    if (!isRecord(saved.jsonBody)) throw new Error('Missing fictional Churcie response');
+    expect(saved.jsonBody.change).not.toHaveProperty('dotAwardAudit');
+    const round = decodeRoundScores(saved.jsonBody.round);
+    expect(round?.games?.results[0]?.churchy?.order?.playerIds).toEqual(game.playerIds);
+    expect(round?.games?.results[0]?.churchy?.awards?.[0]).toMatchObject({ kind: 'dime' });
+    expect(isScoreWriteResult({ ...saved.jsonBody, round })).toBe(true);
+    expect(await dedicated(f.request({ score }, 24502, {}, '?format=lean'), f.context)).toEqual(saved);
+  });
+
   it.each(['owner', 'public'] as const)('returns lean %s game/score receipts and reads, retaining protected history, legacy replies and retries', async (role) => {
     const f = await fixture();
     const ownerApi = { verify: vi.fn().mockResolvedValue(creator), limiter: f.api.limiter, scores: f.scores };

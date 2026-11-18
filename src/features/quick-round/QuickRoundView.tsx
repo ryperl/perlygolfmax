@@ -4,6 +4,7 @@ import type { QuickRoundClient } from '../../client/quick-round';
 import type { EventSetupInput, EventWorkspace } from '../../domain/setup';
 import type { RoundScores } from '../../domain/scoring';
 import type { ScoresClient } from '../../client/scoring';
+import type { DotPresetStore } from '../../client/dot-presets';
 import { EventChangedError } from '../../client/events';
 import { RoundGamesPanel, canManageRoundGames } from '../games';
 import { inputFrom, sameSetupInput, setupProblems } from '../setup';
@@ -37,10 +38,11 @@ function requireQuickScores(round: RoundScores, eventId: string, roundId: string
   return round;
 }
 
-export function QuickRoundView({ client, scores, eventId: existingId }: {
+export function QuickRoundView({ client, scores, eventId: existingId, presetStore }: {
   readonly client: QuickRoundClient;
   readonly scores: ScoresClient;
   readonly eventId?: string | undefined;
+  readonly presetStore?: DotPresetStore | undefined;
 }) {
   const [eventId] = useState(() => existingId ?? crypto.randomUUID());
   const [draft, setDraft] = useState<EventSetupInput>(() => ({
@@ -258,6 +260,7 @@ export function QuickRoundView({ client, scores, eventId: existingId }: {
           <label><input type="checkbox" checked={showScoresOnly} disabled={working || gameDirty || hasSavedGames}
             onChange={(event) => { setScoresOnly(event.target.checked); }} />Scores only</label>
           {!showScoresOnly && <RoundGamesPanel round={scoreRound} busy={working || changed || Boolean(attempt) || conflict} onDirtyChange={setGameDirty}
+            presetStore={presetStore}
             onSave={async (games, etag, requestId) => {
               if (!savedRound || inFlight.current || changed || attempt || conflict) return null;
               inFlight.current = true; setWorking(true);

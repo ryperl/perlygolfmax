@@ -43,6 +43,27 @@ function record(game: DotsGameDefinition, round: RoundScores, playerId: string, 
 }
 
 describe('persisted independent Dots and earned Wolf authority', () => {
+  it('rejects Churcie-only Murphy stages in Wolf-linked Dots before publishing scores or a capture', async () => {
+    const f = await publicFixture();
+    const base = dots(f.input.playerIds);
+    const match = wolf(f.input.playerIds);
+    const game: DotsGameDefinition = { id: base.id, name: base.name, kind: 'dots', version: 1,
+      groupNumber: 1, playerIds: base.playerIds, mode: 'linked', linkedGameId: match.id,
+      specials: [{ kind: 'murphy', units: 2 }] };
+    const configured = await f.scores.saveGames(f.actor, event.id, f.roundId, [match, game], null, identifier(24700));
+    for (const murphyPresses of [0, 1, 2] as const) {
+      const declaration: DotsHoleRecord = { number: 1, gameId: game.id,
+        gameEtag: configured.round.games?.configuration.etag ?? 'missing', contests: [],
+        players: [{ playerId: f.playerId, counts: {}, calls: [{
+          id: identifier(24701), kind: 'murphy', result: 'pending', murphyPresses,
+        }] }] };
+      await expect(f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+        { kind: 'strokes', strokes: 4, dots: [declaration] }, null, identifier(24702 + murphyPresses)))
+        .rejects.toMatchObject({ code: 'DOTS_SETUP_CHANGED' });
+    }
+    expect((await f.scores.get(f.actor, event.id, f.roundId)).setupLocked).toBe(false);
+  });
+
   it.each([1, 2, 3] as const)('creates and conditionally scores public individual Dots for a full saved group of %i', async (count) => {
     const f = await scoringFixture(count);
     const actor = { kind: 'public-score' as const, eventId: event.id };

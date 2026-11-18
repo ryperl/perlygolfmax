@@ -27,7 +27,8 @@ export function isDotAward(value: unknown): value is DotAward {
 
 export function isDotAwardAudit(value: unknown): value is DotAwardAudit {
   return isRecord(value) && Object.keys(value).length === 8 && isUuid(value.gameId)
-    && (value.kind === 'dots' || value.kind === 'wolf') && (value.version === 1 || value.version === 2)
+    && (value.kind === 'dots' || value.kind === 'wolf' || value.kind === 'churchy' && value.version === 3)
+    && (value.version === 1 || value.version === 2 || value.version === 3)
     && isRoundGameDefinition(value.configuration) && value.configuration.id === value.gameId
     && value.configuration.kind === value.kind && value.configuration.version === value.version
     && (value.gameEtag === null || isEventRevision(value.gameEtag))

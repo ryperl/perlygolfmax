@@ -184,7 +184,7 @@ export interface RoundGameResult {
   readonly wolf?: WolfResults;
   readonly nassau?: NassauResults;
   readonly dots?: DotsResults;
-  readonly version?: 1 | 2;
+  readonly version?: 1 | 2 | 3;
   readonly unawardedSkins?: number;
   readonly pendingSkins?: number;
   readonly gameId: string;
@@ -277,7 +277,10 @@ export function sameGameDefinitions(left: readonly RoundGameDefinition[], right:
       return game.kind === 'churchy' && other.kind === 'churchy' && game.id === other.id
         && game.name === other.name && game.groupNumber === other.groupNumber
         && game.version === other.version
-        && (game.version === 1 || other.version === 2
+        && (game.version === 1 || game.version === 3 && other.version === 3
+          && game.orderMode === other.orderMode && game.specials.length === other.specials.length
+          && game.specials.every((special) => other.specials.some((entry) => entry.kind === special.kind && entry.units === special.units))
+          || game.version === 2 && other.version === 2
           && game.enabledSpecials.length === other.enabledSpecials.length
           && game.enabledSpecials.every((special) => other.enabledSpecials.includes(special)))
         && game.amountPerDotMinor === other.amountPerDotMinor

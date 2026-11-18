@@ -80,7 +80,7 @@ runtime/capacity are unchanged. Local browser commands do not require Docker.
 
 Deploy the API before the frontend. `RoundScores.supportedGameKinds` lists actual
 backend support; absence never enables new Stroke Play/Nassau/Wolf mutations.
-Churchy's independent environment flag remains authoritative. No new environment
+Churcie's independent environment flag remains authoritative. No new environment
 setting, infrastructure or role change is required.
 
 Nassau/Wolf definitions lock after the first round score, including their money,
@@ -123,7 +123,7 @@ catalog, purse-management or settlement-transfer authority is granted.
 New Wolf definitions are version 2; existing Wolf version 1 is never converted,
 including unstarted games. The definition validator requires the version-2 stake
 field explicitly (null is points-only) and rejects a stake field on legacy
-version 1. Legacy Churchy's settlement expression and stored minor units do
+version 1. Legacy Churcie's settlement expression and stored minor units do
 not change. Dollar-based editing is presentation/parsing only, not a migration.
 
 Deploy the API before the frontend. The server publishes `supportedGameKinds`
@@ -131,9 +131,9 @@ including `dots`, explicit `wolfRulesVersions: [1, 2]`, `internalGamesSupported`
 and narrow `permissions.canManageInternalGames` for eligible active pre-scoring
 views. Missing capabilities do not enable new writes. Legacy testers receive
 neither the new internal capability nor its Dots/Wolf ledgers or declarations.
-The Churchy flag remains authoritative.
+The Churcie flag remains authoritative.
 
-Any visitor may configure Dots, new Wolf or enabled Churchy inside an ordinary
+Any visitor may configure Dots, new Wolf or enabled Churcie inside an ordinary
 event before scoring. The game handler compares complete old/new definitions:
 protected peers retain identity, values and relative order, and a protected
 game ID cannot be repurposed as an internal game. Stored groups, not submitted
@@ -159,7 +159,7 @@ Individual Dots accepts the entire authoritative saved group of 1–4 golfers.
 Two/three golfers have singleton sides only; failure/Walk/Pickup awards reach
 only actual remaining opponents. Solo retains declarations and own earned dots
 without fabricated recipients, cash or transfers; positive stakes are rejected.
-Fixed, rotating and linked Dots, Wolf and Churchy remain foursome-only.
+Fixed, rotating and linked Dots, Wolf and Churcie remain foursome-only.
 Two/three-player cash uses `(N*d_i - sum(d)) * rateMinor` and exact pairwise
 differences; four-player balances are unchanged. Score captures, setup locks,
 conditional/idempotent writes and immutable audit receipts are unchanged.
@@ -197,7 +197,7 @@ its own permission boundary; this optimization grants no historical access.
 
 Current scoring clients request `format=lean` on round reads and score/game/KP
 save replies. The version-1 `round-scores-lean` wrapper omits Dots/Wolf award
-evidence and Churchy special explanations, including nested duplicates.
+evidence and Churcie special explanations, including nested duplicates.
 Duplicate derived Dots/Wolf players and Wolf contexts are omitted. Computed
 saved comeback receipts reference the identical canonical card receipt; absent
 or forged references fail validation. Available pre-write proofs remain intact.
@@ -221,7 +221,7 @@ visible, and incomplete combined progress is not presented as final.
 Money uses exact minor units and the agreed per-opponent formula
 `(4*d_i - sum(d)) * rateMinor`. Blank/zero is points-only; positive incomplete
 amounts are projected, never final payments. New settlement is separate from
-legacy Churchy and event purse sources. No environment setting, role,
+legacy Churcie and event purse sources. No environment setting, role,
 infrastructure, identity provider, storage account or resource creation is
 required by this release.
 
@@ -260,11 +260,11 @@ Bulk Par is explicit, draft-only and preserves saved values, intentional
 clears and other staged game edits. The same acknowledged Save & Next publishes
 the intended score/special changes; no new browser score persistence is added.
 
-Dots and Churchy Pully accepts a confirmed long putt for gross par or birdie.
+Dots and Churcie Pully accepts a confirmed long putt for gross par or birdie.
 Do not invalidate a birdie Pully or erase its saved declaration. A manually
 qualified Hogan may stack with Birdie in Dots; gross score alone cannot prove
 fairway/GIR. Called Dots Pully Murphy retains its separate long-par requirement.
-Churchy Sandy, version-specific points and settlement math are unchanged.
+Churcie Sandy, version-specific points and settlement math are unchanged.
 
 Optional second KP/Blue Plate/Long Drive qualifiers are Assassin evidence
 only in an actual partnered 2-v-2 context. The first golfer remains the sole
@@ -291,7 +291,40 @@ values. Public projections publish only the allowlisted derived result, never
 raw Handicap Index observation metadata. This uses already-loaded round data,
 with no external request, new secret, GHIN endpoint or infrastructure setting.
 
-## Churchy versions, capability rollout and kill switch
+## Churcie versions, capability rollout and kill switch
+
+The user-facing name is Churcie; internal `churchy` data and the existing
+environment switch are unchanged. New definitions use version 3 and require
+explicit `churchyRulesVersions` support. Their default specials copy the
+Churcie subset of the shared Dots catalog, with canonical Dime displayed Sticky.
+Sandy is gross par-or-better. Units are positive safe integers; Murphy stages
+multiply their configured units, while Sweep uses units times current stake.
+Ordinary Dots does not gain Churcie press semantics.
+
+Tee order is an explicit saved definition. Approach order is an immutable
+canonical group-first card receipt on the group's starting hole, saved through
+the dedicated staged conditional score transaction. Both rotate partners in
+three-played-hole blocks over the actual circuit: ranked 1+4, then 1+3, then 1+2.
+High/Low retain relative captured handicaps, independent carries and exact
+money. Category contests use the captured default tee, not the first golfer's
+personal par. Missing order is pending, never inferred; raw scoring remains
+available. Another group's setup lock does not prevent the approach receipt.
+Late recovery is marked by the server, not trusted from a client. Raw-only
+edits/clears preserve acknowledged order and historical receipts.
+
+Version-1 and version-2 calculations remain unchanged. Version-2 setup can be
+explicitly upgraded to v3 only before persisted scoring, with conditional
+event/game revisions and audit history. Never auto-upgrade on reads or edits;
+reject scored/legacy-v1 conversions. The UI presents this as a deliberate action.
+
+Built-in and custom presets are copied into definitions, not referenced live.
+Custom presets are browser/device-local: versioned named specials/units only,
+no scores, identities, player/game IDs or money. The app injects the storage
+adapter; failures/corruption/quota remain explicit without discarding drafts
+or overwriting unread storage. This is not a public catalog or offline scoring.
+Ordinary Dots advertises `dotsSpecialKinds` for Other; absent capability keeps
+legacy-compatible choices. Lean responses retain strict numerical coherence,
+omit verbose award evidence and preserve canonical order/audit inputs.
 
 The scoring API (organizer and public runtime) evaluates
 `CHURCHY_GAME_ENABLED` and publishes `churchyEnabled` on each round projection.
@@ -301,12 +334,12 @@ fails closed. There is no frontend environment override or new infrastructure.
 Clients require the explicit server capability; an older API without it is
 treated as unsupported even though the new server defaults on.
 
-New Churchy games use version 2, separately advertised through
+Legacy version-2 Churcie support is separately advertised through
 `RoundScores.churchyRulesVersions`. A missing version capability must not enable
 version-2 creation, definition edits or special writes. Retain legacy version-1
 reads and unchanged raw-only saves without converting saved games. The new
-version supports independent Churchy configurations per saved foursome, with
-one Churchy game per group rather than one per round. Duplicate-group definitions,
+version supports independent Churcie configurations per saved foursome, with
+one Churcie game per group rather than one per round. Duplicate-group definitions,
 cross-group declarations, changed rules versions and disabled special claims are
 rejected. Existing whole-round capture/setup locks and authority boundaries remain.
 
@@ -326,19 +359,19 @@ read back an actual round response to confirm the deployed capability. An
 existing explicit `false` must be deliberately changed to `true` to enable.
 Do not modify production or create resources as part of this rollout.
 
-To turn Churchy off, set `CHURCHY_GAME_ENABLED=false` on the existing Functions
+To turn Churcie off, set `CHURCHY_GAME_ENABLED=false` on the existing Functions
 app through the separately approved settings process. The platform may recycle
-the worker on settings changes. Fresh reads hide Churchy creation, Dots dialogs,
+the worker on settings changes. Fresh reads hide Churcie creation, Dots dialogs,
 scorecard selections, results, leaderboards and planned money settlement.
 Already-open clients may be stale until refresh, but the authoritative store
-rejects changed Churchy definitions or specials. Ordinary stroke saves still
-work, preserving any hidden specials; other game edits retain Churchy
+rejects changed Churcie definitions or specials. Ordinary stroke saves still
+work, preserving any hidden specials; other game edits retain Churcie
 definitions. Reads continue to carry known definitions and receipts for
 lossless transport. Audits are retained and idempotent replay never publishes
 a second change. No migration, deletion, payment, authentication or access
 decision is part of disabling/re-enabling.
 
-Churchy uses the existing same-partition conditional score/card/audit/grant
+Churcie uses the existing same-partition conditional score/card/audit/grant
 transaction, including public-event authority and legacy grant checks. A special
 edit carries the saved game revision; group/order changes and stale proofs are
 rejected. The per-player Save & Next workflow retains partial acknowledgements
@@ -352,7 +385,7 @@ settlement. Version 2 uses exact USD cents and `(4*d_i - sum(d)) * rateMinor`,
 with source-aware earned dots, net due/owed and total positive balances to settle.
 Version 1 retains its separate shared-pot formula `2*d_i - sum(d)/2`.
 Neither is an existing place-based purse source. Overflow yields unavailable
-amounts, never a float approximation or silent zero. See the Churchy section
+amounts, never a float approximation or silent zero. See the Churcie section
 in the README for the approved golf rules and explicitly unresolved pickup
 boundaries.
 
@@ -455,7 +488,7 @@ management. The field is assigned by the dedicated creation endpoint, not
 accepted through ordinary setup. Quick setup requires exactly one round, with
 multiple explicit groups supported. It cannot configure an overall competition.
 Shared game editing uses existing definitions/validation and the authoritative
-Churchy capability, including its explicit planned per-dot game stake (not purse
+Churcie capability, including its explicit planned per-dot game stake (not purse
 management or payments). Public Quick projections still have role `viewer`/`public`,
 never a fake owner. Ordinary event writes, global catalog mutations, raw
 observations/history, audited corrections, purse management, KP administration,
@@ -852,7 +885,7 @@ tester score projections do not include KP purse amounts.
 
 Optional `HoleScore.kp` is either explicitly on-green integer inches with a
 single-use measurement UUID, No measurement, or explicit null to clear.
-Omission preserves saved KP for raw-only/legacy clients, just as Churchy extras
+Omission preserves saved KP for raw-only/legacy clients, just as Churcie extras
 are preserved. Whole feet/inches are converted exactly; inches must be 0–11,
 and arithmetic must remain within safe integer precision. Explicit zero means
 hole-in-one, not a blank default. Sparse group contenders are sufficient:
@@ -865,7 +898,7 @@ of an old tie proof after clearing. Existing public-any-group, approved-player
 bound-group and tester-event scopes remain unchanged. First persistence still
 locks/captures ordinary setup inputs. Entry/closure races conflict on the shared
 event revision. Closure rejects changed KP authoritatively while allowing
-unchanged/preserved KP with ordinary score or Churchy edits.
+unchanged/preserved KP with ordinary score or Churcie edits.
 
 Only the organizer closes/reopens KP. Closure does not finalize ordinary golf.
 Only closed KP can fully allocate its purse source. Its single canonical amount

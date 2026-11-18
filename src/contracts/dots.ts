@@ -62,9 +62,11 @@ export function isDotsHoleRecord(value: unknown): value is DotsHoleRecord {
     }
     if (Number(player.counts.dime ?? 0) > 0 && Number(player.counts['super-dime'] ?? 0) > 0) return false;
     for (const call of player.calls) {
-      if (!isRecord(call) || !keys(call, ['id', 'kind', 'result']) || !isUuid(call.id)
+      if (!isRecord(call) || !keys(call, ['id', 'kind', 'result'], ['murphyPresses']) || !isUuid(call.id)
         || !['paree', 'murphy', 'pully-murphy'].includes(String(call.kind))
-        || !['pending', 'success', 'failure'].includes(String(call.result))) return false;
+        || !['pending', 'success', 'failure'].includes(String(call.result))
+        || Object.hasOwn(call, 'murphyPresses') && (call.kind !== 'murphy'
+          || call.murphyPresses !== 0 && call.murphyPresses !== 1 && call.murphyPresses !== 2)) return false;
       callIds.push(call.id);
     }
   }
