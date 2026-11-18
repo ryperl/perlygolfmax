@@ -7,6 +7,47 @@ import { dotsFixture } from './dots.test-support';
 import { dotsSpecialCatalog } from '../../domain/dots';
 
 describe('Dots special mode compatibility', () => {
+  it.each([1, 2, 3])('offers %i-player individual groups without enabling any partner mode', (count) => {
+    const f = dotsFixture(), ids = f.ids.slice(0, count), onChange = vi.fn<(draft: DotsSetupDraft) => void>();
+    function Editor() {
+      const [draft, setDraft] = useState<DotsSetupDraft>({ dotsMode: 'individual', stake: '.50' });
+      return <DotsSettings draft={draft} groups={[{ number: 1, playerIds: ids }]} players={f.round.cards} wolves={[]}
+        v2Supported individualPlayerCounts={[1, 2, 3, 4]}
+        onChange={(patch) => { setDraft((current) => ({ ...current, ...patch })); onChange(patch); }} />;
+    }
+    render(<Editor />);
+    fireEvent.change(screen.getByLabelText('Dots playing group'), { target: { value: '1' } });
+    expect(onChange.mock.lastCall?.[0]).toMatchObject({ groupNumber: 1, dotsPlayerIds: ids });
+    for (const name of ['Fixed partners', 'Link to earned Wolf', /Modified Sixes/, /^Sixes · Change/]) {
+      expect(screen.getByRole('option', { name })).toBeDisabled();
+    }
+    const calls = onChange.mock.calls.length;
+    for (const value of ['fixed', 'linked', 'rotating-3', 'rotating-6']) {
+      fireEvent.change(screen.getByLabelText('Dots mode'), { target: { value } });
+    }
+    expect(onChange).toHaveBeenCalledTimes(calls);
+    if (count === 1) {
+      expect(onChange.mock.lastCall?.[0].stake).toBe('');
+      expect(screen.getByText('Solo stats only · No money or opponent payments.')).toBeVisible();
+      expect(screen.queryByLabelText('USD per dot difference')).not.toBeInTheDocument();
+    } else {
+      expect(screen.getByLabelText('USD per dot difference')).toHaveValue('.50');
+    }
+    expect(screen.getByLabelText('Assassin · Automatic')).toBeDisabled();
+    expect(screen.getByLabelText('Sweep · Automatic')).toBeDisabled();
+  });
+
+  it('retains a small-group draft on an old API but refuses selecting it without advertised support', () => {
+    const f = dotsFixture(), ids = f.ids.slice(0, 2), onChange = vi.fn();
+    render(<DotsSettings draft={{ dotsMode: 'individual', groupNumber: 1, dotsPlayerIds: ids, stake: '.50' }}
+      groups={[{ number: 1, playerIds: ids }]} players={f.round.cards} wolves={[]} onChange={onChange} />);
+    expect(screen.getByRole('option', { name: 'Group 1 · 2 players' })).toBeDisabled();
+    expect(screen.getByRole('alert')).toHaveTextContent('This API does not support individual Dots for this group size');
+    expect(screen.getByLabelText('USD per dot difference')).toHaveValue('.50');
+    fireEvent.change(screen.getByLabelText('Dots playing group'), { target: { value: '1' } });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('offers explicit three/six-hole rotations only with API support, enabling Assassin but never standalone Sweep', () => {
     const f = dotsFixture(), onChange = vi.fn<(draft: DotsSetupDraft) => void>();
     function Editor({ supported = true }: { readonly supported?: boolean }) {

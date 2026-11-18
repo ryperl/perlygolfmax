@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import type { DotsGameDefinition, DotsHoleRecord } from '../../../src/domain/dots.js';
 import type { WolfGameDefinition, WolfHoleRecord } from '../../../src/domain/wolf.js';
 import type { HoleScore, RoundScores } from '../../../src/domain/scoring.js';
-import { isRoundScores, isScoreWriteResult } from '../../../src/contracts/scoring.js';
+import { decodeRoundScores, isRoundScores, isScoreWriteResult } from '../../../src/contracts/scoring.js';
+import { leanRoundScores, leanScoreWriteResult } from '../../../src/contracts/lean-round-scores.js';
 import { privateWritePartBytes } from '../../../src/contracts/private-values.js';
 import { stablefordPoints } from '../../../src/domain/stableford.js';
 import { publicFixture } from '../public-access/test-support.js';
@@ -42,6 +43,80 @@ function record(game: DotsGameDefinition, round: RoundScores, playerId: string, 
 }
 
 describe('persisted independent Dots and earned Wolf authority', () => {
+  it.each([1, 2, 3] as const)('creates and conditionally scores public individual Dots for a full saved group of %i', async (count) => {
+    const f = await scoringFixture(count);
+    const actor = { kind: 'public-score' as const, eventId: event.id };
+    const game = { ...dots(f.input.playerIds), stakeMinor: count === 1 ? null : 50, specials: [
+      { kind: 'sandy' as const, units: 1 }, { kind: 'walk' as const, units: 1 },
+      { kind: 'pickup' as const, units: 1 }, { kind: 'murphy' as const, units: 1 },
+    ] };
+    const requestId = identifier(23000);
+    expect(await f.scores.receiveGames(actor, event.id, f.roundId, { games: [game] }, null, requestId))
+      .toMatchObject({ kind: 'value', value: { games: [game] } });
+    const configured = await f.scores.saveGames(actor, event.id, f.roundId, [game], null, requestId);
+    const round = configured.round;
+    expect(round.dotsIndividualPlayerCounts).toEqual([1, 2, 3, 4]);
+    expect((await f.scores.get(creator, event.id, f.roundId)).dotsIndividualPlayerCounts).toEqual([1, 2, 3, 4]);
+    expect(isRoundScores(round)).toBe(true);
+    expect(decodeRoundScores(leanRoundScores(round))).toEqual(round);
+    const special: DotsHoleRecord = { number: 1, gameId: game.id, gameEtag: round.games?.configuration.etag ?? '',
+      players: [{ playerId: f.playerId, counts: { sandy: 2, walk: 1, pickup: 1 },
+        calls: [{ id: identifier(23001), kind: 'murphy', result: 'failure' }] }], contests: [] };
+    const score = { kind: 'strokes' as const, strokes: 4, dots: [special] };
+    const saved = await f.scores.write(actor, event.id, f.roundId, f.playerId, 1, score, null, identifier(23002));
+    expect(isScoreWriteResult(saved)).toBe(true);
+    expect(leanScoreWriteResult(saved).round.round.dotsIndividualPlayerCounts).toEqual([1, 2, 3, 4]);
+    expect(saved.round.setupLocked).toBe(true);
+    expect(saved.change.after.dots).toEqual([special]);
+    expect(saved.change.dotAwardAudit).toBeUndefined();
+    const audit = (await f.scores.history(creator, event.id, f.roundId, f.playerId)).changes[0]?.dotAwardAudit?.[0];
+    expect(audit?.after.length).toBeGreaterThan(0);
+    expect(audit?.after.every((award) => award.recipientIds.length > 0)).toBe(true);
+    expect((await f.scores.write(actor, event.id, f.roundId, f.playerId, 1, score, null, identifier(23002))).change)
+      .toEqual(saved.change);
+    await expect(f.scores.write(actor, event.id, f.roundId, f.playerId, 1, score, null, identifier(23003)))
+      .rejects.toMatchObject({ code: 'SCORECARD_CHANGED' });
+    await expect(f.scores.saveGames(actor, event.id, f.roundId, [{ ...game, name: 'Fictional changed name' }],
+      round.games?.configuration.etag ?? null, identifier(23004))).rejects.toMatchObject({ code: 'MATCH_SETUP_LOCKED' });
+    for (const [index, playerId] of f.input.playerIds.slice(1).entries()) {
+      await f.scores.write(actor, event.id, f.roundId, playerId, 1,
+        { kind: 'strokes', strokes: 4 }, null, identifier(23010 + index));
+    }
+    const reloaded = await f.scores.get(actor, event.id, f.roundId);
+    expect(isRoundScores(reloaded)).toBe(true);
+    expect(decodeRoundScores(leanRoundScores(reloaded))).toEqual(reloaded);
+    expect(reloaded.games?.results[0]?.players.map((player) => player.totalPoints)).toEqual([
+      2, ...f.input.playerIds.slice(1).map(() => 3),
+    ]);
+    expect(reloaded.internalSettlements?.[0]).toMatchObject(count === 1
+      ? { status: 'points-only', totalToSettleMinor: null, pairwise: [], players: [{ netMinor: null }] }
+      : { status: 'projected', players: reloaded.internalSettlements?.[0]?.players.map((player, index) => ({
+        ...player, netMinor: index === 0 ? (1 - count) * 50 : 50,
+      })) });
+    const raw = await f.scores.write(actor, event.id, f.roundId, f.playerId, 1,
+      { kind: 'strokes', strokes: 4 }, etag(reloaded, f.playerId), identifier(23020));
+    expect(raw.change.after.dots).toEqual([special]);
+  });
+
+  it('rejects solo cash, partial groups, and nonindividual small-group setup', async () => {
+    const solo = await scoringFixture(1);
+    await expect(solo.scores.saveGames(creator, event.id, solo.roundId,
+      [{ ...dots(solo.input.playerIds), stakeMinor: 1 }], null, identifier(23100)))
+      .rejects.toMatchObject({ code: 'INVALID_GAME_SETUP' });
+    for (const count of [2, 3] as const) {
+      const f = await scoringFixture(count);
+      await expect(f.scores.saveGames(creator, event.id, f.roundId,
+        [dots(f.input.playerIds.slice(0, -1))], null, identifier(23101)))
+        .rejects.toMatchObject({ code: 'INVALID_DOTS_GROUP' });
+      await expect(f.scores.saveGames(creator, event.id, f.roundId,
+        [{ ...dots(f.input.playerIds), mode: 'fixed' as const, partnerIds: f.input.playerIds }], null, identifier(23102)))
+        .rejects.toMatchObject({ code: 'INVALID_GAME_SETUP' });
+      await expect(f.scores.saveGames(creator, event.id, f.roundId,
+        [wolf(f.input.playerIds)], null, identifier(23103)))
+        .rejects.toMatchObject({ code: 'INVALID_GAME_SETUP' });
+    }
+  });
+
   it('accepts a confirmed birdie Pully with Hogan and preserves its automatic Birdie without accepting bogey Pully', async () => {
     const f = await publicFixture();
     const game = { ...dots(f.input.playerIds), specials: [

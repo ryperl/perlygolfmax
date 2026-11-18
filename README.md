@@ -685,7 +685,13 @@ and settlement; creating another game does not silently attach it. Linked
 specials use the current Wolf sides and x1/x2/x3 multiplier for both sides.
 Each golfer's achievement shares its full award with current teammates;
 Walk, selected Pickup and failed called challenges award opponents instead.
-Individual-play opponents are the other three golfers.
+Individual Dots supports every golfer in a saved playing group of **1–4**.
+Two or three golfers always play individually, never as teams. Solo play
+records scores and specials without money or imaginary opponents; its rate
+must be blank or zero. With two or more golfers, opponents are the other
+actual participants. Fixed, rotating and Wolf-linked modes still require four.
+Smaller individual groups require explicit API capability support; older APIs
+retain four-player individual editing only.
 
 New rotating Dots games use **version 2** for **Modified Sixes** (partners every
 three played holes) or **Sixes** (every six). Choose P1–P4 on the first played
@@ -755,8 +761,10 @@ means $0.50. Existing stored cents are preserved exactly. New internal games
 use USD; blank or zero means points-only, never an implicit positive stake.
 Special unit counts are points, not money.
 
-For four golfers with individual combined dots `d_i`, total `S` and a configured
-minor-unit rate `r`, planned net money is **`(4*d_i - S) * r`**. This already
+For `N` golfers with individual combined dots `d_i`, total `S` and a configured
+minor-unit rate `r`, planned net money is **`(N*d_i - S) * r`**. `N` is two or
+three for smaller individual games and four for existing partnered formats;
+solo never settles money. This already
 compares every opponent; do not settle it twice. At $1, `[6,6,1,1]` produces
 `[+10,+10,-10,-10]`. Total to settle is the sum of positive balances, not total
 dots or absolute net balances. Explicitly linked Wolf/Dots shares one rate and

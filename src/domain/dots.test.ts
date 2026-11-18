@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateDots, dotsDeclarationIssues, dotsSpecialCatalog, dotsRecordsMatchGame } from './dots.js';
+import { calculateDots, dotsDeclarationIssues, dotsDefinitionMatchesRound, dotsSpecialCatalog, dotsRecordsMatchGame } from './dots.js';
 import type { DotsContest, DotsGameDefinition, DotsHoleRecord, DotsPlayerDeclaration, DotsSpecialKind } from './dots.js';
 import type { DotHoleContext, DotRoundInput } from './dot-context.js';
 import type { HoleScore } from './scoring.js';
@@ -26,7 +26,7 @@ function setScores(round: DotRoundInput, playerId: string, scores: readonly Hole
     ? { ...card, holes: card.holes.map((hole, index) => ({ ...hole, score: scores[index] ?? hole.score })) } : card) };
 }
 const totals = (result: ReturnType<typeof calculateDots>) => result.players.map((player) => player.totalPoints);
-const fixed = (game: DotsGameDefinition): DotsGameDefinition => ({
+const fixed = (game: DotsGameDefinition): Extract<DotsGameDefinition, { readonly mode: 'fixed' }> => ({
   id: game.id, name: game.name, kind: 'dots', version: 1, groupNumber: 1, playerIds: ids,
   specials: game.specials, mode: 'fixed', partnerIds: ids, stakeMinor: null,
 });
@@ -84,6 +84,49 @@ describe('source-only Dots declaration review', () => {
 });
 
 describe('independent Dots earning and declarations', () => {
+  it.each([1, 2, 3, 4])('keeps %i individual golfers on singleton sides with actual opponents only', (count) => {
+    const f = fixture([4], ['sandy', 'walk', 'pickup', 'murphy', 'paree', 'pully-murphy']);
+    const playerIds = ids.slice(0, count);
+    const game = { ...f.game, playerIds };
+    const round = { ...f.round, groups: [{ number: 1, playerIds }], cards: f.round.cards.slice(0, count) };
+    const records = [record(1, [declaration('A', { sandy: 2, walk: 1, pickup: 1 }, [
+      { id: 'call-murphy', kind: 'murphy', result: 'failure' },
+      { id: 'call-paree', kind: 'paree', result: 'failure' },
+      { id: 'call-pully', kind: 'pully-murphy', result: 'failure' },
+    ])])];
+    expect(dotsDefinitionMatchesRound(game, round)).toBe(true);
+    expect(dotsRecordsMatchGame(records, game, round)).toBe(true);
+    const result = calculateDots(game, round, records);
+    expect(result.status).toBe('complete');
+    expect(totals(result)).toEqual([2, ...playerIds.slice(1).map(() => 5)]);
+    expect(result.awards.every((award) => award.recipientIds.length > 0)).toBe(true);
+    expect(result.awards.find((award) => award.kind === 'sandy')?.recipientIds).toEqual(['A']);
+    expect(result.awards.find((award) => award.kind === 'walk')?.recipientIds)
+      .toEqual(count === 1 ? undefined : playerIds.slice(1));
+    if (count < 4) {
+      expect(dotsDefinitionMatchesRound({ ...fixed(f.game), playerIds, partnerIds: playerIds }, round)).toBe(false);
+      expect(dotsDefinitionMatchesRound({ ...linked(f.game), playerIds }, round)).toBe(false);
+      expect(dotsDefinitionMatchesRound({ id: game.id, name: game.name, kind: 'dots', version: 2,
+        mode: 'rotating', rotationHoles: 3, groupNumber: 1, playerIds, stakeMinor: null, specials: [] }, round)).toBe(false);
+    }
+    expect(dotsDefinitionMatchesRound({ ...game, playerIds: [...playerIds, 'outsider'] }, round)).toBe(false);
+    if (count === 1) expect(dotsDefinitionMatchesRound({ ...game, stakeMinor: 1 }, round)).toBe(false);
+  });
+
+  it('retains solo positive automatic awards and pending score/call states without fictitious failure awards', () => {
+    const f = fixture([4], ['birdie', 'walk', 'pickup', 'murphy']);
+    const game = { ...f.game, playerIds: ['A'] };
+    const round = { ...f.round, groups: [{ number: 1, playerIds: ['A'] }], cards: f.round.cards.slice(0, 1) };
+    const records = [record(1, [declaration('A', { walk: 1, pickup: 1 },
+      [{ id: 'failed', kind: 'murphy', result: 'failure' }])])];
+    expect(totals(calculateDots(game, setScores(round, 'A', [{ kind: 'strokes', strokes: 3 }]), records))).toEqual([2]);
+    expect(calculateDots(game, setScores(round, 'A', [{ kind: 'picked-up' }]), records))
+      .toMatchObject({ status: 'complete', awards: [], players: [{ totalPoints: 0 }] });
+    expect(calculateDots(game, setScores(round, 'A', [{ kind: 'unplayed' }]), records).status).toBe('in-progress');
+    expect(calculateDots(game, round, [record(1, [declaration('A', {},
+      [{ id: 'pending', kind: 'murphy', result: 'pending' }])])]).status).toBe('in-progress');
+  });
+
   it('records three Sandys plus a separately called Paree, and each partner’s own achievements', () => {
     const { game, round } = fixture([4], ['sandy', 'paree', 'murphy', 'walk', 'pickup']);
     const records = [record(1, [

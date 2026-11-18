@@ -7,6 +7,38 @@ import { InternalSettlement } from './InternalSettlement';
 import { dotsFixture } from './dots.test-support';
 
 describe('saved Dots awards and one internal settlement', () => {
+  it.each([2, 3])('explains a %i-player net using only actual participants', (count) => {
+    const { f, game } = dotsFixture();
+    const settlement = calculateDotSettlement({ groupNumber: 1, gameIds: [game.id], stakeMinor: 50, complete: true,
+      players: f.cards.slice(0, count).map((card, index) => ({ playerId: card.playerId, displayName: card.displayName,
+        baseDots: 0, specialDots: index === 0 ? 1 : 0 })) });
+    const view = render(<InternalSettlement settlement={settlement} />);
+    const rows = [...screen.getByRole('list', { name: 'Individual net settlement' }).children];
+    expect(rows).toHaveLength(count);
+    const first = rows[0];
+    if (!(first instanceof HTMLElement)) throw new Error('Missing fictional settlement');
+    fireEvent.click(first.querySelector('summary') ?? first);
+    expect(first).toHaveTextContent(`(${String(count)} × 1 − 1)`);
+    expect(first).toHaveTextContent(`One net amount across the ${String(count)} players.`);
+    expect(first).not.toHaveTextContent('(4 ×');
+    expect(view.container).not.toHaveTextContent('Fictional golfer 4');
+  });
+
+  it('shows solo earned dots without money, opponents or a settlement-method control', () => {
+    const { f, game, ids } = dotsFixture(), player = f.cards[0];
+    if (!player) throw new Error('Missing fictional golfer');
+    const settlement = calculateDotSettlement({ groupNumber: 1, gameIds: [game.id], stakeMinor: null, complete: true,
+      players: [{ playerId: player.playerId, displayName: player.displayName, baseDots: 0, specialDots: 3 }] });
+    const view = render(<><DotsResults game={{ ...game, playerIds: ids.slice(0, 1), stakeMinor: null }} result={undefined} />
+      <InternalSettlement settlement={settlement} /></>);
+    expect(screen.getByText('Solo stats only', { exact: true })).toBeVisible();
+    expect(screen.getByText('Solo stats only · No money')).toBeVisible();
+    expect(screen.getByText('3 dots')).toBeVisible();
+    expect(screen.queryByText('Rate and settlement method')).not.toBeInTheDocument();
+    expect(view.container).not.toHaveTextContent(/Due USD|Owes USD/);
+    expect(screen.getByRole('list', { name: 'Solo earned dots' }).children).toHaveLength(1);
+  });
+
   it('labels rotating specials without claiming a base match and distinguishes missing order from server-marked late recovery', () => {
     const f = dotsFixture();
     const game: DotsGameDefinition = { ...f.game, version: 2, mode: 'rotating', rotationHoles: 3 };

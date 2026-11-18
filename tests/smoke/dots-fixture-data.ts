@@ -25,7 +25,8 @@ const dots: DotsGameDefinition = { id: strokeGameId(961), name: 'Fictional linke
   specials: [{ kind: 'sandy', units: 1 }, { kind: 'paree', units: 1 }] };
 
 function project(round: RoundScores, games = round.games?.configuration.games ?? []): RoundScores {
-  const results = calculateGameResults(games, dotsFixture.snapshot, round.cards);
+  const results = calculateGameResults(games, { ...dotsFixture.snapshot, groups: round.groups,
+    players: dotsFixture.snapshot.players.filter((player) => round.cards.some((card) => card.playerId === player.playerId)) }, round.cards);
   return { ...round, games: {
     configuration: { eventId: round.eventId, roundId: round.roundId,
       etag: round.games?.configuration.etag ?? 'fictional-dots-games-v1', games },
@@ -38,24 +39,27 @@ function workspace(round: RoundScores): EventWorkspace {
     etag: 'fictional-dots-event-v1', createdAt: '2026-01-01T00:00:00Z' },
   etag: 'fictional-dots-event-v1', location: 'Fictional location', publicAccess: true, canViewScores: true,
   roster: round.cards.map(({ playerId, displayName }) => ({ playerId, displayName, handicapIndexValue: '0' })),
-  rounds: [{ ...dotsFixture.snapshot, scoringStarted: round.setupLocked,
+  rounds: [{ ...dotsFixture.snapshot, groups: round.groups, scoringStarted: round.setupLocked,
     players: round.cards.map(({ playerId, displayName }) => ({ playerId, displayName, handicapIndexValue: '0' })) }] };
 }
 
 export async function openDotsFixture(page: Page, testInfo: TestInfo,
-  scenario: 'setup' | 'linked' | 'old-api' | 'rotating-3' | 'rotating-6' = 'setup') {
+  scenario: 'setup' | 'linked' | 'old-api' | 'rotating-3' | 'rotating-6' | 'individual-1' | 'individual-2' | 'individual-3' = 'setup') {
   const server = await createServer({ configFile: false, cacheDir: testInfo.outputPath('vite-cache'),
     server: { host: '127.0.0.1', port: 0, hmr: false }, esbuild: { jsx: 'automatic' },
     optimizeDeps: { noDiscovery: true, include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'] },
     logLevel: 'error' });
-  const base = strokeGamesRound(dotsFixture);
+  const playerCount = scenario.startsWith('individual-') ? Number(scenario.slice(-1)) : 4;
+  const base = strokeGamesRound(playerCount === 4 ? dotsFixture : strokeGameFixture(9, playerCount));
+  const ids = dotsPlayers.slice(0, playerCount);
   const initial: RoundScores = { ...base, setupLocked: false, lastUpdatedAt: null, teeStrokeAllocation: true,
-    cards: base.cards.map((card) => ({ ...card, etag: null, updatedAt: null,
+    groups: [{ ...base.groups[0], number: 1, playerIds: ids }],
+    cards: base.cards.slice(0, playerCount).map((card) => ({ ...card, etag: null, updatedAt: null,
       holes: card.holes.map((hole) => ({ ...hole, score: { kind: 'unplayed' } })) })),
     supportedGameKinds: scenario === 'old-api' ? ['skins'] : ['dots', 'wolf', 'skins'],
-    ...(scenario === 'old-api' ? {} : { dotsRulesVersions: [1, 2] as const }),
+    ...(scenario === 'old-api' ? {} : { dotsRulesVersions: [1, 2] as const, dotsIndividualPlayerCounts: [1, 2, 3, 4] as const }),
     internalGamesSupported: scenario !== 'old-api', wolfRulesVersions: scenario === 'old-api' ? [1] : [1, 2],
-    permissions: { role: 'public', writePlayerIds: dotsPlayers, canManageGames: false, canManageInternalGames: scenario !== 'old-api' },
+    permissions: { role: 'public', writePlayerIds: ids, canManageGames: false, canManageInternalGames: scenario !== 'old-api' },
     gameInputContext: { courseVersionId: dotsFixture.snapshot.courseVersionId, teeProfileId: dotsFixture.snapshot.teeProfile.id } };
   const rotating: DotsGameDefinition = { id: strokeGameId(962), name: 'Fictional rotating Dots', kind: 'dots',
     version: 2, mode: 'rotating', rotationHoles: scenario === 'rotating-6' ? 6 : 3,
@@ -63,7 +67,7 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
     specials: [...(['sandy', 'hogan', 'seve', 'pully', 'dime', 'super-dime', 'murphy', 'chippy', 'walk'] as const)
       .map((kind) => ({ kind, units: 1 })), { kind: 'birdie', units: 2 }] };
   let stored = project(initial, scenario.startsWith('rotating') ? [dotsFixture.skins, rotating]
-    : scenario === 'setup' ? [dotsFixture.skins] : [dotsFixture.skins, wolf, dots]);
+    : scenario === 'setup' || scenario.startsWith('individual-') ? [dotsFixture.skins] : [dotsFixture.skins, wolf, dots]);
   let writes = 0, configWrites = 0, failPaused = false, roundReads = 0;
   const roundReadFormats: string[] = [];
   let releaseFailure: (() => void) | null = null;
@@ -132,7 +136,7 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
       const after = preserveScoreExtras(payload.score, before);
       const recordedAt = '2026-01-01T00:00:00Z';
       stored = project({ ...stored, setupLocked: true, lastUpdatedAt: recordedAt,
-        permissions: { role: 'public', writePlayerIds: dotsPlayers, canManageGames: false, canManageInternalGames: false },
+        permissions: { role: 'public', writePlayerIds: ids, canManageGames: false, canManageInternalGames: false },
         cards: stored.cards.map((entry) => entry.playerId === card.playerId ? { ...entry,
           etag: `fictional-dots-card-v${String(++writes)}`, updatedAt: recordedAt,
           holes: entry.holes.map((hole) => hole.number === holeNumber ? { ...hole, score: after } : hole),

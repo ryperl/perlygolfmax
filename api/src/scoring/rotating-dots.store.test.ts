@@ -201,6 +201,8 @@ describe('rotating Dots score transaction authority', () => {
     const saved = await f.scores.write(creator, event.id, f.roundId, f.playerId, 1, score, null, identifier(22502));
     const tester = await f.scores.get(f.actor, event.id, f.roundId);
     expect(tester.dotsRulesVersions).toBeUndefined();
+    expect(tester.dotsIndividualPlayerCounts).toBeUndefined();
+    expect(tester.internalSettlements).toBeUndefined();
     expect(tester.games?.configuration.games).toEqual([]);
     expect(JSON.stringify(tester)).not.toContain('rotationHoles');
     expect(tester.cards.find((card) => card.playerId === f.playerId)?.holes[0]?.score.dots).toBeUndefined();

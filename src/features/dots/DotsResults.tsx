@@ -7,7 +7,7 @@ export function DotsResults({ game, result }: { readonly game: DotsGameDefinitio
   const pending = result?.holes.filter((hole) => hole.status === 'pending').map((hole) => hole.number) ?? [];
   const unavailable = result?.holes.filter((hole) => hole.status === 'unavailable').map((hole) => hole.number) ?? [];
   return <section className="game-results dots-results" aria-label={`${game.name} results`}>
-    <h3>{game.name}</h3><p>{game.mode === 'individual' ? 'Individual' : game.mode === 'fixed' ? 'Fixed partners'
+    <h3>{game.name}</h3><p>{game.mode === 'individual' ? game.playerIds.length === 1 ? 'Solo stats only' : 'Individual' : game.mode === 'fixed' ? 'Fixed partners'
       : game.mode === 'rotating' ? game.rotationHoles === 3 ? 'Modified Sixes · 3-hole partners' : 'Sixes · 6-hole partners' : 'Linked sides'}</p>
     {!result ? <p>Saved Dots results unavailable. Refresh to retry.</p> : <>
       {game.mode === 'fixed' && <p className="game-hint">{game.partnerIds.slice(0, 2).map(name).join(' + ')}

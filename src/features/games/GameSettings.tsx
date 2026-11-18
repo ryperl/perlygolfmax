@@ -29,6 +29,7 @@ interface GameSettingsProps {
   readonly wolfV2Supported?: boolean;
   readonly churchyV2Supported?: boolean;
   readonly dotsV2Supported?: boolean;
+  readonly dotsIndividualPlayerCounts?: readonly number[];
   readonly existing?: boolean;
 }
 
@@ -45,7 +46,8 @@ function scoreLabel(value: number): string {
 export function GameSettings({
   draft, disabled, saveDisabled, cancelDisabled, retry, onChange, onSave, onCancel, roster = [],
   churchyEnabled = false, groups = [], setupLocked = false, allowChurchyCreation = false, supportedGameKinds,
-  games = [], internalOnly = false, wolfV2Supported = false, churchyV2Supported = false, dotsV2Supported = false, existing = false,
+  games = [], internalOnly = false, wolfV2Supported = false, churchyV2Supported = false, dotsV2Supported = false,
+  dotsIndividualPlayerCounts = [4], existing = false,
 }: GameSettingsProps) {
   const allowanceHint = useId();
   const stableford = draft.kind === undefined || draft.kind === 'stableford';
@@ -56,6 +58,7 @@ export function GameSettings({
   const [golferQuery, setGolferQuery] = useState('');
   const [teamPage, setTeamPage] = useState(0);
   const rosterIds = roster.map((player) => player.playerId);
+  const dotsPlayerCount = (draft.dotsPlayerIds ?? draft.dotsPlayers ?? []).length;
   const teamFeedback = teamDraftFeedback(draft, rosterIds);
   const assigned = (draft.teams ?? []).flatMap((team) => team.playerIds).filter(Boolean);
   const teams = (draft.teams ?? []).map((team, index) => ({ team, index })).filter(({ team }) =>
@@ -195,6 +198,7 @@ export function GameSettings({
         </section>}
         {draft.kind === 'dots' && <DotsSettings draft={draft} groups={groups} players={roster}
           v2Supported={dotsV2Supported}
+          individualPlayerCounts={dotsIndividualPlayerCounts}
           wolves={games.filter((game) => game.kind === 'wolf')} onChange={(patch) => { onChange({ ...draft, ...patch }); }} />}
         {draft.kind === 'churchy' && <section aria-label="Churchy setup">
           {draft.churchyGroup && <h3>Group {draft.churchyGroup} · Churchy Game</h3>}
@@ -342,6 +346,8 @@ export function GameSettings({
       <div className="game-actions">
         <button type="submit" disabled={disabled || matchLocked || saveDisabled
           || draft.kind === 'dots' && draft.dotsMode === 'rotating' && !dotsV2Supported
+          || draft.kind === 'dots' && (draft.dotsMode ?? 'individual') === 'individual'
+            && dotsPlayerCount > 0 && !dotsIndividualPlayerCounts.includes(dotsPlayerCount)
           || draft.kind === 'churchy' && draft.churchyVersion === 2 && !churchyV2Supported
           || draft.format !== undefined && !buildGame(draft, rosterIds)}>{retry ? 'Retry save' : 'Save game'}</button>
         <button type="button" disabled={cancelDisabled} onClick={onCancel}>Cancel editing</button>

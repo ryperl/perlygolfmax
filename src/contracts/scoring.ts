@@ -131,6 +131,9 @@ function validateRoundScores(value: unknown, lean = false): value is RoundScores
       || new Set(value.churchyRulesVersions).size !== value.churchyRulesVersions.length
       || value.churchyRulesVersions.length > 0 && value.churchyEnabled !== true)) return false;
   if (isRecord(value) && (value.internalGamesSupported !== undefined && typeof value.internalGamesSupported !== 'boolean'
+    || value.dotsIndividualPlayerCounts !== undefined && (!Array.isArray(value.dotsIndividualPlayerCounts)
+      || !value.dotsIndividualPlayerCounts.every((count: unknown) => count === 1 || count === 2 || count === 3 || count === 4)
+      || new Set(value.dotsIndividualPlayerCounts).size !== value.dotsIndividualPlayerCounts.length)
     || value.dotsRulesVersions !== undefined && (!Array.isArray(value.dotsRulesVersions)
       || !value.dotsRulesVersions.every((version: unknown) => version === 1 || version === 2)
       || new Set(value.dotsRulesVersions).size !== value.dotsRulesVersions.length)

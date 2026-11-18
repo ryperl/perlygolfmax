@@ -1,7 +1,7 @@
 import type { ScoresClient } from '../../client/scoring';
 import { EventChangedError } from '../../client/events';
 import type { HoleScore, RoundScores, ScoreChange } from '../../domain/scoring';
-import { sameHoleScore, preserveScoreExtras } from '../../domain/scoring';
+import { sameHoleScore, preserveScoreExtras, supportsIndividualDotsPlayerCount } from '../../domain/scoring';
 import { scoreDeclarationIntent } from '../../domain/game-declarations';
 import { cardFor, conflictedDraft, entryKey, entryScore, savedHole } from './entry-state';
 import type { HoleDraft } from './entry-state';
@@ -44,7 +44,8 @@ export function planGroup(round: RoundScores, playerIds: readonly string[], hole
     }
     if (draft?.dots?.some((record) => {
       const game = round.games?.configuration.games.find((game) => game.kind === 'dots' && game.id === record.gameId);
-      if (game?.kind !== 'dots' || game.version === 2 && !round.dotsRulesVersions?.includes(2)) return true;
+      if (game?.kind !== 'dots' || game.version === 2 && !round.dotsRulesVersions?.includes(2)
+        || game.mode === 'individual' && !supportsIndividualDotsPlayerCount(round, game.playerIds.length)) return true;
       const previous = saved.dots?.find((entry) => entry.gameId === record.gameId && entry.number === record.number);
       return record.players.some((player) => dotsDeclarationIssues(player).conflicts.length > 0
         && JSON.stringify(player) !== JSON.stringify(previous?.players.find((entry) => entry.playerId === player.playerId)));

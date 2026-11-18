@@ -18,13 +18,14 @@ export interface DotsSetupDraft {
   readonly stake?: string;
 }
 
-export function DotsSettings({ draft, groups, players, wolves, onChange, v2Supported = false }: {
+export function DotsSettings({ draft, groups, players, wolves, onChange, v2Supported = false, individualPlayerCounts = [4] }: {
   readonly draft: DotsSetupDraft;
   readonly groups: readonly RoundGroup[];
   readonly players: readonly { readonly playerId: string; readonly displayName: string }[];
   readonly wolves: readonly WolfGameDefinition[];
   readonly onChange: (patch: DotsSetupDraft) => void;
   readonly v2Supported?: boolean;
+  readonly individualPlayerCounts?: readonly number[];
 }) {
   const [expanded, setExpanded] = useState<DotsSpecialKind | null>(null);
   const helpId = useId();
@@ -32,6 +33,10 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
   const linked = wolves.find((game) => game.id === draft.linkedGameId);
   const specials = draft.dotsSpecials ?? [];
   const mode = draft.dotsMode ?? 'individual';
+  const solo = mode === 'individual' && group?.playerIds.length === 1;
+  const smallGroup = group !== undefined && group.playerIds.length !== 4;
+  const supportsGroup = (size: number) => mode === 'individual'
+    ? size >= 1 && size <= 4 && individualPlayerCounts.includes(size) : size === 4;
   const compatible = (kind: DotsSpecialKind, selectedMode: DotsGameDefinition['mode']) =>
     (kind !== 'sweep' || selectedMode === 'linked') && (kind !== 'assassin' || selectedMode !== 'individual');
   const available = dotsSpecialCatalog.filter((special) => compatible(special.kind, mode));
@@ -40,11 +45,16 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
     <div className="dots-setup-fields">
     <label>Dots playing group<select value={draft.groupNumber ?? ''} onChange={(event) => {
       const selected = groups.find((entry) => entry.number === Number(event.target.value));
-      if (selected) onChange({ groupNumber: selected.number, dotsPlayers: selected.playerIds, dotsPlayerIds: selected.playerIds, linkedGameId: '' });
-    }}><option value="">Choose saved foursome</option>{groups.filter((entry) => entry.playerIds.length === 4).map((entry) =>
-      <option key={entry.number} value={entry.number}>Group {entry.number}</option>)}</select></label>
+      if (selected && supportsGroup(selected.playerIds.length)) onChange({ groupNumber: selected.number,
+        dotsPlayers: selected.playerIds, dotsPlayerIds: selected.playerIds, linkedGameId: '',
+        ...(selected.playerIds.length === 1 ? { stake: '' } : {}) });
+    }}><option value="">Choose saved playing group</option>{groups.filter((entry) =>
+      supportsGroup(entry.playerIds.length) || entry.number === draft.groupNumber).map((entry) =>
+      <option key={entry.number} value={entry.number} disabled={!supportsGroup(entry.playerIds.length)}>
+        Group {entry.number}{entry.playerIds.length === 4 ? '' : ` · ${String(entry.playerIds.length)} ${entry.playerIds.length === 1 ? 'player' : 'players'}`}</option>)}</select></label>
     <label>Dots mode<select value={mode === 'rotating' ? `rotating-${String(draft.dotsRotationHoles ?? 3)}` : mode} onChange={(event) => {
       const selectedMode = event.target.value;
+      if (smallGroup && selectedMode !== 'individual') return;
       if ((selectedMode === 'rotating-3' || selectedMode === 'rotating-6') && v2Supported && draft.dotsVersion !== 1) {
         onChange({ dotsMode: 'rotating', dotsRotationHoles: selectedMode === 'rotating-3' ? 3 : 6,
           dotsSpecials: specials.filter((special) => compatible(special.kind, 'rotating')) });
@@ -54,11 +64,14 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
         if (draft.dotsVersion === 2) return;
         onChange({ dotsMode: selectedMode, dotsSpecials: specials.filter((special) => compatible(special.kind, selectedMode)) });
       }
-    }}><option value="rotating-3" disabled={!v2Supported || draft.dotsVersion === 1}>Modified Sixes · Change partners every 3 holes</option>
-      <option value="rotating-6" disabled={!v2Supported || draft.dotsVersion === 1}>Sixes · Change partners every 6 holes</option>
-      <option value="individual" disabled={draft.dotsVersion === 2}>Individual</option><option value="fixed" disabled={draft.dotsVersion === 2}>Fixed partners</option>
-      <option value="linked" disabled={draft.dotsVersion === 2}>Link to earned Wolf</option></select></label>
+    }}><option value="rotating-3" disabled={smallGroup || !v2Supported || draft.dotsVersion === 1}>Modified Sixes · Change partners every 3 holes</option>
+      <option value="rotating-6" disabled={smallGroup || !v2Supported || draft.dotsVersion === 1}>Sixes · Change partners every 6 holes</option>
+      <option value="individual" disabled={draft.dotsVersion === 2}>Individual</option><option value="fixed" disabled={smallGroup || draft.dotsVersion === 2}>Fixed partners</option>
+      <option value="linked" disabled={smallGroup || draft.dotsVersion === 2}>Link to earned Wolf</option></select></label>
     </div>
+    {mode === 'individual' && smallGroup && !supportsGroup(group.playerIds.length)
+      && <p role="alert">This API does not support individual Dots for this group size. Refresh after an API upgrade; your draft is retained.</p>}
+    {smallGroup && <small>Partner modes require four players.</small>}
     {mode === 'rotating' && <p>Choose P1–P4 on your first played hole in score entry. Partners rotate in your playing circuit; only specials are shared, with no base match points.</p>}
     {draft.dotsVersion === 1 && <small>Saved version-1 rules stay unchanged. Create a separate rotating Dots game before scoring to use Modified Sixes or Sixes.</small>}
     {!v2Supported && <small>Rotating Dots requires advertised API version-2 support.</small>}
@@ -69,6 +82,9 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
           <option key={game.id} value={game.id}>{game.name}</option>)}</select></label>
       <p className="dots-linked-rate">Wolf sides and multiplier · Shared rate: {linked?.stakeMinor == null
         ? 'No money configured' : `${formatMoney(linked.stakeMinor, 'USD')} per dot difference`}</p>
+    </> : solo ? <>
+      <p>Solo stats only · No money or opponent payments.</p>
+      {draft.stake?.trim() && Number(draft.stake) !== 0 && <button type="button" onClick={() => { onChange({ stake: '' }); }}>Clear planned rate for solo play</button>}
     </> : <>
       {draft.dotsMode === 'fixed' && (draft.dotsPlayers ?? []).map((id, index) => <label key={index}>
         Side {index < 2 ? 'A' : 'B'} golfer {index % 2 + 1}<select value={id} onChange={(event) => {

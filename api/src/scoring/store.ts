@@ -267,6 +267,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       churchyEnabled: this.churchyEnabled(),
       ...(!access.testerLink && this.churchyEnabled() ? { churchyRulesVersions: [1, 2] as const } : {}),
       ...(!access.testerLink ? { wolfRulesVersions: [1, 2] as const, dotsRulesVersions: [1, 2] as const,
+        dotsIndividualPlayerCounts: [1, 2, 3, 4] as const,
         internalGamesSupported: true } : {}),
       supportedGameKinds: roundGameKinds.filter((kind) => (kind !== 'churchy' || this.churchyEnabled())
         && (!access.testerLink || kind !== 'wolf' && kind !== 'nassau' && kind !== 'dots')),
@@ -501,7 +502,9 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     if (!await optionalRow(this.table, eventId, `round:${roundId}`)) throw new ApiError(404, 'ROUND_NOT_FOUND');
     if (state.publicAccess && state.event.quickRound !== true) {
       const current = await this.snapshot(identity, eventId, roundId);
-      if (!current.round.groups.some((group) => group.playerIds.length === 4)) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
+      if (!current.round.groups.some((group) => group.playerIds.length >= 1 && group.playerIds.length <= 4)) {
+        throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
+      }
     }
     // Parts are inactive. Check the head revision without repeatedly decoding a large configuration.
     // The final save validates the complete captured workspace and games again.

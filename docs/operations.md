@@ -155,6 +155,19 @@ beside standalone Dots must not silently attach it or make an explicit later
 link impossible. Independent games retain named source-specific settlement
 views; a link produces one combined settlement without double counting.
 
+Individual Dots accepts the entire authoritative saved group of 1–4 golfers.
+Two/three golfers have singleton sides only; failure/Walk/Pickup awards reach
+only actual remaining opponents. Solo retains declarations and own earned dots
+without fabricated recipients, cash or transfers; positive stakes are rejected.
+Fixed, rotating and linked Dots, Wolf and Churchy remain foursome-only.
+Two/three-player cash uses `(N*d_i - sum(d)) * rateMinor` and exact pairwise
+differences; four-player balances are unchanged. Score captures, setup locks,
+conditional/idempotent writes and immutable audit receipts are unchanged.
+Current owner/public responses advertise `dotsIndividualPlayerCounts`;
+absence means legacy four-player individual editing only. Tester projections
+do not gain internal-game capabilities. Lean replies retain this capability
+and undergo the same strict full-result validation.
+
 The comeback proof uses resolved saved prefix results, not current-hole drafts:
 after 16 played holes (18-hole layout) or 7 (nine-hole layout), choose the lowest
 combined linked total, with printed next-rotation ties. The first accepted

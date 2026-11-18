@@ -10,6 +10,16 @@ import { calculateInternalGameResults, calculateInternalSettlements } from '../d
 import { isRecord } from './events.js';
 
 describe('lean routine round scores', () => {
+  it('preserves explicit individual Dots participant capabilities and rejects invalid lean metadata', () => {
+    const round = { ...leanScoresFixture(), dotsIndividualPlayerCounts: [1, 2, 3, 4] as const };
+    const wire = leanRoundScores(round);
+    expect(wire.round.dotsIndividualPlayerCounts).toEqual([1, 2, 3, 4]);
+    expect(decodeRoundScores(JSON.parse(JSON.stringify(wire)))).toEqual(round);
+    for (const counts of [null, [1, 1], [0, 4], ['2'], [5]]) {
+      expect(decodeRoundScores({ ...wire, round: { ...wire.round, dotsIndividualPlayerCounts: counts } })).toBeNull();
+    }
+  });
+
   it('fits a fictional 12-player three-foursome heavy profile inline with all canonical comeback receipts', () => {
     const round = leanScoresFixture(12);
     expect(isRoundScores(round)).toBe(true);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RoundScores, Scorecard, ScoreChange } from '../domain/scoring';
-import { maximumExactHoleStrokes, sameScoreActor, scoreActor } from '../domain/scoring';
+import { maximumExactHoleStrokes, sameScoreActor, scoreActor, supportsIndividualDotsPlayerCount } from '../domain/scoring';
 import { isHoleScore, isRoundScores, isScorecard, isScoreChange, isScoreHistoryPage, isScoreWriteResult, isScoreActor, parseScoreEntry, scoreEntryText } from './scoring';
 import type { GamePlayerResult, TeamGameDefinition, TeamGameFormat } from '../domain/games.js';
 import { teamSize } from '../domain/games.js';
@@ -32,6 +32,26 @@ const change: ScoreChange = {
 };
 
 describe('owner gross scoring network contracts', () => {
+  it('gates individual Dots by explicit participant counts with legacy four-only fallback', () => {
+    const saved = round();
+    for (const count of [1, 2, 3, 4]) {
+      expect(supportsIndividualDotsPlayerCount(saved, count)).toBe(count === 4);
+      expect(supportsIndividualDotsPlayerCount({ ...saved, dotsIndividualPlayerCounts: [1, 2, 3, 4] }, count)).toBe(true);
+      expect(supportsIndividualDotsPlayerCount({ ...saved, dotsIndividualPlayerCounts: [2, 3] }, count)).toBe(count === 2 || count === 3);
+      expect(supportsIndividualDotsPlayerCount({ ...saved, dotsIndividualPlayerCounts: [] }, count)).toBe(false);
+    }
+    for (const count of [0, -1, 5, 1.5, NaN, Infinity]) {
+      expect(supportsIndividualDotsPlayerCount(saved, count)).toBe(false);
+      expect(supportsIndividualDotsPlayerCount({ ...saved, dotsIndividualPlayerCounts: [1, 2, 3, 4] }, count)).toBe(false);
+    }
+    for (const counts of [[], [1], [2, 3], [4], [1, 2, 3, 4]]) {
+      expect(isRoundScores({ ...saved, dotsIndividualPlayerCounts: counts })).toBe(true);
+    }
+    for (const counts of [null, true, 4, ['1'], [1, 1], [0], [5], [1.5]]) {
+      expect(isRoundScores({ ...saved, dotsIndividualPlayerCounts: counts })).toBe(false);
+    }
+  });
+
   it('validates explicit Dots rules capabilities while preserving legacy omission', () => {
     const saved = round();
     expect(isRoundScores(saved)).toBe(true);

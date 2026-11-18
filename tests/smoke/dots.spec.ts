@@ -43,6 +43,62 @@ async function openGameStandings(page: Page, name: string) {
   })) await summary.click();
 }
 
+for (const count of [1, 2, 3] as const) {
+  test(`individual Dots saves and scores ${String(count)} players without teams or imaginary opponents`, async ({ page }, testInfo) => {
+    const scenario = count === 1 ? 'individual-1' : count === 2 ? 'individual-2' : 'individual-3';
+    const fixture = await openDotsFixture(page, testInfo, scenario);
+    try {
+      await page.setViewportSize({ width: 320, height: 900 });
+      await page.getByRole('button', { name: 'Games', exact: true }).click();
+      await page.getByRole('button', { name: 'Add game', exact: true }).click();
+      const editor = page.getByRole('form', { name: 'Game settings', exact: true });
+      await editor.getByRole('combobox', { name: 'Dots playing group', exact: true }).selectOption('1');
+      await expect(editor.getByRole('combobox', { name: 'Dots mode', exact: true })).toHaveValue('individual');
+      await expect(editor.getByRole('option', { name: 'Fixed partners', exact: true })).toHaveJSProperty('disabled', true);
+      await expect(editor.getByRole('option', { name: 'Link to earned Wolf', exact: true })).toHaveJSProperty('disabled', true);
+      await editor.getByLabel('Sandy', { exact: true }).check();
+      if (count === 1) {
+        await expect(editor.getByLabel('USD per dot difference', { exact: true })).toHaveCount(0);
+        await expect(editor).toContainText('Solo stats only');
+      } else {
+        await editor.getByLabel('USD per dot difference', { exact: true }).fill('.50');
+      }
+      await editor.getByRole('button', { name: 'Save game', exact: true }).click();
+      await expect(page.getByText('Game settings saved.', { exact: true })).toBeVisible();
+      expect(fixture.counters().configurations[0]?.find((game) => game.kind === 'dots')).toMatchObject({
+        mode: 'individual', playerIds: dotsPlayers.slice(0, count), stakeMinor: count === 1 ? null : 50,
+      });
+      await page.getByRole('button', { name: 'Enter scores', exact: true }).click();
+      const form = page.getByRole('form', { name: 'Group 1 hole 1 entry', exact: true });
+      await form.getByRole('button', { name: 'Par for blanks', exact: true }).click();
+      await form.getByRole('button', { name: 'Dots for Fictional golfer 1 · Dots', exact: true }).click();
+      const dialog = form.getByRole('dialog', { name: 'Dots · Fictional golfer 1', exact: true });
+      await dialog.getByRole('button', { name: 'Increase Sandy for Fictional golfer 1', exact: true }).click();
+      await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+      await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+      await expect(page.getByRole('form', { name: 'Group 1 hole 2 entry', exact: true })).toBeVisible();
+      expect(fixture.counters().writes).toBe(count);
+      const result = fixture.read().games?.results.find((game) => game.kind === 'dots');
+      expect(result?.players.map((player) => player.totalPoints)).toEqual([1, ...Array.from({ length: count - 1 }, () => 0)]);
+      await page.getByRole('button', { name: 'Games', exact: true }).click();
+      const settlement = page.getByRole('region', { name: 'Group 1 Dots internal settlement', exact: true });
+      await expect(settlement.locator('.internal-settlement-list > li')).toHaveCount(count);
+      if (count === 1) {
+        await expect(settlement).toContainText('Solo stats only · No money');
+        await expect(settlement.getByText('Rate and settlement method', { exact: true })).toHaveCount(0);
+      } else {
+        await expect(settlement.locator('.internal-settlement-list > li').first().locator('summary'))
+          .toContainText(count === 2 ? 'Due USD 0.50' : 'Due USD 1.00');
+      }
+      for (const theme of ['light', 'dark']) {
+        await page.evaluate((value) => { document.documentElement.dataset.theme = value; document.documentElement.style.fontSize = '125%'; }, theme);
+        await narrowControls(page, settlement);
+      }
+      expect(fixture.counters().pageErrors).toEqual([]);
+    } finally { await fixture.close(); }
+  });
+}
+
 test('Dots setup stays compact and selects all compatible specials without losing custom units', async ({ page }, testInfo) => {
   test.setTimeout(30000);
   const fixture = await openDotsFixture(page, testInfo);

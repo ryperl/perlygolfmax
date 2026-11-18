@@ -8,7 +8,7 @@ import type { RoundGameDefinition } from '../../domain/games';
 import type { ScoreLocation, ScoreView } from '../../domain/score-location';
 import { RoundGamesPanel, RoundGameHoleControls, canManageRoundGames } from '../games';
 import { RoundLeaderboard } from '../leaderboard';
-import { sameHoleScore, scorePermissions, supportsRoundGame } from '../../domain/scoring';
+import { sameHoleScore, scorePermissions, supportsIndividualDotsPlayerCount, supportsRoundGame } from '../../domain/scoring';
 import { scoreAccessKey, writablePlayerIds } from './score-access';
 import { scorecardHoles, scorecardTee } from '../../domain/tees';
 import { useOwnerScores } from './useOwnerScores';
@@ -171,7 +171,8 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     if (!round || !hole || !playerId || busy || saving.current || !canEditGroup
       || !supportsRoundGame(round, patch.nassau !== undefined ? 'nassau' : patch.dots !== undefined ? 'dots' : 'wolf')) return;
     if (patch.dots?.some((record) => round.games?.configuration.games.some((game) =>
-      game.kind === 'dots' && game.id === record.gameId && game.version === 2 && !round.dotsRulesVersions?.includes(2)))) return;
+      game.kind === 'dots' && game.id === record.gameId && (game.version === 2 && !round.dotsRulesVersions?.includes(2)
+        || game.mode === 'individual' && !supportsIndividualDotsPlayerCount(round, game.playerIds.length))))) return;
     const card = cardFor(round, playerId);
     const key = entryKey(playerId, hole.number);
     const previous = currentDrafts.current.get(key);

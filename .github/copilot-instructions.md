@@ -209,10 +209,15 @@
   who still needs a solo Wolf/PIG using acknowledged choices only; never block
   play or override comeback selection to enforce the reminder.
 - Legacy Dots version 1 supports individual, fixed partners, or explicit
-  linked neutral contexts, never a Wolf-owned special subsystem. Standalone
-  contexts stay independent until explicitly linked. Each qualifying occurrence
+  linked neutral contexts, never a Wolf-owned special subsystem.
+  Individual play uses every golfer in a saved 1–4-player group; two/three
+  players never form teams. Solo is stats-only with blank/zero rate, no
+  opponents or money. Fixed/rotating/linked modes still require four players.
+  Small individual groups require explicit `dotsIndividualPlayerCounts` API
+  support; absence permits legacy four-player individual play only.
+  Standalone contexts stay independent until explicitly linked. Each qualifying occurrence
   shares with current teammates; Walk, manual Pickup and failed called
-  Paree/Murphy/Pully Murphy award opponents (other three in individual play).
+  Paree/Murphy/Pully Murphy award actual opponents (none in solo play).
   Count repeated fairway/greenside Sandys, including a separately called Paree.
   Hogan/Seve/Sandy/Paree/Murphy/Haz Par/Chippy allow gross par or better;
   par-3 Hogan/Seve omit fairway conditions. Pully allows its long par or birdie
@@ -252,8 +257,10 @@
   No legacy Wolf conversion, protected game-ID conversion, owner promotion,
   general setup, catalog, Ball Drop administration, purse or archive authority.
   Keep old tester projections unchanged and omit internal ledgers/declarations.
-- Internal USD settlement is `(4*d_i - sum(d)) * rateMinor`, once per explicitly
-  linked combination/foursome, with separate sources. Blank/zero is points-only.
+- Internal USD settlement is `(N*d_i - sum(d)) * rateMinor`, once per explicitly
+  linked combination/group, with separate sources and actual participant count.
+  N remains four for partnered games; solo never settles money.
+  Blank/zero is points-only.
   User money input is dollars (`1`, `.50`), storage stays exact integer cents;
   dot units remain whole points. Preserve all legacy Churchy math/saved values.
   Total to settle sums positive net balances, never absolute balances or dots.

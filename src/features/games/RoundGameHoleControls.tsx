@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
 import type { NassauHoleRecord } from '../../domain/nassau';
 import type { HoleScore, RoundScores } from '../../domain/scoring';
-import { supportsRoundGame } from '../../domain/scoring';
+import { supportsIndividualDotsPlayerCount, supportsRoundGame } from '../../domain/scoring';
 import type { WolfHoleRecord } from '../../domain/wolf';
 import { wolfForHole } from '../../domain/wolf';
 import { NassauHoleControls } from '../nassau';
@@ -81,7 +81,8 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
       const rotation = game.version === 2 ? dotsRotationContext(game, round, staged
         ? [...records.filter((record) => record.number !== holeNumber), staged] : records) : undefined;
       const rotationLocked = records.some((record) => record.rotation !== undefined);
-      const dotsLocked = locked || !onSpecialDotsChange || game.version === 2 && !round.dotsRulesVersions?.includes(2);
+      const individualUnsupported = game.mode === 'individual' && !supportsIndividualDotsPlayerCount(round, game.playerIds.length);
+      const dotsLocked = locked || !onSpecialDotsChange || individualUnsupported || game.version === 2 && !round.dotsRulesVersions?.includes(2);
       const controls = <DotsHoleControls game={game} holeNumber={holeNumber}
       par={round.layout.find((hole) => hole.number === holeNumber)?.par ?? 0} etag={etag ?? ''} players={round.cards}
       playerPars={game.playerIds.map((playerId) => ({ playerId,
@@ -99,6 +100,7 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
         disabled={dotsLocked} staged={staged?.players.some((player) => player.playerId === playerId) === true}>
         {controls}
       </DotsEntryButton> : <Fragment key={game.id}>
+        {individualUnsupported && <p>Individual Dots edits for this group size require advertised API support.</p>}
         {game.version === 2 && !round.dotsRulesVersions?.includes(2) && <p>Rotating Dots edits require advertised API version-2 support.</p>}
         {controls}
       </Fragment>;

@@ -3,7 +3,7 @@ import { EventChangedError } from '../../client/events';
 import type { RoundGameDefinition } from '../../domain/games';
 import { maximumGamesPerRound, sameGameDefinitions, visibleGames } from '../../domain/games';
 import type { GameWriteResult, RoundScores } from '../../domain/scoring';
-import { scorePermissions, supportsRoundGame } from '../../domain/scoring';
+import { scorePermissions, supportsIndividualDotsPlayerCount, supportsRoundGame } from '../../domain/scoring';
 import type { GameDraft } from './game-draft';
 import { buildGame, draftFromGame, newGameDraft, replaceGame, setGameKind } from './game-draft';
 import { GameResults } from './GameResults';
@@ -95,6 +95,12 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
     }
     const game = buildGame(editor.draft, editor.roster.map((card) => card.playerId));
     const previousGame = editor.base.find((entry) => entry.id === editor.draft.id);
+    if (game?.kind === 'dots' && game.mode === 'individual'
+      && (!supportsIndividualDotsPlayerCount(round, game.playerIds.length)
+        || !supportsIndividualDotsPlayerCount(editingRound, game.playerIds.length))) {
+      setMessage('This API does not support individual Dots for this group size. Your draft is retained.');
+      return;
+    }
     if (game?.kind === 'dots' && (previousGame?.kind === 'dots' && previousGame.version !== game.version
       || game.version === 2 && (!round.dotsRulesVersions?.includes(2) || !editingRound.dotsRulesVersions?.includes(2)))) {
       setMessage('Rotating Dots requires API rules support. Saved rules versions cannot be converted.');
@@ -128,9 +134,11 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
       const group = editingRound.groups.find((entry) => entry.number === game.groupNumber);
       const ids = game.kind === 'nassau' ? game.sides.flatMap((side) => side.playerIds) : game.playerIds;
       if (!group || ids.some((id) => !group.playerIds.includes(id))
-        || (game.kind === 'wolf' || game.kind === 'dots') && group.playerIds.length !== 4
+        || game.kind === 'wolf' && group.playerIds.length !== 4
+        || game.kind === 'dots' && (ids.length !== group.playerIds.length
+          || (game.mode === 'individual' ? group.playerIds.length < 1 || group.playerIds.length > 4 : group.playerIds.length !== 4))
         || game.kind === 'nassau' && (editingRound.layout.length !== 18 || editingRound.layout.some((hole) => hole.number < 1 || hole.number > 18))) {
-        setMessage('Choose participants from one saved playing group. Wolf and Dots require a foursome; Nassau requires 18 holes.');
+        setMessage('Choose participants from one saved playing group. Individual Dots supports 1–4 players; partner modes and Wolf require four. Nassau requires 18 holes.');
         return;
       }
     }
@@ -139,7 +147,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
       if (peers.some((peer) => (peer.kind === 'churchy' || peer.kind === 'wolf' || peer.kind === 'dots')
         && peer.groupNumber === game.groupNumber && (game.kind === 'churchy' || peer.kind === 'churchy'
           || game.kind === 'wolf' && peer.kind === 'wolf'))) {
-        setMessage('Choose one internal base game per foursome. Churchy cannot accompany Wolf or Dots; Ball Drop remains separate.');
+        setMessage('Choose one internal base game per playing group. Churchy cannot accompany Wolf or Dots; Ball Drop remains separate.');
         return;
       }
       if (game.kind === 'dots' && game.mode === 'linked' && !peers.some((peer) => peer.kind === 'wolf'
@@ -153,7 +161,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
     if (!intended) {
       setMessage(editor.draft.kind === 'wolf' || editor.draft.kind === 'nassau'
         ? 'Check the game name, saved playing group, distinct participants and order. Enter USD dollars and cents, or choose No planned money.'
-        : editor.draft.kind === 'dots' ? 'Choose a saved foursome, compatible mode and game, enabled specials with positive whole units, and a valid optional USD rate with at most two decimal places.'
+        : editor.draft.kind === 'dots' ? 'Choose a saved playing group, compatible mode and enabled specials with positive whole units. Solo play is stats-only; otherwise use a valid optional USD rate with at most two decimal places.'
         : editor.draft.kind === 'churchy'
         ? 'Choose a complete saved foursome, order all four golfers, and enter USD dollars and cents per dot (zero or more). Choose one Churchy game per group.'
         : editor.draft.kind === 'stroke-play' ? 'Check the game name (1–100 characters) and gross or net score basis. Net uses 100% captured Course Handicap.'
@@ -290,6 +298,8 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh }:
           existing={editor.base.some((game) => game.id === editor.draft.id)}
           wolfV2Supported={round.wolfRulesVersions?.includes(2) === true && editingRound.wolfRulesVersions?.includes(2) === true}
           dotsV2Supported={round.dotsRulesVersions?.includes(2) === true && editingRound.dotsRulesVersions?.includes(2) === true}
+          dotsIndividualPlayerCounts={([1, 2, 3, 4] as const).filter((count) =>
+            supportsIndividualDotsPlayerCount(round, count) && supportsIndividualDotsPlayerCount(editingRound, count))}
           churchyV2Supported={round.churchyRulesVersions?.includes(2) === true && editingRound.churchyRulesVersions?.includes(2) === true}
           setupLocked={round.setupLocked || editingRound.setupLocked}
           allowChurchyCreation={!editor.base.some((game) => game.id === editor.draft.id)}

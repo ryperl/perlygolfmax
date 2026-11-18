@@ -132,7 +132,10 @@ const sameMembers = (left: readonly string[], right: readonly string[]) =>
 export function dotsDefinitionMatchesRound(game: DotsGameDefinition, round: DotRoundInput): boolean {
   const groups = round.groups.filter((group) => group.number === game.groupNumber);
   const group = groups[0];
-  return groups.length === 1 && group !== undefined && game.playerIds.length === 4 && unique(game.playerIds)
+  return groups.length === 1 && group !== undefined
+    && (game.mode === 'individual' ? game.playerIds.length >= 1 && game.playerIds.length <= 4
+      && (game.playerIds.length !== 1 || game.stakeMinor === null || game.stakeMinor === 0)
+      : game.playerIds.length === 4) && unique(game.playerIds)
     && sameMembers(group.playerIds, game.playerIds)
     && game.playerIds.every((id) => round.cards.filter((card) => card.playerId === id).length === 1
       && round.groups.filter((candidate) => candidate.playerIds.includes(id)).length === 1)
@@ -271,7 +274,7 @@ export function calculateDots(
     const add = (kind: DotsSpecialKind, earnedBy: string | null, recipients: readonly string[], count: number,
       source: DotAward['source'], sourceHoles: readonly number[], reason: string, suffix = '') => {
       const base = units.get(kind);
-      if (base === undefined || context.status !== 'ready') return;
+      if (base === undefined || context.status !== 'ready' || recipients.length === 0) return;
       const dots = exact(BigInt(base) * BigInt(count) * BigInt(context.multiplier));
       if (dots === null) { mark(hole, 'unavailable', 'arithmetic-range'); issues.push('arithmetic-range'); return; }
       const award: DotAward = { id: `${game.id}:${String(hole.number)}:${kind}:${earnedBy ?? 'side'}:${suffix}`,

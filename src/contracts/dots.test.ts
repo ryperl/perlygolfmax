@@ -25,6 +25,25 @@ const record: DotsHoleRecord = { number: 1, gameId: game.id, gameEtag: 'revision
   contests: [{ kind: 'kp', status: 'awarded', winnerId: A, secondId: B }] };
 
 describe('Dots network contracts', () => {
+  it.each([1, 2, 3, 4])('accepts %i unique individual golfers only, with solo stakes disabled', (count) => {
+    const playerIds = game.playerIds.slice(0, count);
+    for (const stakeMinor of [null, 0, 50]) {
+      expect(isDotsDefinition({ ...game, playerIds, stakeMinor })).toBe(count !== 1 || !stakeMinor);
+    }
+    if (count < 4) {
+      expect(isDotsDefinition({ ...game, playerIds, mode: 'fixed', partnerIds: playerIds })).toBe(false);
+      expect(isDotsDefinition({ ...game, playerIds, mode: 'rotating', version: 2, rotationHoles: 3 })).toBe(false);
+      const { stakeMinor: omitted, ...base } = game;
+      void omitted;
+      expect(isDotsDefinition({ ...base, playerIds, mode: 'linked', linkedGameId })).toBe(false);
+    }
+  });
+  it('rejects empty, oversized and duplicate individual participant lists', () => {
+    for (const playerIds of [[], [A, A], [A, B, C, D, otherId]]) {
+      expect(isDotsDefinition({ ...game, playerIds })).toBe(false);
+    }
+  });
+
   it('accepts only explicit v2 rotating definitions with 3/6 blocks, allowing Assassin but no Sweep or legacy hybrid', () => {
     const rotating = { ...game, version: 2, mode: 'rotating', rotationHoles: 3, specials: [{ kind: 'assassin', units: 1 }] };
     expect(isDotsDefinition(rotating)).toBe(true);

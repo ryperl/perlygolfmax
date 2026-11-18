@@ -43,10 +43,11 @@ export function calculateDotSettlement(input: {
         ? exact(BigInt(player.baseDots) + BigInt(player.specialDots)) : null, netMinor: null }));
   const base = { version: 1 as const, groupNumber: input.groupNumber, gameIds: input.gameIds, currency: 'USD' as const,
     stakeMinor: input.stakeMinor, players, totalToSettleMinor: null, pairwise: [] };
-  if (players.length !== 4 || new Set(players.map((player) => player.playerId)).size !== 4
+  if (players.length < 1 || players.length > 4 || new Set(players.map((player) => player.playerId)).size !== players.length
     || input.unavailable || !Number.isSafeInteger(input.groupNumber) || input.groupNumber < 1
     || input.gameIds.length < 1 || new Set(input.gameIds).size !== input.gameIds.length
-    || input.stakeMinor !== null && (!Number.isSafeInteger(input.stakeMinor) || input.stakeMinor < 0)
+    || input.stakeMinor !== null && (!Number.isSafeInteger(input.stakeMinor) || input.stakeMinor < 0
+      || players.length === 1 && input.stakeMinor !== 0)
     || players.some((player) => player.baseDots !== null && (!Number.isSafeInteger(player.baseDots) || player.baseDots < 0)
       || player.specialDots !== null && (!Number.isSafeInteger(player.specialDots) || player.specialDots < 0)
       || player.totalDots === null && player.baseDots !== null && player.specialDots !== null)) {
@@ -55,7 +56,7 @@ export function calculateDotSettlement(input: {
   if (input.stakeMinor === null || input.stakeMinor === 0) return { ...base, status: 'points-only' };
   if (players.some((player) => player.totalDots === null)) return { ...base, status: 'pending' };
   const sum = players.reduce((total, player) => total + BigInt(player.totalDots ?? 0), 0n);
-  const balances = players.map((player) => exact((4n * BigInt(player.totalDots ?? 0) - sum) * BigInt(input.stakeMinor ?? 0)));
+  const balances = players.map((player) => exact((BigInt(players.length) * BigInt(player.totalDots ?? 0) - sum) * BigInt(input.stakeMinor ?? 0)));
   if (balances.some((balance) => balance === null)) return { ...base, status: 'unavailable', reason: 'Settlement exceeds exact arithmetic range.' };
   const total = exact(balances.reduce<bigint>((amount, balance) => amount + BigInt(Math.max(0, balance ?? 0)), 0n));
   if (total === null) return { ...base, status: 'unavailable', reason: 'Settlement exceeds exact arithmetic range.' };

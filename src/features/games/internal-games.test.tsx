@@ -26,6 +26,46 @@ afterAll(() => {
 });
 
 describe('separate internal game setup and capability boundaries', () => {
+  it('retains a small individual draft but refuses saving if API capability disappears while editing', () => {
+    const f = dotsFixture();
+    if (!f.round.games) throw new Error('Missing fictional games');
+    const ids = f.ids.slice(0, 3);
+    const game: DotsGameDefinition = { ...f.game, playerIds: ids };
+    const legacy = { ...f.round, cards: f.round.cards.slice(0, 3), groups: [{ number: 1, playerIds: ids }],
+      permissions: { role: 'owner' as const, canManageGames: true, writePlayerIds: ids },
+      games: { ...f.round.games, configuration: { ...f.round.games.configuration, games: [game] } } };
+    const props = { busy: false, onDirtyChange: vi.fn(), onSave: vi.fn(), onRefresh: vi.fn() };
+    const view = render(<RoundGamesPanel {...props} round={{ ...legacy, dotsIndividualPlayerCounts: [1, 2, 3, 4] }} />);
+    fireEvent.click(screen.getByRole('button', { name: `Edit ${game.name}` }));
+    fireEvent.change(screen.getByLabelText('Game name'), { target: { value: 'Fictional retained draft' } });
+    expect(screen.getByRole('button', { name: 'Save game' })).toBeEnabled();
+    view.rerender(<RoundGamesPanel {...props} round={legacy} />);
+    expect(screen.getByLabelText('Game name')).toHaveValue('Fictional retained draft');
+    expect(screen.getByRole('button', { name: 'Save game' })).toBeDisabled();
+    fireEvent.submit(screen.getByRole('form', { name: 'Game settings' }));
+    expect(props.onSave).not.toHaveBeenCalled();
+    expect(screen.getByText('This API does not support individual Dots for this group size. Your draft is retained.')).toBeVisible();
+  });
+
+  it.each([1, 2, 3])('gates %i-player individual declaration and setup controls on explicit API support', (count) => {
+    const f = dotsFixture(), playerId = f.ids[0];
+    if (!playerId || !f.round.games) throw new Error('Missing fictional game');
+    const ids = f.ids.slice(0, count);
+    const game: DotsGameDefinition = { ...f.game, playerIds: ids, stakeMinor: count === 1 ? null : 50 };
+    const round = { ...f.round, cards: f.round.cards.slice(0, count), groups: [{ number: 1, playerIds: ids }],
+      permissions: { role: 'owner' as const, canManageGames: true, writePlayerIds: ids },
+      games: { ...f.round.games, configuration: { ...f.round.games.configuration, games: [game] } } };
+    const props = { round, groupNumber: 1, holeNumber: 1, playerId, saved: { kind: 'unplayed' as const },
+      disabled: false, onNassauChange: vi.fn(), onWolfChange: vi.fn(), onSpecialDotsChange: vi.fn() };
+    const view = render(<RoundGameHoleControls {...props} />);
+    expect(screen.getByRole('button', { name: `Dots for Fictional golfer 1 · ${game.name}` })).toBeDisabled();
+    expect(canManageGame(round, game)).toBe(false);
+    const supported = { ...round, dotsIndividualPlayerCounts: [1, 2, 3, 4] as const };
+    view.rerender(<RoundGameHoleControls {...props} round={supported} />);
+    expect(screen.getByRole('button', { name: `Dots for Fictional golfer 1 · ${game.name}` })).toBeEnabled();
+    expect(canManageGame(supported, game)).toBe(true);
+  });
+
   it('identifies a missing hole-16 declaration before hole 17, then enables only the authoritative recovered choice', () => {
     const f = matchGamesFixture();
     const wolf: WolfGameDefinition = { ...f.wolf, version: 2, stakeMinor: null };

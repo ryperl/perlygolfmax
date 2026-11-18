@@ -69,6 +69,7 @@ export interface RoundScores {
   readonly internalGamesSupported?: boolean;
   readonly wolfRulesVersions?: readonly (1 | 2)[];
   readonly dotsRulesVersions?: readonly (1 | 2)[];
+  readonly dotsIndividualPlayerCounts?: readonly (1 | 2 | 3 | 4)[];
   readonly churchyRulesVersions?: readonly (1 | 2)[];
   readonly internalSettlements?: readonly InternalGameSettlement[];
   readonly supportedGameKinds?: readonly RoundGameKind[];
@@ -105,6 +106,11 @@ export interface RoundScores {
 
 export function scorePermissions(round: RoundScores): ScorePermissions {
   return round.permissions ?? { role: 'viewer', writePlayerIds: [], canManageGames: false };
+}
+
+export function supportsIndividualDotsPlayerCount(round: RoundScores, count: number): boolean {
+  if (count !== 1 && count !== 2 && count !== 3 && count !== 4) return false;
+  return round.dotsIndividualPlayerCounts === undefined ? count === 4 : round.dotsIndividualPlayerCounts.includes(count);
 }
 
 export function supportsRoundGame(round: Pick<RoundScores, 'supportedGameKinds' | 'churchyEnabled'>, kind: RoundGameKind): boolean {

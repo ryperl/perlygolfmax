@@ -14,12 +14,14 @@ const integer = (value: unknown): value is number => typeof value === 'number' &
 const positive = (value: unknown): value is number => integer(value) && value > 0;
 const distinct = (values: readonly unknown[]) => new Set(values).size === values.length;
 const special = (value: unknown): value is DotsSpecialKind => dotsSpecialCatalog.some((entry) => entry.kind === value);
-const members = (value: unknown): value is string[] => Array.isArray(value) && value.length === 4 && value.every(isUuid) && distinct(value);
+const members = (value: unknown, individual = false): value is string[] => Array.isArray(value)
+  && (individual ? value.length >= 1 && value.length <= 4 : value.length === 4) && value.every(isUuid) && distinct(value);
 
 export function isDotsDefinition(value: unknown): value is DotsGameDefinition {
   if (!isRecord(value) || !keys(value, ['id', 'name', 'kind', 'version', 'groupNumber', 'playerIds', 'specials', 'mode'],
     ['stakeMinor', 'partnerIds', 'linkedGameId', 'rotationHoles']) || !isUuid(value.id) || !text(value.name)
-    || value.kind !== 'dots' || value.version !== 1 && value.version !== 2 || !positive(value.groupNumber) || !members(value.playerIds)
+    || value.kind !== 'dots' || value.version !== 1 && value.version !== 2 || !positive(value.groupNumber)
+    || !members(value.playerIds, value.version === 1 && value.mode === 'individual')
     || !Array.isArray(value.specials) || !value.specials.every((entry: unknown) =>
       isRecord(entry) && keys(entry, ['kind', 'units']) && special(entry.kind) && positive(entry.units))
     || !distinct(value.specials.map((entry: { readonly kind: DotsSpecialKind }) => entry.kind))) return false;
@@ -36,6 +38,7 @@ export function isDotsDefinition(value: unknown): value is DotsGameDefinition {
     || Object.hasOwn(value, 'linkedGameId')) return false;
   const playerIds = value.playerIds;
   return value.mode === 'individual' ? !Object.hasOwn(value, 'partnerIds')
+    && (playerIds.length !== 1 || value.stakeMinor === null || value.stakeMinor === 0)
     : members(value.partnerIds) && value.partnerIds.every((id) => playerIds.includes(id));
 }
 

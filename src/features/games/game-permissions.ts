@@ -1,5 +1,5 @@
 import type { RoundScores } from '../../domain/scoring';
-import { scorePermissions } from '../../domain/scoring';
+import { scorePermissions, supportsIndividualDotsPlayerCount } from '../../domain/scoring';
 import type { RoundGameDefinition } from '../../domain/games';
 
 export function canManageAllRoundGames(round: RoundScores): boolean {
@@ -18,6 +18,7 @@ export function canManageGame(round: RoundScores, game: RoundGameDefinition): bo
   if (round.eventStatus === 'archived') return false;
   if (game.kind === 'wolf' && game.version === 2 && !round.wolfRulesVersions?.includes(2)) return false;
   if (game.kind === 'dots' && game.version === 2 && !round.dotsRulesVersions?.includes(2)) return false;
+  if (game.kind === 'dots' && game.mode === 'individual' && !supportsIndividualDotsPlayerCount(round, game.playerIds.length)) return false;
   if (game.kind === 'churchy' && (round.churchyEnabled !== true || game.version === 2 && !round.churchyRulesVersions?.includes(2))) return false;
   if (game.kind === 'dots' || game.kind === 'wolf' || game.kind === 'nassau') {
     if (round.setupLocked) return false;

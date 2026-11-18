@@ -22,10 +22,11 @@ export function InternalSettlement({ settlement, gameNames = [], ranked = false,
   const [baseLabel, specialLabel] = sourceLabels;
   return <section className="game-results internal-settlement" aria-label={`Group ${String(settlement.groupNumber)} ${sources ? `${sources} ` : ''}internal settlement`}>
     <h3>Group {settlement.groupNumber}{sources && ` · ${sources}`}{ranked && ' · Combined standings'}</h3>
-    <p className="internal-settlement-status">{pointsOnly ? `No money configured · Points-only${provisional ? ' · Provisional' : ''}` : settlement.status === 'complete' ? 'Planned settlement · Not paid'
+    <p className="internal-settlement-status">{pointsOnly ? `${settlement.players.length === 1 ? 'Solo stats only · No money' : 'No money configured · Points-only'}${provisional ? ' · Provisional' : ''}` : settlement.status === 'complete' ? 'Planned settlement · Not paid'
       : settlement.status === 'unavailable' ? 'Settlement unavailable' : 'Provisional settlement · Not paid'}</p>
     <div role="region" aria-label="Combined earned dots and planned money">
-      <ol className="internal-settlement-list" aria-label={ranked ? 'Combined standings' : 'Individual net settlement'}>
+      <ol className="internal-settlement-list" aria-label={ranked ? 'Combined standings'
+        : pointsOnly && settlement.players.length === 1 ? 'Solo earned dots' : 'Individual net settlement'}>
         {players.map((player) => {
           const canRank = ranked && settlement.status !== 'unavailable' && player.totalDots !== null;
           const position = canRank ? players.findIndex((other) => other.totalDots === player.totalDots) + 1 : null;
@@ -46,9 +47,9 @@ export function InternalSettlement({ settlement, gameNames = [], ranked = false,
               <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m3 6 5 5 5-5" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
             </summary>
             <div className="internal-settlement-calculation">
-              <p>{pointsOnly ? 'Earned dots only; no money configured.' : 'How calculated · One net amount across the foursome.'}</p>
+              <p>{pointsOnly ? 'Earned dots only; no money configured.' : `How calculated · One net amount across the ${settlement.players.length === 4 ? 'foursome' : `${String(settlement.players.length)} players`}.`}</p>
               {!pointsOnly && settlement.status !== 'unavailable' && total !== null && player.totalDots !== null && settlement.stakeMinor !== null
-                && player.netMinor !== null && <p>(4 × {player.totalDots} − {String(total)}) × {formatMoney(settlement.stakeMinor, 'USD')}
+                && player.netMinor !== null && <p>({settlement.players.length} × {player.totalDots} − {String(total)}) × {formatMoney(settlement.stakeMinor, 'USD')}
                   {' = '}{money(player.netMinor)}</p>}
               {!pointsOnly && <ul>{settlement.pairwise.filter((pair) => pair.fromPlayerId === player.playerId || pair.toPlayerId === player.playerId)
                 .map((pair, index) => <li key={index}>{pair.fromPlayerId === player.playerId ? 'Behind' : 'Ahead of'} {
