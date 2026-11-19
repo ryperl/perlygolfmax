@@ -45,7 +45,7 @@ function isChurchyV3ResultShape(value: unknown, game: ChurchyGameDefinitionV3): 
     const winners = (value: unknown) => Array.isArray(value)
       && value.every((id: unknown) => typeof id === 'string' && game.playerIds.includes(id))
       && new Set(value).size === value.length && (value.length === 0 || value.length === 1
-      || pairs.some((pair) => sameJsonValue(pair, value)));
+      || pairs.some((pair) => pair.length === value.length && pair.every((id) => value.includes(id))));
     for (const lane of [raw.high, raw.low]) {
       if (!isRecord(lane) || !keys(lane, ['status', 'winners', 'dots', 'carry'])
         || !winners(lane.winners) || !nullable(lane.dots) || !nullable(lane.carry)

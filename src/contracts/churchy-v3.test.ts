@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { churchyV3CategoryFixture, churchyV3Fixture } from '../domain/churchy-v3.test-support.js';
 import { isChurchyDefinition, isChurchyResult, isChurchySpecials } from './churchy.js';
 import { isRoundGameDefinitions } from './games.js';
@@ -6,6 +6,44 @@ import { decodeRoundScores, isHoleScore, isRoundScores } from './scoring.js';
 import { leanRoundScores } from './lean-round-scores.js';
 import { strokeGameId } from '../domain/stroke-games.test-support.js';
 import { isRecord } from './events.js';
+import { calculateGameResults } from '../domain/stableford.js';
+import type { DotsPlayerDeclaration } from '../domain/dots.js';
+import type { Scorecard } from '../domain/scoring.js';
+import { createScoresClient } from '../client/scoring.js';
+
+type OpponentSpecial = 'walk' | 'pickup' | 'paree' | 'murphy' | 'pully-murphy';
+
+function opponentAwardFixture(kind: OpponentSpecial, count: 9 | 18 = 18, start = 1, offset = 0) {
+  const f = churchyV3Fixture(count, start);
+  const first = f.ids[0];
+  if (!first) throw new Error('Missing fictional first golfer.');
+  const order = [...f.ids].reverse();
+  const number = (start - 1 + offset) % count + 1;
+  const game = { ...f.game, specials: [{ kind, units: 1 }] };
+  const declaration: DotsPlayerDeclaration = {
+    playerId: first,
+    counts: kind === 'walk' ? { walk: 1 } : kind === 'pickup' ? { pickup: 1 } : {},
+    calls: kind === 'walk' || kind === 'pickup' ? [] : [{
+      id: strokeGameId(951), kind, result: 'failure', ...(kind === 'murphy' ? { murphyPresses: 2 } : {}),
+    }],
+  };
+  const beforeCards = f.cards.map((card, index) => index ? card : { ...card,
+    holes: card.holes.map((hole) => hole.number !== start ? hole : { ...hole,
+      score: { kind: 'strokes' as const, strokes: 4, churchy: f.declaration(start, order) } }) });
+  const cards = beforeCards.map((card, index) => index ? card : { ...card, etag: 'fictional-card-remote-v2',
+    holes: card.holes.map((hole) => hole.number !== number ? hole : { ...hole,
+      score: { kind: 'strokes' as const, strokes: 5, churchy: {
+        ...f.declaration(number, number === start ? order : undefined), players: [declaration],
+      } } }) });
+  function view(input: readonly Scorecard[]) {
+    const round = f.round(input);
+    if (!round.games) throw new Error('Missing fictional Churchie game.');
+    return { ...round, permissions: { role: 'public' as const, writePlayerIds: f.ids, canManageGames: false },
+      games: { configuration: { ...round.games.configuration, games: [game] },
+        results: calculateGameResults([game], f.snapshot, input) } };
+  }
+  return { ...f, game, number, before: view(beforeCards), round: view(cards) };
+}
 
 function tamper(value: unknown, path: readonly (string | number)[], replacement: unknown): unknown {
   const [key, ...remaining] = path;
@@ -17,6 +55,42 @@ function tamper(value: unknown, path: readonly (string | number)[], replacement:
 }
 
 describe('Churchie v3 strict definitions, receipts and coherent lean round transport', () => {
+  it.each(['walk', 'pickup', 'paree', 'murphy', 'pully-murphy'] as const)(
+    'accepts the same opponent recipients in roster order for %s across partner blocks and playing circuits', (kind) => {
+      for (const [count, start, offset] of [[18, 1, 0], [18, 1, 3], [18, 1, 6], [9, 7, 0], [9, 7, 3], [9, 7, 6]] as const) {
+        const f = opponentAwardFixture(kind, count, start, offset);
+        const result = f.round.games.results[0], receipt = result?.churchy?.holes.find((hole) => hole.number === f.number);
+        const special = receipt?.specials[0], source = f.ids[0];
+        const opposingPair = receipt?.pairs.find((pair) => !pair.includes(source ?? ''));
+        expect(special?.winners).toEqual([...(opposingPair ?? [])].reverse());
+        expect(isChurchyResult(result, f.game)).toBe(true);
+        expect(isRoundScores(f.round)).toBe(true);
+        expect(decodeRoundScores(leanRoundScores(f.round))).toEqual(f.round);
+      }
+    });
+
+  it('still rejects duplicate, foreign and mixed-side special recipients', () => {
+    const f = opponentAwardFixture('murphy');
+    const result = f.round.games.results[0];
+    if (!result) throw new Error('Missing fictional Churchie result.');
+    for (const recipients of [[f.ids[1], f.ids[1]], [f.ids[0], f.ids[1]], [f.ids[1], strokeGameId(999)]]) {
+      expect(isChurchyResult(tamper(result, ['churchy', 'holes', 0, 'specials', 0, 'winners'], recipients), f.game)).toBe(false);
+    }
+  });
+
+  it('loads a remote failed-Murphy edit through the actual lean client without rejecting or rewriting the saved cards', async () => {
+    const f = opponentAwardFixture('murphy');
+    const send = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(leanRoundScores(f.before))))
+      .mockResolvedValueOnce(new Response(JSON.stringify(leanRoundScores(f.round))));
+    const token = vi.fn().mockRejectedValue(new Error('Public reads must not request an identity token.'));
+    const client = createScoresClient('https://fictional.example.test/api/public', token, send, 'None');
+    const signal = new AbortController().signal;
+    await expect(client.load(f.before.eventId, f.before.roundId, signal)).resolves.toEqual(f.before);
+    await expect(client.load(f.round.eventId, f.round.roundId, signal)).resolves.toEqual(f.round);
+    expect(send.mock.calls.every(([, options]) => options?.method === undefined)).toBe(true);
+    expect(token).not.toHaveBeenCalled();
+  });
   it.each([[3, 'kp'], [5, 'blue-plate'], [5, 'long-drive']] as const)(
     'reconstructs %s default-tee categories independently of the first golfer’s personal tee (%s)', (par, category) => {
       const f = churchyV3CategoryFixture(par, 4, category);

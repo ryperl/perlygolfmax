@@ -16,6 +16,31 @@ async function savePar(page: Page, hole: number) {
   await expect(page.getByRole('form', { name: `Group 1 hole ${String(hole + 1)} entry`, exact: true })).toBeVisible();
 }
 
+test('Churchie cards refresh and cold-load after another scorer saves a failed Murphy with reversed opponent order', async ({ page }, testInfo) => {
+  const fixture = await openChurcieV3Fixture(page, testInfo);
+  try {
+    await page.getByRole('button', { name: 'Scorecards', exact: true }).click();
+    const cards = page.getByRole('region', { name: 'Round scorecards', exact: true });
+    await cards.getByRole('button', { name: 'Back 9', exact: true }).click();
+    fixture.simulateRemoteOpponentAward();
+    const result = fixture.read().games?.results.find((game) => game.kind === 'churchy');
+    const hole = result?.churchy?.holes.find((entry) => entry.number === 10);
+    expect(hole?.specials.find((special) => special.special === 'Murphy')?.winners)
+      .toEqual([churciePlayers[1], churciePlayers[2]]);
+    expect(hole?.pairs).toContainEqual([churciePlayers[2], churciePlayers[1]]);
+    await page.getByRole('button', { name: 'Refresh saved round', exact: true }).click();
+    await expect(cards.getByLabel(/^Hole 10: 5(?:,|$)/)).toBeVisible();
+    await expect(page.getByText(/Invalid owner scorecards response/)).toHaveCount(0);
+    await page.reload();
+    await page.getByRole('button', { name: 'Scorecards', exact: true }).click();
+    await cards.getByRole('button', { name: 'Back 9', exact: true }).click();
+    await expect(cards.getByLabel(/^Hole 10: 5(?:,|$)/)).toBeVisible();
+    expect(fixture.counters().writes).toBe(0);
+    expect(fixture.counters().requests).toHaveLength(0);
+    expect(fixture.counters().pageErrors).toEqual([]);
+  } finally { await fixture.close(); }
+});
+
 test('Churchie approach order and Sticky/Sandy calls survive a failed lean acknowledgement and rotate after three played holes', async ({ page }, testInfo) => {
   const fixture = await openChurcieV3Fixture(page, testInfo);
   try {

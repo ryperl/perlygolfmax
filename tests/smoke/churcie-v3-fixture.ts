@@ -200,6 +200,24 @@ export async function openChurcieV3Fixture(page: Page, testInfo: TestInfo,
     await expect(page.getByRole('form', { name: 'Group 1 hole 10 entry', exact: true })).toBeVisible();
     return { close: () => server.close(), read: () => stored,
       counters: () => ({ writes, configWrites, reads, requests, configurations, pageErrors }),
+      simulateRemoteOpponentAward() {
+        const game = games[0], first = game?.playerIds[0];
+        if (!game || !first) throw new Error('Missing fictional remote Churchie target.');
+        stored = project({ ...stored, setupLocked: true, lastUpdatedAt: '2026-01-02T00:00:00Z',
+          permissions: { role: 'public', writePlayerIds: churciePlayers, canManageGames: false, canManageInternalGames: false },
+          cards: stored.cards.map((card) => !game.playerIds.includes(card.playerId) ? card : { ...card,
+            etag: `fictional-remote-${card.playerId}`, updatedAt: '2026-01-02T00:00:00Z',
+            holes: card.holes.map((hole) => hole.number !== 10 ? hole : { ...hole,
+              score: { kind: 'strokes', strokes: card.playerId === first ? 5 : 4,
+                ...(card.playerId === first ? { churchy: { version: 3, gameId: game.id,
+                  gameEtag: stored.games?.configuration.etag ?? '', number: 10,
+                  rotation: { playerIds: [...game.playerIds].reverse() }, contests: [],
+                  players: [{ playerId: first, counts: {}, calls: [{
+                    id: strokeGameId(995), kind: 'murphy', result: 'failure', murphyPresses: 2,
+                  }] }] } } : {}) },
+            }) }),
+        });
+      },
       failNextAcknowledgement() { failed = true; } };
   } catch (error) { await server.close(); throw error; }
 }

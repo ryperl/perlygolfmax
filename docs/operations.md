@@ -301,6 +301,14 @@ Sandy is gross par-or-better. Units are positive safe integers; Murphy stages
 multiply their configured units, while Sweep uses units times current stake.
 Ordinary Dots does not gain Churchie press semantics.
 
+Special-award recipient lists represent a set of golfers, not the ordered
+partnership receipt. Opponent awards (Walk, Pickup and failed Paree/Murphy/Pully
+Murphy) may use roster order while the same pair appears reversed in the saved
+approach rotation. Validate the same unique pair independently of recipient
+order; keep the actual rotation, pair membership, raw cards and recomputed
+points/settlement checks strict. This applies to full and lean reads, including
+refresh after another scorer saves; it never rewrites an award or saved score.
+
 New Churchie defaults enable KP and Blue Plate at one unit each. KP carries
 only to the next default-tee par 3; Blue Plate is closest qualifying GIR on
 default-tee par 5s and carries only to the next par 5. Categories resolve
