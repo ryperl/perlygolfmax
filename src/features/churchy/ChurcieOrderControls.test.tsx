@@ -40,19 +40,12 @@ describe('Churchie starting order', () => {
     expect(onChange).toHaveBeenCalledWith(['D', 'B', 'C', 'A']);
   });
 
-  it('never edits an acknowledged order and marks late recovery without exposing editable selects', () => {
-    render(<ChurcieOrderControls mode="approach" value={['A', 'D', 'C', 'B']} players={players} circuit={circuit}
-      saved late disabled={false} onChange={vi.fn()} />);
-    expect(screen.getByText('Churchie partners · Order recorded late').closest('details')).not.toHaveAttribute('open');
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
-  });
-
-  it('keeps unavailable saved order explicit instead of guessing pairs from roster order', () => {
-    render(<ChurcieOrderControls mode="approach" value={['A', 'A', 'C', 'D']} players={players} circuit={circuit}
-      saved disabled={false} onChange={vi.fn()} />);
-    fireEvent.click(screen.getByText('Churchie partners'));
-    expect(screen.getByRole('alert')).toHaveTextContent('Saved partner order is unavailable');
-    expect(screen.queryByRole('list')).not.toBeInTheDocument();
+  it('keeps a disabled setup editor readonly without changing the order', () => {
+    const onChange = vi.fn();
+    render(<ChurcieOrderControls mode="tee" value={['A', 'B', 'C', 'D']} players={players} circuit={circuit}
+      disabled onChange={onChange} />);
+    expect(screen.getByLabelText('Churchie P1')).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Churchie P1'), { target: { value: 'D' } });
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,7 @@
 .churcie-order { margin-block: .75rem; padding: .8rem; border: 1px solid var(--cp-border); border-radius: .75rem; }
+.churcie-current-teams { margin-block: .5rem; overflow-wrap: anywhere; }
+.churcie-current-teams p { margin: 0; font-size: .9rem; font-weight: 600; }
+.churcie-current-teams small { display: block; color: var(--cp-text-muted); }
 .churcie-order h3 { margin-top: 0; font-size: 1rem; }
 .churcie-order summary { min-height: 44px; padding-block: .65rem; cursor: pointer; font-weight: 650; }
 .churcie-order-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: .65rem; }

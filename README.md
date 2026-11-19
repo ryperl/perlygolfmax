@@ -383,6 +383,10 @@ acknowledgement is tracked separately: on partial failure, saved values stay
 saved, pending drafts remain and the screen does not advance. A foursome uses
 one compact card with a row per golfer and one shared save footer; single-player
 entry can additionally offer explicit quick scores.
+Name headers show subtle **CH 4, SO 1** when an off-low result applies: CH is
+the round/tee Course Handicap and SO is the existing handicap difference from
+the low player in that playing group, not strokes received on the current hole.
+Unknown SO stays **—**; other formats do not acquire a new off-low scoring rule.
 Scores stay blank until entered. The first + or − tap on a blank score enters
 that hole's par; later taps adjust it. After an 850 ms pause in valid numeric
 typing, focus moves to the next empty golfer, allowing multi-digit scores.
@@ -1036,6 +1040,10 @@ reshuffled after acknowledgement. Another group's first score does not prevent
 this choice. Raw scores may be saved while order is pending, but partners and
 money are not invented. Recovery after scoring is server-marked late; clearing
 specials or raw-only edits preserve the original order.
+Once the order is known, score entry shows the selected hole's current matchup
+directly as **Golfer A + Golfer B vs Golfer C + Golfer D**, rather than a collapsed
+partner schedule. It follows the saved playing circuit when navigating holes;
+pending teams and late-order recovery remain explicit.
 
 Version 3 shares the Dots specials catalog and configuration editor. Its
 **Sticky is Dime**, not an additional award. All compatible specials can be

@@ -93,11 +93,12 @@ describe('pure mobile group hole entry', () => {
     if (!player) throw new Error('Missing fictional golfer.');
     render(<GroupHoleEntry {...input} rows={[{ ...player,
       courseHandicap: { playerId: player.playerId, courseHandicap: 12 },
+      strokesOff: 1,
       grossProgress: { holesScored: 6, toPar: 2 },
       draft: { text: '8', baseEtag: null, status: 'draft' },
     }]} />);
     const heading = screen.getByRole('heading', { level: 3 });
-    expect(heading).toHaveTextContent(`${player.displayName} CH 12 Thru 6 +2`);
+    expect(heading).toHaveTextContent(`${player.displayName} CH 12, SO 1 Thru 6 +2`);
     const handicap = heading.querySelector('.entry-handicap');
     const progress = within(heading).getByText('Thru 6 +2');
     expect((handicap?.compareDocumentPosition(progress) ?? 0) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
@@ -105,6 +106,27 @@ describe('pure mobile group hole entry', () => {
     expect(screen.getByText('Unsaved')).toBeVisible();
     expect(screen.getByRole('textbox')).toHaveValue('8');
     expect(screen.getByRole('textbox')).not.toHaveFocus();
+  });
+  it.each([
+    { courseHandicap: 4, strokesOff: 1, expected: 'CH 4, SO 1', accessible: 'Strokes off the low player: 1' },
+    { courseHandicap: 11, strokesOff: 8, expected: 'CH 11, SO 8', accessible: 'Strokes off the low player: 8' },
+    { courseHandicap: 3, strokesOff: 0, expected: 'CH 3, SO 0', accessible: 'Strokes off the low player: 0' },
+    { courseHandicap: null, strokesOff: null, expected: 'NH, SO —', accessible: 'Strokes off the low player unavailable' },
+  ])('shows $expected in the generic name header without the old per-hole explanation', (sample) => {
+    const input = props(), player = input.rows[0];
+    if (!player) throw new Error('Missing fictional golfer.');
+    render(<GroupHoleEntry {...input} rows={[{ ...player, strokesOff: sample.strokesOff,
+      courseHandicap: sample.courseHandicap === null
+        ? { playerId: player.playerId, courseHandicap: null, unavailableReason: 'missing-handicap-index' }
+        : { playerId: player.playerId, courseHandicap: sample.courseHandicap },
+    }]} />);
+    const heading = screen.getByRole('heading', { level: 3 });
+    expect(heading).toHaveTextContent(`${player.displayName} ${sample.expected}`);
+    expect(within(heading).getByLabelText(sample.accessible)).toBeVisible();
+    expect(screen.queryByText(/Churchie relative handicap|Relative strokes this hole/)).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox')).toHaveAccessibleName(`${player.displayName} score`);
+    expect(input.onEdit).not.toHaveBeenCalled();
+    expect(input.onSave).not.toHaveBeenCalled();
   });
   it.each([
     { courseHandicap: 0, expected: 'CH 0' },

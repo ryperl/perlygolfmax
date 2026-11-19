@@ -120,6 +120,17 @@ test('Churchie Paree called derives par outcomes, survives retry/reload and reca
     await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
     await order(page);
     const form = page.getByRole('form', { name: 'Group 1 hole 10 entry', exact: true });
+    const heading = form.getByRole('article', { name: 'Fictional golfer 1 scorecard', exact: true }).getByRole('heading', { level: 3 });
+    await expect(heading).toContainText('CH 0, SO 0');
+    await expect(form.getByText(/Churchie relative handicap|Relative strokes this hole/)).toHaveCount(0);
+    const typography = await heading.locator('.entry-handicap').first().evaluate((element) => {
+      const heading = element.closest('h3'), pair = element.closest('.entry-handicap-pair');
+      if (!heading || !pair) throw new Error('Missing compact handicap header');
+      return { size: Number.parseFloat(getComputedStyle(element).fontSize),
+        nameSize: Number.parseFloat(getComputedStyle(heading).fontSize), wrap: getComputedStyle(pair).whiteSpace };
+    });
+    expect(typography.size).toBeLessThan(typography.nameSize);
+    expect(typography.wrap).toBe('nowrap');
     await form.getByRole('button', { name: 'Dots for Fictional golfer 2 · Churchie', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Dots · Fictional golfer 2', exact: true });
     const paree = dialog.getByRole('checkbox', { name: 'Paree called · Fictional golfer 2', exact: true });
@@ -408,9 +419,20 @@ test('Churchie deferred order remains available after another group locks setup 
     expect(receipt).toMatchObject({ version: 3, rotation: {
       playerIds: [churciePlayers[1], churciePlayers[2], churciePlayers[3], churciePlayers[0]], recordedLate: true,
     } });
-    await page.getByText('Churchie partners · Order recorded late', { exact: true }).click();
-    await expect(page.getByRole('list', { name: 'Churchie partner rotation', exact: true })).toContainText('Holes 10, 11, 12');
+    await expect(page.getByRole('group', { name: 'Current teams', exact: true })).toContainText('Order recorded late');
+    await expect(page.getByRole('list', { name: 'Churchie partner rotation', exact: true })).toHaveCount(0);
     await expect(page.getByRole('combobox', { name: 'Closest approach', exact: true })).toHaveCount(0);
+    const currentTeams = page.getByRole('group', { name: 'Current teams', exact: true });
+    await expect(currentTeams).toBeVisible();
+    expect(await currentTeams.evaluate((element) => element.closest('details') === null
+      && element.scrollWidth <= element.clientWidth)).toBe(true);
+    await expect(currentTeams).toContainText('Fictional golfer 2 + Fictional golfer 1 vs Fictional golfer 3 + Fictional golfer 4');
+    const writes = fixture.counters().writes;
+    await page.getByRole('combobox', { name: 'Jump to hole', exact: true }).selectOption('14');
+    await expect(currentTeams).toContainText('Fictional golfer 2 + Fictional golfer 4 vs Fictional golfer 3 + Fictional golfer 1');
+    await page.getByRole('combobox', { name: 'Jump to hole', exact: true }).selectOption('2');
+    await expect(currentTeams).toContainText('Fictional golfer 2 + Fictional golfer 1 vs Fictional golfer 3 + Fictional golfer 4');
+    expect(fixture.counters().writes).toBe(writes);
     await page.getByRole('combobox', { name: 'Jump to hole', exact: true }).selectOption('10');
     await page.getByLabel('Fictional golfer 1 score', { exact: true }).fill('5');
     await page.getByRole('form', { name: 'Group 1 hole 10 entry', exact: true })

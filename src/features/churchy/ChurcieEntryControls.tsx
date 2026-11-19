@@ -28,13 +28,21 @@ export function ChurcieEntryControls({ round, game, holeNumber, saved, draft, di
   const locked = disabled || !etag || round.churchyEnabled !== true || !round.churchyRulesVersions?.includes(3);
   const players = game.playerIds.flatMap((id) => round.cards.filter((card) => card.playerId === id));
   if (orderOnly) {
-    if (game.orderMode === 'approach' && !acknowledged.rotation && holeNumber !== acknowledged.firstHole) {
-      return <p className="game-hint">Churchie partners pending. Choose the approach order on hole {acknowledged.firstHole ?? '—'}.
+    if (acknowledged.rotation) {
+      const current = acknowledged.contexts.find((context) => context.number === holeNumber);
+      if (current?.status !== 'ready') return <p role="alert">Current teams are unavailable. Refresh before reviewing the saved order.</p>;
+      return <div className="churcie-current-teams" role="group" aria-label="Current teams">
+        <p>{current.sides.map((side) => side.map((id) =>
+          players.find((player) => player.playerId === id)?.displayName ?? 'Golfer unavailable').join(' + ')).join(' vs ')}</p>
+        {acknowledged.rotation.recordedLate && <small>Order recorded late</small>}
+      </div>;
+    }
+    if (game.orderMode === 'approach' && holeNumber !== acknowledged.firstHole) {
+      return <p className="game-hint">Teams pending. Choose the approach order on hole {acknowledged.firstHole ?? '—'}.
         Raw scores can still be saved.</p>;
     }
     return <ChurcieOrderControls mode={game.orderMode} value={preview.rotation?.playerIds ?? []} players={players}
       circuit={acknowledged.contexts.map((context) => context.number)}
-      saved={acknowledged.rotation !== undefined} late={acknowledged.rotation?.recordedLate === true}
       disabled={locked} onChange={(ids) => {
         const { rotation: previous, ...rest } = value;
         void previous;

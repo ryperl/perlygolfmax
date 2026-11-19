@@ -461,8 +461,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
           return {
             playerId, displayName: card.displayName, saved: savedHole(card, hole.number),
             grossProgress: savedGrossProgress(card, scorecardHoles(round, playerId)),
-            ...(churchyPlayer ? { churchyRelativeHandicap: churchyPlayer.playingHandicap,
-              churchyStrokesReceived: churchyPlayer.holes.find((entry) => entry.number === hole.number)?.strokesReceived ?? null } : {}),
+            ...(churchyPlayer ? { strokesOff: churchyPlayer.playingHandicap } : {}),
             ...(courseHandicap ? { courseHandicap } : {}),
             ...(playerHole ? { hole: playerHole } : {}),
             ...((round.playerTees?.length ?? 0) > 0 ? {

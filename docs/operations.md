@@ -539,6 +539,13 @@ null for NH), without observation IDs, sources, dates or histories. Legacy priva
 viewer/tester projections continue to omit these fields. Scoring projections publish
 Course Handicap from captured HI and the golfer's captured tee, without applying
 game allowances or requiring stroke allocation. Reads never refresh stored captures.
+Score-entry names present CH and applicable existing off-low results as compact
+`CH 4, SO 1` metadata. SO is the total relative handicap, never the current hole's
+stroke allocation. Keep unknown values distinct from zero and use generic
+labels without adding reads, recalculation or rules to other scoring formats.
+The entry matchup likewise uses the acknowledged current-hole partnership
+context; navigate the actual circuit, preserve pending/late states and never
+reconstruct sides from displayed roster order or add reads for the label.
 
 Scores use the same validated raw dispositions, conditional card/event revision,
 UUID idempotency, immutable audit and first-score setup lock. Public authority

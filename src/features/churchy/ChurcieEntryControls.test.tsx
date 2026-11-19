@@ -16,6 +16,58 @@ afterAll(() => {
 });
 
 describe('Churchie default named category controls', () => {
+  it('shows only the current saved teams and follows the actual playing circuit across the turn', () => {
+    const f = churchyV3Fixture(18, 10, 'tee'), round = f.round(), onChange = vi.fn();
+    const [p1, p2, p3, p4] = f.ids.map((id) => round.cards.find((card) => card.playerId === id)?.displayName);
+    if (!p1 || !p2 || !p3 || !p4) throw new Error('Missing fictional team names');
+    const first = `${p1} + ${p4} vs ${p2} + ${p3}`;
+    const second = `${p1} + ${p3} vs ${p2} + ${p4}`;
+    const props = { round, game: f.game, saved: undefined, draft: undefined, disabled: false, orderOnly: true, onChange };
+    const view = render(<ChurcieEntryControls {...props} holeNumber={10} />);
+    const teams = screen.getByRole('group', { name: 'Current teams' });
+    expect(teams).toHaveTextContent(first);
+    expect(teams.closest('details')).toBeNull();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('list')).not.toBeInTheDocument();
+    view.rerender(<ChurcieEntryControls {...props} holeNumber={14} />);
+    expect(teams).toHaveTextContent(second);
+    view.rerender(<ChurcieEntryControls {...props} holeNumber={1} />);
+    expect(teams).toHaveTextContent(first);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps late saved approach order readonly and does not invent teams for a missing hole', () => {
+    const f = churchyV3Fixture(18, 10);
+    const record = { ...f.declaration(10, f.ids), rotation: { playerIds: f.ids, recordedLate: true as const } };
+    const round = f.round(f.cards.map((card, index) => index ? card : { ...card,
+      holes: card.holes.map((hole) => hole.number === 10 ? { ...hole, score: { kind: 'strokes', strokes: 4, churchy: record } } : hole) }));
+    const onChange = vi.fn();
+    const props = { round, game: f.game, saved: record, draft: undefined, disabled: false, orderOnly: true, onChange };
+    const view = render(<ChurcieEntryControls {...props} holeNumber={14} />);
+    expect(screen.getByRole('group', { name: 'Current teams' })).toHaveTextContent('Order recorded late');
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    view.rerender(<ChurcieEntryControls {...props} holeNumber={99} />);
+    expect(screen.getByRole('alert')).toHaveTextContent('Current teams are unavailable');
+    expect(screen.queryByRole('group', { name: 'Current teams' })).not.toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps unsaved approach order input on the starting hole and pending teams explicit on later holes', () => {
+    const f = churchyV3Fixture(18, 10), onChange = vi.fn();
+    const round = f.round(f.cards.map((card, index) => index ? card : { ...card,
+      holes: card.holes.map((hole) => hole.number === 10
+        ? { ...hole, score: { kind: 'strokes', strokes: 4 } } : hole) }));
+    const props = { round, game: f.game, saved: undefined, draft: undefined,
+      disabled: false, orderOnly: true, onChange };
+    const view = render(<ChurcieEntryControls {...props} holeNumber={10} />);
+    expect(screen.getByLabelText('Closest approach')).toBeEnabled();
+    view.rerender(<ChurcieEntryControls {...props} holeNumber={14} />);
+    expect(screen.getByText(/Teams pending/)).toBeVisible();
+    expect(screen.queryByRole('group', { name: 'Current teams' })).not.toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('gates Paree score outcomes independently from Murphy and preserves manual Paree until explicit opt-in', () => {
     const f = churchyV3Fixture(9, 1, 'tee');
     const round = { ...f.round(), churchyPareeTargets: true as const };

@@ -309,6 +309,9 @@
   a setup edit. Other groups starting cannot block it. Missing order leaves
   results pending but raw scoring available; late recovery is server-marked.
   Clearing specials/raw-only edits never erase or reshuffle the order.
+  Score entry shows the selected hole's current teams directly from that saved
+  context, not a collapsed future schedule or a new roster-order calculation.
+  Retain pending/order-entry and late-recovery states without extra requests.
   V3 reuses Dots configuration/qualifications: Sticky is canonical Dime, Sandy
   allows par or better, and same-golfer exclusions apply. All compatible
   specials are selectable; defaults retain the familiar subset, Birdie 2/
@@ -389,8 +392,11 @@
   current catalog HI or Churchie earned dots. Use shared allocation math;
   never halve an already-calculated nine-hole CH again. Bound visual counts,
   preserve gross marks/counting badges and surface unavailable allocation.
-- Score-entry headers show saved numeric gross-to-personal-par progress after
-  CH, such as Thru 6 +2/E/-2. Count only acknowledged numeric holes; missing,
+- Score-entry headers show subtle CH and applicable authoritative off-low SO
+  together, such as CH 4, SO 1; SO is total relative handicap, not hole strokes.
+  Keep unavailable distinct from zero, labels generic and existing rule scope.
+  Show saved numeric gross-to-personal-par progress afterward, such as
+  Thru 6 +2/E/-2. Count only acknowledged numeric holes; missing,
   pickup/X7/DNF never count as par or replace the running total with Incomplete.
   Keep overall completeness separate, no-scores distinct from even par,
   drafts out of saved summaries and no new reads merely for this display.

@@ -137,8 +137,9 @@ describe('Churchie actual-circuit partner selection and shared specials', () => 
     await screen.findByRole('heading', { name: 'Round scorecard' });
     await user.click(screen.getByRole('button', { name: 'Enter scores' }));
     expect(screen.queryByLabelText('Closest approach')).not.toBeInTheDocument();
-    await user.click(screen.getByText('Churchie partners', { exact: true }));
-    expect(screen.getByRole('list', { name: 'Churchie partner rotation' })).toHaveTextContent('Holes 10, 11, 12');
+    expect(screen.getByRole('group', { name: 'Current teams' })).toBeVisible();
+    expect(screen.queryByText('Churchie partners', { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Churchie partner rotation' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Par for blanks' }));
     await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     await screen.findByRole('form', { name: 'Group 1 hole 11 entry' });

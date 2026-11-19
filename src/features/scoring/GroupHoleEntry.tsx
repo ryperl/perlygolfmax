@@ -27,8 +27,7 @@ import type { ReactNode } from 'react';
 const scoreTypingPauseMs = 850;
 
 export interface GroupHoleEntryRow {
-  readonly churchyRelativeHandicap?: number | null;
-  readonly churchyStrokesReceived?: number | null;
+  readonly strokesOff?: number | null;
   readonly playerId: string;
   readonly displayName: string;
   readonly saved: HoleScore;
@@ -160,7 +159,13 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
           : row.draft.status === 'saving' ? 'Saving…' : row.draft.status === 'failed' ? 'Failed — retry' : 'Unsaved'
           : row.saved.kind === 'unplayed' ? 'Unplayed' : 'Saved';
         return <article className="player-entry" key={row.playerId} aria-label={`${row.displayName} scorecard`}>
-          <div className="entry-heading"><h3>{row.displayName} <CourseHandicap value={row.courseHandicap} className="entry-handicap" />{' '}
+          <div className="entry-heading"><h3>{row.displayName} <span className="entry-handicap-pair">
+            <CourseHandicap value={row.courseHandicap} className="entry-handicap" />
+            {row.strokesOff !== undefined && <span className="entry-handicap"
+              title="Course handicap difference from the lowest player in this playing group"
+              aria-label={row.strokesOff === null ? 'Strokes off the low player unavailable' : `Strokes off the low player: ${String(row.strokesOff)}`}>
+              , SO {row.strokesOff ?? '—'}</span>}
+            </span>{' '}
             {row.grossProgress && <span className="entry-gross-progress">{savedGrossProgressLabel(row.grossProgress)}</span>}</h3>
             <span className={`score-badge score-badge-${row.draft?.status ?? 'saved'}`}>{status}</span></div>
           {row.teeLabel && <p className="entry-tee">{row.teeLabel} · Par {playerHole.par} · {playerHole.length} yards · Stroke index {playerHole.allocation}</p>}
@@ -219,14 +224,12 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
             onOpen={cancelMovement} onChange={(value) => { cancelMovement(); onKpEdit(row.playerId, value); }} />}
           {playerGameControls?.(row.playerId)}
           </div>
-          {churchy?.kind === 'churchy' && churchy.playerIds.includes(row.playerId) && gameEtag && onDotsEdit && <>
-            <p className="entry-tee">Churchie relative handicap: {row.churchyRelativeHandicap ?? 'unavailable'} · Relative strokes this hole: {
-              row.churchyStrokesReceived ?? 'unavailable'}</p>
-            {churchy.version !== 3 && <ChurchyDots name={row.displayName} number={hole.number} game={churchy}
+          {churchy?.kind === 'churchy' && churchy.version !== 3 && churchy.playerIds.includes(row.playerId) && gameEtag && onDotsEdit && <>
+            <ChurchyDots name={row.displayName} number={hole.number} game={churchy}
               disabled={disabled || churchy.version === 2 && !churchyV2Supported}
               counts={row.draft?.churchyCounts} value={
                 row.draft?.churchy ?? row.saved.churchy ?? emptyChurchySpecials(churchy, gameEtag)
-              } onChange={(value, counts) => { cancelMovement(); onDotsEdit(row.playerId, { ...value, gameId: churchy.id, gameEtag }, counts); }} />}
+              } onChange={(value, counts) => { cancelMovement(); onDotsEdit(row.playerId, { ...value, gameId: churchy.id, gameEtag }, counts); }} />
             {churchy.version === 2 && !churchyV2Supported && <p className="entry-error">Churchie edits require API rules support. Refresh before editing specials.</p>}
           </>}
           {rows.length === 1 && <div className="quick-scores" aria-label={`Quick scores for ${row.displayName}`}>{quickScores.map((value) => <button type="button" key={value}

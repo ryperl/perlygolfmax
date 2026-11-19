@@ -1,12 +1,10 @@
 import './churcie-order.css';
 
-export function ChurcieOrderControls({ mode, value, players, circuit, saved = false, late = false, disabled, onChange }: {
+export function ChurcieOrderControls({ mode, value, players, circuit, disabled, onChange }: {
   readonly mode: 'tee' | 'approach';
   readonly value: readonly string[];
   readonly players: readonly { readonly playerId: string; readonly displayName: string }[];
   readonly circuit: readonly number[];
-  readonly saved?: boolean;
-  readonly late?: boolean;
   readonly disabled: boolean;
   readonly onChange: (playerIds: readonly string[]) => void;
 }) {
@@ -22,7 +20,7 @@ export function ChurcieOrderControls({ mode, value, players, circuit, saved = fa
     [[value[0], value[1]], [value[2], value[3]]],
   ] : [];
   function choose(index: number, id: string) {
-    if (saved || disabled || id && !players.some((player) => player.playerId === id)) return;
+    if (disabled || id && !players.some((player) => player.playerId === id)) return;
     const next = Array.from({ length: 4 }, (_, position) => value[position] ?? '');
     const previous = next[index] ?? '';
     const other = id ? next.indexOf(id) : -1;
@@ -42,10 +40,6 @@ export function ChurcieOrderControls({ mode, value, players, circuit, saved = fa
       <span>{pairs.map((pair) => pair.map(name).join(' + ')).join(' vs ')}</span>
     </li>)}
   </ol>;
-  if (saved) return <details className="churcie-order">
-    <summary>Churchie partners{late ? ' · Order recorded late' : ''}</summary>
-    {complete ? pairings : <p role="alert">Saved partner order is unavailable. Refresh before reviewing Churchie results.</p>}
-  </details>;
   return <section className="churcie-order" aria-label="Churchie partner order">
     <h3>{mode === 'approach' ? `Choose partners after approaches on hole ${String(circuit[0] ?? '—')}` : 'Set the order at the tee'}</h3>
     <div className="churcie-order-fields">{labels.map((label, index) => <label key={label}>{label}

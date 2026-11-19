@@ -89,7 +89,8 @@ describe('Churchy workflow integration', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Enter scores' }));
     await userEvent.selectOptions(screen.getByLabelText('View group'), '2');
     const entry = within(screen.getByRole('article', { name: 'Fictional golfer 5 scorecard' }));
-    expect(entry.getByText(/Churchie relative handicap: 0/)).toBeVisible();
+    expect(entry.getByLabelText('Strokes off the low player: 0')).toHaveTextContent(', SO 0');
+    expect(entry.queryByText(/Churchie relative handicap|Relative strokes this hole/)).not.toBeInTheDocument();
     await userEvent.click(entry.getByRole('button', { name: 'Dots for Fictional golfer 5' }));
     await userEvent.click(within(screen.getByRole('dialog')).getByLabelText(/Sticky confirmed/));
     await userEvent.click(screen.getByRole('button', { name: 'Return to score entry' }));
