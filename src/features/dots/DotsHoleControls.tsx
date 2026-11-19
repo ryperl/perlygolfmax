@@ -8,7 +8,7 @@ import './dots-entry.css';
 
 export function DotsHoleControls({ game, holeNumber, par, playerPars, etag, saved, draft, players, context, disabled, onChange,
   playerId: selectedPlayerId, groupOnly = false, rotation, rotationLocked = false, specialLabels, contextLabel = 'Wolf',
-  contextPreview = false, allowMurphyPresses = false, scoreDerivedMurphy = false, playerScores }: {
+  contextPreview = false, allowMurphyPresses = false, scoreDerivedMurphy = false, scoreDerivedParee = false, playerScores }: {
   readonly game: DotsGameDefinition;
   readonly holeNumber: number;
   readonly par: number;
@@ -29,6 +29,7 @@ export function DotsHoleControls({ game, holeNumber, par, playerPars, etag, save
   readonly contextPreview?: boolean;
   readonly allowMurphyPresses?: boolean;
   readonly scoreDerivedMurphy?: boolean;
+  readonly scoreDerivedParee?: boolean;
   readonly playerScores?: readonly { readonly playerId: string; readonly score: HoleScore | undefined }[] | undefined;
 }) {
   const record = draft ?? saved ?? { number: holeNumber, gameId: game.id, gameEtag: etag, players: [], contests: [] };
@@ -76,7 +77,7 @@ export function DotsHoleControls({ game, holeNumber, par, playerPars, etag, save
       const controls = <DotsPlayerControls game={game} declaration={declaration} name={name(playerId)}
         par={playerPars?.find((entry) => entry.playerId === playerId)?.par ?? par}
         saved={saved?.players.find((entry) => entry.playerId === playerId)} onChange={changePlayer} specialLabels={specialLabels}
-        allowMurphyPresses={allowMurphyPresses} scoreDerivedMurphy={scoreDerivedMurphy}
+        allowMurphyPresses={allowMurphyPresses} scoreDerivedMurphy={scoreDerivedMurphy} scoreDerivedParee={scoreDerivedParee}
         score={playerScores?.find((entry) => entry.playerId === playerId)?.score} />;
       return selectedPlayerId ? <div key={playerId}>{controls}</div>
         : <details key={playerId}><summary>{name(playerId)} · Specials and calls</summary>{controls}</details>;

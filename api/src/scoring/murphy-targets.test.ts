@@ -324,20 +324,25 @@ describe('score-derived Murphy authoritative persistence and negotiation', () =>
     const f = await testerFixture();
     const game: ChurchyGameDefinitionV3 = { id: identifier(26600), name: 'Churchie', kind: 'churchy', version: 3,
       basis: 'net', groupNumber: 1, playerIds: f.input.playerIds.slice(0, 4), orderMode: 'tee',
-      amountPerDotMinor: 0, currency: 'USD', specials: [{ kind: 'murphy', units: 1 }] };
+      amountPerDotMinor: 0, currency: 'USD', specials: [{ kind: 'murphy', units: 1 }, { kind: 'paree', units: 1 }] };
     const configured = await f.scores.saveGames(creator, event.id, f.roundId, [game], null, identifier(26601));
     await f.scores.write(creator, event.id, f.roundId, f.playerId, 1, { kind: 'strokes', strokes: 4,
       churchy: { version: 3, gameId: game.id, gameEtag: configured.round.games?.configuration.etag ?? '', number: 1, contests: [],
-        players: [{ playerId: f.playerId, counts: {}, calls: [{ id: identifier(26602), kind: 'murphy', result: 'pending', murphyTarget: 'par' }] }] } },
+        players: [{ playerId: f.playerId, counts: {}, calls: [
+          { id: identifier(26602), kind: 'murphy', result: 'pending', murphyTarget: 'par' },
+          { id: identifier(26604), kind: 'paree', result: 'pending', pareeTarget: 'par' },
+        ] }] } },
     null, identifier(26603));
     const api = { ...f, verify: vi.fn().mockResolvedValue(creator), limiter: { check: vi.fn().mockResolvedValue(undefined) } };
     const response = await createTesterHandler(() => api, 'scores')(new HttpRequest({
-      url: 'https://fictional.example.test/api/fixture?murphy=score-v1', method: 'GET',
+      url: 'https://fictional.example.test/api/fixture?murphy=score-v1&paree=score-v1', method: 'GET',
       params: { id: event.id, roundId: f.roundId }, headers: { authorization: f.header },
     }), new InvocationContext({ invocationId: 'fictional-tester-murphy', logHandler: () => undefined }));
     expect(response.status).toBe(200);
     expect(isRoundScores(response.jsonBody)).toBe(true);
     expect(JSON.stringify(response.jsonBody)).not.toContain('murphyTarget');
     expect(JSON.stringify(response.jsonBody)).not.toContain('churchyMurphyTargets');
+    expect(JSON.stringify(response.jsonBody)).not.toContain('pareeTarget');
+    expect(JSON.stringify(response.jsonBody)).not.toContain('churchyPareeTargets');
   });
 });

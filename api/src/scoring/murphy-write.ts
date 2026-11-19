@@ -11,14 +11,18 @@ export function retainMurphyTargets(score: HoleScore, saved: HoleScore, round: D
     calls: player.calls.map((call) => {
       const priorPlayer = previous.players.find((entry) => entry.calls.some((entry) => entry.id === call.id));
       const prior = priorPlayer?.calls.find((entry) => entry.id === call.id);
-      if (call.murphyTarget !== undefined || prior?.murphyTarget === undefined) return call;
+      if (prior?.murphyTarget === undefined && prior?.pareeTarget === undefined) return call;
+      const paree = prior.pareeTarget !== undefined;
+      if (paree ? call.pareeTarget !== undefined : call.murphyTarget !== undefined) return call;
       const raw = round.cards.find((card) => card.playerId === player.playerId)?.holes.find((hole) => hole.number === extras.number)?.score;
       const par = (round.playerLayouts?.find((entry) => entry.playerId === player.playerId)?.layout ?? round.layout)
         .find((hole) => hole.number === extras.number)?.par;
-      if (priorPlayer?.playerId !== player.playerId || call.kind !== 'murphy' || call.result !== dotsCallResult(prior, raw, par)) {
-        throw new ApiError(409, 'CHURCHY_MURPHY_REFRESH_REQUIRED');
+      if (priorPlayer?.playerId !== player.playerId || call.kind !== prior.kind || call.result !== dotsCallResult(prior, raw, par)) {
+        throw new ApiError(409, paree ? 'CHURCHY_PAREE_REFRESH_REQUIRED' : 'CHURCHY_MURPHY_REFRESH_REQUIRED');
       }
-      return { ...call, result: 'pending' as const, murphyTarget: prior.murphyTarget };
+      return { ...call, result: 'pending' as const,
+        ...(prior.pareeTarget !== undefined ? { pareeTarget: prior.pareeTarget } : {}),
+        ...(prior.murphyTarget !== undefined ? { murphyTarget: prior.murphyTarget } : {}) };
     }),
   })) } };
 }

@@ -327,6 +327,10 @@
   Preserve manual calls until explicit opt-in, target identities and raw-only
   edits. Negotiate target-aware transport/capability and project compatible
   reads for older clients; never make old browsers reject entire scorecards.
+  Paree has independent explicit par-target opt-in/capability/negotiation and
+  score-derived gross par-or-better outcomes. Keep blanks pending, configured
+  units/repeated calls/team attribution intact, and legacy manual results until
+  explicit opt-in. Raw-only corrections never require a second declaration save.
   Category holes use the captured default tee; source qualifications use
   personal tees. Shared presets copy configuration into games, never bind
   live settings. Custom presets are device-local config/units only, injected

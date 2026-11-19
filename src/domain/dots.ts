@@ -67,11 +67,14 @@ export interface DotsCall {
   readonly result: 'pending' | 'success' | 'failure';
   readonly murphyPresses?: 0 | 1 | 2;
   readonly murphyTarget?: 'par' | 'birdie';
+  readonly pareeTarget?: 'par';
 }
 
 export function dotsCallResult(call: DotsCall, score: HoleScore | undefined, par: number | undefined): DotsCall['result'] {
-  if (call.murphyTarget === undefined || call.kind !== 'murphy') return call.result;
+  if (!(call.kind === 'murphy' && call.murphyTarget !== undefined)
+    && !(call.kind === 'paree' && call.pareeTarget === 'par')) return call.result;
   if (!score || score.kind === 'unplayed') return 'pending';
+  if (call.pareeTarget !== undefined && (par === undefined || !Number.isSafeInteger(par) || par < 1)) return 'pending';
   if (score.kind !== 'strokes') return 'failure';
   if (par === undefined || !Number.isSafeInteger(par) || par < 1) return 'pending';
   return score.strokes <= par - (call.murphyTarget === 'birdie' ? 1 : 0) ? 'success' : 'failure';
@@ -184,13 +187,15 @@ export function dotsAutomaticWriteConflicts(
   before: DotRoundInput, after: DotRoundInput,
   previous: readonly DotsHoleRecord[], records: readonly DotsHoleRecord[],
 ): readonly string[] {
-  if (!records.some((record) => record.players.some((player) => player.calls.some((call) => call.result === 'failure' || call.murphyTarget !== undefined)))) return [];
+  if (!records.some((record) => record.players.some((player) => player.calls.some((call) =>
+    call.result === 'failure' || call.murphyTarget !== undefined || call.pareeTarget !== undefined)))) return [];
   const oldAwards = dotsAutomaticWriteAwards(game, before, previous), awards = dotsAutomaticWriteAwards(game, after, records);
   const orderActivated = !previous.some((record) => record.rotation !== undefined)
     && records.some((record) => record.rotation !== undefined);
   const canonical = (player: DotsPlayerDeclaration | undefined) => player && JSON.stringify({
     playerId: player.playerId, counts: Object.entries(player.counts).sort(([a], [b]) => a.localeCompare(b)),
-    calls: player.calls.map((call) => [call.id, call.kind, call.result, call.murphyPresses ?? null, call.murphyTarget ?? null]),
+    calls: player.calls.map((call) => [call.id, call.kind, call.result, call.murphyPresses ?? null,
+      call.murphyTarget ?? null, call.pareeTarget ?? null]),
   });
   return [...new Set(records.flatMap((record) => record.players.flatMap((player) => {
     const prior = previous.find((entry) => entry.number === record.number)?.players.find((entry) => entry.playerId === player.playerId);
@@ -307,6 +312,8 @@ export function dotsRecordsMatchGame(
           && (profile !== 'churcie-v3' || call.kind !== 'murphy' || ![0, 1, 2].includes(call.murphyPresses))) return false;
         if (call.murphyTarget !== undefined && (profile !== 'churcie-v3' || call.kind !== 'murphy'
           || !['par', 'birdie'].includes(call.murphyTarget) || call.result !== 'pending')) return false;
+        if (call.pareeTarget !== undefined && (profile !== 'churcie-v3' || call.kind !== 'paree'
+          || call.result !== 'pending')) return false;
         if (call.result === 'success' && score && score.kind !== 'unplayed'
           && (score.kind !== 'strokes' || par === undefined
             || (call.kind === 'pully-murphy' ? score.strokes !== par : score.strokes > par))) return false;

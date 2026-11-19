@@ -16,6 +16,32 @@ afterAll(() => {
 });
 
 describe('Churchie default named category controls', () => {
+  it('gates Paree score outcomes independently from Murphy and preserves manual Paree until explicit opt-in', () => {
+    const f = churchyV3Fixture(9, 1, 'tee');
+    const round = { ...f.round(), churchyPareeTargets: true as const };
+    const saved: ChurchySpecialsV3 = { version: 3, gameId: f.game.id,
+      gameEtag: round.games?.configuration.etag ?? '', number: 1, contests: [],
+      players: [{ playerId: f.ids[0] ?? '', counts: {}, calls: [{
+        id: 'legacy-paree', kind: 'paree', result: 'failure',
+      }] }] };
+    const onChange = vi.fn();
+    const props = { round, game: f.game, saved, draft: undefined, disabled: false,
+      playerId: f.ids[0], holeNumber: 1, onChange };
+    const view = render(<ChurcieEntryControls {...props} playerScore={{ kind: 'strokes', strokes: 4 }} />);
+    fireEvent.click(screen.getByRole('button', { name: /Dots for .*Churchie/ }));
+    expect(screen.getByRole('checkbox', { name: /Paree called/ })).toBeChecked();
+    expect(screen.getByText('Manual result: Missed')).toBeVisible();
+    expect(screen.getByRole('button', { name: /Call Murphy/ })).toBeVisible();
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Use score outcome' }));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ players: [{
+      playerId: f.ids[0], counts: {}, calls: [{ id: 'legacy-paree', kind: 'paree', result: 'pending', pareeTarget: 'par' }],
+    }] }));
+    view.rerender(<ChurcieEntryControls {...props} round={f.round()} saved={undefined} />);
+    expect(screen.queryByRole('checkbox', { name: /Paree called/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Call Paree/ })).toBeVisible();
+  });
+
   it('uses entered gross rather than stale saved scores, keeps invalid input pending, and gates new Murphy controls on API capability', () => {
     const f = churchyV3Fixture(9, 1, 'tee');
     const round = { ...f.round(), churchyMurphyTargets: true as const };

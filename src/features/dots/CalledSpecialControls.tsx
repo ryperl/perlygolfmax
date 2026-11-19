@@ -2,7 +2,8 @@ import { dotsCallResult } from '../../domain/dots';
 import type { DotsCall } from '../../domain/dots';
 import type { HoleScore } from '../../domain/scoring';
 
-export function MurphyCallControls({ calls, name, score, par, blocked, onChange }: {
+export function CalledSpecialControls({ kind, calls, name, score, par, blocked, onChange }: {
+  readonly kind: 'murphy' | 'paree';
   readonly calls: readonly DotsCall[];
   readonly name: string;
   readonly score: HoleScore | undefined;
@@ -10,44 +11,51 @@ export function MurphyCallControls({ calls, name, score, par, blocked, onChange 
   readonly blocked: boolean;
   readonly onChange: (calls: readonly DotsCall[]) => void;
 }) {
-  const murphys = calls.filter((call) => call.kind === 'murphy');
+  const selected = calls.filter((call) => call.kind === kind);
+  const label = kind === 'murphy' ? 'Murphy' : 'Paree';
+  function newCall(): DotsCall {
+    return { id: crypto.randomUUID(), kind, result: 'pending',
+      ...(kind === 'murphy' ? { murphyTarget: 'par', murphyPresses: 0 } : { pareeTarget: 'par' }) };
+  }
+  function scoreTarget(call: DotsCall): DotsCall {
+    return { ...call, result: 'pending', ...(kind === 'murphy' ? { murphyTarget: 'par' } : { pareeTarget: 'par' }) };
+  }
   function replace(call: DotsCall, value: DotsCall) {
     onChange(calls.map((entry) => entry.id === call.id ? value : entry));
   }
-  const slots = murphys.length > 0 ? murphys : [undefined];
-  return <div className="dots-call-controls murphy-call-controls">
+  const slots = selected.length > 0 ? selected : [undefined];
+  return <div className="dots-call-controls">
     {slots.map((call, index) => {
-      const suffix = murphys.length > 1 ? ` ${String(index + 1)}` : '';
+      const suffix = selected.length > 1 ? ` ${String(index + 1)}` : '';
       const result = call ? dotsCallResult(call, score, par) : 'pending';
       const stage = call?.murphyPresses ?? 0;
-      const automatic = call?.murphyTarget !== undefined;
-      const target = par - (call?.murphyTarget === 'birdie' ? 1 : 0);
-      return <div className="dots-call murphy-call" key={index === 0 ? 'primary' : call?.id}>
+      const automatic = kind === 'murphy' ? call?.murphyTarget !== undefined : call?.pareeTarget !== undefined;
+      const target = par - (kind === 'murphy' && call?.murphyTarget === 'birdie' ? 1 : 0);
+      return <div className={`dots-call ${kind}-call${call ? '' : ' is-uncalled'}`} key={index === 0 ? 'primary' : call?.id}>
         <label className="dots-special-choice">
           <input type="checkbox" checked={call !== undefined} disabled={!call && blocked}
-            aria-label={`Murphy called${suffix} · ${name}`}
+            aria-label={`${label} called${suffix} · ${name}`}
             onChange={() => { onChange(call ? calls.filter((entry) => entry.id !== call.id)
-              : [...calls, { id: crypto.randomUUID(), kind: 'murphy',
-                result: 'pending', murphyTarget: 'par', murphyPresses: 0 }]); }} />
-          <span>Murphy called{suffix}</span>
+              : [...calls, newCall()]); }} />
+          <span>{label} called{suffix}</span>
         </label>
         {call && <>
-        <label className="dots-special-choice">
+        {kind === 'murphy' && <label className="dots-special-choice">
           <input type="checkbox" checked={call.murphyTarget === 'birdie'}
             disabled={par !== 4 && par !== 5 && call.murphyTarget !== 'birdie'}
             aria-label={`Murphy for birdie${suffix} · ${name}`}
             onChange={(event) => { replace(call, { ...call, result: 'pending',
               murphyTarget: event.target.checked ? 'birdie' : 'par' }); }} />
           <span>For birdie</span>
-        </label>
-        <p className="murphy-outcome" aria-live="polite">{automatic
+        </label>}
+        <p className="called-special-outcome" aria-live="polite">{automatic
           ? result === 'pending' ? 'Pending · enter a gross score'
             : `${result === 'success' ? 'Made' : 'Missed · opponents earn'} · needs ${String(target)} or better`
           : `Manual result: ${result === 'success' ? 'Made' : result === 'failure' ? 'Missed' : 'Pending'}`}</p>
         {!automatic && <button type="button" onClick={() => {
-          replace(call, { ...call, result: 'pending', murphyTarget: 'par' });
+          replace(call, scoreTarget(call));
         }}>Use score outcome{suffix}</button>}
-        <div className="dots-count-control"><span>Murphy stakes{suffix}</span>
+        {kind === 'murphy' && <div className="dots-count-control"><span>Murphy stakes{suffix}</span>
           <div className="dots-count-stepper">
             <button type="button" aria-label={`Decrease Murphy stakes${suffix} · ${name}`} disabled={stage === 0}
               onClick={() => { replace(call, { ...call, murphyPresses: stage === 2 ? 1 : 0 }); }}>−</button>
@@ -55,10 +63,12 @@ export function MurphyCallControls({ calls, name, score, par, blocked, onChange 
             <button type="button" aria-label={`Increase Murphy stakes${suffix} · ${name}`} disabled={stage === 2}
               onClick={() => { replace(call, { ...call, murphyPresses: stage === 0 ? 1 : 2 }); }}>+</button>
           </div>
-        </div>
+        </div>}
         </>}
       </div>;
     })}
-    {blocked && murphys.length === 0 && <small>Clear this golfer&apos;s Hogan before calling Murphy.</small>}
+    {kind === 'paree' && selected.length > 0 && <button type="button" aria-label={`Add another Paree call · ${name}`}
+      onClick={() => { onChange([...calls, newCall()]); }}>Add another Paree call</button>}
+    {blocked && selected.length === 0 && <small>Clear this golfer&apos;s Hogan before calling Murphy.</small>}
   </div>;
 }

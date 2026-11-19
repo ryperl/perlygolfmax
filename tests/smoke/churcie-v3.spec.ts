@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './test';
 import { churciePlayers, openChurcieV3Fixture } from './churcie-v3-fixture';
 import { dotsSpecialCatalog } from '../../src/domain/dots';
@@ -7,6 +7,18 @@ async function order(page: Page) {
   await page.getByRole('combobox', { name: 'Closest approach', exact: true }).selectOption(churciePlayers[1] ?? '');
   await page.getByRole('combobox', { name: 'Farthest approach', exact: true }).selectOption(churciePlayers[0] ?? '');
   await page.getByRole('combobox', { name: 'Next farthest approach', exact: true }).selectOption(churciePlayers[3] ?? '');
+}
+
+async function singleCollapsedOutline(checkbox: Locator) {
+  const borders = await checkbox.evaluate((element) => {
+    const label = element.closest('label'), frame = label?.closest('.dots-call');
+    if (!label || !frame) throw new Error('Missing collapsed called-special control');
+    return { outer: Number.parseFloat(getComputedStyle(frame).borderTopWidth),
+      inner: Number.parseFloat(getComputedStyle(label).borderTopWidth), height: label.getBoundingClientRect().height };
+  });
+  expect(borders.outer).toBe(0);
+  expect(borders.inner).toBeGreaterThan(0);
+  expect(borders.height).toBeGreaterThanOrEqual(44);
 }
 
 async function savePar(page: Page, hole: number) {
@@ -28,6 +40,7 @@ test('Churchie birdie Murphy permits par Sandy/Pully, retains target on retry/re
     const form = page.getByRole('form', { name: 'Group 1 hole 10 entry', exact: true });
     await form.getByRole('button', { name: 'Dots for Fictional golfer 2 · Churchie', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Dots · Fictional golfer 2', exact: true });
+    await singleCollapsedOutline(dialog.getByRole('checkbox', { name: 'Murphy called · Fictional golfer 2', exact: true }));
     await dialog.getByRole('checkbox', { name: 'Murphy called · Fictional golfer 2', exact: true }).check();
     await expect(dialog.getByText('Pending · enter a gross score', { exact: true })).toBeVisible();
     await dialog.getByRole('checkbox', { name: 'Murphy for birdie · Fictional golfer 2', exact: true }).check();
@@ -95,6 +108,62 @@ test('Churchie birdie Murphy permits par Sandy/Pully, retains target on retry/re
     expect(fixture.read().cards[0]?.holes.find((hole) => hole.number === 10)?.score.churchy).toEqual(canonical);
     expect(specials()).toContainEqual(expect.objectContaining({ special: 'Murphy', dots: 3,
       winners: expect.arrayContaining([churciePlayers[0], churciePlayers[1]]) }));
+    expect(fixture.counters().pageErrors).toEqual([]);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  } finally { await fixture.close(); }
+});
+
+test('Churchie Paree called derives par outcomes, survives retry/reload and recalculates through a raw-only correction', async ({ page }, testInfo) => {
+  const fixture = await openChurcieV3Fixture(page, testInfo, 'score-targets');
+  try {
+    await page.setViewportSize({ width: 320, height: 900 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
+    await order(page);
+    const form = page.getByRole('form', { name: 'Group 1 hole 10 entry', exact: true });
+    await form.getByRole('button', { name: 'Dots for Fictional golfer 2 · Churchie', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Dots · Fictional golfer 2', exact: true });
+    const paree = dialog.getByRole('checkbox', { name: 'Paree called · Fictional golfer 2', exact: true });
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+      await singleCollapsedOutline(paree);
+      await singleCollapsedOutline(dialog.getByRole('checkbox', { name: 'Murphy called · Fictional golfer 2', exact: true }));
+    }
+    await paree.check();
+    await expect(dialog.getByText('Pending · enter a gross score', { exact: true })).toBeVisible();
+    await expect(dialog.getByRole('combobox', { name: /^Paree call/ })).toHaveCount(0);
+    await expect(dialog.getByRole('checkbox', { name: /Murphy for birdie/ })).toHaveCount(0);
+    await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+    await form.getByRole('button', { name: 'Par for blanks', exact: true }).click();
+    await form.getByRole('button', { name: 'Dots for Fictional golfer 2 · Churchie', exact: true }).click();
+    await expect(dialog.getByText('Made · needs 4 or better', { exact: true })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+    fixture.failNextAcknowledgement();
+    await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('Service request failed (503)');
+    const first = fixture.counters().requests[0];
+    await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+    await expect(page.getByRole('form', { name: 'Group 1 hole 11 entry', exact: true })).toBeVisible();
+    expect(fixture.counters().requests[1]).toEqual(first);
+    expect(fixture.counters().writes).toBe(4);
+    const canonical = fixture.read().cards[0]?.holes.find((hole) => hole.number === 10)?.score.churchy;
+    expect(canonical).toMatchObject({ version: 3, players: [{
+      playerId: churciePlayers[1], calls: [{ kind: 'paree', result: 'pending', pareeTarget: 'par' }],
+    }] });
+    const pareeAward = () => fixture.read().games?.results.find((game) => game.kind === 'churchy')
+      ?.churchy?.holes.find((hole) => hole.number === 10)?.specials.find((special) => special.special === 'Paree');
+    expect(pareeAward()).toMatchObject({ dots: 1, winners: expect.arrayContaining([churciePlayers[0], churciePlayers[1]]) });
+    await page.reload();
+    await page.getByRole('combobox', { name: 'Jump to hole', exact: true }).selectOption('10');
+    await form.getByLabel('Fictional golfer 2 score', { exact: true }).fill('5');
+    await form.getByRole('button', { name: 'Dots for Fictional golfer 2 · Churchie', exact: true }).click();
+    await expect(paree).toBeChecked();
+    await expect(dialog.getByText('Missed · opponents earn · needs 4 or better', { exact: true })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+    await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+    await expect(page.getByRole('form', { name: 'Group 1 hole 11 entry', exact: true })).toBeVisible();
+    expect(fixture.counters().writes).toBe(5);
+    expect(fixture.read().cards[0]?.holes.find((hole) => hole.number === 10)?.score.churchy).toEqual(canonical);
+    expect(pareeAward()).toMatchObject({ dots: 1, winners: expect.arrayContaining([churciePlayers[2], churciePlayers[3]]) });
     expect(fixture.counters().pageErrors).toEqual([]);
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   } finally { await fixture.close(); }

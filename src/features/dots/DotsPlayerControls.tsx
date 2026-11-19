@@ -1,10 +1,10 @@
 import { dotsCallResult, dotsDeclarationWriteIssues, dotsManualKinds, dotsSpecialCatalog } from '../../domain/dots';
 import type { DotsCall, DotsGameDefinition, DotsPlayerDeclaration, DotsSpecialKind } from '../../domain/dots';
 import type { HoleScore } from '../../domain/scoring';
-import { MurphyCallControls } from './MurphyCallControls';
+import { CalledSpecialControls } from './CalledSpecialControls';
 
 export function DotsPlayerControls({ game, declaration, saved, name, par, onChange, specialLabels, allowMurphyPresses = false,
-  scoreDerivedMurphy = false, score }: {
+  scoreDerivedMurphy = false, scoreDerivedParee = false, score }: {
   readonly game: DotsGameDefinition;
   readonly declaration: DotsPlayerDeclaration;
   readonly saved: DotsPlayerDeclaration | undefined;
@@ -14,10 +14,11 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
   readonly specialLabels?: Readonly<Partial<Record<DotsSpecialKind, string>>> | undefined;
   readonly allowMurphyPresses?: boolean;
   readonly scoreDerivedMurphy?: boolean;
+  readonly scoreDerivedParee?: boolean;
   readonly score?: HoleScore | undefined;
 }) {
   const enabled = (kind: DotsSpecialKind) => game.specials.some((special) => special.kind === kind);
-  const context = scoreDerivedMurphy ? { score, par } : undefined;
+  const context = scoreDerivedMurphy || scoreDerivedParee ? { score, par } : undefined;
   const issues = dotsDeclarationWriteIssues(declaration, context);
   const failedCallConflict = issues.conflicts.some((issue) => issue.code === 'FAILED_CALL_SPECIAL');
   const hasFailedCall = declaration.calls.some((call) => dotsCallResult(call, score, par) === 'failure'
@@ -78,10 +79,13 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
               onClick={() => { changeCount(special.kind, count + 1); }}>+</button>
           </div></div>;
     })}
-    {scoreDerivedMurphy && enabled('murphy') && <MurphyCallControls calls={declaration.calls} name={name}
+    {scoreDerivedMurphy && enabled('murphy') && <CalledSpecialControls kind="murphy" calls={declaration.calls} name={name}
       score={score} par={par} blocked={(declaration.counts.hogan ?? 0) > 0}
       onChange={(value) => { onChange({ ...declaration, calls: value }); }} />}
-    {calls.filter((kind) => enabled(kind) && !(scoreDerivedMurphy && kind === 'murphy')).map((kind) => {
+    {scoreDerivedParee && enabled('paree') && <CalledSpecialControls kind="paree" calls={declaration.calls} name={name}
+      score={score} par={par} blocked={false} onChange={(value) => { onChange({ ...declaration, calls: value }); }} />}
+    {calls.filter((kind) => enabled(kind) && !(scoreDerivedMurphy && kind === 'murphy')
+      && !(scoreDerivedParee && kind === 'paree')).map((kind) => {
       const callBlocked = kind === 'murphy' && (declaration.counts.hogan ?? 0) > 0;
       return <div className="dots-call-controls" key={kind}>
         <button type="button" aria-label={`Call ${label(kind)} · ${name}`} disabled={callBlocked} onClick={() => {

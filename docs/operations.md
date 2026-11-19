@@ -340,6 +340,16 @@ target-aware calls on old/raw-only writes; incompatible manual overrides must
 fail explicitly, never silently downgrade the target or acknowledge an ignored
 edit. Historical projections must not invent past results from current scores.
 
+Paree uses an independent per-call `pareeTarget: "par"` opt-in with canonical
+pending and score-derived gross-personal-par outcomes. The called checkbox does
+not infer a call from par, and blanks remain pending. Preserve configured units,
+repeated call IDs and current partner/opponent attribution. Legacy manual Paree
+records remain unchanged until explicit opt-in. Negotiate `paree=score-v1`
+independently of Murphy; only matching responses expose `churchyPareeTargets`.
+Murphy-aware older clients must still receive compatible Paree projections.
+Raw-only score corrections recalculate outcomes without rewriting declarations
+or adding a second save; retained older-client echoes cannot erase the opt-in.
+
 New Churchie defaults enable KP and Blue Plate at one unit each. KP carries
 only to the next default-tee par 3; Blue Plate is closest qualifying GIR on
 default-tee par 5s and carries only to the next par 5. Categories resolve

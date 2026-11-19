@@ -129,6 +129,9 @@ function validateRoundScores(value: unknown, lean = false): value is RoundScores
   if (isRecord(value) && value.churchyMurphyTargets !== undefined
     && (value.churchyMurphyTargets !== true || value.churchyEnabled !== true
       || isRecord(value.permissions) && value.permissions.role === 'tester')) return false;
+  if (isRecord(value) && value.churchyPareeTargets !== undefined
+    && (value.churchyPareeTargets !== true || value.churchyEnabled !== true
+      || isRecord(value.permissions) && value.permissions.role === 'tester')) return false;
   if (isRecord(value) && value.dotsSpecialKinds !== undefined && (!Array.isArray(value.dotsSpecialKinds)
     || !value.dotsSpecialKinds.every((kind: unknown) => dotsSpecialCatalog.some((entry) => entry.kind === kind))
     || new Set(value.dotsSpecialKinds).size !== value.dotsSpecialKinds.length)) return false;

@@ -16,7 +16,8 @@ import { dotsRecordsFor } from '../../domain/game-declarations';
 function changedDeclarationConflicts(players: readonly DotsPlayerDeclaration[], previous: readonly DotsPlayerDeclaration[] = []): boolean {
   const canonical = (player: DotsPlayerDeclaration | undefined) => player && JSON.stringify({
     playerId: player.playerId, counts: Object.entries(player.counts).sort(([a], [b]) => a.localeCompare(b)),
-    calls: player.calls.map((call) => [call.id, call.kind, call.result, call.murphyPresses ?? null]),
+    calls: player.calls.map((call) => [call.id, call.kind, call.result, call.murphyPresses ?? null,
+      call.murphyTarget ?? null, call.pareeTarget ?? null]),
   });
   return players.some((player) => canonical(player) !== canonical(previous.find((entry) => entry.playerId === player.playerId))
     && dotsDeclarationWriteIssues(player).conflicts.length > 0);

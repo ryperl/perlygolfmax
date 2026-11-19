@@ -60,6 +60,7 @@ export function ChurcieEntryControls({ round, game, holeNumber, saved, draft, di
     contextPreview={draft?.rotation !== undefined && acknowledged.rotation === undefined}
     specialLabels={{ dime: 'Sticky' }} allowMurphyPresses
     scoreDerivedMurphy={round.churchyMurphyTargets === true}
+    scoreDerivedParee={round.churchyPareeTargets === true}
     playerScores={players.map((card) => ({ playerId: card.playerId,
       score: (card.playerId === playerId && playerScore !== undefined
         ? playerScore : card.holes.find((hole) => hole.number === holeNumber)?.score) ?? undefined }))}

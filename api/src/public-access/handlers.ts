@@ -18,7 +18,7 @@ import type { TableQuickRoundStore } from '../quick-round/store.js';
 import { maximumGameConfigurationBytes } from '../../../src/domain/games.js';
 import { isRoundGameDefinitions } from '../../../src/contracts/games.js';
 import { leanRoundScores, leanScoreWriteResult } from '../../../src/contracts/lean-round-scores.js';
-import { murphyTransport, supportsMurphyTargets } from '../scoring/murphy-transport.js';
+import { murphyTransport, supportsMurphyTargets, supportsPareeTargets } from '../scoring/murphy-transport.js';
 
 export type PublicAction = 'events' | 'workspace' | 'scores' | 'score-hole' | 'score-game-hole' | 'event-leaderboard' | 'purse' | 'games';
 export interface PublicApi {
@@ -60,8 +60,9 @@ function continuationToken(request: HttpRequest): string | undefined {
 export function createPublicHandler(resolveApi: () => PublicApi, action: PublicAction) {
   return async (request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> => {
     const negotiated = supportsMurphyTargets(request);
-    const send = (value: unknown) => response(200, murphyTransport(value, negotiated));
-    const read = (value: unknown) => privateReadResponse(request, murphyTransport(value, negotiated));
+    const pareeTargets = supportsPareeTargets(request);
+    const send = (value: unknown) => response(200, murphyTransport(value, negotiated, pareeTargets));
+    const read = (value: unknown) => privateReadResponse(request, murphyTransport(value, negotiated, pareeTargets));
     try {
       const api = resolveApi();
       if (request.method !== (action === 'score-hole' || action === 'score-game-hole' || action === 'games' ? 'PUT' : 'GET')) return response(405, { code: 'METHOD_NOT_ALLOWED' });
@@ -102,7 +103,7 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
       const lean = request.query.get('format') === 'lean';
       if (action === 'scores') {
         const round = await api.scores.get(identity, eventId, roundId);
-        return response(200, lean ? privateReadResponse(request, leanRoundScores(round, negotiated)) : read(round));
+        return response(200, lean ? privateReadResponse(request, leanRoundScores(round, negotiated, pareeTargets)) : read(round));
       }
       if (action === 'games') {
         const requestId = uuid(request.headers.get('Idempotency-Key'));
@@ -113,7 +114,7 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
         if (!isRecord(received.value) || Object.keys(received.value).length !== 1
           || !isRoundGameDefinitions(received.value.games)) throw new ApiError(400, 'INVALID_GAME_SETUP');
         const result = await api.scores.saveGames(identity, eventId, roundId, received.value.games, etag, requestId);
-        return lean ? response(200, { ...result, round: leanRoundScores(result.round, negotiated) }) : send(result);
+        return lean ? response(200, { ...result, round: leanRoundScores(result.round, negotiated, pareeTargets) }) : send(result);
       }
       const playerId = uuid(request.params.playerId);
       const requestId = uuid(request.headers.get('Idempotency-Key'));
@@ -130,7 +131,7 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
       if (action === 'score-game-hole' && !body.score.nassau?.length && !body.score.wolf?.length
         && !body.score.dots?.length && body.score.churchy?.version !== 3) throw new ApiError(400, 'INVALID_GAME_SCORE');
       const result = await api.scores.write(identity, eventId, roundId, playerId, Number(hole), body.score, etag, requestId, body.inputRevision);
-      return lean ? response(200, leanScoreWriteResult(result, negotiated)) : send(result);
+      return lean ? response(200, leanScoreWriteResult(result, negotiated, pareeTargets)) : send(result);
     } catch (error) {
       const status = error instanceof ApiError ? error.status : 503;
       const code = error instanceof ApiError ? error.code : 'SERVICE_UNAVAILABLE';

@@ -24,8 +24,8 @@ function leanWolf(value: WolfResults, game: WolfGameDefinition | undefined, roun
 }
 
 /** Omit evidence and duplicate derived views, never captured inputs or canonical write receipts. */
-export function leanRoundScores(input: RoundScores, murphyTargets = false) {
-  const round = murphyRoundScores(input, murphyTargets);
+export function leanRoundScores(input: RoundScores, murphyTargets = false, pareeTargets = false) {
+  const round = murphyRoundScores(input, murphyTargets, pareeTargets);
   const games = round.games;
   return {
     version: 1, kind: 'round-scores-lean', round: {
@@ -46,8 +46,9 @@ export function leanRoundScores(input: RoundScores, murphyTargets = false) {
   };
 }
 
-export function leanScoreWriteResult(value: ScoreWriteResult, murphyTargets = false) {
-  return { round: leanRoundScores(value.round, murphyTargets), change: without(murphyScoreChange(value.change, murphyTargets, value.round), 'dotAwardAudit') };
+export function leanScoreWriteResult(value: ScoreWriteResult, murphyTargets = false, pareeTargets = false) {
+  return { round: leanRoundScores(value.round, murphyTargets, pareeTargets),
+    change: without(murphyScoreChange(value.change, murphyTargets, value.round, pareeTargets), 'dotAwardAudit') };
 }
 
 /**

@@ -15,7 +15,7 @@ import { isEventSkinsConfiguration } from '../../../src/contracts/event-skins.js
 import { calculateEventSkinsDetails } from '../../../src/domain/event-skins.js';
 import type { HoleScore } from '../../../src/domain/scoring.js';
 import { leanRoundScores, leanScoreWriteResult } from '../../../src/contracts/lean-round-scores.js';
-import { murphyTransport, supportsMurphyTargets } from './murphy-transport.js';
+import { murphyTransport, supportsMurphyTargets, supportsPareeTargets } from './murphy-transport.js';
 
 export interface ScoringApi {
   readonly verify: VerifyIdentity;
@@ -50,8 +50,9 @@ export function parseScoreWriteBody(body: unknown): { readonly score: HoleScore;
 export function createScoringHandler(resolveApi: () => ScoringApi, action: ScoringAction) {
   return async (request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> => {
     const negotiated = supportsMurphyTargets(request);
-    const send = (value: unknown) => response(200, murphyTransport(value, negotiated));
-    const read = (value: unknown) => privateReadResponse(request, murphyTransport(value, negotiated));
+    const pareeTargets = supportsPareeTargets(request);
+    const send = (value: unknown) => response(200, murphyTransport(value, negotiated, pareeTargets));
+    const read = (value: unknown) => privateReadResponse(request, murphyTransport(value, negotiated, pareeTargets));
     try {
       const api = resolveApi();
       const identity = await api.verify(request.headers.get('authorization'));
@@ -74,15 +75,15 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
         const value = await api.scores.leaderboard(identity, eventId,
           (units) => api.limiter.check(identity, 'scores-read', units));
         if (request.query.get('view') === 'event-skins-details') {
-          return send(read(calculateEventSkinsDetails(value.workspace, value.roundScores)));
+          return response(200, read(calculateEventSkinsDetails(value.workspace, value.roundScores)));
         }
-        return send(read(value));
+        return response(200, read(value));
       }
       const roundId = uuid(request.params.roundId);
       const lean = request.query.get('format') === 'lean';
       if (action === 'scores') {
         const round = await api.scores.get(identity, eventId, roundId);
-        return send(read(lean ? leanRoundScores(round, negotiated) : round));
+        return response(200, lean ? privateReadResponse(request, leanRoundScores(round, negotiated, pareeTargets)) : read(round));
       }
       if (action === 'round-kp') {
         const requestId = uuid(request.headers.get('Idempotency-Key'));
@@ -95,7 +96,7 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
         }
         if (!isKpSelection(body)) throw new ApiError(400, 'INVALID_KP_SETUP');
         const result = await api.scores.saveKp(identity, eventId, roundId, body, expectedEtag, requestId);
-        return send(lean ? { ...result, round: leanRoundScores(result.round, negotiated) } : result);
+        return lean ? response(200, { ...result, round: leanRoundScores(result.round, negotiated, pareeTargets) }) : send(result);
       }
       if (action === 'round-games') {
         const requestId = uuid(request.headers.get('Idempotency-Key'));
@@ -110,7 +111,7 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
           throw new ApiError(400, 'INVALID_GAME_SETUP');
         }
         const result = await api.scores.saveGames(identity, eventId, roundId, body.games, expectedEtag, requestId);
-        return send(lean ? { ...result, round: leanRoundScores(result.round, negotiated) } : result);
+        return lean ? response(200, { ...result, round: leanRoundScores(result.round, negotiated, pareeTargets) }) : send(result);
       }
       const playerId = uuid(request.params.playerId);
       if (action === 'score-history') return send(await api.scores.history(identity, eventId, roundId, playerId, readCursor(request)));
@@ -129,7 +130,7 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
         && !parsed.score.dots?.length && parsed.score.churchy?.version !== 3) throw new ApiError(400, 'INVALID_GAME_SCORE');
       const result = await api.scores.write(identity, eventId, roundId, playerId, Number(rawHole),
         parsed.score, expectedEtag, requestId, parsed.inputRevision);
-      return send(lean ? leanScoreWriteResult(result, negotiated) : result);
+      return lean ? response(200, leanScoreWriteResult(result, negotiated, pareeTargets)) : send(result);
     } catch (error) {
       const status = error instanceof ApiError ? error.status : 503;
       const code = error instanceof ApiError ? error.code : 'SERVICE_UNAVAILABLE';

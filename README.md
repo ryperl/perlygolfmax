@@ -1067,6 +1067,14 @@ Existing manual calls retain their saved result until explicit **Use score
 outcome**, target change or removal; merely opening a card never converts them.
 Older APIs retain manual controls, and older clients receive compatible reads.
 
+On a Paree-aware API, **Paree called** similarly derives made/missed from gross
+par or better, without an outcome dropdown, birdie target or press multiplier.
+Missing scores stay pending; worse numeric scores, pickup and DNF award the
+configured Paree units (normally one) to the opposing side. **Add another Paree
+call** retains separately called repetitions. Manual saved Parees require
+explicit **Use score outcome**; no old result is silently converted.
+Unchecked called controls have one outline; expanded controls retain grouping.
+
 **Specials and presets** is collapsed during setup. Built-in Dots and Churchie
 presets provide different default units; applying one copies settings into the
 game and never changes other saved games. Named custom presets are saved in
