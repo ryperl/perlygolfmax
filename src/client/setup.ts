@@ -33,6 +33,7 @@ export function createSetupClient(apiUrl: string, getToken: () => Promise<string
         || input.rounds.some((requested) => {
           const saved = value.rounds.find((round) => round.id === requested.id);
           return !saved || requested.teeTime !== undefined && requested.teeTime !== (saved.teeTime ?? '')
+            || requested.roundSide !== undefined && requested.roundSide !== (saved.roundSide ?? 'full')
             || requested.startDate !== undefined && requested.startDate !== (saved.startDate ?? '')
             || requested.groups.some((group) => group.startingHole !== undefined
             && !saved.groups.some((other) => other.number === group.number

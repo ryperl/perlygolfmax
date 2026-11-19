@@ -33,6 +33,8 @@ function isPlayer(value: unknown, game: NewRoundGameDefinition): value is GamePl
     || value.holesScored < 0 || value.holesScored > value.totalHoles
     || !isRecord(value.strokeGame)) return false;
   const score = value.strokeGame;
+  const firstNumber = isRecord(value.holes[0]) ? value.holes[0].number : undefined;
+  if (firstNumber !== 1 && !(value.holes.length === 9 && firstNumber === 10)) return false;
   const reasons = ['missing-score-data', 'missing-handicap-index', 'invalid-handicap-index', 'missing-tee-ratings',
     'missing-stroke-index', 'arithmetic-range', 'invalid-stroke-score'];
   if (!keys(score, ['kind', 'version', 'holes', 'frontTotal', 'backTotal', 'total',
@@ -43,12 +45,12 @@ function isPlayer(value: unknown, game: NewRoundGameDefinition): value is GamePl
     || score.unavailableReason !== undefined && (typeof score.unavailableReason !== 'string' || !reasons.includes(score.unavailableReason))
     || value.unavailableReason !== undefined && (typeof value.unavailableReason !== 'string' || !reasons.includes(value.unavailableReason))
     || !Array.isArray(score.holes) || score.holes.length !== value.totalHoles
-    || !score.holes.every((hole: unknown, index: number) => isHole(hole, index + 1))) return false;
+    || !score.holes.every((hole: unknown, index: number) => isHole(hole, index + firstNumber))) return false;
   const holes: StrokeGameHole[] = score.holes;
   const received: number[] = [];
   for (const [index, hole] of value.holes.entries()) {
     if (!isRecord(hole) || !keys(hole, ['number', 'points', 'strokesReceived'])
-      || hole.number !== index + 1 || hole.points !== null || !nullableInteger(hole.strokesReceived)) return false;
+      || hole.number !== index + firstNumber || hole.points !== null || !nullableInteger(hole.strokesReceived)) return false;
     const raw = holes[index];
     if (!raw) return false;
     if (game.kind === 'ball-drop' && (raw.value !== null || raw.countingPlayerIds.length)) return false;

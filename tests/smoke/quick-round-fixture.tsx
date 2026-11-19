@@ -6,6 +6,7 @@ import { PublicEventsPage } from '../../src/app/PublicEventsPage';
 import { createPublicServices } from '../../src/client/public-events';
 import { fictionalCapturedRound, fictionalGamesRound } from './games-fixture-data';
 import '../../src/app/styles.css';
+import { roundTee } from '../../src/domain/round-tee';
 
 const players = Array.from({ length: 5 }, (_, index) => ({
   id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
@@ -20,13 +21,15 @@ const listedEvent = { id: '00000000-0000-4000-8000-000000000050', name: 'Fiction
 function confirm(eventId: string, input: EventSetupInput): EventWorkspace {
   const round = input.rounds[0];
   if (!round) throw new Error('Missing fictional round');
+  const teeProfile = roundTee(fictionalCapturedRound.teeProfile, round.roundSide);
+  if (!teeProfile) throw new Error('Missing fictional tee layout');
   setupInput = input;
   workspace = {
     quickRound: true, publicAccess: true, canViewScores: true,
     event: { id: eventId, name: input.name, role: 'viewer', status: 'active', quickRound: true, etag: 'quick-v1', createdAt: '2026-01-01T00:00:00Z' },
     location: input.location, etag: 'quick-v1', allowPerGolferTees: input.allowPerGolferTees ?? false,
     roster: input.playerIds.map((playerId) => ({ playerId, displayName: players.find((player) => player.id === playerId)?.displayName ?? 'Fictional golfer', handicapIndexValue: '0' })),
-    rounds: [{ ...fictionalCapturedRound, ...round, scoringStarted: false,
+    rounds: [{ ...fictionalCapturedRound, ...round, teeProfile, scoringStarted: false,
       players: input.playerIds.map((playerId) => ({ playerId, displayName: 'Fictional golfer', handicapIndexValue: '0' })) }],
   };
   return workspace;
@@ -49,10 +52,12 @@ const base = createPublicServices(`${window.location.origin}/__unused-public-api
 const scores: ScoresClient = {
   ...base.scores,
   load: (eventId, roundId) => Promise.resolve({ ...fictionalGamesRound, eventId, roundId, quickRound: true, churchyEnabled: true,
+    layout: workspace?.rounds[0]?.teeProfile.holes ?? fictionalGamesRound.layout,
+    teeRatings: workspace?.rounds[0]?.teeProfile.ratings ?? fictionalCapturedRound.teeProfile.ratings,
     churchyRulesVersions: [1, 2, 3],
     eventName: setupInput?.name ?? 'Fictional Quick round', groups: setupInput?.rounds[0]?.groups ?? [],
     cards: players.filter((player) => setupInput?.playerIds.includes(player.id)).map((player) => ({ playerId: player.id, displayName: player.displayName, etag: null, updatedAt: null,
-      holes: fictionalCapturedRound.teeProfile.holes.map((hole) => ({ number: hole.number, score: { kind: 'unplayed' } })) })),
+      holes: (workspace?.rounds[0]?.teeProfile.holes ?? fictionalCapturedRound.teeProfile.holes).map((hole) => ({ number: hole.number, score: { kind: 'unplayed' } })) })),
     setupLocked: false, lastUpdatedAt: null, games: { configuration: { eventId, roundId, etag: null, games: [] }, results: [] },
     permissions: { role: 'public', canManageGames: true, writePlayerIds: setupInput?.playerIds ?? [] },
   }),

@@ -15,6 +15,14 @@ const input = {
 };
 
 describe('private setup and index contracts', () => {
+  it('accepts explicit full/front/back selection and rejects malformed side choices', () => {
+    for (const roundSide of ['full', 'front', 'back']) {
+      expect(isEventSetupInput({ ...input, rounds: input.rounds.map((round) => ({ ...round, roundSide })) })).toBe(true);
+    }
+    for (const roundSide of ['nine', '', 9, null, {}]) {
+      expect(isEventSetupInput({ ...input, rounds: input.rounds.map((round) => ({ ...round, roundSide })) })).toBe(false);
+    }
+  });
   it('validates scalar roster/captured index displays without relaxing private observation boundaries', () => {
     for (const value of ['0', '+2.1', '18.9', null]) {
       expect(isEventWorkspace({ ...fictionalWorkspace,

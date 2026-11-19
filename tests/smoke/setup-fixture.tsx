@@ -7,6 +7,7 @@ import type { EventWorkspace } from '../../src/domain/setup';
 import { EventWorkspaceView } from '../../src/features/setup';
 import '../../src/app/styles.css';
 import { fictionalGamesRound } from './games-fixture-data';
+import { roundTee } from '../../src/domain/round-tee';
 
 const id = (value: number) => `00000000-0000-4000-8000-${String(value).padStart(12, '0')}`;
 const players: readonly PlayerProfile[] = Array.from({ length: 5 }, (_, i) => ({
@@ -17,7 +18,8 @@ const tee: TeeProfile = {
   id: 901, name: 'Fictional Teal', category: 'Fictional rating', holeCount: 18,
   totalYardage: 6300, totalMeters: 5760, totalPar: 72, strokeAllocation: true, shorter: false, eligibleSides: 'All',
   holes: Array.from({ length: 18 }, (_, i) => ({ number: i + 1, sourceId: i + 1, length: 350, par: 4, allocation: i + 1 })),
-  ratings: [{ type: 'Total', course: 72, slope: 120, bogey: 90 }],
+  ratings: [{ type: 'Total', course: 72, slope: 120, bogey: 90 },
+    { type: 'Front', course: 36, slope: 120, bogey: 45 }, { type: 'Back', course: 36, slope: 120, bogey: 45 }],
 };
 const version: CourseVersion = {
   id: 'a'.repeat(64), courseId: 'ghin:902:903',
@@ -68,7 +70,8 @@ const setup: SetupClient = {
         return { playerId, displayName: player.displayName };
       }),
       rounds: input.rounds.map((round) => {
-        const teeProfile = profiles.find((profile) => profile.id === round.teeProfileId);
+        const source = profiles.find((profile) => profile.id === round.teeProfileId);
+        const teeProfile = source && roundTee(source, round.roundSide);
         if (!teeProfile) throw new Error('Unknown fictional tee.');
         return { ...round, course, teeProfile, players: input.playerIds.map((playerId) => {
           const player = players.find((item) => item.id === playerId);

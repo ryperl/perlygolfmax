@@ -103,11 +103,13 @@ export function isScorecard(value: unknown): value is Scorecard {
     || value.updatedAt !== null && !instant(value.updatedAt)
     || !Array.isArray(value.holes) || ![9, 18].includes(value.holes.length)) return false;
   const count = value.holes.length;
-  if (!value.holes.every((hole: unknown) => isRecord(hole) && positiveInteger(hole.number, count) && isHoleScore(hole.score)
+  if (!value.holes.every((hole: unknown) => isRecord(hole) && positiveInteger(hole.number, 18) && isHoleScore(hole.score)
     && (hole.score.nassau ?? []).every((record) => record.number === hole.number)
     && (hole.score.wolf ?? []).every((record) => record.number === hole.number)
     && (hole.score.dots ?? []).every((record) => record.number === hole.number))) return false;
-  return new Set(value.holes.map((hole: { readonly number: number }) => hole.number)).size === count
+  const numbers = value.holes.map((hole: { readonly number: number }) => hole.number);
+  return (count === 18 || numbers.every((number) => number <= 9) || numbers.every((number) => number >= 10))
+    && new Set(numbers).size === count
     && (value.etag === null
       ? value.updatedAt === null && value.holes.every((hole: { readonly score: HoleScore }) => hole.score.kind === 'unplayed')
       : value.updatedAt !== null);
@@ -194,7 +196,7 @@ function validateRoundScores(value: unknown, lean = false): value is RoundScores
       || new Set(value.teeRatings.map((rating: { readonly type: string }) => rating.type)).size !== 3) return false;
   }
   const count = value.layout.length;
-  if (!value.layout.every((hole: unknown): hole is CourseHole => isRecord(hole) && positiveInteger(hole.number, count)
+  if (!value.layout.every((hole: unknown): hole is CourseHole => isRecord(hole) && positiveInteger(hole.number, 18)
     && positiveInteger(hole.sourceId) && positiveInteger(hole.length, 2_000)
     && positiveInteger(hole.par, 10) && positiveInteger(hole.allocation, count))) return false;
   if (new Set(value.layout.map((hole: { readonly number: number }) => hole.number)).size !== count) return false;
@@ -203,6 +205,7 @@ function validateRoundScores(value: unknown, lean = false): value is RoundScores
   const cards: Scorecard[] = value.cards;
   const cardsById = new Map(cards.map((card) => [card.playerId, card]));
   const layout = value.layout;
+  if (count === 9 && !layout.every((hole) => hole.number <= 9) && !layout.every((hole) => hole.number >= 10)) return false;
   const persisted = cards.some((card) => card.etag !== null);
   if (value.setupLocked !== persisted || (persisted ? value.lastUpdatedAt === null : value.lastUpdatedAt !== null)) return false;
   const ids = cards.map((card) => card.playerId);

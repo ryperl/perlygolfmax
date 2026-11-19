@@ -285,6 +285,17 @@ history still require organizer authority. Archives remain owner-only.
 
 ### Public Quick rounds
 
+Both full event setup and Quick rounds offer **Round holes** after choosing a
+tee: play the entire selected tee (including native nine-hole tees), or select
+**9 holes — Front (1–9)** / **9 holes — Back (10–18)** on an eighteen-hole tee.
+Each group plays one nine-hole circuit from its selected starting hole.
+Captures retain printed hole/source identities and the published side rating
+and slope, with stroke-allocation ranks normalized within that nine. Personal
+tees use their own side inputs. Nine-hole Course Handicap uses the existing
+half-index calculation, not half an eighteen-hole Course Handicap. Scoring locks
+the selection; Nassau remains eighteen-hole-only and nine-hole WHS differential
+estimates remain unavailable.
+
 **Quick round** on Events creates one saved round without sign-in. Choose a
 published saved course/version and tees, select saved players and explicitly
 assign them to one or more playing groups of up to four. Each group can have its

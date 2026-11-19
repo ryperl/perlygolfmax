@@ -6,6 +6,7 @@ import type { CourseCatalogEntry, CourseVersion, PlayerProfile, TeeProfile } fro
 import type { RoundSetupInput, RoundSnapshot } from '../../domain/setup';
 import { compatibleTeeLayouts } from '../../domain/tees';
 import { groupStartingHole } from '../../domain/round-navigation';
+import { roundTee } from '../../domain/round-tee';
 import { SetupPager } from './SetupPager';
 
 const groupCapacity = 4;
@@ -59,7 +60,13 @@ export function RoundEditor({ round, number, saved, courses, players, rosterIds,
   const term = query.trim().toLowerCase();
   const matches = courses.filter((course) => `${course.name} ${course.location}`.toLowerCase().includes(term));
   const choices = courses.filter((course) => course.id === round.courseId || matches.includes(course));
-  const tee = profiles.find((profile) => profile.id === round.teeProfileId);
+  const sourceTee = profiles.find((profile) => profile.id === round.teeProfileId);
+  const hasVersion = loaded?.id === versionId && loaded.courseId === round.courseId;
+  const tee = sourceTee && (hasVersion ? roundTee(sourceTee, round.roundSide) : sourceTee);
+  const playingProfiles = hasVersion ? profiles.flatMap((profile) => {
+    const selected = roundTee(profile, round.roundSide);
+    return selected ? [selected] : [];
+  }) : profiles;
   const totalRating = tee?.ratings.find((rating) => rating.type === 'Total');
   const unassigned = rosterIds.filter((id) => !round.groups.some((group) => group.playerIds.includes(id)));
   const groupNumbers = new Set(round.groups.map((group) => group.number));
@@ -73,7 +80,7 @@ export function RoundEditor({ round, number, saved, courses, players, rosterIds,
   const pagePlayers = visiblePlayers.slice(page * pageSize, (page + 1) * pageSize);
   function clearCourseSelection(courseId: string, courseVersionId: string) {
     if (round.playerTeeSelections?.length) setTeeNotice('Personal tee selections cleared because the course or version changed. Assign tees from the selected version again.');
-    onChange({ ...round, courseId, courseVersionId, teeProfileId: 0, playerTeeSelections: [] });
+    onChange({ ...round, courseId, courseVersionId, teeProfileId: 0, roundSide: 'full', playerTeeSelections: [] });
   }
   return <section>
     <label>Find round golfers<input type="search" value={playerQuery} onChange={(event) => {
@@ -112,17 +119,42 @@ export function RoundEditor({ round, number, saved, courses, players, rosterIds,
     </select></label>
     <label>Round {number} tee profile<select required value={round.teeProfileId || ''} disabled={profiles.length === 0} onChange={(event) => {
       const selected = profiles.find((profile) => profile.id === Number(event.target.value));
+      const side = selected?.holeCount === 18 ? round.roundSide ?? 'full' : 'full';
+      const layout = selected && roundTee(selected, side);
       const retained = (round.playerTeeSelections ?? []).filter((entry) => {
         const personal = profiles.find((profile) => profile.id === entry.teeProfileId);
-        return selected && personal && selected.id !== personal.id && compatibleTeeLayouts(selected, personal);
+        const personalLayout = personal && roundTee(personal, side);
+        return layout && personalLayout && layout.id !== personalLayout.id && compatibleTeeLayouts(layout, personalLayout);
       });
       if (retained.length !== (round.playerTeeSelections?.length ?? 0)) setTeeNotice('Personal tee selections that no longer differ from, or are incompatible with, the default tee were cleared. Review golfer tees before saving.');
-      onChange({ ...round, teeProfileId: Number(event.target.value), playerTeeSelections: retained });
+      onChange({ ...round, teeProfileId: Number(event.target.value), roundSide: side, playerTeeSelections: retained,
+        groups: round.groups.map((group) => ({ ...group, startingHole: layout?.holes.some((hole) => hole.number === group.startingHole)
+          ? group.startingHole ?? 1 : layout?.holes[0]?.number ?? 1 })) });
     }}><option value="">Choose a tee and category</option>{profiles.map((profile, index) => <option key={profile.id} value={profile.id}>
       {profile.name} / {profile.category} / {profile.holeCount} holes
       {profiles.some((other) => other.id !== profile.id && other.name === profile.name && other.category === profile.category
         && other.holeCount === profile.holeCount) ? ` / ${profile.totalYardage.toLocaleString('en-US')} yards / par ${String(profile.totalPar)} / choice ${String(index + 1)}` : ''}
     </option>)}</select></label>
+    <label>Round {number} holes<select value={round.roundSide ?? 'full'} disabled={!hasVersion || sourceTee?.holeCount !== 18} onChange={(event) => {
+      const side = event.target.value;
+      if (side !== 'full' && side !== 'front' && side !== 'back' || !sourceTee) return;
+      const layout = roundTee(sourceTee, side);
+      if (!layout) return;
+      const retained = (round.playerTeeSelections ?? []).filter((entry) => {
+        const personal = profiles.find((profile) => profile.id === entry.teeProfileId);
+        const selected = personal && roundTee(personal, side);
+        return selected && compatibleTeeLayouts(layout, selected);
+      });
+      if (retained.length !== (round.playerTeeSelections?.length ?? 0)) setTeeNotice('Incompatible personal tees cleared. Review golfer tees before saving.');
+      onChange({ ...round, roundSide: side, playerTeeSelections: retained,
+        groups: round.groups.map((group) => ({ ...group, startingHole: layout.holes.some((hole) => hole.number === group.startingHole)
+          ? group.startingHole ?? 1 : layout.holes[0]?.number ?? 1 })) });
+    }}>
+      <option value="full">{sourceTee?.holeCount === 9 && !round.roundSide ? '9 holes (selected tee)' : 'All holes (selected tee)'}</option>
+      {(sourceTee?.holeCount === 18 || round.roundSide === 'front' || round.roundSide === 'back') && <>
+        <option value="front">9 holes — Front (1–9)</option><option value="back">9 holes — Back (10–18)</option>
+      </>}
+    </select></label>
     {tee && <p className="setup-tee-summary">{tee.holeCount} holes · Par {tee.totalPar} · {tee.totalYardage.toLocaleString('en-US')} yards
       {totalRating ? ` · Rating ${String(totalRating.course)} / Slope ${String(totalRating.slope)}` : ' · Total rating unavailable'}
     </p>}
@@ -137,8 +169,8 @@ export function RoundEditor({ round, number, saved, courses, players, rosterIds,
       {!tee && <p>Choose the default tee before assigning personal tees.</p>}
       {pagePlayers.map((id) => {
         const selection = round.playerTeeSelections?.find((entry) => entry.playerId === id);
-        const selected = profiles.find((profile) => profile.id === selection?.teeProfileId);
-        const compatible = tee ? profiles.filter((profile) => profile.id !== tee.id && compatibleTeeLayouts(tee, profile)) : [];
+        const selected = playingProfiles.find((profile) => profile.id === selection?.teeProfileId);
+        const compatible = tee ? playingProfiles.filter((profile) => profile.id !== tee.id && compatibleTeeLayouts(tee, profile)) : [];
         return <label key={id}>{players.find((player) => player.id === id)?.displayName ?? 'Saved player'} — round {number} tee
           <select value={selection?.teeProfileId ?? ''} disabled={!tee || error !== ''} onChange={(event) => {
             const others = (round.playerTeeSelections ?? []).filter((entry) => entry.playerId !== id);

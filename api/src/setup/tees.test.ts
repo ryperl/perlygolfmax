@@ -5,8 +5,76 @@ import { stablefordPoints } from '../../../src/domain/stableford.js';
 import { teeFixture } from '../../test/tee-fixtures.js';
 import { identifier } from '../../test/catalog-fixtures.js';
 import { creator, event, member } from '../../test/fixtures.js';
+import type { RoundGameDefinition } from '../../../src/domain/games.js';
+import { defaultChurchySpecialSelections } from '../../../src/domain/churchy.js';
+import { decodeRoundScores } from '../../../src/contracts/scoring.js';
+import { leanRoundScores } from '../../../src/contracts/lean-round-scores.js';
 
 describe('organizer per-golfer captured tees', () => {
+  it.each(['skins', 'stroke-play', 'ball-drop', 'wolf', 'dots', 'churchy-1', 'churchy-2', 'churchy-3'] as const)(
+    'round-trips %s results and lean transport on printed back-nine holes', async (kind) => {
+      const f = await teeFixture();
+      const input = { ...f.input, rounds: f.input.rounds.map((round) => ({ ...round, roundSide: 'back' as const,
+        groups: round.groups.map((group) => ({ ...group, startingHole: 10 })),
+      })) };
+      await f.workspace.save(creator, event.id, input, f.saved.etag);
+      const base = { id: identifier(740), name: 'Fictional nine-hole game', basis: 'net' as const, version: 1 as const };
+      const ids = f.input.playerIds;
+      const game: RoundGameDefinition = kind === 'skins' ? { ...base, kind, carryovers: true }
+        : kind === 'stroke-play' ? { ...base, kind }
+        : kind === 'ball-drop' ? { ...base, kind, format: 'ball-drop-net-gross', teams: [{ id: identifier(741), name: 'Fictional team', playerIds: ids }] }
+        : kind === 'wolf' ? { ...base, kind, version: 2, groupNumber: 1, playerIds: ids, allowPig: true, stakeMinor: null }
+        : kind === 'dots' ? { id: base.id, name: base.name, version: 1, kind, groupNumber: 1, playerIds: ids, mode: 'individual', stakeMinor: null, specials: [{ kind: 'birdie', units: 1 }] }
+        : kind === 'churchy-3' ? { ...base, name: 'Churchie', kind: 'churchy', version: 3, groupNumber: 1, playerIds: ids,
+          orderMode: 'approach', amountPerDotMinor: 0, currency: 'USD', specials: defaultChurchySpecialSelections }
+        : { ...base, name: 'Churchy Game', kind: 'churchy', groupNumber: 1,
+          playerIds: ids, amountPerDotMinor: 0, currency: 'USD',
+          ...(kind === 'churchy-2' ? { version: 2 as const, enabledSpecials: ['birdie'] as const } : { version: 1 as const }) };
+      const configured = await f.scores.saveGames(creator, event.id, f.roundId, [game], null, identifier(742));
+      expect(isRoundScores(configured.round)).toBe(true);
+      let read = configured.round;
+      for (const [index, playerId] of ids.entries()) {
+        read = (await f.scores.write(creator, event.id, f.roundId, playerId, 10,
+          { kind: 'strokes', strokes: 4 }, null, identifier(750 + index))).round;
+      }
+      expect(isRoundScores(read)).toBe(true);
+      expect(decodeRoundScores(leanRoundScores(read))).toBeDefined();
+      expect(read.layout.map((hole) => hole.number)).toEqual([10, 11, 12, 13, 14, 15, 16, 17, 18]);
+    },
+  );
+  it.each(['front', 'back'] as const)('captures %s nine with personal tees, score layouts and first-score setup locks', async (roundSide) => {
+    const f = await teeFixture();
+    const input = { ...f.input, rounds: f.input.rounds.map((round) => ({ ...round, roundSide,
+      groups: round.groups.map((group) => ({ ...group, startingHole: roundSide === 'front' ? 1 : 10 })),
+    })) };
+    const saved = await f.workspace.save(creator, event.id, input, f.saved.etag);
+    expect(isEventWorkspace(saved)).toBe(true);
+    expect(saved.rounds[0]).toMatchObject({ roundSide, teeProfile: { id: f.input.rounds[0]?.teeProfileId, holeCount: 9, totalPar: 36 } });
+    expect(saved.rounds[0]?.playerTees?.[0]?.profile.holes).toHaveLength(9);
+    await f.scores.saveGames(creator, event.id, f.roundId, [{
+      id: identifier(731), name: 'Fictional nine-hole Net', basis: 'net', preset: 'standard',
+      handicapAllowancePercent: 100, points: stablefordPoints('standard'),
+    }], null, identifier(732));
+    const start = roundSide === 'front' ? 1 : 10;
+    const read = await f.scores.get(creator, event.id, f.roundId);
+    expect(isRoundScores(read)).toBe(true);
+    expect(read.layout.map((hole) => hole.number)).toEqual(Array.from({ length: 9 }, (_, index) => start + index));
+    const written = await f.scores.write(creator, event.id, f.roundId, f.playerId, start,
+      { kind: 'strokes', strokes: 4 }, null, identifier(730));
+    expect(isRoundScores(written.round)).toBe(true);
+    expect(written.round.cards[0]?.holes).toHaveLength(9);
+    const current = await f.workspace.get(creator, event.id);
+    await expect(f.workspace.save(creator, event.id, { ...input, rounds: input.rounds.map((round) => ({ ...round, roundSide: 'full' })) },
+      current.etag)).rejects.toMatchObject({ code: 'ROUND_SCORING_STARTED' });
+    const retained = await f.workspace.save(creator, event.id, input, current.etag);
+    expect(retained.rounds[0]?.teeProfile).toEqual(saved.rounds[0]?.teeProfile);
+  });
+  it('rejects nine-hole requests whose starting hole is outside the chosen side', async () => {
+    const f = await teeFixture();
+    await expect(f.workspace.save(creator, event.id, { ...f.input, rounds: f.input.rounds.map((round) => ({ ...round,
+      roundSide: 'back', groups: [{ number: 1, playerIds: f.input.playerIds, startingHole: 1 }],
+    })) }, f.saved.etag)).rejects.toMatchObject({ code: 'INVALID_GROUP_STARTING_HOLE' });
+  });
   it.each([4, 12])('preserves individual tee inputs for %i golfers while unstarted indexes follow the catalog', async (count) => {
     const f = await teeFixture(count);
     expect(isEventWorkspace(f.saved)).toBe(true);

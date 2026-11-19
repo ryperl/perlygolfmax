@@ -156,17 +156,19 @@ function isPlayerResult(value: unknown, game: StablefordGameDefinition): value i
     || value.status !== 'complete' && value.status !== 'in-progress'
     || (game.basis === 'gross' ? value.playingHandicap !== null : !integer(value.playingHandicap))) return false;
   const holes: GamePlayerResult['holes'][number][] = [];
+  const firstNumber = isRecord(value.holes[0]) ? value.holes[0].number : undefined;
+  if (firstNumber !== 1 && !(value.holes.length === 9 && firstNumber === 10)) return false;
   for (const [index, hole] of value.holes.entries()) {
-    if (!isRecord(hole) || !keys(hole, ['number', 'points', 'strokesReceived']) || hole.number !== index + 1
+    if (!isRecord(hole) || !keys(hole, ['number', 'points', 'strokesReceived']) || hole.number !== index + firstNumber
       || (hole.points !== null && (!points(hole.points, maximumExactPointsForGame(game)) || !allowedPoints.has(hole.points)))
       || (hole.strokesReceived !== null && !integer(hole.strokesReceived))) return false;
     if (unavailable ? hole.points !== null || hole.strokesReceived !== null
       : game.basis === 'gross' ? hole.strokesReceived !== 0 : hole.strokesReceived === null) return false;
-    holes.push({ number: index + 1, points: hole.points, strokesReceived: hole.strokesReceived });
+    holes.push({ number: index + firstNumber, points: hole.points, strokesReceived: hole.strokesReceived });
   }
   const scored = holes.filter((hole) => hole.points !== null).length;
-  if (value.holesScored !== scored || value.frontPoints !== total(holes.slice(0, 9))
-    || value.backPoints !== total(holes.slice(9)) || value.totalPoints !== total(holes)
+  if (value.holesScored !== scored || value.frontPoints !== total(holes.filter((hole) => hole.number <= 9))
+    || value.backPoints !== total(holes.filter((hole) => hole.number > 9)) || value.totalPoints !== total(holes)
     || !unavailable && value.status !== (scored === holes.length ? 'complete' : 'in-progress')) return false;
   if (!unavailable && game.basis === 'net' && integer(value.playingHandicap)) {
     const handicap = BigInt(value.playingHandicap);

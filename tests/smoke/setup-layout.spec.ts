@@ -47,6 +47,9 @@ test('real setup controls preserve drafts and fit narrow, enlarged and dark layo
     await picker.selectOption({ label: 'Round 1: Fictional first-round draft — Unsaved changes' });
     await expect(first).toHaveValue('Fictional first-round draft');
     await expect(firstTime).toHaveValue('08:30');
+    await page.getByRole('combobox', { name: 'Round 1 holes', exact: true }).selectOption('back');
+    await expect(page.getByLabel('Round 1 Group 1 starting hole')).toHaveValue('10');
+    await expect(page.getByLabel('Round 1 Group 1 starting hole').locator('option')).toHaveCount(9);
     const save = page.getByRole('button', { name: 'Save event workspace' });
     await save.click();
     await expect(page.getByRole('status')).toContainText('Event workspace saved.');
@@ -56,6 +59,8 @@ test('real setup controls preserve drafts and fit narrow, enlarged and dark layo
     await page.getByText('1. Event details', { exact: true }).click();
     await picker.selectOption({ label: 'Round 1: Fictional first-round draft — Saved' });
     await expect(firstTime).toHaveValue('08:30');
+    await expect(page.getByRole('combobox', { name: 'Round 1 holes', exact: true })).toHaveValue('back');
+    await expect(page.getByLabel('Round 1 Group 1 starting hole').locator('option')).toHaveCount(9);
     await picker.selectOption({ label: 'Round 2: Fictional second-round draft — Saved' });
     await expect(second).toHaveValue('Fictional second-round draft');
     await page.getByText('2. Players (4 selected)', { exact: true }).click();

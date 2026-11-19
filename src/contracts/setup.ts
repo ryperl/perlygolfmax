@@ -78,6 +78,7 @@ export function isEventSetupInput(value: unknown): value is EventSetupInput {
   return value.rounds.every((round: unknown) => isRecord(round) && isUuid(round.id) && boundedText(round.name)
     && (round.teeTime === undefined || round.teeTime === '' || isRoundTeeTime(round.teeTime))
     && (round.startDate === undefined || round.startDate === '' || isEventStartDate(round.startDate))
+    && (round.roundSide === undefined || round.roundSide === 'full' || round.roundSide === 'front' || round.roundSide === 'back')
     && isCourseId(round.courseId) && isVersionId(round.courseVersionId) && typeof round.teeProfileId === 'number'
     && Number.isSafeInteger(round.teeProfileId) && round.teeProfileId > 0 && groups(round.groups, players)
     && (round.playerTeeSelections === undefined || isPlayerTeeSelections(round.playerTeeSelections)
@@ -96,6 +97,9 @@ function isRoundSnapshot(value: unknown, playerIds: readonly string[]): value is
     && (value.reviewWarnings === undefined || isReviewWarnings(value.reviewWarnings))
     && isCourseId(value.courseId) && isVersionId(value.courseVersionId)
     && isCourseMetadata(value.course) && isTeeProfile(value.teeProfile)
+    && (value.roundSide === undefined || value.roundSide === 'full'
+      || (value.roundSide === 'front' || value.roundSide === 'back') && value.teeProfile.holeCount === 9
+        && value.teeProfile.holes.every((hole) => value.roundSide === 'front' ? hole.number <= 9 : hole.number >= 10))
     && (value.playerTees === undefined || isPlayerTeeProfiles(value.playerTees, value.teeProfile, playerIds))
     && groups(value.groups, playerIds, value.teeProfile.holes) && Array.isArray(value.players)
     && value.players.length === playerIds.length

@@ -34,7 +34,7 @@ function isChurchyV3ResultShape(value: unknown, game: ChurchyGameDefinitionV3): 
   if (new Set(holes.map((hole) => isRecord(hole) ? hole.number : null)).size !== holes.length) return false;
   for (const [index, raw] of holes.entries()) {
     if (!isRecord(raw) || !keys(raw, ['number', 'stake', 'pairs', 'high', 'low', 'specials', 'specialStatus', 'dotStatus', 'awards'])
-      || !exact(raw.number) || raw.number < 1 || raw.number > holes.length || raw.stake !== index % 3 + 1
+      || !exact(raw.number) || raw.number < 1 || raw.number > 18 || raw.stake !== index % 3 + 1
       || !Array.isArray(raw.specials) || !Array.isArray(raw.awards) || raw.awards.length !== 4
       || !['complete', 'pending', 'unavailable'].includes(String(raw.specialStatus))
       || !['complete', 'partial', 'pending', 'unavailable'].includes(String(raw.dotStatus))) return false;

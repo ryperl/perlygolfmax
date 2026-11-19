@@ -24,17 +24,21 @@ test('a created Quick round can return from scoring to edit its unstarted roster
   try {
     await page.getByRole('combobox', { name: 'Course', exact: true }).selectOption('ghin:301:302');
     await page.getByLabel('Default tee').selectOption('901');
+    await page.getByRole('combobox', { name: 'Round holes', exact: true }).selectOption('back');
+    await expect(page.getByLabel('Round holes')).toHaveValue('back');
     for (let index = 1; index <= 4; index++) await page.getByLabel(`Fictional golfer ${String(index)}`, { exact: true }).check();
     await page.getByRole('button', { name: 'Save round', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('Save is not confirmed');
     await page.getByRole('button', { name: 'Retry same setup save', exact: true }).click();
     await page.getByRole('button', { name: 'Start scoring', exact: true }).click();
-    await expect(page.getByRole('form', { name: 'Group 1 hole 1 entry', exact: true })).toBeVisible();
+    await expect(page.getByRole('form', { name: 'Group 1 hole 10 entry', exact: true })).toBeVisible();
     await page.getByRole('link', { name: 'Back to event overview', exact: true }).click();
     await page.getByRole('link', { name: 'Edit Quick round', exact: true }).click();
     const golfer = page.getByRole('checkbox', { name: 'Fictional golfer 1', exact: true });
     await expect(golfer).toBeEnabled();
     await expect(golfer).toBeChecked();
+    await expect(page.getByLabel('Round holes')).toHaveValue('back');
+    await expect(page.getByLabel('Group 1 starting hole').locator('option')).toHaveCount(9);
     await golfer.uncheck();
     await page.getByRole('button', { name: 'Save round', exact: true }).click();
     await expect(page.getByText('Round setup saved. Choose games or start with scores only.', { exact: true })).toBeVisible();

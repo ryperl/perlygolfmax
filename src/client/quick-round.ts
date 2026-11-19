@@ -59,6 +59,7 @@ export function createQuickRoundClient(apiUrl: string, send: typeof fetch = fetc
       || saved.roster.length !== input.playerIds.length || saved.roster.some((player, index) => player.playerId !== input.playerIds[index])
       || round.id !== requested.id || round.name !== requested.name || round.courseId !== requested.courseId
       || round.courseVersionId !== requested.courseVersionId || round.teeProfile.id !== requested.teeProfileId
+      || requested.roundSide !== undefined && requested.roundSide !== (round.roundSide ?? 'full')
       || requested.startDate !== undefined && requested.startDate !== (round.startDate ?? '')
       || requested.teeTime !== undefined && requested.teeTime !== (round.teeTime ?? '')
       || round.groups.length !== requested.groups.length || round.groups.some((group, index) => {

@@ -3,6 +3,7 @@ import type { EventSummary } from './events.js';
 import type { PlayerTeeProfile, PlayerTeeSelection } from './tees.js';
 import type { EventSkinsConfiguration } from './event-skins.js';
 import type { RoundReviewWarning } from './round-corrections.js';
+import type { RoundSide } from './round-tee.js';
 
 export type OverallCompetition =
   | {
@@ -37,6 +38,7 @@ export interface RoundGroup {
 }
 
 export interface RoundSetupInput {
+  readonly roundSide?: RoundSide;
   readonly id: string;
   readonly name: string;
   readonly teeTime?: string;
@@ -70,6 +72,7 @@ export interface RoundPlayerSnapshot extends EventRosterPlayer {
 }
 
 export interface RoundSnapshot {
+  readonly roundSide?: RoundSide;
   readonly id: string;
   readonly name: string;
   readonly teeTime?: string;

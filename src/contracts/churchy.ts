@@ -99,6 +99,8 @@ function isChurchyResultShape(value: unknown, game: ChurchyGameDefinition): valu
     || !Array.isArray(data.settlement) || data.settlement.length !== 4) return false;
   const count = data.holes.length;
   const holes: unknown[] = data.holes;
+  const firstNumber = isRecord(holes[0]) ? holes[0].number : undefined;
+  if (firstNumber !== 1 && !(count === 9 && firstNumber === 10)) return false;
   const players: unknown[] = value.players;
   for (const [index, player] of players.entries()) {
     if (!isRecord(player) || !keys(player, ['playerId', 'displayName', 'playingHandicap', 'status', 'holes',
@@ -109,7 +111,7 @@ function isChurchyResultShape(value: unknown, game: ChurchyGameDefinition): valu
       || !nullable(player.frontPoints) || !nullable(player.backPoints) || !nullable(player.totalPoints)
       || !Array.isArray(player.holes) || player.holes.length !== count
       || !player.holes.every((hole: unknown, index: number) => isRecord(hole)
-        && keys(hole, ['number', 'points', 'strokesReceived']) && hole.number === index + 1
+        && keys(hole, ['number', 'points', 'strokesReceived']) && hole.number === index + firstNumber
         && nullable(hole.points) && nullable(hole.strokesReceived))) return false;
   }
   function winners(value: unknown): boolean {
@@ -118,8 +120,8 @@ function isChurchyResultShape(value: unknown, game: ChurchyGameDefinition): valu
   }
   for (const [index, hole] of holes.entries()) {
     if (!isRecord(hole) || !keys(hole, ['number', 'stake', 'pairs', 'high', 'low', 'specials', 'specialStatus', 'dotStatus', 'awards'])
-      || hole.number !== index + 1 || hole.stake !== index % 3 + 1
-      || !sameJsonValue(hole.pairs, churchyPairs(game.playerIds, index + 1))
+      || hole.number !== index + firstNumber || hole.stake !== index % 3 + 1
+      || !sameJsonValue(hole.pairs, churchyPairs(game.playerIds, index + firstNumber))
       || typeof hole.specialStatus !== 'string' || !['complete', 'pending', 'unavailable'].includes(hole.specialStatus)
       || typeof hole.dotStatus !== 'string' || !['complete', 'partial', 'pending', 'unavailable'].includes(hole.dotStatus)
       || !Array.isArray(hole.specials) || hole.specials.length > (game.version === 2 ? 29 : 21)
@@ -128,7 +130,7 @@ function isChurchyResultShape(value: unknown, game: ChurchyGameDefinition): valu
       if (!isRecord(lane) || !keys(lane, ['status', 'winners', 'dots', 'carry'])
         || typeof lane.status !== 'string' || !['won', 'tied', 'pending', 'unavailable'].includes(lane.status)
         || !winners(lane.winners) || !nullable(lane.dots) || !nullable(lane.carry)) return false;
-      const pairs = churchyPairs(game.playerIds, index + 1);
+      const pairs = churchyPairs(game.playerIds, index + firstNumber);
       if (lane.status === 'won' ? !pairs?.some((pair) => sameJsonValue(pair, lane.winners))
         || !exact(lane.dots) || lane.dots === 0 || lane.carry !== 0
         : !sameJsonValue(lane.winners, []) || (lane.status === 'tied' ? lane.dots !== 0 || !exact(lane.carry)
@@ -148,7 +150,8 @@ function isChurchyResultShape(value: unknown, game: ChurchyGameDefinition): valu
         const total = values.reduce<bigint>((total, value) => total + BigInt(value ?? 0), 0n);
         return total > BigInt(Number.MAX_SAFE_INTEGER) ? null : Number(total);
       };
-      if (player.frontPoints !== sum(awarded.slice(0, 9)) || player.backPoints !== sum(awarded.slice(9), 9)
+      const frontCount = firstNumber === 10 ? 0 : 9;
+      if (player.frontPoints !== sum(awarded.slice(0, frontCount)) || player.backPoints !== sum(awarded.slice(frontCount), frontCount)
         || player.totalPoints !== sum(awarded)
         || !player.holes.every((hole: unknown, index: number) => isRecord(hole) && hole.points === awarded[index])) return false;
     }
@@ -159,7 +162,7 @@ function isChurchyResultShape(value: unknown, game: ChurchyGameDefinition): valu
       && (award.playerId === null || typeof award.playerId === 'string' && game.playerIds.includes(award.playerId))
       && (award.outcome === 'made' || award.outcome === 'missed' || award.outcome === 'ineligible')
       && winners(award.winners) && exact(award.dots)
-      && (game.version === 2 ? validV2Award(award, game, index + 1)
+      && (game.version === 2 ? validV2Award(award, game, index + firstNumber)
         : award.outcome === 'ineligible' ? award.dots === 0 : award.dots >= 1 && award.dots <= 3))
       || !hole.awards.every((award: unknown, index: number) => isRecord(award)
         && keys(award, ['playerId', 'dots']) && award.playerId === game.playerIds[index] && nullable(award.dots))) return false;
