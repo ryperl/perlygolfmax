@@ -770,13 +770,27 @@ except Birdie 2 and Eagle 5. All of these rules use gross qualifications:
   saved choices. The API checks new/changed inputs too. Teammates' independent
   source awards remain separate, and old conflicting records stay readable for
   explicit correction rather than silently changing historical results.
-  Churchie score-derived **birdie-target Murphy** is target-aware: a missed
+  Score-derived **birdie-target Murphy** is target-aware: a missed
   birdie call followed by gross par may still earn a qualifying Sandy and Pully.
   Finishing over par or picking up does not make those claims valid.
 - Birdie, Eagle and streaks derive from saved scores. Eagle does not also earn
-  Birdie. String starts on the third exact gross par; BirdyString starts on
-  the third birdie-or-better. Continue through the actual playing circuit,
-  including across the turn, without inventing results through missing scores.
+  Birdie. String starts on the third consecutive gross par-or-better and awards
+  again on every qualifying hole afterward. BirdyString uses three consecutive
+  birdie-or-better scores, including eagles. When both configured streaks qualify,
+  award BirdyString only; the underlying par-or-better run stays alive so a later
+  par resumes String immediately. Other Birdie/Eagle awards remain independent.
+  Follow the actual playing circuit, including across the turn; missing scores,
+  pickup and DNF never extend a streak. These corrected calculations apply to
+  existing and future derived standings/planned winnings, without rewriting raw
+  scores, captures or original audit receipts.
+- Ordinary Dots on a supporting API uses the same **Paree called** and
+  **Murphy called** controls as Churchie: outcomes derive from the source
+  golfer's personal gross par, with optional birdie target and total **1×/2×/3×**
+  Murphy stakes. Presses multiply configured units, never the hole's stake.
+  Failed calls award actual opponents (none in solo play); Pully Murphy remains
+  manual. Saved manual calls require explicit **Use score outcome**. Blank scores
+  remain pending, raw corrections recalculate outcomes without rewriting calls,
+  and older APIs retain manual controls.
 - Dots KP uses par 3s; Blue Plate and Long Drive use par 5s. Select a qualifying
   winner or explicitly no qualifier on each eligible hole, never Skip.
   Categories carry independently to their next eligible played hole, with

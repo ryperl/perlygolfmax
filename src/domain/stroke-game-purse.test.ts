@@ -7,8 +7,34 @@ import type { EventWorkspace } from './setup.js';
 import type { StrokePlayGameDefinition } from './games.js';
 import { calculateGameResults } from './stableford.js';
 import { matchGamesFixture } from './match-games.test-support.js';
+import type { DotsGameDefinition } from './dots.js';
 
 describe('stroke-game place awards and overall boundaries', () => {
+  it('recalculates String-funded place prizes and invalidates a manual resolution whose tied set changed', () => {
+    const f = matchGamesFixture();
+    const game: DotsGameDefinition = { id: f.wolf.id, name: 'Fictional String', kind: 'dots', version: 1,
+      mode: 'individual', stakeMinor: null, groupNumber: 1, playerIds: f.ids, specials: [{ kind: 'string', units: 1 }] };
+    const cards = f.cards.map((card, index) => ({ ...card, holes: card.holes.map((hole) => ({ ...hole,
+      score: { kind: 'strokes' as const, strokes: index === 0 && hole.number === 2 ? 3 : 4 },
+    })) }));
+    const current = { ...f.round(cards, [game]), stringRulesVersion: 2 as const };
+    const legacy = { ...current, games: { configuration: current.games?.configuration ?? {
+      eventId: current.eventId, roundId: current.roundId, games: [game], etag: null },
+      results: calculateGameResults([game], f.snapshot, cards, 1) } };
+    const base = purseTestContext();
+    const workspace: EventWorkspace = { ...base.workspace, event: { ...base.workspace.event, id: current.eventId },
+      rounds: [f.snapshot], roster: f.snapshot.players };
+    const pool = { ...base.pool, source: { kind: 'round-game' as const, roundId: current.roundId, gameId: game.id },
+      awardUnit: 'per-golfer' as const, tiePolicy: 'organizer' as const, prizes: [{ place: 1, amountMinor: 100 }] };
+    const plan = { ...base.plan, eventId: current.eventId, pools: [pool] };
+    const resolutions = [{ poolId: pool.id, rank: 1, orderedEntrantIds: f.ids.slice(1) }];
+    expect(calculatePurse(plan, workspace, [legacy], resolutions).issues).toEqual([]);
+    const changed = calculatePurse(plan, workspace, [current], resolutions);
+    expect(changed.issues).toContainEqual({ code: 'invalid-resolution', poolId: pool.id });
+    expect(changed.pools[0]?.shares).toEqual([]);
+    const pooled = calculatePurse({ ...plan, pools: [{ ...pool, tiePolicy: 'pooled' }] }, workspace, [current]);
+    expect(pooled.pools[0]?.shares.map((share) => share.amountMinor)).toEqual([25, 25, 25, 25]);
+  });
   it('uses only the selected Wolf foursome for explicit place prizes, never dot-difference cash settlement or Nassau bets', () => {
     const f = matchGamesFixture(8);
     const cards = f.cards.map((card, index) => ({ ...card, holes: card.holes.map((hole) => index === 0 && hole.number === 1

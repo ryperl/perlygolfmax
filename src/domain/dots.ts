@@ -30,8 +30,8 @@ export const dotsSpecialCatalog: readonly {
   { kind: 'gorilla', label: 'Gorilla', description: 'Reach a personal par-5 green in two, regardless of final score.', defaultUnits: 1, automatic: false },
   { kind: 'birdie', label: 'Birdie', description: 'Exactly one under personal gross par.', defaultUnits: 2, automatic: true },
   { kind: 'eagle', label: 'Eagle', description: 'Exactly two under personal gross par, not also Birdie.', defaultUnits: 5, automatic: true },
-  { kind: 'string', label: 'String', description: 'Third consecutive exact gross par, and every subsequent par.', defaultUnits: 1, automatic: true },
-  { kind: 'birdy-string', label: 'BirdyString', description: 'Third consecutive gross birdie or better, and every subsequent qualifying hole.', defaultUnits: 1, automatic: true },
+  { kind: 'string', label: 'String', description: 'Third consecutive personal gross par or better, and every subsequent qualifying hole. Birdie String replaces String when both qualify.', defaultUnits: 1, automatic: true },
+  { kind: 'birdy-string', label: 'BirdyString', description: 'Third consecutive personal gross birdie or better, and every subsequent qualifying hole. Replaces String on that hole only.', defaultUnits: 1, automatic: true },
   { kind: 'blue-plate', label: 'Blue Plate', description: 'Closest qualifying GIR on each par 5; category carry.', defaultUnits: 1, automatic: false },
   { kind: 'king-of-the-hill', label: 'King of the Hill', description: 'Individual round-end ownership of every award in a category; never shared or multiplied.', defaultUnits: 1, automatic: true },
   { kind: 'assassin', label: 'Assassin', description: 'A partnered pair holds both closest qualifying approaches or both longest qualifying par-5 drives.', defaultUnits: 1, automatic: true },
@@ -277,7 +277,7 @@ function contextFor(game: DotsGameDefinition, number: number, contexts: readonly
 /** Semantic write validation. Read projections can still represent historical invalid input as unavailable. */
 export function dotsRecordsMatchGame(
   records: readonly DotsHoleRecord[], game: DotsGameDefinition, round: DotRoundInput,
-  contexts: readonly DotHoleContext[] = [], profile: DotsRulesProfile = 'dots',
+  contexts: readonly DotHoleContext[] = [],
 ): boolean {
   if (!dotsDefinitionMatchesRound(game, round) || !unique(records.map((record) => record.number))) return false;
   const rotations = records.filter((record) => record.rotation !== undefined);
@@ -309,10 +309,10 @@ export function dotsRecordsMatchGame(
       for (const call of player.calls) {
         callIds.push(call.id);
         if (!enabled.has(call.kind) || call.murphyPresses !== undefined
-          && (profile !== 'churcie-v3' || call.kind !== 'murphy' || ![0, 1, 2].includes(call.murphyPresses))) return false;
-        if (call.murphyTarget !== undefined && (profile !== 'churcie-v3' || call.kind !== 'murphy'
+          && (call.kind !== 'murphy' || ![0, 1, 2].includes(call.murphyPresses))) return false;
+        if (call.murphyTarget !== undefined && (call.kind !== 'murphy'
           || !['par', 'birdie'].includes(call.murphyTarget) || call.result !== 'pending')) return false;
-        if (call.pareeTarget !== undefined && (profile !== 'churcie-v3' || call.kind !== 'paree'
+        if (call.pareeTarget !== undefined && (call.kind !== 'paree'
           || call.result !== 'pending')) return false;
         if (call.result === 'success' && score && score.kind !== 'unplayed'
           && (score.kind !== 'strokes' || par === undefined
@@ -341,7 +341,7 @@ export function calculateDots(
   const rotation = game.version === 2 ? dotsRotationContext(game, round, records) : undefined;
   const effectiveContexts = rotation?.contexts ?? contexts;
   const valid = dotsDefinitionMatchesRound(game, round);
-  const recordsValid = valid && dotsRecordsMatchGame(records, game, round, [], profile);
+  const recordsValid = valid && dotsRecordsMatchGame(records, game, round);
   if (!valid) issues.push('invalid-dots-group');
   else if (!recordsValid) issues.push('invalid-dots-records');
   const units = new Map(game.specials.map((special) => [special.kind, special.units]));
@@ -380,14 +380,14 @@ export function calculateDots(
       return par === undefined ? [] : [{ playerId, number, strokes: score?.kind === 'strokes' ? score.strokes : null, par }];
     }));
     const add = (kind: DotsSpecialKind, earnedBy: string | null, recipients: readonly string[], count: number,
-      source: DotAward['source'], sourceHoles: readonly number[], reason: string, suffix = '') => {
+      source: DotAward['source'], sourceHoles: readonly number[], reason: string, suffix = '', multiplier = context.multiplier) => {
       const base = units.get(kind);
       if (base === undefined || context.status !== 'ready' || recipients.length === 0) return;
-      const dots = exact(BigInt(base) * BigInt(count) * BigInt(context.multiplier));
+      const dots = exact(BigInt(base) * BigInt(count) * BigInt(multiplier));
       if (dots === null) { mark(hole, 'unavailable', 'arithmetic-range'); issues.push('arithmetic-range'); return; }
       const award: DotAward = { id: `${game.id}:${String(hole.number)}:${kind}:${earnedBy ?? 'side'}:${suffix}`,
         number: hole.number, kind, source, earnedBy, recipientIds: [...recipients], units: base, count,
-        multiplier: context.multiplier, dots, sourceHoles: [...sourceHoles], scores: evidence(sourceHoles), reason };
+        multiplier, dots, sourceHoles: [...sourceHoles], scores: evidence(sourceHoles), reason };
       hole.awards.push(award); awards.push(award);
     };
     const own = (playerId: string) => context.sides.find((side) => side.includes(playerId)) ?? [];
@@ -421,21 +421,25 @@ export function calculateDots(
         if (result === 'pending') { mark(hole, 'pending', 'unresolved-call'); continue; }
         if (result === 'success' && pending) { mark(hole, 'pending', 'call-needs-score'); continue; }
         add(call.kind, playerId, result === 'failure' ? opponents(playerId) : own(playerId),
-          1 + (profile === 'churcie-v3' ? call.murphyPresses ?? 0 : 0), 'manual', [hole.number], `${dotsSpecialCatalog.find((entry) => entry.kind === call.kind)?.label ?? call.kind} call: ${result}.`, call.id);
+          1 + (call.murphyPresses ?? 0), 'manual', [hole.number], `${dotsSpecialCatalog.find((entry) => entry.kind === call.kind)?.label ?? call.kind} call: ${result}.`, call.id,
+          call.murphyTarget !== undefined || call.pareeTarget !== undefined || call.murphyPresses !== undefined ? 1 : context.multiplier);
       }
       if (strokes !== null && par !== undefined) {
         if (strokes === par - 1) add('birdie', playerId, own(playerId), 1, 'automatic', [hole.number], 'Exactly one under personal gross par.');
         if (strokes === par - 2) add('eagle', playerId, own(playerId), 1, 'automatic', [hole.number], 'Exactly two under personal gross par.');
       }
       const streak = streaks.get(playerId) ?? { par: [], birdie: [], unknown: { par: false, birdie: false } };
-      for (const kind of ['string', 'birdy-string'] as const) {
+      for (const kind of ['birdy-string', 'string'] as const) {
         const key = kind === 'string' ? 'par' : 'birdie';
         if (pending) { streak[key] = []; streak.unknown[key] = true; continue; }
-        const qualifies = strokes !== null && par !== undefined && (kind === 'string' ? strokes === par : strokes < par);
+        const qualifies = strokes !== null && par !== undefined
+          && (kind === 'string' ? round.stringRulesVersion === 1 ? strokes === par : strokes <= par : strokes < par);
         if (!qualifies) { streak[key] = []; streak.unknown[key] = false; continue; }
         streak[key].push(hole.number);
-        if (streak[key].length >= 3) add(kind, playerId, own(playerId), 1, 'automatic', streak[key].slice(-3), 'Three consecutive qualifying acknowledged gross scores.');
-        else if (streak.unknown[key] && units.has(kind)) mark(hole, 'pending', 'earlier-streak-score-pending');
+        const replaced = round.stringRulesVersion !== 1 && kind === 'string'
+          && units.has('birdy-string') && streak.birdie.length >= 3;
+        if (streak[key].length >= 3 && !replaced) add(kind, playerId, own(playerId), 1, 'automatic', streak[key].slice(-3), 'Three consecutive qualifying acknowledged gross scores.');
+        else if (streak[key].length < 3 && streak.unknown[key] && units.has(kind)) mark(hole, 'pending', 'earlier-streak-score-pending');
       }
       streaks.set(playerId, streak);
     }

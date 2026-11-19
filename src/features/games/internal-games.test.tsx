@@ -26,6 +26,32 @@ afterAll(() => {
 });
 
 describe('separate internal game setup and capability boundaries', () => {
+  it('gates shared Dots called controls on capability and previews the entered score rather than a saved par', () => {
+    const f = dotsFixture(), playerId = f.ids[0];
+    if (!playerId || !f.round.games) throw new Error('Missing fictional game');
+    const callerId = playerId;
+    const game: DotsGameDefinition = { ...f.game, specials: [...f.game.specials, { kind: 'murphy', units: 1 }] };
+    const round = { ...f.round, games: { ...f.round.games, configuration: { ...f.round.games.configuration, games: [game] } } };
+    function Editor({ supported }: { readonly supported: boolean }) {
+      const [dots, setDots] = useState<readonly DotsHoleRecord[]>([]);
+      return <RoundGameHoleControls round={{ ...round, ...(supported ? { dotsCallTargets: true as const } : {}) }}
+        groupNumber={1} holeNumber={1} playerId={callerId} saved={{ kind: 'strokes', strokes: 4 }}
+        playerScore={{ kind: 'strokes', strokes: 5 }} draft={{ dots }} disabled={false}
+        onNassauChange={vi.fn()} onWolfChange={vi.fn()} onSpecialDotsChange={setDots} />;
+    }
+    const view = render(<Editor supported={false} />);
+    fireEvent.click(screen.getByRole('button', { name: `Dots for Fictional golfer 1 · ${game.name}` }));
+    expect(screen.getByRole('button', { name: 'Call Paree · Fictional golfer 1' })).toBeVisible();
+    expect(screen.queryByRole('checkbox', { name: 'Paree called · Fictional golfer 1' })).not.toBeInTheDocument();
+    view.rerender(<Editor supported />);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Paree called · Fictional golfer 1' }));
+    expect(screen.getByText('Missed · opponents earn · needs 4 or better')).toBeVisible();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Murphy called · Fictional golfer 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Increase Murphy stakes · Fictional golfer 1' }));
+    expect(screen.getByLabelText('Murphy stakes · Fictional golfer 1')).toHaveTextContent('×2');
+    expect(screen.queryByRole('combobox', { name: /Paree call/ })).not.toBeInTheDocument();
+  });
+
   it('retains a small individual draft but refuses saving if API capability disappears while editing', () => {
     const f = dotsFixture();
     if (!f.round.games) throw new Error('Missing fictional games');

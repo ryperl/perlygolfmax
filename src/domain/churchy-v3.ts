@@ -59,7 +59,7 @@ export function churchyV3RecordsMatchGame(records: readonly ChurchySpecialsV3[],
   round: DotRoundInput): boolean {
   return !churchyV3Context(game, round, records).contexts.some((entry) => entry.status === 'unavailable')
     && records.every((record) => record.players.every((player) => dotsDeclarationIssues(player).conflicts.length === 0))
-    && dotsRecordsMatchGame(dotRecords(records), churchyDotsDefinition(game), round, [], 'churcie-v3');
+    && dotsRecordsMatchGame(dotRecords(records), churchyDotsDefinition(game), round);
 }
 
 const sum = (values: readonly number[]) => {
@@ -69,8 +69,8 @@ const sum = (values: readonly number[]) => {
 
 export function calculateChurchyV3Results(game: ChurchyGameDefinitionV3, inputs: readonly ChurchyPlayerInput[],
   cards: readonly Scorecard[], groups: readonly RoundGroup[], defaultLayout: readonly CourseHole[],
-  groupValid: boolean): RoundGameResult {
-  const round: DotRoundInput = { groups, cards, layout: defaultLayout,
+  groupValid: boolean, stringRulesVersion: 1 | 2 = 2): RoundGameResult {
+  const round: DotRoundInput = { groups, cards, layout: defaultLayout, stringRulesVersion,
     playerLayouts: inputs.map((input) => ({ playerId: input.playerId, layout: input.layout })) };
   const records = churchyV3Records(game, groups, cards);
   const rotation = churchyV3Context(game, round, records);

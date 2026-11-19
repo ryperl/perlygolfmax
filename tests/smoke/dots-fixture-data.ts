@@ -24,9 +24,10 @@ const dots: DotsGameDefinition = { id: strokeGameId(961), name: 'Fictional linke
   groupNumber: 1, playerIds: dotsPlayers, mode: 'linked', linkedGameId: wolf.id,
   specials: [{ kind: 'sandy', units: 1 }, { kind: 'paree', units: 1 }] };
 
-function project(round: RoundScores, games = round.games?.configuration.games ?? []): RoundScores {
-  const results = calculateGameResults(games, { ...dotsFixture.snapshot, groups: round.groups,
-    players: dotsFixture.snapshot.players.filter((player) => round.cards.some((card) => card.playerId === player.playerId)) }, round.cards);
+function project(round: RoundScores, games = round.games?.configuration.games ?? [], snapshot = dotsFixture.snapshot): RoundScores {
+  const results = calculateGameResults(games, { ...snapshot, groups: round.groups,
+    players: snapshot.players.filter((player) => round.cards.some((card) => card.playerId === player.playerId)) },
+  round.cards, round.stringRulesVersion ?? 1);
   return { ...round, games: {
     configuration: { eventId: round.eventId, roundId: round.roundId,
       etag: round.games?.configuration.etag ?? 'fictional-dots-games-v1', games },
@@ -34,28 +35,41 @@ function project(round: RoundScores, games = round.games?.configuration.games ??
   }, internalSettlements: calculateInternalSettlements(games, results, round) };
 }
 
-function workspace(round: RoundScores): EventWorkspace {
+function workspace(round: RoundScores, snapshot = dotsFixture.snapshot): EventWorkspace {
   return { event: { id: round.eventId, name: round.eventName, role: 'viewer', status: 'active',
     etag: 'fictional-dots-event-v1', createdAt: '2026-01-01T00:00:00Z' },
   etag: 'fictional-dots-event-v1', location: 'Fictional location', publicAccess: true, canViewScores: true,
   roster: round.cards.map(({ playerId, displayName }) => ({ playerId, displayName, handicapIndexValue: '0' })),
-  rounds: [{ ...dotsFixture.snapshot, groups: round.groups, scoringStarted: round.setupLocked,
+  rounds: [{ ...snapshot, groups: round.groups, scoringStarted: round.setupLocked,
     players: round.cards.map(({ playerId, displayName }) => ({ playerId, displayName, handicapIndexValue: '0' })) }] };
 }
 
 export async function openDotsFixture(page: Page, testInfo: TestInfo,
-  scenario: 'setup' | 'linked' | 'old-api' | 'rotating-3' | 'rotating-6' | 'individual-1' | 'individual-2' | 'individual-3' = 'setup') {
+  scenario: 'setup' | 'linked' | 'old-api' | 'rotating-3' | 'rotating-6' | 'individual-1' | 'individual-2' | 'individual-3'
+    | 'string-rules' | 'called-targets' = 'setup') {
   const server = await createServer({ configFile: false, cacheDir: testInfo.outputPath('vite-cache'),
     server: { host: '127.0.0.1', port: 0, hmr: false }, esbuild: { jsx: 'automatic' },
     optimizeDeps: { noDiscovery: true, include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'] },
     logLevel: 'error' });
   const playerCount = scenario.startsWith('individual-') ? Number(scenario.slice(-1)) : 4;
-  const base = strokeGamesRound(playerCount === 4 ? dotsFixture : strokeGameFixture(9, playerCount));
+  const modernRules = scenario === 'string-rules' || scenario === 'called-targets';
+  const snapshot = scenario === 'string-rules' ? { ...dotsFixture.snapshot, teeProfile: { ...dotsFixture.snapshot.teeProfile,
+    holes: dotsFixture.snapshot.teeProfile.holes.map((hole) => ({ ...hole, par: hole.number === 2 ? 5 : hole.number === 3 ? 3 : hole.par })) } }
+    : dotsFixture.snapshot;
+  const base = strokeGamesRound(playerCount === 4 ? { ...dotsFixture, snapshot } : strokeGameFixture(9, playerCount));
   const ids = dotsPlayers.slice(0, playerCount);
-  const initial: RoundScores = { ...base, setupLocked: false, lastUpdatedAt: null, teeStrokeAllocation: true,
+  const seeded = scenario === 'string-rules';
+  const stringScores = [[4, 4, 3], [3, 4, 1]] as const;
+  const initial: RoundScores = { ...base, setupLocked: seeded, lastUpdatedAt: seeded ? '2026-01-01T00:00:00Z' : null,
+    teeStrokeAllocation: true, ...(modernRules ? { stringRulesVersion: 2 as const } : {}),
+    ...(scenario === 'called-targets' ? { dotsCallTargets: true as const } : {}),
     groups: [{ ...base.groups[0], number: 1, playerIds: ids }],
-    cards: base.cards.slice(0, playerCount).map((card) => ({ ...card, etag: null, updatedAt: null,
-      holes: card.holes.map((hole) => ({ ...hole, score: { kind: 'unplayed' } })) })),
+    cards: base.cards.slice(0, playerCount).map((card, index) => ({ ...card,
+      etag: seeded ? `fictional-string-card-${String(index)}` : null, updatedAt: seeded ? '2026-01-01T00:00:00Z' : null,
+      holes: card.holes.map((hole) => ({ ...hole, score: seeded && hole.number <= 3
+        ? { kind: 'strokes', strokes: stringScores[index]?.[hole.number - 1]
+          ?? (snapshot.teeProfile.holes.find((entry) => entry.number === hole.number)?.par ?? 4) + 1 }
+        : { kind: 'unplayed' } })) })),
     supportedGameKinds: scenario === 'old-api' ? ['skins'] : ['dots', 'wolf', 'skins'],
     ...(scenario === 'old-api' ? {} : { dotsRulesVersions: [1, 2] as const, dotsIndividualPlayerCounts: [1, 2, 3, 4] as const }),
     internalGamesSupported: scenario !== 'old-api', wolfRulesVersions: scenario === 'old-api' ? [1] : [1, 2],
@@ -66,8 +80,13 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
     groupNumber: 1, playerIds: dotsPlayers, stakeMinor: 50,
     specials: [...(['sandy', 'hogan', 'seve', 'pully', 'dime', 'super-dime', 'murphy', 'chippy', 'walk'] as const)
       .map((kind) => ({ kind, units: 1 })), { kind: 'birdie', units: 2 }] };
-  let stored = project(initial, scenario.startsWith('rotating') ? [dotsFixture.skins, rotating]
-    : scenario === 'setup' || scenario.startsWith('individual-') ? [dotsFixture.skins] : [dotsFixture.skins, wolf, dots]);
+  const modern: DotsGameDefinition = { id: strokeGameId(963), name: 'Fictional current Dots', kind: 'dots', version: 1,
+    mode: 'individual', groupNumber: 1, playerIds: dotsPlayers, stakeMinor: null,
+    specials: scenario === 'string-rules' ? [{ kind: 'string', units: 1 }, { kind: 'birdy-string', units: 3 },
+      { kind: 'birdie', units: 2 }, { kind: 'eagle', units: 4 }]
+      : [{ kind: 'paree', units: 1 }, { kind: 'murphy', units: 1 }, { kind: 'sandy', units: 1 }, { kind: 'pully', units: 1 }] };
+  let stored = project(initial, modernRules ? [modern] : scenario.startsWith('rotating') ? [dotsFixture.skins, rotating]
+    : scenario === 'setup' || scenario.startsWith('individual-') ? [dotsFixture.skins] : [dotsFixture.skins, wolf, dots], snapshot);
   let writes = 0, configWrites = 0, failPaused = false, roundReads = 0;
   const roundReadFormats: string[] = [];
   let releaseFailure: (() => void) | null = null;
@@ -76,7 +95,7 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
   const pageErrors: string[] = [];
   page.on('pageerror', (error) => { pageErrors.push(error.message); });
   expect(isRoundScores(stored)).toBe(true);
-  expect(isEventWorkspace(workspace(stored))).toBe(true);
+  expect(isEventWorkspace(workspace(stored, snapshot))).toBe(true);
   try {
     await server.listen();
     const address = server.httpServer?.address();
@@ -89,13 +108,14 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
       expect(headers.authorization).toBeUndefined();
       const path = new URL(request.url()).pathname.replace('/__public-api/public/', '');
       if (request.method() === 'GET') {
-        if (path === 'events') return route.fulfill({ json: { events: [workspace(stored).event] } });
-        if (path.endsWith('/workspace')) return route.fulfill({ json: workspace(stored) });
+        if (path === 'events') return route.fulfill({ json: { events: [workspace(stored, snapshot).event] } });
+        if (path.endsWith('/workspace')) return route.fulfill({ json: workspace(stored, snapshot) });
         if (path.endsWith('/scores')) {
           roundReads++;
           const lean = new URL(request.url()).searchParams.get('format') === 'lean';
           roundReadFormats.push(lean ? 'lean' : 'full');
-          return route.fulfill({ json: lean ? leanRoundScores(stored) : stored });
+          if (modernRules) expect(new URL(request.url()).searchParams.get('stringRules')).toBe('2');
+          return route.fulfill({ json: lean ? leanRoundScores(stored, false, false, modernRules, scenario === 'called-targets') : stored });
         }
         throw new Error(`Unexpected fictional Dots read: ${path}`);
       }
@@ -112,13 +132,13 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
         const before = stored.games.configuration.games;
         configurations.push(payload.games);
         stored = project({ ...stored, games: { ...stored.games, configuration: { ...stored.games.configuration,
-          etag: `fictional-dots-games-v${String(++configWrites + 1)}` } } }, payload.games);
+          etag: `fictional-dots-games-v${String(++configWrites + 1)}` } } }, payload.games, snapshot);
         const result: GameWriteResult = { round: stored, change: { id, eventId: stored.eventId, roundId: stored.roundId,
           expectedEtag, before, after: payload.games, recordedAt: '2026-01-01T00:00:00Z',
           recordedBy: { kind: 'public-score', eventId: stored.eventId } } };
         expect(isRoundScores(stored)).toBe(true);
         return route.fulfill({ json: new URL(request.url()).searchParams.get('format') === 'lean'
-          ? { ...result, round: leanRoundScores(result.round) } : result });
+          ? { ...result, round: leanRoundScores(result.round, false, false, modernRules, scenario === 'called-targets') } : result });
       }
       if (!isHoleScore(payload.score)) throw new Error('Invalid fictional Dots score request');
       const parts = path.split('/'), playerId = parts[5], holeNumber = Number(parts[7]);
@@ -140,12 +160,13 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
         cards: stored.cards.map((entry) => entry.playerId === card.playerId ? { ...entry,
           etag: `fictional-dots-card-v${String(++writes)}`, updatedAt: recordedAt,
           holes: entry.holes.map((hole) => hole.number === holeNumber ? { ...hole, score: after } : hole),
-        } : entry) });
+        } : entry) }, undefined, snapshot);
       const result: ScoreWriteResult = { round: stored, change: { id, eventId: stored.eventId, roundId: stored.roundId,
         playerId: card.playerId, holeNumber, before, after, expectedEtag, recordedAt,
         recordedBy: { kind: 'public-score', eventId: stored.eventId } } };
       expect(isScoreWriteResult(result)).toBe(true);
-      return route.fulfill({ json: new URL(request.url()).searchParams.get('format') === 'lean' ? leanScoreWriteResult(result) : result });
+      return route.fulfill({ json: new URL(request.url()).searchParams.get('format') === 'lean'
+        ? leanScoreWriteResult(result, false, false, modernRules, scenario === 'called-targets') : result });
     });
     await page.goto(`${origin}/#events?event=${stored.eventId}&round=${stored.roundId}`);
     await expect(page.getByRole('form', { name: 'Group 1 hole 1 entry', exact: true })).toBeVisible();

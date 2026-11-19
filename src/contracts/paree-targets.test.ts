@@ -24,7 +24,7 @@ function fixture() {
 }
 
 describe('Paree strict contracts and independent compatibility', () => {
-  it('accepts canonical Churchie v3 pending par markers only, never ordinary Dots or manual marked results', () => {
+  it('accepts canonical pending par markers in Churchie v3 and ordinary Dots, never manual marked results', () => {
     const f = fixture();
     expect(isChurchySpecials(f.extras)).toBe(true);
     for (const patch of [{ result: 'success' }, { result: 'failure' }, { pareeTarget: 'birdie' },
@@ -32,7 +32,7 @@ describe('Paree strict contracts and independent compatibility', () => {
       expect(isChurchySpecials({ ...f.extras, players: [{ ...f.extras.players[0],
         calls: [{ ...f.paree, ...patch }] }] })).toBe(false);
     }
-    expect(isDotsHoleRecord(Object.fromEntries(Object.entries(f.extras).filter(([key]) => key !== 'version')))).toBe(false);
+    expect(isDotsHoleRecord(Object.fromEntries(Object.entries(f.extras).filter(([key]) => key !== 'version')))).toBe(true);
     expect(isChurchySpecials({ ...f.extras, version: 2 })).toBe(false);
     expect(isChurchySpecials({ ...f.extras, version: 1 })).toBe(false);
     expect(isRoundScores({ ...f.round, churchyPareeTargets: false })).toBe(false);

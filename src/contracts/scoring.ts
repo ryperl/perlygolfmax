@@ -126,6 +126,11 @@ export function decodeRoundScores(value: unknown): RoundScores | null {
 }
 
 function validateRoundScores(value: unknown, lean = false): value is RoundScores {
+  if (isRecord(value) && value.dotsCallTargets !== undefined
+    && (value.dotsCallTargets !== true || value.internalGamesSupported !== true
+      || !Array.isArray(value.supportedGameKinds) || !value.supportedGameKinds.includes('dots')
+      || isRecord(value.permissions) && value.permissions.role === 'tester')) return false;
+  if (isRecord(value) && value.stringRulesVersion !== undefined && value.stringRulesVersion !== 2) return false;
   if (isRecord(value) && value.churchyMurphyTargets !== undefined
     && (value.churchyMurphyTargets !== true || value.churchyEnabled !== true
       || isRecord(value.permissions) && value.permissions.role === 'tester')) return false;
@@ -307,6 +312,7 @@ function validateRoundScores(value: unknown, lean = false): value is RoundScores
     hole.score.churchy?.version === 2 || hole.score.churchy?.version === 3))) return false;
   if (value.games !== undefined) {
     const context: RoundGameScoringContext = { roundId: value.roundId, groups, layout, cards,
+      stringRulesVersion: value.stringRulesVersion === 2 ? 2 : 1,
       ...(value.playerTees ? { playerTees: value.playerTees } : {}), ...(courseHandicaps ? { courseHandicaps } : {}),
       ...(typeof value.teeStrokeAllocation === 'boolean' ? { teeStrokeAllocation: value.teeStrokeAllocation } : {}),
       ...(isRecord(value.gameInputContext) && typeof value.gameInputContext.courseVersionId === 'string'
@@ -356,7 +362,7 @@ function validateRoundScores(value: unknown, lean = false): value is RoundScores
             handicap: !(playerAllocations.get(card.playerId) ?? value.teeStrokeAllocation)
               ? 'missing-stroke-index' : published?.courseHandicap ?? 'missing-handicap-index' };
         }), cards, isRecord(group) && Array.isArray(group.playerIds) && group.playerIds.length === 4
-          && group.playerIds.every((id: unknown) => typeof id === 'string' && game.playerIds.includes(id)), groups, layout);
+          && group.playerIds.every((id: unknown) => typeof id === 'string' && game.playerIds.includes(id)), groups, layout, context.stringRulesVersion);
         if (!sameJsonValue(result, expected)) return false;
         continue;
       }

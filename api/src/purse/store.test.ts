@@ -7,6 +7,7 @@ import { creator, event, member } from '../../test/fixtures.js';
 import { TableEventStore } from '../events/store.js';
 import { TablePurseStore } from './store.js';
 import { ApiError } from '../errors.js';
+import type { DotsGameDefinition } from '../../../src/domain/dots.js';
 
 async function fixture() {
   const f = await scoringFixture();
@@ -21,6 +22,26 @@ async function fixture() {
 }
 
 describe('owner purse settings and authoritative winnings', () => {
+  it('refuses an affected old-client purse acknowledgement before publishing money or an audit', async () => {
+    const f = await fixture();
+    const game: DotsGameDefinition = { id: identifier(760), name: 'Fictional String', kind: 'dots', version: 1,
+      mode: 'individual', stakeMinor: null, groupNumber: 1, playerIds: f.input.playerIds,
+      specials: [{ kind: 'string', units: 1 }] };
+    let round = (await f.scores.saveGames(creator, event.id, f.roundId, [game], null, identifier(761))).round;
+    for (const hole of [1, 2, 3]) {
+      round = (await f.scores.write(creator, event.id, f.roundId, f.playerId, hole,
+        { kind: 'strokes', strokes: hole === 2 ? 3 : 4 },
+        round.cards.find((card) => card.playerId === f.playerId)?.etag ?? null, identifier(761 + hole))).round;
+    }
+    const rows = new Map(f.rows);
+    f.submit.mockClear();
+    await expect(f.store.save(creator, event.id, f.plan, [], null, identifier(765), f.charge, undefined, false))
+      .rejects.toMatchObject({ status: 426, code: 'STRING_RULES_CLIENT_UPDATE_REQUIRED' });
+    expect(f.submit).not.toHaveBeenCalled();
+    expect(f.rows).toEqual(rows);
+    const saved = await f.store.save(creator, event.id, f.plan, [], null, identifier(765), f.charge, undefined, true);
+    expect(isPurseWriteResult(saved)).toBe(true);
+  });
   it('reserves all round reads in one charge and does no score work when that reservation is denied', async () => {
     const f = await fixture();
     const first = f.input.rounds[0];

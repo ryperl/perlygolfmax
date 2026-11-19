@@ -274,7 +274,7 @@ describe('Churchie v3 authoritative public conditional transactions', () => {
     expect(saved.round.games?.results[0]?.churchy?.order).toEqual({ playerIds: f.game.playerIds });
     expect(isScoreWriteResult(saved)).toBe(true);
     expect(isRoundScores(saved.round)).toBe(true);
-    expect(decodeRoundScores(leanRoundScores(saved.round))).toEqual(saved.round);
+    expect(decodeRoundScores(leanRoundScores(saved.round, false, false, true))).toEqual(saved.round);
     expect(f.row(`index-capture:${f.roundId}`)).toBeDefined();
     expect((await f.workspace.get(creator, event.id)).rounds[0]?.players).toHaveLength(8);
     expect((await f.scores.write(f.actor, event.id, f.roundId, f.playerId, start, score, null, identifier(24002))).change)

@@ -57,7 +57,10 @@ export function buildDotAwardAudit(
     const previousAwards = previous?.dots?.awards ?? previous?.wolf?.awards ?? previous?.churchy?.awards ?? [];
     const nextAwards = next?.dots?.awards ?? next?.wolf?.awards ?? next?.churchy?.awards ?? [];
     if (canonical(previousAwards) === canonical(nextAwards)) return [];
-    return [{ gameId: game.id, kind: game.kind, version: game.version, configuration: game, gameEtag,
+    const stringRules = [...previousAwards, ...nextAwards]
+      .some((award) => award.kind === 'string' || award.kind === 'birdy-string');
+    return [{ ...(stringRules ? { stringRulesVersion: 2 as const } : {}),
+      gameId: game.id, kind: game.kind, version: game.version, configuration: game, gameEtag,
       inputRevision: afterRound.inputRevision ?? null, before: previousAwards, after: nextAwards }];
   });
 }

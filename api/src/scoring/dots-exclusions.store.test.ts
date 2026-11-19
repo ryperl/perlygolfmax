@@ -133,7 +133,7 @@ describe('new Dots declaration exclusions with legacy preservation', () => {
       const { rotation, ...base } = f.record([declaration]);
       const record = { ...base, number, ...(number === 1 && rotation ? { rotation } : {}) };
       round = (await f.scores.write(f.actor, event.id, f.roundId, f.playerId, number,
-        { kind: 'strokes', strokes: 4, dots: [record] },
+        { kind: 'strokes', strokes: kind === 'birdy-string' ? 5 : 4, dots: [record] },
         cardEtag(round, f.playerId), identifier(22943))).round;
       const rows = new Map(f.rows);
       f.submit.mockClear();
@@ -249,34 +249,23 @@ describe('new Dots declaration exclusions with legacy preservation', () => {
     expect(f.rows.has(`${event.id}|score-change:${identifier(22918)}`)).toBe(false);
   });
 
-  it.each([1, 2] as const)('rejects Churchie-only press stages from ordinary Dots v%i writes and marks malformed saved records unavailable', async (version) => {
+  it.each([1, 2] as const)('accepts explicit score-derived Murphy stages in ordinary Dots v%i and preserves them on reads', async (version) => {
     const f = await fixture(version);
+    let expected: string | null = null;
     for (const murphyPresses of [0, 1, 2] as const) {
       const record = f.record([{ playerId: f.playerId, counts: {}, calls: [{
-        id: identifier(22800), kind: 'murphy', result: 'pending', murphyPresses,
+        id: identifier(22800), kind: 'murphy', result: 'pending', murphyPresses, murphyTarget: 'par',
       }] }]);
-      await expect(f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
-        { kind: 'strokes', strokes: 4, dots: [record] }, null, identifier(22801 + murphyPresses)))
-        .rejects.toMatchObject({ code: 'DOTS_SETUP_CHANGED' });
+      const saved = await f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+        { kind: 'strokes', strokes: 4, dots: [record] }, expected, identifier(22801 + murphyPresses));
+      expect(saved.change.after.dots).toEqual([record]);
+      const read = await f.scores.get(f.actor, event.id, f.roundId);
+      expect(read.games?.results[0]?.dots?.awards).toContainEqual(expect.objectContaining({
+        kind: 'murphy', count: 1 + murphyPresses, multiplier: 1,
+      }));
+      expect(isRoundScores(read)).toBe(true);
+      expected = read.cards.find((entry) => entry.playerId === f.playerId)?.etag ?? null;
     }
-    const record = f.record([{ playerId: f.playerId, counts: {}, calls: [{
-      id: identifier(22805), kind: 'murphy', result: 'pending',
-    }] }]);
-    const saved = await f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
-      { kind: 'strokes', strokes: 4, dots: [record] }, null, identifier(22806));
-    const card = saved.round.cards.find((entry) => entry.playerId === f.playerId);
-    if (!card) throw new Error('Missing fictional card');
-    const malformed = { ...record, players: record.players.map((player) => ({ ...player,
-      calls: player.calls.map((call) => ({ ...call, murphyPresses: 2 as const })) })) };
-    f.seed({ ...f.row(`score-card:${f.roundId}:${f.playerId}`), content: JSON.stringify({
-      playerId: card.playerId, displayName: card.displayName, updatedAt: card.updatedAt,
-      holes: card.holes.map((hole) => hole.number === 1 ? { ...hole,
-        score: { kind: 'strokes', strokes: 4, dots: [malformed] } } : hole),
-    }) });
-    const read = await f.scores.get(f.actor, event.id, f.roundId);
-    expect(read.games?.results[0]?.dots?.status).toBe('unavailable');
-    expect(read.games?.results[0]?.dots?.awards).toEqual([]);
-    expect(isRoundScores(read)).toBe(true);
   });
 
   it.each([1, 2] as const)('rejects new same-golfer conflicts for version %i but permits teammates and warning-only Walk', async (version) => {

@@ -305,7 +305,33 @@ explicit `churchyRulesVersions` support. Their default specials copy the
 Churchie subset of the shared Dots catalog, with canonical Dime displayed Sticky.
 Sandy is gross par-or-better. Units are positive safe integers; Murphy stages
 multiply their configured units, while Sweep uses units times current stake.
-Ordinary Dots does not gain Churchie press semantics.
+Ordinary Dots independently supports explicit Murphy total-stakes 1×/2×/3×;
+these multiply configured units, never Churchie's hole stake.
+
+String calculations use `stringRules=2` and a received `stringRulesVersion: 2`
+marker. Gross par-or-better sustains String; birdie-or-better sustains BirdyString.
+Both start on the third qualifying hole and award on each later qualifier.
+Only the configured, qualifying BirdyString wins when both streaks qualify;
+the underlying ordinary streak survives a birdie so a later par resumes String.
+Other automatic awards remain independent. Apply corrected derived results to
+existing and future rounds without rewriting cards, captures or original receipts.
+Absent response markers retain strict legacy decoding, never guessed current
+math. Unnegotiated reads succeed only when their authoritative totals are exactly
+legacy-representable; affected old writers fail with HTTP 426 before mutation.
+Preserve pending drafts and request an app update, not a second set of successful
+legacy totals. Immutable Wolf final-hole choices remain fixed; changed prefix
+receipts and obsolete purse tie resolutions must stay explicitly stale.
+
+Ordinary Dots called targets negotiate `dotsCalls=score-v1`, independently of
+the Churchie Murphy/Paree flags, and advertise `dotsCallTargets: true`.
+Use the shared called controls and existing canonical pending target markers for
+Paree/par and Murphy/par-or-birdie, including repeated calls and explicit Murphy
+press stages. Manual legacy calls remain manual until explicit opt-in; raw-only
+or older-client echoes cannot erase saved markers/stages. Compatible legacy
+reads may resolve target outcomes, but nonzero ordinary-Dots presses require
+HTTP 426 instead of fabricated legacy units. Reject unsupported writes before
+mutation or staged publication. Preserve actual individual/partner/opponent
+attribution and all conditional, retry, audit and budget safeguards.
 
 Special-award recipient lists represent a set of golfers, not the ordered
 partnership receipt. Opponent awards (Walk, Pickup and failed Paree/Murphy/Pully

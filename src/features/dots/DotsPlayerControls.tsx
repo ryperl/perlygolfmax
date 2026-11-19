@@ -18,6 +18,7 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
   readonly score?: HoleScore | undefined;
 }) {
   const enabled = (kind: DotsSpecialKind) => game.specials.some((special) => special.kind === kind);
+  const hasOpponents = game.mode !== 'individual' || game.playerIds.length > 1;
   const context = scoreDerivedMurphy || scoreDerivedParee ? { score, par } : undefined;
   const issues = dotsDeclarationWriteIssues(declaration, context);
   const failedCallConflict = issues.conflicts.some((issue) => issue.code === 'FAILED_CALL_SPECIAL');
@@ -80,10 +81,10 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
           </div></div>;
     })}
     {scoreDerivedMurphy && enabled('murphy') && <CalledSpecialControls kind="murphy" calls={declaration.calls} name={name}
-      score={score} par={par} blocked={(declaration.counts.hogan ?? 0) > 0}
+      score={score} par={par} blocked={(declaration.counts.hogan ?? 0) > 0} hasOpponents={hasOpponents}
       onChange={(value) => { onChange({ ...declaration, calls: value }); }} />}
     {scoreDerivedParee && enabled('paree') && <CalledSpecialControls kind="paree" calls={declaration.calls} name={name}
-      score={score} par={par} blocked={false} onChange={(value) => { onChange({ ...declaration, calls: value }); }} />}
+      score={score} par={par} blocked={false} hasOpponents={hasOpponents} onChange={(value) => { onChange({ ...declaration, calls: value }); }} />}
     {calls.filter((kind) => enabled(kind) && !(scoreDerivedMurphy && kind === 'murphy')
       && !(scoreDerivedParee && kind === 'paree')).map((kind) => {
       const callBlocked = kind === 'murphy' && (declaration.counts.hogan ?? 0) > 0;
@@ -106,7 +107,7 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
               if (result === 'pending' || result === 'success' || result === 'failure') onChange({ ...declaration,
                 calls: declaration.calls.map((entry) => entry.id === call.id ? { ...entry, result } : entry) });
             }}><option value="pending">Called · Outcome pending</option><option value="success" disabled={successBlocked}>Success</option>
-              <option value="failure" disabled={failureBlocked}>Failed · Opponents earn</option></select></label>
+              <option value="failure" disabled={failureBlocked}>{hasOpponents ? 'Failed · Opponents earn' : 'Failed · No opponents'}</option></select></label>
           {failureBlocked && <small>Clear this golfer&apos;s par-or-better specials or made calls before marking this call failed.</small>}
           {successBlocked && <small>Correct this golfer&apos;s failed call before recording another made call.</small>}
           {allowMurphyPresses && kind === 'murphy' && <label>Murphy press stage

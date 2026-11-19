@@ -1,8 +1,9 @@
 import { HttpRequest, InvocationContext } from '@azure/functions';
+import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import type { DotsGameDefinition } from '../../../src/domain/dots.js';
 import type { ChurchyGameDefinitionV3 } from '../../../src/domain/churchy.js';
-import { decodeRoundScores, isScoreWriteResult } from '../../../src/contracts/scoring.js';
+import { decodeRoundScores, isScoreHistoryPage, isScoreWriteResult } from '../../../src/contracts/scoring.js';
 import { isRecord } from '../../../src/contracts/events.js';
 import { maximumGameConfigurationBytes } from '../../../src/domain/games.js';
 import { publicFixture } from '../public-access/test-support.js';
@@ -34,6 +35,81 @@ async function fixture() {
 }
 
 describe('Dots HTTP namespaces and public internal authority', () => {
+  it.each(['owner', 'public'] as const)('negotiates corrected String for %s before mutations, preserves retry identity and pages the projected leaf once', async (role) => {
+    const f = await fixture();
+    const game: DotsGameDefinition = { ...f.game, specials: [{ kind: 'string', units: 1 }, { kind: 'birdy-string', units: 2 }] };
+    await f.scores.saveGames(f.actor, event.id, f.roundId, [game], null, identifier(25000));
+    const ownerApi = { verify: vi.fn().mockResolvedValue(creator), limiter: f.api.limiter, scores: f.scores };
+    const writer = role === 'owner' ? createScoringHandler(() => ownerApi, 'score-hole')
+      : createPublicHandler(() => f.api, 'score-hole');
+    const staged = role === 'owner' ? createScoringHandler(() => ownerApi, 'score-game-hole')
+      : createPublicHandler(() => f.api, 'score-game-hole');
+    const reader = role === 'owner' ? createScoringHandler(() => ownerApi, 'scores')
+      : createPublicHandler(() => f.api, 'scores');
+    const request = (query = '') => new HttpRequest({ method: 'GET', url: `https://fictional.example.test/api/fixture${query}`,
+      params: { id: event.id, roundId: f.roundId } });
+    const untouched = await reader(request(), f.context);
+    expect(untouched.status).toBe(200);
+    expect(untouched.jsonBody).not.toHaveProperty('stringRulesVersion');
+    expect(decodeRoundScores(untouched.jsonBody)).not.toBeNull();
+    const rows = new Map(f.rows);
+    f.submit.mockClear();
+    expect(await writer(f.request({ score: { kind: 'strokes', strokes: 3 } }, 25001), f.context))
+      .toMatchObject({ status: 426, jsonBody: { code: 'STRING_RULES_CLIENT_UPDATE_REQUIRED' } });
+    for (const query of ['stringRules=3', 'stringRules=2&stringRules=1']) {
+      expect(await writer(f.request({ score: { kind: 'strokes', strokes: 3 } }, 25001, {}, `?${query}`), f.context))
+        .toMatchObject({ status: 426 });
+    }
+    expect(await staged(f.request({ privateUpload: {} }, 25001), f.context))
+      .toMatchObject({ status: 426 });
+    const gameWriter = role === 'owner' ? createScoringHandler(() => ownerApi, 'round-games')
+      : createPublicHandler(() => f.api, 'games');
+    expect(await gameWriter(f.request({ privateUpload: {} }, 25010), f.context))
+      .toMatchObject({ status: 426 });
+    if (role === 'owner') {
+      const kp = createScoringHandler(() => ownerApi, 'round-kp');
+      expect(await kp(f.request({ privateUpload: {} }, 25011), f.context)).toMatchObject({ status: 426 });
+      expect(await kp(f.request({ version: 1, context: 'fictional-kp-context', status: 'open', decisions: [] }, 25011), f.context))
+        .toMatchObject({ status: 426 });
+    }
+    expect(f.submit).not.toHaveBeenCalled();
+    expect(f.rows).toEqual(rows);
+    const modern = await writer(f.request({ score: { kind: 'strokes', strokes: 3 } }, 25001, {}, '?stringRules=2&format=lean'), f.context);
+    expect(modern.status).toBe(200);
+    expect(await writer(f.request({ score: { kind: 'strokes', strokes: 3 } }, 25001, {}, '?stringRules=2&format=lean'), f.context)).toEqual(modern);
+    const originalReceipt = { ...f.row(`score-change:${identifier(25001)}`) };
+    const originalCapture = { ...f.row(`index-capture:${f.roundId}`) };
+    let round = await f.scores.get(f.actor, event.id, f.roundId);
+    for (const hole of [2, 3]) {
+      round = (await f.scores.write(f.actor, event.id, f.roundId, f.playerId, hole, { kind: 'strokes', strokes: 4 },
+        round.cards.find((card) => card.playerId === f.playerId)?.etag ?? null, identifier(25001 + hole))).round;
+    }
+    for (const format of ['', '&format=lean']) {
+      expect(await reader(request(`?legacy=1${format}`), f.context))
+        .toMatchObject({ status: 426, jsonBody: { code: 'STRING_RULES_CLIENT_UPDATE_REQUIRED' } });
+      const current = await reader(request(`?stringRules=2${format}`), f.context);
+      expect(current.status).toBe(200);
+      expect(decodeRoundScores(current.jsonBody)?.games?.results[0]?.players[0]?.totalPoints).toBe(1);
+      expect(decodeRoundScores(current.jsonBody)?.stringRulesVersion).toBe(2);
+      const digest = createHash('sha256').update(JSON.stringify(current.jsonBody)).digest('hex');
+      const page = await reader(request(`?stringRules=2${format}&privatePart=0&privateHash=${digest}`), f.context);
+      expect(page.status).toBe(200);
+      expect(page.jsonBody).toMatchObject({ privateRead: { sha256: digest, index: 0 } });
+    }
+    const history = createScoringHandler(() => ownerApi, 'score-history');
+    const historyRequest = (query: string) => new HttpRequest({ method: 'GET',
+      url: `https://fictional.example.test/api/fixture?${query}`,
+      params: { id: event.id, roundId: f.roundId, playerId: f.playerId } });
+    expect(await history(historyRequest(''), f.context)).toMatchObject({ status: 426 });
+    const currentHistory = await history(historyRequest('stringRules=2'), f.context);
+    expect(currentHistory.status).toBe(200);
+    expect(isScoreHistoryPage(currentHistory.jsonBody)).toBe(true);
+    if (!isScoreHistoryPage(currentHistory.jsonBody)) throw new Error('Missing fictional history');
+    expect(currentHistory.jsonBody.changes.flatMap((change) => change.dotAwardAudit ?? []))
+      .toContainEqual(expect.objectContaining({ stringRulesVersion: 2 }));
+    expect(f.row(`score-change:${identifier(25001)}`)).toEqual(originalReceipt);
+    expect(f.row(`index-capture:${f.roundId}`)).toEqual(originalCapture);
+  });
   it.each(['owner', 'public'] as const)('accepts Churchie v3 canonical declarations on the dedicated %s route without raising ordinary limits', async (role) => {
     const f = await fixture();
     const game: ChurchyGameDefinitionV3 = { id: f.game.id, name: 'Churchie', kind: 'churchy', version: 3,

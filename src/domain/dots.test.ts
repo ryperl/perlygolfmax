@@ -168,19 +168,87 @@ describe('source-only Dots declaration review', () => {
       .toContainEqual(expect.objectContaining({ kind: 'string', number: 2, earnedBy: 'A' }));
   });
 
-  it.each([0, 1, 2] as const)('rejects Churchie-only Murphy stage %i in ordinary individual, fixed, linked and rotating Dots', (murphyPresses) => {
+  it.each([0, 1, 2] as const)('scales configured Murphy units by stage %i without linked hole stakes in every ordinary mode', (murphyPresses) => {
     const f = fixture([4], ['murphy']);
+    f.game = { ...f.game, specials: [{ kind: 'murphy', units: 2 }] };
     const rotating: DotsGameDefinition = { id: f.game.id, name: f.game.name, kind: 'dots', version: 2,
       mode: 'rotating', rotationHoles: 3, groupNumber: 1, playerIds: ids, specials: f.game.specials, stakeMinor: null };
     for (const game of [f.game, fixed(f.game), linked(f.game), rotating]) {
       const records = [{ ...record(1, [declaration('A', {}, [{
-        id: 'murphy-call', kind: 'murphy', result: 'success', murphyPresses,
+        id: 'murphy-call', kind: 'murphy', result: 'pending', murphyPresses, murphyTarget: 'par',
       }])]), ...(game.version === 2 ? { rotation: { playerIds: ids } } : {}) }];
-      expect(dotsRecordsMatchGame(records, game, f.round, [context(1, 2)])).toBe(false);
+      expect(dotsRecordsMatchGame(records, game, f.round, [context(1, 2)])).toBe(true);
       const result = calculateDots(game, f.round, records, [context(1, 2)]);
-      expect(result.status).toBe('unavailable');
-      expect(result.awards).toEqual([]);
+      expect(result.status).toBe('complete');
+      expect(result.awards).toEqual([expect.objectContaining({ kind: 'murphy', earnedBy: 'A',
+        recipientIds: game.mode === 'individual' ? ['A'] : ['A', 'B'],
+        count: 1 + murphyPresses, units: 2, multiplier: 1, dots: 2 * (1 + murphyPresses) })]);
     }
+  });
+
+  it.each([1, 2, 3, 4])('derives repeated explicit calls for %i real individual participants, not inferred calls or invented opponents', (count) => {
+    const f = fixture([4], ['paree', 'murphy']);
+    const game = { ...f.game, playerIds: ids.slice(0, count) };
+    const round = { ...f.round, groups: [{ number: 1, playerIds: game.playerIds }], cards: f.round.cards.slice(0, count),
+      playerLayouts: [{ playerId: 'A', layout: f.round.layout.map((hole) => ({ ...hole, par: 5 })) }] };
+    const calls: DotsPlayerDeclaration['calls'] = [
+      { id: 'paree-1', kind: 'paree', result: 'pending', pareeTarget: 'par' },
+      { id: 'paree-2', kind: 'paree', result: 'pending', pareeTarget: 'par' },
+      { id: 'murphy', kind: 'murphy', result: 'pending', murphyTarget: 'birdie', murphyPresses: 2 },
+    ];
+    const records = [record(1, [declaration('A', {}, calls)])];
+    expect(calculateDots(game, round, []).awards).toEqual([]);
+    for (const score of [{ kind: 'unplayed' }, { kind: 'strokes', strokes: 4 }, { kind: 'strokes', strokes: 5 },
+      { kind: 'strokes', strokes: 6 }, { kind: 'picked-up', reportedStrokes: 7 }, { kind: 'did-not-finish' }] satisfies readonly HoleScore[]) {
+      const result = calculateDots(game, setScores(round, 'A', [score]), records);
+      if (score.kind === 'unplayed') {
+        expect(result.status).toBe('in-progress');
+        expect(result.awards).toEqual([]);
+      } else {
+        const pareeSuccess = score.kind === 'strokes' && score.strokes <= 5;
+        const murphySuccess = score.kind === 'strokes' && score.strokes <= 4;
+        expect(result.awards.filter((award) => award.kind === 'paree')).toHaveLength(pareeSuccess || count > 1 ? 2 : 0);
+        for (const award of result.awards) expect(award.recipientIds).toEqual(
+          (award.kind === 'paree' ? pareeSuccess : murphySuccess) ? ['A'] : game.playerIds.slice(1));
+        expect(result.awards.find((award) => award.kind === 'murphy')?.dots).toBe(murphySuccess || count > 1 ? 3 : undefined);
+      }
+    }
+    const legacy = [record(1, [declaration('A', {}, [{ id: 'manual', kind: 'paree', result: 'failure' }])])];
+    expect(calculateDots(game, round, legacy).awards.some((award) => award.recipientIds.includes('A'))).toBe(false);
+  });
+
+  it('derives failed-call exclusions from personal scores while allowing par after a missed birdie target with Sandy and Pully', () => {
+    const f = fixture([4], ['murphy', 'paree', 'sandy', 'pully']);
+    const player = declaration('A', { sandy: 2, pully: 1 }, [
+      { id: 'birdie', kind: 'murphy', result: 'pending', murphyTarget: 'birdie', murphyPresses: 1 },
+    ]);
+    expect(dotsDeclarationWriteIssues(player, { score: { kind: 'strokes', strokes: 4 }, par: 4 }).conflicts).toEqual([]);
+    expect(dotsDeclarationWriteIssues(player, { score: { kind: 'strokes', strokes: 5 }, par: 4 }).conflicts)
+      .toContainEqual({ code: 'FAILED_CALL_SPECIAL', kinds: ['murphy', 'sandy'] });
+    const records = [record(1, [player])];
+    const round = setScores(f.round, 'A', [{ kind: 'unplayed' }]);
+    expect(dotsAutomaticWriteConflicts(f.game, round, f.round, records, records)).toEqual([]);
+    expect(dotsAutomaticWriteConflicts(f.game, round, setScores(f.round, 'A', [{ kind: 'strokes', strokes: 5 }]), records, records)).toEqual(['A']);
+  });
+
+  it('uses the actual later rotating/linked teams while preserving the original multiplier of untouched linked manual calls', () => {
+    const f = fixture([4, 4, 4, 4], ['paree', 'murphy']);
+    const rotating: DotsGameDefinition = { id: f.game.id, name: f.game.name, kind: 'dots', version: 2,
+      mode: 'rotating', rotationHoles: 3, groupNumber: 1, playerIds: ids, specials: f.game.specials, stakeMinor: null };
+    const calls: DotsPlayerDeclaration['calls'] = [
+      { id: 'paree', kind: 'paree', result: 'pending', pareeTarget: 'par' },
+      { id: 'murphy', kind: 'murphy', result: 'pending', murphyTarget: 'birdie', murphyPresses: 2 },
+    ];
+    const records = [{ ...record(), rotation: { playerIds: ids } }, record(4, [declaration('A', {}, calls)])];
+    const rotated = calculateDots(rotating, f.round, records).awards;
+    expect(rotated.find((award) => award.kind === 'paree')).toMatchObject({ recipientIds: ['A', 'C'], dots: 1 });
+    expect(rotated.find((award) => award.kind === 'murphy')).toMatchObject({ recipientIds: ['B', 'D'], dots: 3 });
+    const contexts = f.round.layout.map((hole) => context(hole.number, 3, [['A', 'D'], ['B', 'C']]));
+    const linkedAwards = calculateDots(linked(f.game), f.round,
+      [record(4, [declaration('A', {}, [...calls, { id: 'legacy', kind: 'paree', result: 'success' }])])], contexts).awards;
+    expect(linkedAwards.find((award) => award.id.endsWith(':paree'))).toMatchObject({ recipientIds: ['A', 'D'], dots: 1, multiplier: 1 });
+    expect(linkedAwards.find((award) => award.kind === 'murphy')).toMatchObject({ recipientIds: ['B', 'C'], dots: 3, multiplier: 1 });
+    expect(linkedAwards.find((award) => award.id.endsWith(':legacy'))).toMatchObject({ recipientIds: ['A', 'D'], dots: 3, multiplier: 3 });
   });
 
   it('keeps current-stake Sweep confined to the internal Churchie profile, preserving ordinary linked multipliers', () => {
@@ -414,6 +482,60 @@ describe('automatic gross awards and actual-order dependencies', () => {
     expect(totals(result)).toEqual([11, 0, 0, 0]);
   });
 
+  it('uses personal gross par-or-better runs, replaces only qualifying enabled Birdie String, and resumes String on par', () => {
+    const f = fixture([4, 5, 3, 4, 4, 4, 4, 4], ['string', 'birdy-string', 'birdie', 'eagle']);
+    const round = setScores(f.round, 'A', [3, 4, 1, 3, 4, 5, 4, 4]
+      .map((strokes) => ({ kind: 'strokes', strokes })));
+    const awards = (input: DotRoundInput, game = f.game) => calculateDots(game, input, []).awards
+      .filter((award) => award.earnedBy === 'A' && ['string', 'birdy-string'].includes(award.kind))
+      .map((award) => [award.number, award.kind]);
+    expect(awards(round)).toEqual([[3, 'birdy-string'], [4, 'birdy-string'], [5, 'string']]);
+    expect(awards(round, { ...f.game, specials: [{ kind: 'string', units: 1 }] }))
+      .toEqual([[3, 'string'], [4, 'string'], [5, 'string']]);
+    expect(awards(setScores(f.round, 'A', [4, 4, 3, 4, 4, 5, 4, 4]
+      .map((strokes) => ({ kind: 'strokes', strokes })))))
+      .toEqual([[3, 'string'], [4, 'string'], [5, 'string']]);
+    expect(awards({ ...round, stringRulesVersion: 1 })).toEqual([[3, 'birdy-string'], [4, 'birdy-string']]);
+    const automatic = calculateDots(f.game, round, []).awards.filter((award) => award.earnedBy === 'A');
+    expect(automatic.filter((award) => award.number === 3).map((award) => award.kind)).toEqual(['eagle', 'birdy-string']);
+  });
+
+  it.each(['picked-up', 'did-not-finish'] as const)('breaks both runs on %s and keeps par-only interruptions of Birdie String', (kind) => {
+    const f = fixture(Array.from({ length: 9 }, () => 4), ['string', 'birdy-string']);
+    const input = setScores(f.round, 'A', [3, 3, 3, 4, 3, 3, 3, 3, 3].map((strokes, index) =>
+      index === 4 ? { kind } : { kind: 'strokes', strokes }));
+    expect(calculateDots(f.game, input, []).awards.filter((award) => award.earnedBy === 'A')
+      .map((award) => [award.number, award.kind]))
+      .toEqual([[3, 'birdy-string'], [4, 'string'], [8, 'birdy-string'], [9, 'birdy-string']]);
+  });
+
+  it('uses personal pars across a nine-hole wrapped circuit in fixed, rotating and linked consumers', () => {
+    const f = fixture(Array.from({ length: 9 }, () => 4), ['string', 'birdy-string']);
+    const input: DotRoundInput = { ...f.round, groups: [{ number: 1, playerIds: ids, startingHole: 9 }],
+      playerLayouts: [{ playerId: 'A', layout: f.round.layout.map((hole) => ({ ...hole, par: 5 })) }] };
+    const rotating: DotsGameDefinition = { id: f.game.id, name: f.game.name, kind: 'dots', version: 2,
+      mode: 'rotating', rotationHoles: 3, groupNumber: 1, playerIds: ids, specials: f.game.specials, stakeMinor: null };
+    for (const game of [f.game, fixed(f.game), rotating, linked(f.game)]) {
+      const contexts = game.mode === 'linked' ? [9, 1, 2, 3, 4, 5, 6, 7, 8].map((number) => context(number)) : undefined;
+      const records = game.version === 2 ? [{ ...record(9), rotation: { playerIds: ids } }] : [];
+      const result = calculateDots(game, input, records, contexts);
+      expect(result.awards.filter((award) => award.earnedBy === 'A').map((award) => [award.number, award.kind]))
+        .toEqual([2, 3, 4, 5, 6, 7, 8].map((number) => [number, 'birdy-string']));
+      expect(result.awards.some((award) => award.kind === 'string' && award.earnedBy === 'B')).toBe(true);
+    }
+  });
+
+  it('rejects a newly earned mixed String conflicting with the same source failed call without erasing old records', () => {
+    const f = fixture([4, 5, 3], ['string', 'murphy']);
+    const previous = setScores(f.round, 'A', [4, 6, 3].map((strokes) => ({ kind: 'strokes', strokes })));
+    const next = setScores(previous, 'A', [4, 4, 3].map((strokes) => ({ kind: 'strokes', strokes })));
+    const records = [record(3, [declaration('A', {}, [{ id: 'failed', kind: 'murphy', result: 'failure' }])])];
+    expect(dotsAutomaticWriteConflicts(f.game, previous, next, records, records)).not.toEqual([]);
+    expect(calculateDots(f.game, next, records).awards.some((award) => award.kind === 'string' && award.earnedBy === 'A')).toBe(true);
+    expect(dotsAutomaticWriteConflicts(f.game, { ...previous, stringRulesVersion: 1 },
+      { ...next, stringRulesVersion: 1 }, records, records)).toEqual([]);
+  });
+
   it('follows a starting-hole circuit across the turn without retroactive String bonuses', () => {
     const { game, round } = fixture(Array.from({ length: 18 }, () => 4), ['string']);
     const rotated = { ...round, groups: [{ number: 1, playerIds: ids, startingHole: 10 }] };
@@ -429,7 +551,7 @@ describe('automatic gross awards and actual-order dependencies', () => {
     const result = calculateDots(game, unknown, []);
     expect(result.holes.map((hole) => hole.status)).toEqual(['pending', 'pending', 'pending', 'complete', 'complete']);
     expect(result.awards.filter((award) => award.earnedBy === 'A').map((award) => award.number)).toEqual([4, 5]);
-    const broken = setScores(unknown, 'A', [{ kind: 'unplayed' }, { kind: 'strokes', strokes: 3 }]);
+    const broken = setScores(unknown, 'A', [{ kind: 'unplayed' }, { kind: 'strokes', strokes: 5 }]);
     expect(calculateDots(game, broken, []).holes.map((hole) => hole.status)).toEqual(['pending', 'complete', 'complete', 'complete', 'complete']);
   });
 

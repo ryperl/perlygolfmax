@@ -6,6 +6,7 @@ import { samePursePlan, samePurseTieResolutions } from '../domain/purse';
 import type { EventPurseView, PurseWriteResult } from '../domain/purse-settings';
 import { maximumPurseRequestBytes } from '../domain/purse-settings';
 import { createPrivateRequest, readPrivateValue, writePrivateValue } from './private-request';
+import { scoringRulesQuery } from './scoring';
 
 export interface PurseClient {
   readonly load: (eventId: string, signal: AbortSignal) => Promise<EventPurseView>;
@@ -17,7 +18,7 @@ export function createPurseClient(apiUrl: string, getToken: () => Promise<string
   const request = createPrivateRequest(apiUrl, getToken, send, maximumPurseRequestBytes);
   const path = (eventId: string) => {
     if (!isUuid(eventId)) throw new Error('Invalid event identifier.');
-    return `events/${encodeURIComponent(eventId)}/purse`;
+    return `events/${encodeURIComponent(eventId)}/purse?${scoringRulesQuery}`;
   };
   return {
     async load(eventId, signal) {

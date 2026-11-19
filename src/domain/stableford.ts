@@ -152,11 +152,11 @@ function playerResult(
 }
 
 export function calculateGameResults(
-  games: readonly RoundGameDefinition[], round: RoundSnapshot, cards: readonly Scorecard[],
+  games: readonly RoundGameDefinition[], round: RoundSnapshot, cards: readonly Scorecard[], stringRulesVersion: 1 | 2 = 2,
 ): readonly RoundGameResult[] {
   const layout = [...round.teeProfile.holes].sort((left, right) => left.number - right.number);
   const courseHandicaps = games.some((game) => game.kind === 'wolf' || game.kind === 'nassau') ? publishedCourseHandicaps(round) : [];
-  const internal = calculateInternalGameResults(games, { roundId: round.id, layout, groups: round.groups, cards,
+  const internal = calculateInternalGameResults(games, { roundId: round.id, layout, groups: round.groups, cards, stringRulesVersion,
     courseHandicaps: games.some((game) => game.kind === 'wolf') ? courseHandicaps : [],
     teeStrokeAllocation: round.teeProfile.strokeAllocation,
     ...(round.playerTees ? { playerTees: round.playerTees } : {}) });
@@ -176,7 +176,7 @@ export function calculateGameResults(
           handicap: !tee.strokeAllocation ? 'missing-stroke-index' : player.handicapIndex == null ? 'missing-handicap-index'
             : calculateCourseHandicap(player.handicapIndex.value, tee) };
       }), cards, group?.playerIds.length === 4 && group.playerIds.every((id) => game.playerIds.includes(id)),
-      round.groups, round.teeProfile.holes);
+      round.groups, round.teeProfile.holes, stringRulesVersion);
     }
     if (!isStablefordGame(game)) return calculateStrokeGameResults(game, round.players.map((player) => {
       const tee = playerTee(round, player.playerId);

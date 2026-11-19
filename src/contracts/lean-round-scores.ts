@@ -8,6 +8,7 @@ import type { WolfGameDefinition, WolfResults } from '../domain/wolf.js';
 import { wolfRecordsFor } from '../domain/game-declarations.js';
 import { sameJsonValue } from './round-context.js';
 import { murphyRoundScores, murphyScoreChange } from '../domain/murphy-transport.js';
+import { stringRoundScores } from './string-rules.js';
 
 function without(value: object, ...keys: readonly string[]): Record<string, unknown> {
   return Object.fromEntries(Object.entries(value).filter(([name]) => !keys.includes(name)));
@@ -24,8 +25,8 @@ function leanWolf(value: WolfResults, game: WolfGameDefinition | undefined, roun
 }
 
 /** Omit evidence and duplicate derived views, never captured inputs or canonical write receipts. */
-export function leanRoundScores(input: RoundScores, murphyTargets = false, pareeTargets = false) {
-  const round = murphyRoundScores(input, murphyTargets, pareeTargets);
+export function leanRoundScores(input: RoundScores, murphyTargets = false, pareeTargets = false, stringRules = false, dotsCalls = false) {
+  const round = stringRoundScores(murphyRoundScores(input, murphyTargets, pareeTargets, dotsCalls), stringRules);
   const games = round.games;
   return {
     version: 1, kind: 'round-scores-lean', round: {
@@ -46,9 +47,9 @@ export function leanRoundScores(input: RoundScores, murphyTargets = false, paree
   };
 }
 
-export function leanScoreWriteResult(value: ScoreWriteResult, murphyTargets = false, pareeTargets = false) {
-  return { round: leanRoundScores(value.round, murphyTargets, pareeTargets),
-    change: without(murphyScoreChange(value.change, murphyTargets, value.round, pareeTargets), 'dotAwardAudit') };
+export function leanScoreWriteResult(value: ScoreWriteResult, murphyTargets = false, pareeTargets = false, stringRules = false, dotsCalls = false) {
+  return { round: leanRoundScores(value.round, murphyTargets, pareeTargets, stringRules, dotsCalls),
+    change: without(murphyScoreChange(value.change, murphyTargets, value.round, pareeTargets, dotsCalls), 'dotAwardAudit') };
 }
 
 /**
@@ -99,7 +100,7 @@ export function restoreLeanRoundGames(value: unknown, context: RoundGameScoringC
           handicap: !(personal?.strokeAllocation ?? context.teeStrokeAllocation)
             ? 'missing-stroke-index' : published?.courseHandicap ?? 'missing-handicap-index' };
       }), context.cards, group?.playerIds.length === 4 && group.playerIds.every((id) => game.playerIds.includes(id)),
-      context.groups, context.layout);
+      context.groups, context.layout, context.stringRulesVersion);
       const holes: unknown[] = [];
       for (const hole of result.churchy.holes) {
         if (!isRecord(hole) || Object.hasOwn(hole, 'specials')) return null;

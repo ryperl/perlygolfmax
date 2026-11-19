@@ -25,7 +25,7 @@ function fixture() {
 }
 
 describe('score-derived Murphy strict codecs and legacy projections', () => {
-  it('accepts only canonical pending par/birdie markers on Churchie v3 Murphy calls', () => {
+  it('accepts only canonical pending par/birdie markers on Churchie v3 and ordinary Dots Murphy calls', () => {
     const f = fixture();
     for (const murphyTarget of ['par', 'birdie']) {
       expect(isChurchySpecials({ ...f.extras, players: f.extras.players.map((player) => ({ ...player,
@@ -37,8 +37,8 @@ describe('score-derived Murphy strict codecs and legacy projections', () => {
         calls: player.calls.map((call) => ({ ...call, ...patch })) })) })).toBe(false);
     }
     const dots = Object.fromEntries(Object.entries(f.extras).filter(([key]) => key !== 'version'));
-    expect(isDotsHoleRecord(dots)).toBe(false);
-    expect(isHoleScore({ kind: 'strokes', strokes: 4, dots: [dots] })).toBe(false);
+    expect(isDotsHoleRecord(dots)).toBe(true);
+    expect(isHoleScore({ kind: 'strokes', strokes: 4, dots: [dots] })).toBe(true);
     expect(isHoleScore(f.score)).toBe(true);
   });
 

@@ -30,6 +30,24 @@ function harness(initial = fictionalRoundScores) {
       plan: planGroup(latest, playerIds, 1, drafts), signal: new AbortController().signal, refreshVersion: 0, ...callbacks }) };
 }
 describe('serialized group save protocol', () => {
+  it('retains a new Dots call draft but refuses to send it if advertised call support disappears', async () => {
+    const f = dotsFixture(), playerId = f.ids[0];
+    if (!playerId || !f.round.games) throw new Error('Missing fictional game');
+    const record: DotsHoleRecord = { gameId: f.game.id, gameEtag: f.round.games.configuration.etag ?? '',
+      number: 1, contests: [], players: [{ playerId, counts: {}, calls: [{
+        id: fictionalId(998), kind: 'paree', result: 'pending', pareeTarget: 'par',
+      }] }] };
+    const drafts = new Map<string, HoleDraft>([[entryKey(playerId, 1),
+      { ...editedDraft('4', cardFor(f.round, playerId)), dots: [record] }]]);
+    expect(planGroup({ ...f.round, dotsCallTargets: true }, [playerId], 1, drafts).invalid).toEqual([]);
+    const plan = planGroup(f.round, [playerId], 1, drafts), store = memoryScores(f.round);
+    expect(plan.invalid).toEqual([playerId]);
+    await expect(saveGroupEntries({ client: store.client, round: f.round, holeNumber: 1, plan,
+      signal: new AbortController().signal, refreshVersion: 0, onDraft: vi.fn(), onProjection: vi.fn() })).rejects.toThrow('Review all entries');
+    expect(store.client.save).not.toHaveBeenCalled();
+    expect(drafts.get(entryKey(playerId, 1))?.dots).toEqual([record]);
+  });
+
   it('permits a raw-only birdie correction of a target-aware Murphy on another card but blocks losing par qualification for Sandy/Pully', () => {
     const f = churchyV3Fixture(9);
     const [anchor, peer] = f.ids;

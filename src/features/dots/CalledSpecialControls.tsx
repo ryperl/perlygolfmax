@@ -2,7 +2,7 @@ import { dotsCallResult } from '../../domain/dots';
 import type { DotsCall } from '../../domain/dots';
 import type { HoleScore } from '../../domain/scoring';
 
-export function CalledSpecialControls({ kind, calls, name, score, par, blocked, onChange }: {
+export function CalledSpecialControls({ kind, calls, name, score, par, blocked, onChange, hasOpponents = true }: {
   readonly kind: 'murphy' | 'paree';
   readonly calls: readonly DotsCall[];
   readonly name: string;
@@ -10,6 +10,7 @@ export function CalledSpecialControls({ kind, calls, name, score, par, blocked, 
   readonly par: number;
   readonly blocked: boolean;
   readonly onChange: (calls: readonly DotsCall[]) => void;
+  readonly hasOpponents?: boolean;
 }) {
   const selected = calls.filter((call) => call.kind === kind);
   const label = kind === 'murphy' ? 'Murphy' : 'Paree';
@@ -50,7 +51,7 @@ export function CalledSpecialControls({ kind, calls, name, score, par, blocked, 
         </label>}
         <p className="called-special-outcome" aria-live="polite">{automatic
           ? result === 'pending' ? 'Pending · enter a gross score'
-            : `${result === 'success' ? 'Made' : 'Missed · opponents earn'} · needs ${String(target)} or better`
+            : `${result === 'success' ? 'Made' : hasOpponents ? 'Missed · opponents earn' : 'Missed · no opponents'} · needs ${String(target)} or better`
           : `Manual result: ${result === 'success' ? 'Made' : result === 'failure' ? 'Missed' : 'Pending'}`}</p>
         {!automatic && <button type="button" onClick={() => {
           replace(call, scoreTarget(call));

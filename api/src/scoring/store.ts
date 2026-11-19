@@ -43,6 +43,8 @@ import { dotsDefinitionMatchesRound, dotsRecordsMatchGame } from '../../../src/c
 import { dotsAutomaticWriteConflicts, dotsDeclarationIssues, dotsDeclarationWriteIssues, dotsFirstPlayedHole, dotsSpecialCatalog } from '../../../src/domain/dots.js';
 import { dotRound, definitionCards, validateInternalGameChanges } from './internal-games.js';
 import { buildDotAwardAudit } from './dot-audit.js';
+import { requireStringRules } from './string-rules.js';
+import { DotsCallsClientUpdateRequired, murphyRoundScores, requireLegacyDotsCalls } from '../../../src/domain/murphy-transport.js';
 import { groupStartingHole } from '../../../src/domain/round-navigation.js';
 import { calculateInternalSettlements } from '../../../src/domain/internal-games.js';
 import { calculateRoundDifferentials } from '../../../src/domain/round-differential.js';
@@ -67,6 +69,11 @@ function roundKpContext(round: RoundSnapshot): string {
   return kpContext(round.teeProfile.holes, round.players.map((player) => player.playerId),
     kpCaptureIdentity(round));
 }
+function hasDotsCallPolicy(cards: readonly Scorecard[]): boolean {
+  return cards.some((card) => card.holes.some((hole) => hole.score.dots?.some((record) =>
+    record.players.some((player) => player.calls.some((call) =>
+      call.murphyTarget !== undefined || call.pareeTarget !== undefined || call.murphyPresses !== undefined)))));
+}
 const kpCaptureIdentity = (round: RoundSnapshot) => `${round.id}:${round.courseId}:${round.courseVersionId}:${String(round.teeProfile.id)}`;
 
 type StoredCard = Omit<Scorecard, 'etag'>;
@@ -89,23 +96,35 @@ export class TableScoreStore {
   constructor(private readonly table: TableClient, private readonly workspace: TableWorkspaceStore,
     private readonly churchyEnabled: () => boolean = () => true) {}
 
+  private async requireDotsCalls(eventId: string, state: Awaited<ReturnType<TableScoreStore['snapshot']>>, supported: boolean): Promise<void> {
+    if (supported || state.testerLink || !state.games?.games.some((game) => game.kind === 'dots')) return;
+    const cards = await this.cards(eventId, state.round, state.lock);
+    if (!hasDotsCallPolicy(cards)) return;
+    requireLegacyDotsCalls(cards.flatMap((card) => card.holes.map((hole) => hole.score)));
+    murphyRoundScores(await this.projection(state.workspace, state.round, cards, state, state.games), true, true, false);
+  }
+
 private async kpProjection(eventId: string, roundId: string, configured: unknown) {
   const row = await optionalRow(this.table, eventId, `round-kp:${roundId}`);
   if (Boolean(row) !== configuredKpRounds(configured).includes(roundId)) throw new ApiError(503, 'INVALID_STORED_KP');
   return row ? { kp: { ...decode(await privateContent(this.table, eventId, `round-kp:${roundId}`, row.content), isKpSelection), etag: revision(row) } } : {};
 }
 
-async receiveKp(identity: AccountIdentity, eventId: string, roundId: string, body: unknown, expected: string | null, requestId: string) {
+async receiveKp(identity: AccountIdentity, eventId: string, roundId: string, body: unknown, expected: string | null, requestId: string, stringRules = true, dotsCalls = true) {
   const state = await this.snapshot(identity, eventId, roundId, true);
   if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
+  requireStringRules(state.games?.games ?? [], stringRules);
+  await this.requireDotsCalls(eventId, state, dotsCalls);
   return receivePrivateWrite(this.table, identity, eventId, `round-kp:${roundId}`, expected, requestId, body);
 }
 
 async saveKp(identity: AccountIdentity, eventId: string, roundId: string, selection: KpSelection,
-  expectedEtag: string | null, requestId: string): Promise<KpWriteResult> {
+  expectedEtag: string | null, requestId: string, stringRules = true, dotsCalls = true): Promise<KpWriteResult> {
   if (!isUuid(requestId) || !isKpSelection(selection)
     || expectedEtag !== null && !isEventRevision(expectedEtag)) throw new ApiError(400, 'INVALID_KP_SETUP');
   const state = await this.snapshot(identity, eventId, roundId, true);
+  requireStringRules(state.games?.games ?? [], stringRules);
+  await this.requireDotsCalls(eventId, state, dotsCalls);
   const grant = this.writer(state);
   if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
   const receiptKey = `kp-change:${requestId}`;
@@ -261,6 +280,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       game.kind !== 'wolf' && game.kind !== 'nassau' && game.kind !== 'dots'
       && !(game.kind === 'churchy' && game.version !== 1)) : games?.games;
     const projection: RoundScores = {
+      stringRulesVersion: 2,
       ...(access.event.quickRound === true ? { quickRound: true as const } : {}),
       kpEnabled: true,
       kpCaptureIdentity: kpCaptureIdentity(capturedRound),
@@ -392,13 +412,15 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
   }
 
   async saveGames(identity: AccountIdentity | PublicScoreIdentity, eventId: string, roundId: string, games: readonly RoundGameDefinition[],
-    expectedEtag: string | null, requestId: string): Promise<GameWriteResult> {
+    expectedEtag: string | null, requestId: string, stringRules = true, dotsCalls = true): Promise<GameWriteResult> {
     if (!isUuid(requestId) || !isRoundGameDefinitions(games) || games.length === 0
       || expectedEtag !== null && !isEventRevision(expectedEtag)) throw new ApiError(400, 'INVALID_GAME_SETUP');
     if (Buffer.byteLength(JSON.stringify({ games }), 'utf8') > maximumPrivateWriteBytes) {
       throw new ApiError(413, 'REQUEST_TOO_LARGE');
     }
     const state = await this.snapshot(identity, eventId, roundId);
+    requireStringRules([...state.games?.games ?? [], ...games], stringRules);
+    await this.requireDotsCalls(eventId, state, dotsCalls);
     if (state.summary.role !== 'owner' && !state.publicAccess) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
     if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     const replay = await this.replayGames(identity, eventId, roundId, games, expectedEtag, requestId);
@@ -499,12 +521,13 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
   }
 
   async receiveGames(identity: AccountIdentity | PublicScoreIdentity,
-    eventId: string, roundId: string, body: unknown, expected: string | null, requestId: string) {
+    eventId: string, roundId: string, body: unknown, expected: string | null, requestId: string, stringRules = true, dotsCalls = true) {
     if (!isUuid(roundId) || !isUuid(requestId)) throw new ApiError(400, 'INVALID_REQUEST_ID');
     const state = await this.access(identity, eventId);
     if (state.summary.role !== 'owner' && !state.publicAccess) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
     if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     if (!await optionalRow(this.table, eventId, `round:${roundId}`)) throw new ApiError(404, 'ROUND_NOT_FOUND');
+    if (!dotsCalls) await this.requireDotsCalls(eventId, await this.snapshot(identity, eventId, roundId), false);
     if (state.publicAccess && state.event.quickRound !== true) {
       const current = await this.snapshot(identity, eventId, roundId);
       if (!current.round.groups.some((group) => group.playerIds.length >= 1 && group.playerIds.length <= 4)) {
@@ -514,6 +537,11 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     // Parts are inactive. Check the head revision without repeatedly decoding a large configuration.
     // The final save validates the complete captured workspace and games again.
     const head = await optionalRow(this.table, eventId, gameConfigurationKey(roundId));
+    if (!stringRules && head) {
+      const current = await readGameConfiguration(this.table, eventId, roundId,
+        configuredGameRounds(state.event.gameRoundIds), { row: head });
+      requireStringRules(current?.games ?? [], false);
+    }
     if ((head ? revision(head) : null) !== expected) {
       const receipt = await this.gameReceipt(eventId, roundId, requestId);
       if (!receipt || receipt.expectedEtag !== expected || !sameScoreActor(receipt.recordedBy, identity)) throw new ApiError(409, 'GAMES_CHANGED');
@@ -566,12 +594,15 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
   }
 
   async write(identity: ScoreActor, eventId: string, roundId: string, playerId: string, holeNumber: number,
-    score: HoleScore, expectedEtag: string | null, requestId: string, inputRevision?: string | null): Promise<ScoreWriteResult> {
+    score: HoleScore, expectedEtag: string | null, requestId: string, inputRevision?: string | null, stringRules = true, dotsCalls = true): Promise<ScoreWriteResult> {
     if (!isUuid(requestId) || !isUuid(playerId) || !isHoleScore(score) || !Number.isSafeInteger(holeNumber)
       || expectedEtag !== null && !isEventRevision(expectedEtag)
       || inputRevision !== undefined && inputRevision !== null && !isUuid(inputRevision)) throw new ApiError(400, 'INVALID_SCORE_WRITE');
     const state = await this.snapshot(identity, eventId, roundId);
     if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
+    requireStringRules(state.games?.games ?? [], stringRules);
+    if (!dotsCalls) requireLegacyDotsCalls([score]);
+    await this.requireDotsCalls(eventId, state, dotsCalls);
     if (!state.round.teeProfile.holes.some((hole) => hole.number === holeNumber)) throw new ApiError(400, 'ROUND_HOLE_NOT_FOUND');
     if (!state.round.players.some((player) => player.playerId === playerId)) throw new ApiError(404, 'ROUND_PLAYER_NOT_FOUND');
     const grant = this.writer(state, playerId);
@@ -775,6 +806,9 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     }
     const nextCards = cards.map((entry) => entry.playerId === playerId ? { ...entry,
       holes: entry.holes.map((hole) => hole.number === holeNumber ? { ...hole, score: savedScore } : hole) } : entry);
+    if (!dotsCalls && hasDotsCallPolicy(nextCards)) {
+      murphyRoundScores(await this.projection(state.workspace, state.round, nextCards, state, state.games), true, true, false);
+    }
     for (const game of state.games?.games ?? []) {
       if (game.kind !== 'dots' && (game.kind !== 'churchy' || game.version !== 3)) continue;
       if (game.kind === 'churchy' && !this.churchyEnabled()) continue;
@@ -869,11 +903,19 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
   }
 
   async receiveGameScore(identity: ScoreActor, eventId: string, roundId: string, playerId: string, holeNumber: number,
-    body: unknown, expected: string | null, requestId: string) {
+    body: unknown, expected: string | null, requestId: string, stringRules = true, dotsCalls = true) {
     if (!isUuid(requestId) || !isUuid(playerId) || !Number.isInteger(holeNumber)
       || expected !== null && !isEventRevision(expected)) throw new ApiError(400, 'INVALID_SCORE_WRITE');
     const state = await this.snapshot(identity, eventId, roundId);
     if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
+    requireStringRules(state.games?.games ?? [], stringRules);
+    await this.requireDotsCalls(eventId, state, dotsCalls);
+    if (!dotsCalls) {
+      if (isRecord(body) && isHoleScore(body.score)) requireLegacyDotsCalls([body.score]);
+      // Opaque fragments cannot prove that the assembled declaration is legacy-representable.
+      if (state.games?.games.some((game) => game.kind === 'dots') && isRecord(body)
+        && (Object.hasOwn(body, 'privateUpload') || Object.hasOwn(body, 'privateCommit'))) throw new DotsCallsClientUpdateRequired();
+    }
     this.writer(state, playerId);
     if (state.testerLink) throw new ApiError(403, 'MATCH_DECLARATIONS_NOT_ALLOWED');
     if (!state.round.teeProfile.holes.some((hole) => hole.number === holeNumber)

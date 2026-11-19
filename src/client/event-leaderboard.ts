@@ -7,6 +7,7 @@ import type { EventLeaderboardView } from '../domain/event-leaderboard';
 import { createPrivateRequest, readPrivateValue } from './private-request';
 import type { EventSkinsDetails } from '../domain/event-skins-details';
 import { isEventSkinsDetails } from '../contracts/event-skins-details';
+import { scoringRulesQuery } from './scoring';
 
 export interface EventLeaderboardClient {
   readonly details?: (eventId: string, signal: AbortSignal) => Promise<EventSkinsDetails>;
@@ -39,7 +40,7 @@ export function createEventLeaderboardClient(apiUrl: string, getToken: () => Pro
     },
     async load(eventId, signal) {
       if (!isUuid(eventId)) throw new Error('Invalid event identifier.');
-      const value = await readPrivateValue(request, `events/${encodeURIComponent(eventId)}/leaderboard`, signal);
+      const value = await readPrivateValue(request, `events/${encodeURIComponent(eventId)}/leaderboard?${scoringRulesQuery}`, signal);
       if (!isEventLeaderboardView(value) || value.workspace.event.id !== eventId) {
         throw new Error('Invalid overall leaderboard response. Nothing was loaded.');
       }

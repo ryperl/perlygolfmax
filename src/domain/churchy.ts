@@ -211,8 +211,8 @@ export function churchySettlement(totals: readonly (number | null)[], amount: nu
 
 export function calculateChurchyResults(game: ChurchyGameDefinition, inputs: readonly ChurchyPlayerInput[],
   cards: readonly Scorecard[], groupValid = true, groups: readonly RoundGroup[] = [],
-  defaultLayout: readonly CourseHole[] = []): RoundGameResult {
-  if (game.version === 3) return calculateChurchyV3Results(game, inputs, cards, groups, defaultLayout, groupValid);
+  defaultLayout: readonly CourseHole[] = [], stringRulesVersion: 1 | 2 = 2): RoundGameResult {
+  if (game.version === 3) return calculateChurchyV3Results(game, inputs, cards, groups, defaultLayout, groupValid, stringRulesVersion);
   const selected = game.playerIds.map((id) => inputs.find((entry) => entry.playerId === id));
   const known = selected.flatMap((entry) => entry ? [entry] : []);
   const validHandicaps = selected.length === 4 && selected.every((entry) =>

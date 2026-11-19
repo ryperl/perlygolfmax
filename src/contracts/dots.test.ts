@@ -25,6 +25,21 @@ const record: DotsHoleRecord = { number: 1, gameId: game.id, gameEtag: 'revision
   contests: [{ kind: 'kp', status: 'awarded', winnerId: A, secondId: B }] };
 
 describe('Dots network contracts', () => {
+  it('requires canonical target markers and bounded Murphy stages independently of Dots mode/version', () => {
+    const calls = [
+      { id: callId, kind: 'paree', result: 'pending', pareeTarget: 'par' },
+      { id: otherId, kind: 'murphy', result: 'pending', murphyTarget: 'birdie', murphyPresses: 2 },
+    ];
+    const canonical = { ...record, players: [{ playerId: A, counts: {}, calls }] };
+    expect(isDotsHoleRecord(canonical)).toBe(true);
+    for (const patch of [{ result: 'success' }, { result: 'failure' }, { murphyTarget: 'bogey' },
+      { murphyPresses: -1 }, { murphyPresses: 3 }, { kind: 'pully-murphy' }, { pareeTarget: 'par' }]) {
+      expect(isDotsHoleRecord({ ...canonical, players: [{ playerId: A, counts: {}, calls: [{ ...calls[1], ...patch }] }] })).toBe(false);
+    }
+    expect(isDotsHoleRecord({ ...canonical, players: [{ playerId: A, counts: {},
+      calls: [{ id: callId, kind: 'pully-murphy', result: 'success' }] }] })).toBe(true);
+  });
+
   it.each([1, 2, 3, 4])('accepts %i unique individual golfers only, with solo stakes disabled', (count) => {
     const playerIds = game.playerIds.slice(0, count);
     for (const stakeMinor of [null, 0, 50]) {

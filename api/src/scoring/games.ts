@@ -33,8 +33,8 @@ export function configuredGameRounds(value: unknown): readonly string[] {
 }
 
 export async function readGameConfiguration(table: TableClient, eventId: string, roundId: string,
-  configuredRounds: readonly string[]): Promise<GameConfiguration | undefined> {
-  const row = await optionalRow(table, eventId, gameConfigurationKey(roundId));
+  configuredRounds: readonly string[], head?: { readonly row: Awaited<ReturnType<typeof optionalRow>> }): Promise<GameConfiguration | undefined> {
+  const row = head ? head.row : await optionalRow(table, eventId, gameConfigurationKey(roundId));
   if (!row) {
     if (configuredRounds.includes(roundId)) throw new ApiError(503, 'INVALID_STORED_GAMES');
     const prefix = `game-change:${roundId}`;

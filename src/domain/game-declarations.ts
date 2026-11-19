@@ -40,7 +40,8 @@ export function mergeDotsRecords(edits: readonly DotsHoleRecord[], saved: readon
 }
 
 export type RoundGameScoringContext = Pick<RoundScores, 'roundId' | 'layout' | 'groups' | 'cards' | 'playerTees'
-  | 'courseHandicaps' | 'teeStrokeAllocation' | 'gameInputContext' | 'inputRevision'>;
+  | 'courseHandicaps' | 'teeStrokeAllocation' | 'gameInputContext' | 'inputRevision'>
+  & { readonly stringRulesVersion?: 1 | 2 };
 
 export class GameDeclarationConflictError extends Error {
   constructor(message: string, readonly code: 'NASSAU_PRESS_CONFLICT' | 'WOLF_COMEBACK_CONFLICT' | 'DOTS_ROTATION_CONFLICT' | 'CHURCHY_ORDER_CONFLICT' = 'NASSAU_PRESS_CONFLICT') { super(message); }
@@ -142,6 +143,7 @@ export function dotsRecordsFor(game: DotsGameDefinition, groups: readonly RoundG
 
 export function dotsInputFromScores(round: RoundGameScoringContext): DotRoundInput {
   return { layout: round.layout, groups: round.groups, cards: round.cards,
+    stringRulesVersion: round.stringRulesVersion ?? 2,
     ...(round.playerTees?.length ? { playerLayouts: round.playerTees.map((entry) => ({ playerId: entry.playerId, layout: entry.profile.holes })) } : {}) };
 }
 

@@ -245,6 +245,18 @@
   infer Hogan; a qualified manual Hogan may stack. SuperDime replaces Dime;
   Eagle never also earns Birdie. Derive
   streaks from acknowledged scores and actual play order, not drafts.
+  String is three consecutive gross par-or-better, then every qualifier;
+  BirdyString is birdie-or-better. Award only qualifying configured BirdyString
+  when both qualify, retaining the underlying String run for a later par.
+  Recalculate existing/future derived results, never raw cards/captures/original
+  receipts. Negotiate `stringRules=2` and explicit response version; strictly
+  decode missing markers as legacy. Unsupported affected clients require 426
+  before mutation, not successful alternate totals or lost pending drafts.
+  Ordinary Dots shares called Paree/par and Murphy/par-or-birdie outcomes with
+  explicit 1x/2x/3x Murphy stakes times configured units, never hole stakes.
+  Require independent `dotsCalls=score-v1`/`dotsCallTargets` support; preserve
+  manual legacy calls until opt-in, target IDs and raw-only/old-client echoes.
+  Nonrepresentable old reads/writes require an update before any mutation.
   Category carries resolve independently in actual order; final unclaimed stays
   unawarded. King requires every eligible category-hole award owned directly or
   through carry, individual x1 only after complete inputs. No fixed hole counts.
@@ -322,7 +334,7 @@
   once to the winning golfer and their current partner, never split or apply
   again for partner entry. Do not retro-enable or relabel saved Other entries.
   Murphy stages scale configured units by 1/2/3;
-  Sweep scales units by the current stake. Neither changes ordinary Dots.
+  Sweep scales units by the current stake and is separate from Dots presses.
   Target-aware Murphy is an explicit per-call par/birdie choice with derived
   gross-personal-par outcomes; blanks stay pending and pickup/DNF misses.
   A missed birdie Murphy followed by par may coexist with valid Sandy/Pully.

@@ -17,7 +17,14 @@ function Editor({ score, initial = [], changed, kind = 'murphy' }: {
     onChange={(value) => { setCalls(value); changed(value); }} />;
 }
 
-describe('score-aware Churchie called-special controls', () => {
+describe('score-aware called-special controls', () => {
+  it('does not imply an opponent award in a solo Dots context', () => {
+    render(<CalledSpecialControls kind="murphy" name="Fictional golfer" par={4}
+      calls={[{ id: 'solo-call', kind: 'murphy', result: 'pending', murphyTarget: 'par' }]}
+      score={{ kind: 'strokes', strokes: 5 }} blocked={false} hasOpponents={false} onChange={vi.fn()} />);
+    expect(screen.getByText('Missed · no opponents · needs 4 or better')).toBeVisible();
+    expect(screen.queryByText(/opponents earn/)).not.toBeInTheDocument();
+  });
   it('records Paree explicitly without outcome, birdie or press inputs, while retaining separately called repetitions', async () => {
     const user = userEvent.setup(), changed = vi.fn<(calls: readonly DotsCall[]) => void>();
     render(<Editor kind="paree" score={{ kind: 'strokes', strokes: 4 }} changed={changed} />);

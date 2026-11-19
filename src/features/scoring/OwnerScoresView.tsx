@@ -380,11 +380,15 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     || [...drafts.values()].some((draft) => draft.status === 'failed' || draft.status === 'conflict');
   const feedbackState: ScoreFeedbackState = needsAttention ? 'attention' : drafts.size > 0 ? 'unsaved'
     : notice?.kind === 'saved' ? 'saved' : 'idle';
+  const legacyStringRules = round?.stringRulesVersion !== 2 && round?.games?.configuration.games.some((game) =>
+    (game.kind === 'dots' || game.kind === 'churchy' && game.version === 3)
+      && game.specials.some((special) => special.kind === 'string'));
   return <section ref={entryRegion} tabIndex={-1} aria-label="Round scores" className="owner-scores" data-round-tone={roundTone}>
     {round && <EventReviewBanner notices={roundReviewNotices(round, round.roundName)} />}
     <h1>Round scores</h1>
     {roundPicker && <RoundAccent className="score-round-picker" tone={roundTone}>{roundPicker}</RoundAccent>}
     {tools}
+    {legacyStringRules && <p role="note">This API uses previous String calculations. Updated par-or-better rules require the newer API.</p>}
     {accessChanged && <p role="alert">Score permissions or playing groups changed. Your drafts are retained for review only. Discard them before starting new entries.</p>}
     {screen !== 'entry' && connection}
     {error && <p role="alert">{error} {round ? 'Unconfirmed entries are kept on this page.' : 'Private score data is not displayed.'}</p>}

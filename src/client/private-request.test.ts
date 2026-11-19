@@ -4,6 +4,16 @@ import { createPrivateRequest, PrivateRequestError } from './private-request';
 afterEach(() => { vi.useRealTimers(); });
 
 describe('private catalog/setup transport', () => {
+  it('surfaces an update-required response without parsing arbitrary error content or retrying the write', async () => {
+    const send = vi.fn<typeof fetch>().mockResolvedValue(new Response('not JSON', { status: 426 }));
+    const request = createPrivateRequest('https://fictional.example.test/api', () => Promise.resolve('fictional'), send);
+    const result = request('events/fictional/scores?stringRules=2', new AbortController().signal,
+      { method: 'PUT', body: { score: 4 }, requestId: 'fictional-operation' });
+    await expect(result).rejects.toMatchObject({ status: 426 });
+    await expect(result).rejects.toThrow('Copy any unsaved scores, then refresh the page');
+    expect(send).toHaveBeenCalledOnce();
+    expect(send.mock.calls[0]?.[1]?.headers).toHaveProperty('Idempotency-Key', 'fictional-operation');
+  });
   it('bounds actual UTF-8 bytes before acquiring a token or sending a write', async () => {
     const send = vi.fn<typeof fetch>();
     const token = vi.fn().mockResolvedValue('fictional');

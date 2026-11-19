@@ -40,7 +40,7 @@ async function fixture() {
   });
   const api = { ...f, verify: vi.fn().mockResolvedValue(creator), limiter: { check: vi.fn().mockResolvedValue(undefined) } };
   const request = (search: string, method = 'GET', body?: unknown, expected: string | null = null, requestId = identifier(27010)) =>
-    new HttpRequest({ url: `https://fictional.example.test/api/fixture?${search}`, method,
+    new HttpRequest({ url: `https://fictional.example.test/api/fixture?stringRules=2&${search}`, method,
       params: { id: event.id, roundId: f.roundId, playerId: f.playerId, holeNumber: '1' },
       headers: { authorization: 'Bearer fictional', 'Content-Type': 'application/json', 'Idempotency-Key': requestId,
         ...(expected === null ? { 'If-None-Match': '*' } : { 'If-Match': expected }) },
@@ -160,7 +160,7 @@ describe('authoritative Churchie Paree targets', () => {
             expect(JSON.stringify(response.jsonBody).includes('"pareeTarget"')).toBe(paree);
           }
           const current = await f.scores.get(owner ? creator : f.actor, event.id, f.roundId);
-          const text = JSON.stringify(lean ? leanRoundScores(current, murphy, paree) : murphyRoundScores(current, murphy, paree));
+          const text = JSON.stringify(lean ? leanRoundScores(current, murphy, paree, true) : murphyRoundScores(current, murphy, paree));
           const hash = createHash('sha256').update(text).digest('hex'), parts = Math.ceil(text.length / privateReadPartCharacters);
           const handler = owner ? createScoringHandler(() => f.api, 'scores') : createPublicHandler(() => f.api, 'scores');
           for (let index = 0; index < parts; index++) {

@@ -65,6 +65,8 @@ export function createPrivateRequest(apiUrl: string, getToken: () => Promise<str
       throw new SessionExpiredError('This event or round is no longer available publicly. Choose an active event.');
     }
     if (response.status === 401) throw new SessionExpiredError('Your session expired. Sign in again.');
+    if (response.status === 426) throw new PrivateRequestError(426,
+      'This scoring view needs an app update. Copy any unsaved scores, then refresh the page. Nothing was confirmed saved.');
     if (response.status === 409) throw new EventChangedError('This data changed. Refresh before approving and retrying. Your draft was preserved.');
     if (!response.ok) throw new PrivateRequestError(response.status, response.status === 403
       ? 'You do not have permission for this operation. Nothing was confirmed saved.'

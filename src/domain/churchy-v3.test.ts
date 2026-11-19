@@ -6,6 +6,22 @@ import { preserveScoreExtras, supportsDotsSpecials } from './scoring.js';
 import { strokeGameCards, strokeGameId } from './stroke-games.test-support.js';
 
 describe('Churchie v3 actual playing circuit and canonical shared specials', () => {
+  it('shares corrected String once per source and keeps the ordinary run alive after a Birdie String', () => {
+    const f = churchyV3Fixture(9, 8, 'tee');
+    const game = { ...f.game, specials: [{ kind: 'string' as const, units: 2 }, { kind: 'birdy-string' as const, units: 3 }] };
+    const cards = f.cards.map((card, index) => ({ ...card, holes: card.holes.map((hole) => ({ ...hole,
+      score: { kind: 'strokes' as const, strokes: index === 0 && [8, 9, 1].includes(hole.number) ? 3 : 4 },
+    })) }));
+    const current = calculateGameResults([game], f.snapshot, cards)[0]?.churchy;
+    expect(current?.awards?.filter((award) => award.earnedBy === f.ids[0] && award.number === 1))
+      .toEqual([expect.objectContaining({ kind: 'birdy-string', dots: 3, sourceHoles: [8, 9, 1],
+        recipientIds: [f.ids[0], f.ids[3]] })]);
+    expect(current?.awards?.filter((award) => award.earnedBy === f.ids[0] && award.number === 2))
+      .toEqual([expect.objectContaining({ kind: 'string', dots: 2, sourceHoles: [9, 1, 2] })]);
+    expect(calculateGameResults([game], f.snapshot, cards, 1)[0]?.churchy?.awards
+      ?.filter((award) => award.earnedBy === f.ids[0] && award.kind === 'string').map((award) => award.number))
+      .toEqual([4, 5, 6, 7]);
+  });
   it('carries KP and Blue Plate independently to their next eligible holes and credits both current teammates in full', () => {
     const f = churchyV3Fixture(9), [a, b, c, d] = f.ids;
     if (!a || !b || !c || !d) throw new Error('Missing fictional foursome');

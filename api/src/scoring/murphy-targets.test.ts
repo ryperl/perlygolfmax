@@ -65,7 +65,7 @@ describe('score-derived Murphy authoritative persistence and negotiation', () =>
         project.mockClear();
         validate.mockClear();
         const request = new HttpRequest({
-          url: `https://fictional.example.test/api/fixture?${lean ? 'format=lean&' : ''}${negotiated ? 'murphy=score-v1' : ''}`,
+          url: `https://fictional.example.test/api/fixture?stringRules=2&${lean ? 'format=lean&' : ''}${negotiated ? 'murphy=score-v1' : ''}`,
           method: write ? 'PUT' : 'GET',
           params: { id: event.id, roundId: f.roundId, playerId: f.playerId, holeNumber: '1' },
           headers: { 'Content-Type': 'application/json', 'If-Match': etag(initial.round, f.playerId) ?? '',
@@ -93,11 +93,11 @@ describe('score-derived Murphy authoritative persistence and negotiation', () =>
     const api = { ...f, limiter: { check: vi.fn().mockResolvedValue(undefined) } };
     const context = new InvocationContext({ invocationId: 'fictional-negotiated-pages', logHandler: () => undefined });
     for (const negotiated of [false, true]) {
-      const expected = lean ? leanRoundScores(initial.round, negotiated) : murphyRoundScores(initial.round, negotiated);
+      const expected = lean ? leanRoundScores(initial.round, negotiated, false, true) : murphyRoundScores(initial.round, negotiated);
       const text = JSON.stringify(expected);
       const sha256 = createHash('sha256').update(text).digest('hex');
       const request = (hash: string, index = 0) => new HttpRequest({
-        url: `https://fictional.example.test/api/fixture?${lean ? 'format=lean&' : ''}${negotiated ? 'murphy=score-v1&' : ''}privatePart=${String(index)}&privateHash=${hash}`,
+        url: `https://fictional.example.test/api/fixture?stringRules=2&${lean ? 'format=lean&' : ''}${negotiated ? 'murphy=score-v1&' : ''}privatePart=${String(index)}&privateHash=${hash}`,
         method: 'GET', params: { id: event.id, roundId: f.roundId },
       });
       const parts = Math.ceil(text.length / privateReadPartCharacters);
@@ -247,7 +247,7 @@ describe('score-derived Murphy authoritative persistence and negotiation', () =>
     const api = { ...f, verify: vi.fn().mockResolvedValue(creator), limiter: { check: vi.fn().mockResolvedValue(undefined) } };
     for (const lean of [false, true]) for (const negotiated of [false, true]) {
       const request = new HttpRequest({
-        url: `https://fictional.example.test/api/fixture?${lean ? 'format=lean&' : ''}${negotiated ? 'murphy=score-v1' : ''}`,
+        url: `https://fictional.example.test/api/fixture?stringRules=2&${lean ? 'format=lean&' : ''}${negotiated ? 'murphy=score-v1' : ''}`,
         method: 'PUT', params: { id: event.id, roundId: f.roundId },
         headers: { authorization: 'Bearer fictional', 'Content-Type': 'application/json', 'Idempotency-Key': identifier(26701),
           ...(action !== 'round-kp' ? { 'If-Match': initial.round.games?.configuration.etag ?? '' } : { 'If-None-Match': '*' }) },
@@ -272,7 +272,7 @@ describe('score-derived Murphy authoritative persistence and negotiation', () =>
     const api = { ...f, verify: vi.fn().mockResolvedValue(creator), limiter: { check: vi.fn().mockResolvedValue(undefined) } };
     const context = new InvocationContext({ invocationId: 'fictional-murphy', logHandler: () => undefined });
     const request = (query: string, method = 'GET', body?: unknown, params: Readonly<Record<string, string>> = {}) => new HttpRequest({
-      url: `https://fictional.example.test/api/fixture?${query}`, method,
+      url: `https://fictional.example.test/api/fixture?stringRules=2&${query}`, method,
       params: { id: event.id, roundId: f.roundId, playerId: f.playerId, holeNumber: '1', ...params },
       headers: { authorization: 'Bearer fictional', 'Content-Type': 'application/json',
         'If-Match': etag(initial.round, f.playerId) ?? '', 'Idempotency-Key': identifier(26501) },

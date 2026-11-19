@@ -103,6 +103,11 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
       playerPars={game.playerIds.map((playerId) => ({ playerId,
         par: round.playerTees?.find((entry) => entry.playerId === playerId)?.profile.holes.find((hole) => hole.number === holeNumber)?.par
           ?? round.layout.find((hole) => hole.number === holeNumber)?.par ?? 0 }))}
+      scoreDerivedMurphy={round.dotsCallTargets === true} scoreDerivedParee={round.dotsCallTargets === true}
+      allowMurphyPresses={round.dotsCallTargets === true}
+      playerScores={round.cards.map((card) => ({ playerId: card.playerId,
+        score: (card.playerId === playerId && playerScore !== undefined
+          ? playerScore : card.holes.find((hole) => hole.number === holeNumber)?.score) ?? undefined }))}
       saved={saved.dots?.find((record) => record.gameId === game.id && record.number === holeNumber)}
       draft={draft?.dots?.find((record) => record.gameId === game.id && record.number === holeNumber)}
       context={game.mode === 'linked' ? round.games?.results.find((result) => result.gameId === game.linkedGameId)?.wolf?.contexts

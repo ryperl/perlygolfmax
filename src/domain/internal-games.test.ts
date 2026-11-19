@@ -99,6 +99,63 @@ describe('optional independent Dots/Wolf composition', () => {
     expect(corrected?.holes.filter((hole) => hole.number >= 17).map((hole) => hole.wolfId)).toEqual([f.ids[2], f.ids[2]]);
   });
 
+  it('retains the legacy pre-write Wolf receipt and chosen final-hole Wolf when corrected String changes its prefix', () => {
+    const f = fixture();
+    const dots: DotsGameDefinition = { ...f.dots, specials: [{ kind: 'string', units: 1 }] };
+    const games = [f.wolf, dots];
+    const cards = f.cards.map((card): Scorecard => ({ ...card, holes: card.holes.map((hole) => ({
+      ...hole, score: { ...hole.score, kind: 'strokes',
+        strokes: card.playerId === f.anchor && hole.number <= 2 ? 3 : 4, dots: [] },
+    })) }));
+    const context = f.round(cards, games);
+    const receipt = calculateInternalGameResults(games, { ...context, stringRulesVersion: 1 })
+      .get(f.wolf.id)?.wolf?.comeback?.receipt;
+    if (!receipt) throw new Error('Missing fictional legacy candidate');
+    const partnerId = f.ids.find((id) => id !== receipt.wolfId);
+    if (!partnerId) throw new Error('Missing fictional partner');
+    const saved = cards.map((card): Scorecard => card.playerId !== f.anchor ? card : { ...card,
+      holes: card.holes.map((hole) => hole.number !== 17 ? hole : { ...hole, score: { ...hole.score,
+        wolf: [{ number: 17, choice: { gameId: f.wolf.id, gameEtag: 'fictional-game-revision',
+          mode: 'partner', partnerId }, comeback: receipt }] } }) });
+    const modern = { ...f.round(saved, games), stringRulesVersion: 2 as const };
+    const result = calculateInternalGameResults(games, modern).get(f.wolf.id)?.wolf;
+    expect(result?.comeback).toEqual({ status: 'saved', receipt, changed: true });
+    expect(result?.holes.filter((hole) => hole.number >= 17).map((hole) => hole.wolfId))
+      .toEqual([receipt.wolfId, receipt.wolfId]);
+    expect(isRoundScores(modern)).toBe(true);
+    expect(saved.find((card) => card.playerId === f.anchor)?.holes.find((hole) => hole.number === 17)
+      ?.score.wolf?.[0]?.comeback).toEqual(receipt);
+  });
+
+  it('retains the immutable final Wolf after a raw correction resolves a linked pressed Murphy differently', () => {
+    const f = fixture();
+    const dots: DotsGameDefinition = { ...f.dots, specials: [{ kind: 'murphy', units: 1 }] };
+    const games = [f.wolf, dots];
+    const cards = f.cards.map((card): Scorecard => ({ ...card, holes: card.holes.map((hole) => card.playerId === f.anchor && hole.number === 1
+      ? { ...hole, score: { ...hole.score, dots: [{ number: 1, gameId: dots.id, gameEtag: 'fictional-game-revision',
+        players: [{ playerId: f.anchor, counts: {}, calls: [{ id: strokeGameId(1910), kind: 'murphy',
+          result: 'pending', murphyTarget: 'par', murphyPresses: 2 }] }], contests: [] }] } } : hole) }));
+    const initial = calculateInternalGameResults(games, f.round(cards, games));
+    const receipt = initial.get(f.wolf.id)?.wolf?.comeback?.receipt;
+    if (!receipt || !f.ids[2]) throw new Error('Missing fictional call-based candidate');
+    expect(receipt.wolfId).toBe(f.ids[2]);
+    const final: WolfHoleRecord = { number: 17, choice: { gameId: f.wolf.id, gameEtag: 'fictional-game-revision',
+      mode: 'partner', partnerId: f.anchor }, comeback: receipt };
+    const corrected = cards.map((card): Scorecard => ({ ...card, holes: card.holes.map((hole) => {
+      if (card.playerId !== f.anchor) return hole;
+      return hole.number === 17 ? { ...hole, score: { ...hole.score, wolf: [final] } }
+        : hole.number === 1 ? { ...hole, score: { ...hole.score, kind: 'strokes', strokes: 5 } } : hole;
+    }) }));
+    const results = calculateInternalGameResults(games, f.round(corrected, games));
+    expect(results.get(f.wolf.id)?.wolf?.comeback).toEqual({ status: 'saved', receipt, changed: true });
+    expect(results.get(f.wolf.id)?.wolf?.holes.filter((hole) => hole.number >= 17).map((hole) => hole.wolfId))
+      .toEqual([receipt.wolfId, receipt.wolfId]);
+    expect(results.get(dots.id)?.dots?.awards[0]).toMatchObject({ kind: 'murphy', count: 3, multiplier: 1, dots: 3,
+      recipientIds: f.ids.slice(2), reason: 'Murphy call: failure.' });
+    expect(corrected[0]?.holes[0]?.score.dots).toEqual(cards[0]?.holes[0]?.score.dots);
+    expect(corrected[0]?.holes.find((hole) => hole.number === 17)?.score.wolf?.[0]?.comeback).toEqual(receipt);
+  });
+
   it('retains progressive linked dots and resolves hole 17 after a saved birdie Pully and all prefix declarations', () => {
     const f = fixture();
     const scorer = f.ids[2];
@@ -143,6 +200,8 @@ describe('optional independent Dots/Wolf composition', () => {
     const audit = { gameId: f.dots.id, kind: 'dots', version: 1, configuration: f.dots,
       gameEtag: 'fictional-game-revision', inputRevision: null, before: [], after: result.awards };
     expect(isDotAwardAudit(audit)).toBe(true);
+    expect(isDotAwardAudit({ ...audit, stringRulesVersion: 2 })).toBe(true);
+    expect(isDotAwardAudit({ ...audit, stringRulesVersion: 1 })).toBe(false);
     expect(isDotAwardAudit({ ...audit, after: result.awards.map((award) => ({ ...award, dots: 99 })) })).toBe(false);
     expect(isDotAwardAudit({ ...audit, actorId: strokeGameId(1999) })).toBe(false);
   });

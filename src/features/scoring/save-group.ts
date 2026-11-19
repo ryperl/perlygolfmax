@@ -12,6 +12,7 @@ import { churchySpecialsMatchGame, churchyV3Records, sameChurchySpecials } from 
 import { dotsAutomaticWriteConflicts, dotsDeclarationWriteIssues } from '../../domain/dots';
 import type { DotsPlayerDeclaration } from '../../domain/dots';
 import { dotsRecordsFor } from '../../domain/game-declarations';
+import type { DotRoundInput } from '../../domain/dot-context';
 
 function changedDeclarationConflicts(players: readonly DotsPlayerDeclaration[], previous: readonly DotsPlayerDeclaration[] = []): boolean {
   const canonical = (player: DotsPlayerDeclaration | undefined) => player && JSON.stringify({
@@ -69,6 +70,9 @@ export function planGroup(round: RoundScores, playerIds: readonly string[], hole
       draft.nassau, draft.wolf, draft.dots) : saved;
     if (!entry || !isHoleScore(entry)) { invalid.push(playerId); continue; }
     const score = preserveScoreExtras(entry, saved);
+    if (round.dotsCallTargets !== true && score.dots?.some((record) => record.players.some((player) =>
+      player.calls.some((call) => call.murphyTarget !== undefined || call.pareeTarget !== undefined
+        || call.murphyPresses !== undefined)))) { invalid.push(playerId); continue; }
     targets.set(playerId, score);
     if (!draft) continue;
     if (draft.status === 'conflict' || !draft.attempt?.sent && draft.baseEtag !== card.etag) {
@@ -83,7 +87,8 @@ export function planGroup(round: RoundScores, playerIds: readonly string[], hole
     const score = targets.get(card.playerId);
     return hole.number === holeNumber && score ? { ...hole, score } : hole;
   }) }));
-  const before = { layout: round.layout, groups: round.groups, cards: round.cards,
+  const before: DotRoundInput = { layout: round.layout, groups: round.groups, cards: round.cards,
+    stringRulesVersion: round.stringRulesVersion ?? 1,
     playerLayouts: round.playerTees?.map((entry) => ({ playerId: entry.playerId, layout: entry.profile.holes })) ?? [] };
   for (const game of round.games?.configuration.games ?? []) {
     if (game.kind !== 'dots' && (game.kind !== 'churchy' || game.version !== 3)) continue;
