@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { NassauGameDefinition } from '../../../src/domain/nassau.js';
+import type { NassauGameDefinition, MatchPlayGameDefinition, NassauHoleRecord } from '../../../src/domain/nassau.js';
 import type { WolfGameDefinition, WolfHoleRecord } from '../../../src/domain/wolf.js';
 import type { HoleScore, RoundScores } from '../../../src/domain/scoring.js';
 import { isRoundScores, isScoreWriteResult } from '../../../src/contracts/scoring.js';
@@ -14,6 +14,11 @@ import { createHash } from 'node:crypto';
 import { privateWritePartBytes } from '../../../src/contracts/private-values.js';
 import { isRecord } from '../../../src/contracts/events.js';
 import { parseScoreWriteBody } from './handlers.js';
+import { teeFixture } from '../../test/tee-fixtures.js';
+import { TableQuickRoundStore } from '../quick-round/store.js';
+import { decodeRoundScores } from '../../../src/contracts/scoring.js';
+import { leanRoundScores, leanScoreWriteResult } from '../../../src/contracts/lean-round-scores.js';
+import { isGameConfiguration } from '../../../src/contracts/games.js';
 
 function definitions(ids: readonly string[]): readonly [WolfGameDefinition, NassauGameDefinition] {
   return [
@@ -35,6 +40,108 @@ function choice(game: WolfGameDefinition, round: RoundScores, number = 1): WolfH
 }
 
 describe('persisted Nassau and Wolf declarations', () => {
+  for (const quick of [false, true]) {
+    it.each(['native', 'front', 'back', 'eighteen'] as const)(
+      `conditionally saves %s Match Play presses, full/lean replies and raw-only retention in ${quick ? 'Quick' : 'ordinary'} rounds`, async (layout) => {
+        const f = await teeFixture();
+        const input = { ...f.input, rounds: f.input.rounds.map((round) => ({ ...round,
+          teeProfileId: layout === 'native' ? f.nine.id : round.teeProfileId,
+          roundSide: layout === 'front' || layout === 'back' ? layout : 'full' as const,
+          playerTeeSelections: layout === 'native' ? [] : round.playerTeeSelections ?? [],
+          groups: round.groups.map((group) => ({ ...group, startingHole: layout === 'back' || layout === 'eighteen' ? 17 : 8 })),
+        })) };
+        const eventId = quick ? identifier(28000) : event.id;
+        if (quick) await new TableQuickRoundStore(f.table, f.workspace).create(eventId, input);
+        else await f.workspace.save(creator, eventId, input, f.saved.etag);
+        const actor = { kind: 'public-score' as const, eventId };
+        const game: MatchPlayGameDefinition = {
+          id: identifier(28001), name: 'Fictional Match Play', kind: 'match-play', version: 1, basis: 'net',
+          groupNumber: 1, variant: 'one-v-two', automaticPresses: false,
+          sides: [{ id: identifier(28002), name: 'Fictional A', playerIds: input.playerIds.slice(0, 1) },
+            { id: identifier(28003), name: 'Fictional B', playerIds: input.playerIds.slice(1, 3) }],
+          stakes: { currency: 'USD', frontMinor: 0, backMinor: 0, overallMinor: 101 },
+        };
+        const configured = await f.scores.saveGames(quick ? actor : creator, eventId, f.roundId, [game], null, identifier(28004));
+        expect(configured.round.supportedGameKinds).toContain('match-play');
+        expect(isRoundScores(configured.round)).toBe(true);
+        const match = configured.round.games?.results[0]?.nassau?.matches[0];
+        if (!match) throw new Error('Missing fictional match');
+        expect(match.bets).toHaveLength(1);
+        expect(match.holes).toHaveLength(layout === 'eighteen' ? 18 : 9);
+        const anchor = input.playerIds[0];
+        if (!anchor) throw new Error('Missing fictional anchor');
+        let current = configured.round;
+        for (const [index, hole] of match.holes.slice(0, 2).entries()) {
+          const record: NassauHoleRecord = { number: hole.number, gameId: game.id, gameEtag: current.games?.configuration.etag ?? 'missing',
+            outcomes: [{ matchId: match.id, outcome: 'side-a' }], presses: [] };
+          current = (await f.scores.write(actor, eventId, f.roundId, anchor, hole.number,
+            { kind: 'strokes', strokes: 4, nassau: [record] }, etag(current, anchor), identifier(28010 + index))).round;
+        }
+        const option = current.games?.results[0]?.nassau?.pressOptions[0];
+        if (!option) throw new Error('Missing fictional press option');
+        expect(option.startHole).toBe(layout === 'back' || layout === 'eighteen' ? 1 + (layout === 'back' ? 9 : 0) : 1);
+        const record: NassauHoleRecord = { number: option.startHole, gameId: game.id, gameEtag: current.games?.configuration.etag ?? 'missing',
+          outcomes: [], presses: [{ ...option, id: identifier(28020) }] };
+        const score: HoleScore = { kind: 'strokes', strokes: 4, nassau: [record] };
+        const expectedEtag = etag(current, anchor);
+        const first = await f.scores.write(actor, eventId, f.roundId, anchor, option.startHole, score, expectedEtag, identifier(28021));
+        expect(isScoreWriteResult(first)).toBe(true);
+        expect(decodeRoundScores(leanRoundScores(first.round, false, false, true))).toEqual(first.round);
+        const lean = leanScoreWriteResult(first, false, false, true);
+        expect(isScoreWriteResult({ round: decodeRoundScores(lean.round), change: lean.change })).toBe(true);
+        expect(lean.change).toEqual(first.change);
+        const rows = new Map(f.rows);
+        expect((await f.scores.write(actor, eventId, f.roundId, anchor, option.startHole, score, expectedEtag, identifier(28021))).change).toEqual(first.change);
+        expect(f.rows).toEqual(rows);
+        const corrected = await f.scores.write(actor, eventId, f.roundId, anchor, option.startHole,
+          { kind: 'strokes', strokes: 5 }, etag(first.round, anchor), identifier(28022));
+        expect(corrected.change.after.nassau).toEqual([record]);
+        await expect(f.scores.write(actor, eventId, f.roundId, anchor, option.startHole, {
+          ...score, nassau: [{ ...record, presses: record.presses.map((press) => ({ ...press, pressingSide: 'a' })) }],
+        }, etag(corrected.round, anchor), identifier(28023))).rejects.toMatchObject({ code: 'NASSAU_PRESS_CONFLICT' });
+        await expect(f.scores.saveGames(quick ? actor : creator, eventId, f.roundId, [{ ...game, automaticPresses: true }],
+          current.games?.configuration.etag ?? null, identifier(28024))).rejects.toMatchObject({ code: 'MATCH_SETUP_LOCKED' });
+        const read = await f.scores.get(actor, eventId, f.roundId);
+        expect(isRoundScores(read)).toBe(true);
+        const tampered = { ...read, games: read.games && { ...read.games, results: read.games.results.map((result) =>
+          ({ ...result, kind: 'nassau' })) } };
+        expect(isRoundScores(tampered)).toBe(false);
+        expect(isGameConfiguration({ ...read.games?.configuration, games: [{ ...game, stakes: { ...game.stakes, backMinor: 1 } }] })).toBe(false);
+        if (!quick && layout === 'back') {
+          const model = await f.workspace.correctionModel(creator, eventId, f.roundId);
+          await expect(f.workspace.correctRound(creator, eventId, f.roundId, identifier(28025), {
+            expected: { eventEtag: model.eventEtag, roundEtag: model.roundEtag, gamesEtag: model.gamesEtag ?? null,
+              inputRevision: model.inputRevision ?? null },
+            reason: 'Fictional start correction', reviewSummary: 'Keep captured Match Play order',
+            correction: { teeProfileId: model.teeProfileId,
+              groups: model.groups.map((group) => ({ ...group, startingHole: 10 })),
+              players: model.players.map((player) => ({ playerId: player.playerId, handicapIndexValue: '0' })),
+              playerTeeSelections: model.playerTeeSelections },
+          })).rejects.toMatchObject({ code: 'MATCH_SETUP_CHANGED' });
+        }
+      },
+    );
+  }
+
+  it('keeps Match Play configuration owner-protected in ordinary events and hidden from legacy testers', async () => {
+    const f = await testerFixture();
+    const [, nassau] = definitions(f.input.playerIds);
+    const game: MatchPlayGameDefinition = { ...nassau, kind: 'match-play', name: 'Fictional Match Play',
+      stakes: { ...nassau.stakes, frontMinor: 0, backMinor: 0 } };
+    const publicActor = { kind: 'public-score' as const, eventId: event.id };
+    await expect(f.scores.saveGames(publicActor, event.id, f.roundId, [game], null, identifier(28100)))
+      .rejects.toMatchObject({ status: 403 });
+    const configured = await f.scores.saveGames(creator, event.id, f.roundId, [game], null, identifier(28101));
+    const hidden = await f.scores.get(f.actor, event.id, f.roundId);
+    expect(hidden.supportedGameKinds).not.toContain('match-play');
+    expect(hidden.games?.configuration.games).toEqual([]);
+    await expect(f.scores.saveGames(creator, event.id, f.roundId, [{ ...game, kind: 'nassau' }],
+      configured.round.games?.configuration.etag ?? null, identifier(28102))).rejects.toMatchObject({ code: 'MATCH_KIND_FIXED' });
+    await expect(f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1, {
+      kind: 'strokes', strokes: 4, nassau: [{ number: 1, gameId: game.id, gameEtag: configured.round.games?.configuration.etag ?? 'missing',
+        outcomes: [{ matchId: `${game.id}:match:0:1`, outcome: 'side-a' }], presses: [] }],
+    }, null, identifier(28103))).rejects.toMatchObject({ status: 403, code: 'MATCH_DECLARATIONS_NOT_ALLOWED' });
+  });
   it('retains declaration anchors and Wolf rotation during corrections, and preserves corrected-input revisions on lost acknowledgements', async () => {
     const f = await scoringFixture();
     const [wolf] = definitions(f.input.playerIds);

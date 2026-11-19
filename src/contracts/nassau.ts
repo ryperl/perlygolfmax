@@ -1,4 +1,4 @@
-import type { NassauGameDefinition, NassauHandicapInputs, NassauHoleRecord, NassauManualPress, NassauResults, NassauRoundContext } from '../domain/nassau.js';
+import type { NassauGameDefinition, PressMatchGameDefinition, MatchPlayGameDefinition, NassauHandicapInputs, NassauHoleRecord, NassauManualPress, NassauResults, NassauRoundContext } from '../domain/nassau.js';
 import { calculateNassauFromHandicaps, nassauConfigurationIssues, nassauMatchId } from '../domain/nassau.js';
 import type { Scorecard } from '../domain/scoring.js';
 import { boundedText } from './catalog.js';
@@ -18,12 +18,21 @@ function identifier(value: unknown, max = 2048): value is string {
 }
 
 export function isNassauDefinition(value: unknown): value is NassauGameDefinition {
+  return isPressMatchDefinition(value) && value.kind === 'nassau';
+}
+
+export function isMatchPlayDefinition(value: unknown): value is MatchPlayGameDefinition {
+  return isPressMatchDefinition(value) && value.kind === 'match-play';
+}
+
+export function isPressMatchDefinition(value: unknown): value is PressMatchGameDefinition {
   if (!isRecord(value) || !keys(value, ['id', 'name', 'kind', 'version', 'basis', 'groupNumber', 'variant', 'sides', 'stakes', 'automaticPresses'])
-    || !isUuid(value.id) || !boundedText(value.name) || value.kind !== 'nassau' || value.version !== 1
+    || !isUuid(value.id) || !boundedText(value.name) || value.kind !== 'nassau' && value.kind !== 'match-play' || value.version !== 1
     || (value.basis !== 'gross' && value.basis !== 'net') || !integer(value.groupNumber, 1)
     || typeof value.automaticPresses !== 'boolean' || !isRecord(value.stakes)
     || !keys(value.stakes, ['frontMinor', 'backMinor', 'overallMinor', 'currency']) || value.stakes.currency !== 'USD'
     || !integer(value.stakes.frontMinor, 0) || !integer(value.stakes.backMinor, 0) || !integer(value.stakes.overallMinor, 0)
+    || value.kind === 'match-play' && (value.stakes.frontMinor !== 0 || value.stakes.backMinor !== 0)
     || !Array.isArray(value.sides)) return false;
   const sides: unknown[] = value.sides;
   const sizes: number[] = [];
@@ -46,9 +55,11 @@ export function isNassauDefinition(value: unknown): value is NassauGameDefinitio
 export function isNassauManualPress(value: unknown): value is NassauManualPress {
   return isRecord(value) && keys(value, ['id', 'parentBetId', 'matchId', 'startHole', 'declaredAfterHole', 'pressingSide', 'proof'])
     && isUuid(value.id) && identifier(value.parentBetId) && identifier(value.matchId, 256)
-    && integer(value.startHole, 2, 18) && integer(value.declaredAfterHole, 1, 17)
-    && value.startHole === value.declaredAfterHole + 1 && (value.pressingSide === 'a' || value.pressingSide === 'b')
-    && typeof value.proof === 'string' && value.proof.startsWith('nassau-v1:') && value.proof.length <= 8192
+    && integer(value.startHole, 1, 18) && integer(value.declaredAfterHole, 1, 18)
+    && typeof value.proof === 'string'
+    && (value.proof.startsWith('nassau-v1:') ? value.startHole === value.declaredAfterHole + 1
+      : value.proof.startsWith('match-play-v1:') && value.startHole !== value.declaredAfterHole)
+    && (value.pressingSide === 'a' || value.pressingSide === 'b') && value.proof.length <= 8192
     && /^[\x20-\x7e]+$/.test(value.proof);
 }
 
@@ -63,13 +74,13 @@ export function isNassauHoleRecord(value: unknown): value is NassauHoleRecord {
     && new Set(value.presses.map((entry: { readonly id: string }) => entry.id)).size === value.presses.length;
 }
 
-export function nassauDefinitionMatchesRound(game: NassauGameDefinition, round: NassauRoundContext): boolean {
-  return isNassauDefinition(game) && nassauConfigurationIssues(game, round).length === 0;
+export function nassauDefinitionMatchesRound(game: PressMatchGameDefinition, round: NassauRoundContext): boolean {
+  return isPressMatchDefinition(game) && nassauConfigurationIssues(game, round).length === 0;
 }
 
 /** Structural/context validation only; proof/eligibility validation uses the domain helpers. */
-export function nassauRecordsMatchGame(value: unknown, game: NassauGameDefinition): value is readonly NassauHoleRecord[] {
-  if (!isNassauDefinition(game) || !Array.isArray(value) || !value.every(isNassauHoleRecord)) return false;
+export function nassauRecordsMatchGame(value: unknown, game: PressMatchGameDefinition): value is readonly NassauHoleRecord[] {
+  if (!isPressMatchDefinition(game) || !Array.isArray(value) || !value.every(isNassauHoleRecord)) return false;
   const records: NassauHoleRecord[] = value;
   const matches = game.variant === 'three-way'
     ? [nassauMatchId(game.id, 0, 1), nassauMatchId(game.id, 0, 2), nassauMatchId(game.id, 1, 2)]
@@ -78,14 +89,15 @@ export function nassauRecordsMatchGame(value: unknown, game: NassauGameDefinitio
   return new Set(records.map((record) => record.number)).size === records.length
     && new Set(presses.map((press) => press.id)).size === presses.length
     && records.every((record) => record.gameId === game.id && record.outcomes.every((entry) => matches.includes(entry.matchId))
-      && record.presses.every((press) => matches.includes(press.matchId)));
+      && record.presses.every((press) => matches.includes(press.matchId)
+        && press.proof.startsWith(game.kind === 'match-play' ? 'match-play-v1:' : 'nassau-v1:')));
 }
 
 /** Exact recomputation rejects client-authored money, outcomes, missing bets, and excess/private fields. */
 export function isNassauResults(
-  value: unknown, game: NassauGameDefinition, round: NassauRoundContext, cards: readonly Scorecard[],
+  value: unknown, game: PressMatchGameDefinition, round: NassauRoundContext, cards: readonly Scorecard[],
   records: readonly NassauHoleRecord[], published: NassauHandicapInputs,
 ): value is NassauResults {
-  return isNassauDefinition(game) && records.every(isNassauHoleRecord)
+  return isPressMatchDefinition(game) && records.every(isNassauHoleRecord)
     && sameJsonValue(value, calculateNassauFromHandicaps(game, round, cards, records, published));
 }

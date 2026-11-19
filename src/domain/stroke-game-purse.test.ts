@@ -53,6 +53,13 @@ describe('stroke-game place awards and overall boundaries', () => {
       pools: [{ ...pool, source: { ...pool.source, gameId: f.nassau.id } }] }, workspace, [round]).pools[0];
     expect(blocked?.status).toBe('unavailable');
     expect(blocked?.shares).toEqual([]);
+    const match = { ...f.nassau, kind: 'match-play' as const, name: 'Fictional Match Play',
+      stakes: { ...f.nassau.stakes, frontMinor: 0, backMinor: 0 } };
+    const matchRound = f.round(cards, [match]);
+    const matchPool = calculatePurse({ ...base.plan, eventId: round.eventId,
+      pools: [{ ...pool, source: { ...pool.source, gameId: match.id } }] }, workspace, [matchRound]).pools[0];
+    expect(matchPool?.status).toBe('unavailable');
+    expect(matchPool?.shares).toEqual([]);
   });
   it('awards Stroke Play places by personal relative-to-par, preserves ties, and blocks invalid stroke cards', () => {
     const f = strokeGameFixture();

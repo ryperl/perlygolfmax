@@ -1,4 +1,4 @@
-import type { NassauBetResult, NassauGameDefinition, NassauResults as Results } from '../../domain/nassau';
+import type { NassauBetResult, PressMatchGameDefinition, NassauResults as Results } from '../../domain/nassau';
 
 function money(value: number | null, pending = false): string {
   if (value === null) return pending ? 'Pending' : 'Unavailable';
@@ -6,12 +6,12 @@ function money(value: number | null, pending = false): string {
   return `${value < 0 ? '−' : ''}$${String(magnitude / 100n)}.${String(magnitude % 100n).padStart(2, '0')}`;
 }
 
-function betLabel(bet: NassauBetResult): string {
-  return `${bet.segment === 'front' ? 'Front' : bet.segment === 'back' ? 'Back' : 'Overall'}${bet.origin === 'primary' ? '' : ` · ${bet.origin} press`}`;
+function betLabel(bet: NassauBetResult, single: boolean): string {
+  return `${single ? 'Match' : bet.segment === 'front' ? 'Front' : bet.segment === 'back' ? 'Back' : 'Overall'}${bet.origin === 'primary' ? '' : ` · ${bet.origin} press`}`;
 }
 
 export function NassauResults({ game, result, players = [] }: {
-  readonly game: NassauGameDefinition;
+  readonly game: PressMatchGameDefinition;
   readonly result: Results | undefined;
   readonly players?: readonly { readonly playerId: string; readonly displayName: string }[];
 }) {
@@ -29,7 +29,7 @@ export function NassauResults({ game, result, players = [] }: {
     <p>{game.basis === 'net' ? 'Net · 100% captured CH off the lowest within each match' : 'Gross'} · Match play · Ties push</p>
     {!result ? <p>Saved match results unavailable. Refresh to retry.</p> : <>
       <p>Saved matches · {result.status}</p>
-      <section aria-label="Nassau planned settlement">
+      <section aria-label={`${game.kind === 'match-play' ? 'Match Play' : 'Nassau'} planned settlement`}>
         <h4>Planned net settlement · USD</h4>
         <p>{result.settlement.status} · {result.settlement.resolvedBetCount} resolved bets · {result.settlement.pendingBetCount} pending bets</p>
         {result.settlement.status === 'partial' && <p>Partial amounts include resolved bets only, not a final settlement.</p>}
@@ -47,14 +47,15 @@ export function NassauResults({ game, result, players = [] }: {
         <ul>{match.bets.map((bet) => {
           const parent = match.bets.find((entry) => entry.id === bet.parentBetId);
           return <li key={bet.id} className="nassau-bet"><details><summary>
-            <strong>{betLabel(bet)}</strong> · {bet.status === 'won'
+            <strong>{betLabel(bet, game.kind === 'match-play')}</strong> · {bet.status === 'won'
               ? `${bet.winner === 'a' ? match.sideA.name : match.sideB.name} won` : bet.status === 'push' ? 'Push' : bet.status}
             {bet.currentPosition !== null && <> · {bet.currentPosition === 0 ? 'All square'
               : `${bet.currentPosition > 0 ? match.sideA.name : match.sideB.name} ${String(Math.abs(bet.currentPosition))} up`}</>}
             {bet.status === 'stale' && <strong> · Review required</strong>}
             </summary>
-            <p>Holes {bet.startHole}–{bet.endHole} · {bet.holesResolved} resolved / {bet.remainingHoles} remaining · Stake per side {money(bet.stakeMinor)}</p>
-            {parent && <small> · Press of {betLabel(parent)} (holes {parent.startHole}–{parent.endHole})</small>}
+            <p>{game.kind === 'match-play' ? `Starts hole ${String(bet.startHole)} · Ends hole ${String(bet.endHole)}`
+              : `Holes ${String(bet.startHole)}–${String(bet.endHole)}`} · {bet.holesResolved} resolved / {bet.remainingHoles} remaining · Stake per side {money(bet.stakeMinor)}</p>
+            {parent && <small> · Press of {betLabel(parent, game.kind === 'match-play')} (holes {parent.startHole}–{parent.endHole})</small>}
             {bet.status === 'stale' && <strong> · Stale declaration; settlement unavailable</strong>}
             <small> · Unallocated {money(bet.settlement.unallocatedMinor, bet.settlement.status === 'pending')}</small>
           </details></li>;

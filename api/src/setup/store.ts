@@ -534,11 +534,13 @@ export class TableWorkspaceStore {
     if (!isRecord(updatedRound) || !isEventWorkspace({ ...state.workspace, rounds: state.workspace.rounds.map((round) =>
       round.id === roundId ? updatedRound : round) })) throw new ApiError(503, 'INVALID_STORED_WORKSPACE');
     for (const game of state.games?.games ?? []) {
-      if (game.kind !== 'nassau' && game.kind !== 'wolf' && game.kind !== 'dots') continue;
+      if (game.kind !== 'nassau' && game.kind !== 'match-play' && game.kind !== 'wolf' && game.kind !== 'dots') continue;
       const beforeGroup = state.round.groups.find((group) => group.number === game.groupNumber);
       const afterGroup = updatedRound.groups.find((group) => group.number === game.groupNumber);
       if (beforeGroup?.playerIds[0] !== afterGroup?.playerIds[0]
-        || (game.kind === 'nassau' ? nassauConfigurationIssues(game, updatedRound).length > 0
+        || game.kind === 'match-play'
+          && groupStartingHole(beforeGroup, state.round.teeProfile.holes) !== groupStartingHole(afterGroup, updatedRound.teeProfile.holes)
+        || (game.kind === 'nassau' || game.kind === 'match-play' ? nassauConfigurationIssues(game, updatedRound).length > 0
           : (game.kind === 'dots' ? !dotsDefinitionMatchesRound(game, dotRound(updatedRound, definitionCards(updatedRound)))
             : !wolfGroupMatchesRound(game, { layout: updatedRound.teeProfile.holes, groups: updatedRound.groups }))
             || groupStartingHole(beforeGroup, state.round.teeProfile.holes) !== groupStartingHole(afterGroup, updatedRound.teeProfile.holes))) {

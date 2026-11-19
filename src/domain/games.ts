@@ -2,7 +2,7 @@ import type { AccountIdentity } from './events.js';
 import type { PublicScoreIdentity } from './public-access.js';
 import type { ChurchyGameDefinition, ChurchyResults } from './churchy.js';
 import type { WolfGameDefinition, WolfResults } from './wolf.js';
-import type { NassauGameDefinition, NassauResults } from './nassau.js';
+import type { NassauGameDefinition, MatchPlayGameDefinition, NassauResults } from './nassau.js';
 import type { DotsGameDefinition, DotsResults } from './dots.js';
 
 export type StablefordPreset = 'standard' | 'modified';
@@ -85,8 +85,8 @@ export interface StrokePlayGameDefinition extends StrokeGameDefinition {
 
 export type StablefordGameDefinition = IndividualGameDefinition | TeamGameDefinition;
 export type NewRoundGameDefinition = BallDropGameDefinition | SkinsGameDefinition | StrokePlayGameDefinition;
-export type RoundGameDefinition = StablefordGameDefinition | NewRoundGameDefinition | ChurchyGameDefinition | WolfGameDefinition | NassauGameDefinition | DotsGameDefinition;
-export const roundGameKinds = ['stableford', 'ball-drop', 'skins', 'churchy', 'stroke-play', 'wolf', 'nassau', 'dots'] as const;
+export type RoundGameDefinition = StablefordGameDefinition | NewRoundGameDefinition | ChurchyGameDefinition | WolfGameDefinition | NassauGameDefinition | MatchPlayGameDefinition | DotsGameDefinition;
+export const roundGameKinds = ['stableford', 'ball-drop', 'skins', 'churchy', 'stroke-play', 'wolf', 'nassau', 'match-play', 'dots'] as const;
 export type RoundGameKind = (typeof roundGameKinds)[number];
 
 export function isStablefordGame(game: RoundGameDefinition): game is StablefordGameDefinition {
@@ -179,7 +179,7 @@ export interface GamePlayerResult {
 }
 
 export interface RoundGameResult {
-  readonly kind?: 'ball-drop' | 'skins' | 'churchy' | 'stroke-play' | 'wolf' | 'nassau' | 'dots';
+  readonly kind?: 'ball-drop' | 'skins' | 'churchy' | 'stroke-play' | 'wolf' | 'nassau' | 'match-play' | 'dots';
   readonly churchy?: ChurchyResults;
   readonly wolf?: WolfResults;
   readonly nassau?: NassauResults;
@@ -261,8 +261,9 @@ export function sameGameDefinitions(left: readonly RoundGameDefinition[], right:
         && game.version === other.version && game.stakeMinor === other.stakeMinor
         && game.playerIds.length === other.playerIds.length && game.playerIds.every((id, i) => id === other.playerIds[i]);
     }
-    if (game.kind === 'nassau' || other.kind === 'nassau') {
-      return game.kind === 'nassau' && other.kind === 'nassau' && game.id === other.id && game.name === other.name
+    if (game.kind === 'nassau' || game.kind === 'match-play' || other.kind === 'nassau' || other.kind === 'match-play') {
+      return (game.kind === 'nassau' || game.kind === 'match-play') && (other.kind === 'nassau' || other.kind === 'match-play')
+        && game.kind === other.kind && game.id === other.id && game.name === other.name
         && game.basis === other.basis && game.groupNumber === other.groupNumber && game.variant === other.variant
         && game.automaticPresses === other.automaticPresses
         && game.stakes.frontMinor === other.stakes.frontMinor && game.stakes.backMinor === other.stakes.backMinor

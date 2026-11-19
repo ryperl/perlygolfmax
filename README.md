@@ -624,7 +624,7 @@ binding before converting that game to Ball Drop or Skins. Legacy Stableford
 definitions/results remain readable without migration and retain their existing
 points tables and allowances.
 
-### Round Stroke Play, Nassau and Wolf
+### Round Stroke Play, Match Play, Nassau and Wolf
 
 Stroke Play, Nassau and legacy Wolf version 1 use the shared round editor, captured
 personal tees and acknowledged online scores. The API advertises
@@ -638,6 +638,17 @@ Stroke Play when tees have different pars. Pickup, `X7` and DNF invalidate a
 numeric stroke total rather than inventing penalties. Pending holes, missing net
 inputs and arithmetic overflow remain distinct from zero.
 
+**Match Play · With presses** is a separate version-1 game for either a 9-hole
+or 18-hole captured round, including front/back nine selections. It has one
+match stake per side, not Nassau's three bets. Singles, three-way individual
+pairings, 1v2 best ball, and 2v2 best ball/aggregate use the same explicit saved
+group and personal-tee handicap rules below. The match follows that group's
+actual starting hole for one complete captured circuit, including printed-hole
+wraps; presses follow that order, not a fabricated next printed hole.
+Setup requires an explicit `match-play` API capability. Ordinary event owners
+and collaborative Quick-round setup retain their existing management scope;
+public scoring does not grant ordinary-event Match Play setup authority.
+
 **Nassau** is match play over an 18-hole captured layout, with independent front
 1-9, back 10-18 and overall matches. Choose singles 1v1, three-way individuals
 (three separate pairwise Nassaus), 1v2 best ball, or 2v2 best ball/aggregate.
@@ -650,7 +661,10 @@ Enter USD stakes explicitly or choose **No planned money**. Each stake is the
 total per side, not a per-golfer multiplier. Teammates share equally in exact
 minor units; indivisible cents remain unallocated. Amounts are planned, never
 collected or transferred. Nassau has its own bet ledger, not a place-based purse
-metric or overall Stableford source.
+metric or overall Stableford source. Match Play likewise has an independent bet
+ledger, never a place-prize metric. Its single stake uses the existing overall
+minor-unit slot with front/back stakes fixed at zero. Existing Nassau games
+and receipts are never converted or relabeled.
 
 Manual presses use acknowledged two-down positions, start on the next hole and
 inherit the parent's ending hole/stake. Optional automatic two-down presses fire
@@ -658,6 +672,10 @@ once per bet, without rearming after recovery; a press may itself be pressed.
 Stage a manual press on its starting hole with the ordinary **Save & Next**
 action. Earlier score/input corrections can make its receipt stale; preserve it
 for review rather than silently accepting changed eligibility or money.
+Match Play and Nassau share the game-ID-bound match declaration transport;
+distinct game kinds and proof prefixes prevent exchanging their receipts.
+Legacy raw-only saves preserve these extras, and legacy tester views continue
+to omit both games' declarations, ledgers and stakes.
 
 **Legacy Wolf / PIG (version 1)** selects one saved foursome with explicit
 Wolf order, rotating from

@@ -38,6 +38,8 @@ export function PlayerScorecardRecap({ round, card, gameId }: {
     </details>}
     {round.games?.configuration.games.some((entry) => entry.kind === 'nassau' && entry.sides.some((side) => side.playerIds.includes(card.playerId)))
       && <p>Nassau match bets and presses are in Games and Leaderboard.</p>}
+    {round.games?.configuration.games.some((entry) => entry.kind === 'match-play' && entry.sides.some((side) => side.playerIds.includes(card.playerId)))
+      && <p>Match Play bets and presses are in Games and Leaderboard.</p>}
     {scorecardGameWarnings(game, [card]).map((warning) => <p className="scorecard-game-unavailable" key={warning}>{warning}</p>)}
     {(round.courseHandicaps?.find((entry) => entry.playerId === card.playerId)?.courseHandicap ?? 0) > 0
       && <p className="scorecard-stroke-key">Stroke dots: tee Course Handicap.</p>}

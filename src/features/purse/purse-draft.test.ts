@@ -3,15 +3,15 @@ import { fictionalPurse } from '../../../tests/smoke/purse-fixture-data';
 import { purseTestId } from '../../domain/purse.test-support';
 import { samePursePlan } from '../../domain/purse';
 import type { PursePlan } from '../../domain/purse';
-import type { NassauGameDefinition } from '../../domain/nassau';
+import type { PressMatchGameDefinition } from '../../domain/nassau';
 import { buildPurseDraft, draftFromPlan, newPool, reviewSelection, selectSource, sourceChoices } from './purse-draft';
 
 describe('purse draft builders', () => {
-  it('excludes independently settled Nassau bets from place-based sources while retaining ordinary games', () => {
+  it.each(['nassau', 'match-play'] as const)('excludes independently settled %s bets from place-based sources while retaining ordinary games', (kind) => {
     const value = fictionalPurse();
     const round = value.roundScores[0];
     if (!round?.games) throw new Error('Missing fictional games');
-    const nassau: NassauGameDefinition = { id: purseTestId(9900), name: 'Fictional Nassau', kind: 'nassau',
+    const nassau: PressMatchGameDefinition = { id: purseTestId(9900), name: 'Fictional match', kind,
       version: 1, basis: 'gross', groupNumber: 1, variant: 'singles',
       sides: round.cards.slice(0, 2).map((card, index) => ({ id: purseTestId(9901 + index),
         name: `Fictional side ${String(index + 1)}`, playerIds: [card.playerId] })),

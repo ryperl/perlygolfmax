@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { NassauGameDefinition, NassauHoleRecord } from '../../domain/nassau';
+import type { NassauGameDefinition, MatchPlayGameDefinition, NassauHoleRecord } from '../../domain/nassau';
 import { calculateNassau } from '../../domain/nassau';
 import { strokeGameFixture, strokeGameId } from '../../domain/stroke-games.test-support';
 import { NassauHoleControls } from './NassauHoleControls';
@@ -20,6 +20,30 @@ function fixture() {
 }
 
 describe('Nassau saved match UI', () => {
+  it('labels single-match money and wrapped hole order honestly, with staged press controls', () => {
+    const f = strokeGameFixture(9);
+    const base = fixture();
+    const game: MatchPlayGameDefinition = { ...base.game, kind: 'match-play', name: 'Match Play',
+      stakes: { currency: 'USD', frontMinor: 0, backMinor: 0, overallMinor: 101 } };
+    const snapshot = { ...f.snapshot, groups: f.snapshot.groups.map((group) => ({ ...group, startingHole: 8 })) };
+    const cards = f.cards.map((card, index) => ({ ...card, holes: card.holes.map((hole) => ({ ...hole, score: hole.number >= 8
+      ? { kind: 'strokes' as const, strokes: index === 0 ? 3 : 4 } : { kind: 'unplayed' as const } })) }));
+    const result = calculateNassau(game, snapshot, cards);
+    const view = render(<NassauResults game={game} result={result} players={cards} />);
+    const board = screen.getByRole('region', { name: 'Match Play matchboard' });
+    expect(within(board).getByText('Match', { exact: true })).toBeVisible();
+    expect(board).toHaveTextContent('Starts hole 8 · Ends hole 7');
+    expect(board).toHaveTextContent('Stake per side $1.01');
+    expect(within(board).queryByText('Front', { exact: true })).not.toBeInTheDocument();
+    expect(within(board).queryByText('Back', { exact: true })).not.toBeInTheDocument();
+    expect(within(board).queryByText('Overall', { exact: true })).not.toBeInTheDocument();
+    const changed = vi.fn<(record: NassauHoleRecord) => void>();
+    view.rerender(<NassauHoleControls game={game} result={result} holeNumber={1} etag="match-v1"
+      saved={undefined} draft={undefined} disabled={false} onChange={changed} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Stage manual press' }));
+    expect(changed.mock.calls[0]?.[0]).toMatchObject({ number: 1, presses: [{ declaredAfterHole: 9, startHole: 1 }] });
+    expect(changed.mock.calls[0]?.[0].presses[0]?.proof).toMatch(/^match-play-v1:/);
+  });
   it('stages only new next-hole presses, retains their identity across outcome edits/retry renders, and clears manual outcomes explicitly', () => {
     const { game, result } = fixture();
     const option = result.pressOptions[0];

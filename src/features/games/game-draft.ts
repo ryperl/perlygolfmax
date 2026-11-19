@@ -1,5 +1,5 @@
 import { isRoundGameDefinition, isRoundGameDefinitions } from '../../contracts/games';
-import { isNassauDefinition } from '../../contracts/nassau';
+import { isPressMatchDefinition } from '../../contracts/nassau';
 import { isWolfDefinition } from '../../contracts/wolf';
 import type { GameTeam, RoundGameDefinition, StablefordPreset, CompetitionTeamFormat } from '../../domain/games';
 import { defaultHandicapAllowancePercent, defaultTeamHandicapAllowancePercent, gameTeamsMatchRoster, isStablefordGame, isTeamGameDefinition, maximumPointsRows, teamSize } from '../../domain/games';
@@ -12,7 +12,7 @@ import type { ChurchySpecialKey } from '../../domain/churchy';
 import { defaultChurchySpecials, defaultChurchySpecialSelections } from '../../domain/churchy';
 
 export interface GameDraft {
-  readonly kind?: 'stableford' | 'ball-drop' | 'skins' | 'churchy' | 'stroke-play' | 'wolf' | 'nassau' | 'dots';
+  readonly kind?: 'stableford' | 'ball-drop' | 'skins' | 'churchy' | 'stroke-play' | 'wolf' | 'nassau' | 'match-play' | 'dots';
   readonly wolfVersion?: 1 | 2;
   readonly stake?: string;
   readonly dotsMode?: DotsGameDefinition['mode'];
@@ -60,7 +60,7 @@ export function draftFromGame(game: RoundGameDefinition): GameDraft {
   if (game.kind === 'wolf') return { ...newGameDraft(), id: game.id, name: game.name, kind: game.kind,
     basis: game.basis, groupNumber: game.groupNumber, wolfPlayers: game.playerIds, allowPig: game.allowPig,
     wolfVersion: game.version, stake: game.stakeMinor == null ? '' : moneyText(game.stakeMinor) };
-  if (game.kind === 'nassau') return { ...newGameDraft(), id: game.id, name: game.name, kind: game.kind,
+  if (game.kind === 'nassau' || game.kind === 'match-play') return { ...newGameDraft(), id: game.id, name: game.name, kind: game.kind,
     basis: game.basis, groupNumber: game.groupNumber, nassauVariant: game.variant, nassauSides: game.sides,
     nassauStakes: [moneyText(game.stakes.frontMinor), moneyText(game.stakes.backMinor), moneyText(game.stakes.overallMinor)],
     automaticPresses: game.automaticPresses };
@@ -126,6 +126,8 @@ export function setGameKind(draft: GameDraft, kind: NonNullable<GameDraft['kind'
   if (kind === 'dots') return { ...reset, kind, name: 'Dots', dotsMode: 'individual', dotsPlayers: [], dotsSpecials: [], stake: '' };
   if (kind === 'nassau') return setNassauVariant({ ...reset, kind, name: 'Nassau', basis: 'net',
     nassauStakes: ['', '', ''], automaticPresses: false }, 'singles');
+  if (kind === 'match-play') return setNassauVariant({ ...reset, kind, name: 'Match Play', basis: 'net',
+    nassauStakes: ['0', '0', ''], automaticPresses: false }, 'singles');
   if (kind === 'churchy') return { ...reset, kind, name: 'Churchie', basis: 'net', amountPerDotMinor: '',
     churchyPlayers: [], churchyVersion: 3, churchyOrderMode: 'approach',
     churchySpecialSelections: defaultChurchySpecialSelections.map((special) => ({ ...special })) };
@@ -202,7 +204,7 @@ export function buildGame(draft: GameDraft, playerIds: readonly string[] = []): 
         : { ...common, mode: 'individual', stakeMinor: stake };
     return isDotsDefinition(game) && game.playerIds.every((id) => playerIds.includes(id)) ? game : null;
   }
-  if (draft.kind === 'wolf' || draft.kind === 'nassau') {
+  if (draft.kind === 'wolf' || draft.kind === 'nassau' || draft.kind === 'match-play') {
     const stake = draft.stake?.trim() ? parseMoney(draft.stake) : null;
     if (draft.kind === 'wolf' && draft.wolfVersion === 2 && draft.stake?.trim() && stake === null) return null;
     const game = draft.kind === 'wolf'
@@ -215,7 +217,7 @@ export function buildGame(draft: GameDraft, playerIds: readonly string[] = []): 
           backMinor: parseMoney(draft.nassauStakes?.[1] ?? ''), overallMinor: parseMoney(draft.nassauStakes?.[2] ?? '') },
         automaticPresses: draft.automaticPresses ?? false };
     if (game.kind === 'wolf') return isWolfDefinition(game) && game.playerIds.every((id) => playerIds.includes(id)) ? game : null;
-    return isNassauDefinition(game) && game.sides.flatMap((side) => side.playerIds).every((id) => playerIds.includes(id)) ? game : null;
+    return isPressMatchDefinition(game) && game.sides.flatMap((side) => side.playerIds).every((id) => playerIds.includes(id)) ? game : null;
   }
   if (draft.kind === 'stroke-play') {
     const game = { id: draft.id, name: draft.name.trim(), kind: draft.kind, version: 1, basis: draft.basis };

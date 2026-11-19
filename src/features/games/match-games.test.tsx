@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { NassauGameDefinition } from '../../domain/nassau';
+import type { NassauGameDefinition, MatchPlayGameDefinition } from '../../domain/nassau';
 import type { WolfGameDefinition } from '../../domain/wolf';
 import type { RoundGameDefinition, RoundGameResult } from '../../domain/games';
 import type { RoundScores } from '../../domain/scoring';
@@ -34,6 +34,63 @@ function fixture() {
 }
 
 describe('shared match game setup and presentation', () => {
+  it.each([9, 18] as const)('configures a separate %i-hole Match Play with one explicit stake and no Nassau conversion', async (count) => {
+    const f = strokeGameFixture(count);
+    const base = strokeGamesRound(f);
+    const round: RoundScores = { ...base, setupLocked: false, supportedGameKinds: ['match-play', 'nassau'],
+      games: { configuration: { eventId: base.eventId, roundId: base.roundId, etag: null, games: [] }, results: [] } };
+    const onSave = vi.fn().mockResolvedValue(null);
+    render(<RoundGamesPanel round={round} busy={false} onDirtyChange={vi.fn()} onSave={onSave} onRefresh={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add game' }));
+    fireEvent.change(screen.getByLabelText('Game type'), { target: { value: 'match-play' } });
+    expect(screen.getByRole('region', { name: 'Match Play setup' })).toBeVisible();
+    expect(screen.getByText('One match and stake over the saved 9- or 18-hole playing circuit. Ties push; no carry.')).toBeVisible();
+    expect(screen.queryByLabelText('Front stake per side · USD $')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Back stake per side · USD $')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Playing group'), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('Side A golfer 1'), { target: { value: f.cards[0]?.playerId } });
+    fireEvent.change(screen.getByLabelText('Side B golfer 1'), { target: { value: f.cards[1]?.playerId } });
+    fireEvent.change(screen.getByLabelText('Match stake per side · USD $'), { target: { value: '1.01' } });
+    fireEvent.click(screen.getByLabelText('Automatic two-down presses'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save game' }));
+    await waitFor(() => { expect(onSave).toHaveBeenCalledTimes(1); });
+    expect(onSave.mock.calls[0]?.[0]).toEqual([expect.objectContaining({ kind: 'match-play', name: 'Match Play', version: 1,
+      variant: 'singles', automaticPresses: true, stakes: { currency: 'USD', frontMinor: 0, backMinor: 0, overallMinor: 101 } })]);
+  });
+
+  it('requires explicit Match Play capability and keeps existing match identities fixed', () => {
+    const { round, nassau } = fixture();
+    const game: MatchPlayGameDefinition = { ...nassau, kind: 'match-play', name: 'Fictional Match Play',
+      stakes: { ...nassau.stakes, frontMinor: 0, backMinor: 0 } };
+    const props = { round, busy: false, onDirtyChange: vi.fn(), onSave: vi.fn().mockResolvedValue(null), onRefresh: vi.fn() };
+    const view = render(<RoundGamesPanel {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add game' }));
+    expect(screen.getByRole('option', { name: 'Match Play · With presses' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel editing' }));
+    view.rerender(<RoundGamesPanel {...props} round={{ ...round, supportedGameKinds: ['match-play'],
+      games: { configuration: { eventId: round.eventId, roundId: round.roundId, etag: 'match-v1', games: [game] }, results: [] } }} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Fictional Match Play' }));
+    expect(screen.getByLabelText('Game type')).toBeDisabled();
+    expect(screen.getByLabelText('Match stake per side · USD $')).toHaveValue('0.00');
+    expect(buildGame({ ...draftFromGame(game), nassauStakes: ['1', '0', '1'] }, round.cards.map((card) => card.playerId))).toBeNull();
+  });
+
+  it('renders Match Play as a matchboard, never ranked points or a golfer scorecard metric', () => {
+    const { round, nassau, wolf, f } = fixture();
+    const game: MatchPlayGameDefinition = { ...nassau, kind: 'match-play', name: 'Fictional Match Play',
+      stakes: { ...nassau.stakes, frontMinor: 0, backMinor: 0 } };
+    const result: RoundGameResult = { gameId: game.id, kind: game.kind, version: 1, players: [],
+      nassau: calculateNassau(game, f.snapshot, f.cards) };
+    const updated = { ...round, games: { configuration: { eventId: round.eventId, roundId: round.roundId,
+      etag: 'match-v1', games: [game, wolf] }, results: [result] } };
+    const view = render(<RoundLeaderboard round={updated} busy={false} onManageGames={vi.fn()} />);
+    expect(screen.getByRole('region', { name: 'Fictional Match Play matchboard' })).toBeVisible();
+    expect(screen.queryByRole('list', { name: 'Standings' })).not.toBeInTheDocument();
+    view.rerender(<SavedScorecards round={updated} groupNumber={1} busy={false} onGroupChange={vi.fn()} onEnterScores={vi.fn()} />);
+    expect(within(screen.getByLabelText('Game')).queryByRole('option', { name: /Match Play/ })).not.toBeInTheDocument();
+    expect(screen.getByText('Match Play bets and presses are in Games and Leaderboard, not individual scorecard points.')).toBeVisible();
+  });
+
   it('retains explicit Wolf order, capability checks, peer definitions and stable save identity on unconfirmed retries', async () => {
     const { round, wolf, nassau } = fixture();
     const onSave = vi.fn().mockResolvedValue(null), onDirtyChange = vi.fn();

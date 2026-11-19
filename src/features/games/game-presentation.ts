@@ -24,6 +24,7 @@ export function gameScoringLabel(game: RoundGameDefinition): string {
   if (game.kind === 'dots') return 'Dots · Separate earned specials';
   if (game.kind === 'wolf') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Wolf${game.allowPig ? ' / PIG' : ''} · ${game.version === 2 ? 'Earned dots' : 'Legacy dot balance'}`;
   if (game.kind === 'nassau') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Nassau · Match play · ${game.variant.replaceAll('-', ' ')}`;
+  if (game.kind === 'match-play') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Match Play · One match with presses · ${game.variant.replaceAll('-', ' ')}`;
   if (game.kind === 'stroke-play') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Stroke Play · Lowest to personal par${game.basis === 'net' ? ' · 100% Course Handicap' : ''}`;
   if (game.kind === 'churchy') return `Group ${String(game.groupNumber)} · Rotating partners · Earned dots`;
   if (game.kind === 'ball-drop') return `Ball Drop · ${game.format === 'ball-drop-net-gross' ? '1 Net + 1 Gross'

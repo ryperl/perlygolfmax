@@ -12,7 +12,7 @@ import { isStrokeGameResult } from './stroke-games.js';
 import { isChurchyDefinition, isChurchyResult } from './churchy.js';
 import { isPublicScoreIdentity } from './public-access.js';
 import { isWolfDefinition, isWolfResults } from './wolf.js';
-import { isNassauDefinition, isNassauResults } from './nassau.js';
+import { isPressMatchDefinition, isNassauResults } from './nassau.js';
 import { nassauContextFromScores, nassauRecordsFor, wolfInputFromScores, wolfRecordsFor, wolfResultPlayers } from '../domain/game-declarations.js';
 import type { RoundGameScoringContext } from '../domain/game-declarations.js';
 import { sameJsonValue } from './round-context.js';
@@ -48,7 +48,7 @@ function pointsTable(value: unknown, maximum: number): boolean {
 export function isRoundGameDefinition(value: unknown): value is RoundGameDefinition {
   if (isRecord(value) && value.kind === 'dots') return isDotsDefinition(value);
   if (isRecord(value) && value.kind === 'wolf') return isWolfDefinition(value);
-  if (isRecord(value) && value.kind === 'nassau') return isNassauDefinition(value);
+  if (isRecord(value) && (value.kind === 'nassau' || value.kind === 'match-play')) return isPressMatchDefinition(value);
   if (isRecord(value) && value.kind === 'churchy') return isChurchyDefinition(value);
   if (isRecord(value) && (value.kind === 'ball-drop' || value.kind === 'skins' || value.kind === 'stroke-play')) {
     if (!isUuid(value.id) || !boundedText(value.name) || value.version !== 1
@@ -217,10 +217,10 @@ export function isRoundGamesView(value: unknown, context?: RoundGameScoringConte
       seen.add(result.gameId);
       continue;
     }
-    if (game?.kind === 'nassau') {
+    if (game?.kind === 'nassau' || game?.kind === 'match-play') {
       const round = context && nassauContextFromScores(context);
       if (!context || !round || !keys(result, ['gameId', 'kind', 'version', 'players', 'nassau'])
-        || result.kind !== 'nassau' || result.version !== 1 || !Array.isArray(result.players) || result.players.length
+        || result.kind !== game.kind || result.version !== 1 || !Array.isArray(result.players) || result.players.length
         || !isNassauResults(result.nassau, game, round, context.cards,
           nassauRecordsFor(game, context.groups, context.cards), { courseHandicaps: context.courseHandicaps ?? [] })) return false;
       seen.add(result.gameId);

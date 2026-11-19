@@ -54,7 +54,7 @@ export function GameResults({ game, result, holeNumbers, players }: {
   }
 
   if (game.kind === 'churchy') return <ChurchyResults game={game} result={result} />;
-  if (game.kind === 'nassau') return <NassauResults game={game} result={result?.nassau} {...(players ? { players } : {})} />;
+  if (game.kind === 'nassau' || game.kind === 'match-play') return <NassauResults game={game} result={result?.nassau} {...(players ? { players } : {})} />;
   if (game.kind === 'wolf') return <WolfResults game={game} result={result?.wolf} />;
   if (game.kind === 'dots') return <DotsResults game={game} result={result?.dots} />;
   return (

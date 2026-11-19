@@ -292,7 +292,7 @@ export function validatePursePlanContext(
       if (roundScores !== undefined) {
         const saved = roundScores.filter((round) => round.roundId === source.roundId);
         const games = saved[0]?.games?.configuration.games.filter((game) => game.id === source.gameId) ?? [];
-        if (saved.length !== 1 || games.length !== 1 || games[0]?.kind === 'churchy' || games[0]?.kind === 'nassau') issues.push(issue('missing-game', pool.id));
+        if (saved.length !== 1 || games.length !== 1 || games[0]?.kind === 'churchy' || games[0]?.kind === 'nassau' || games[0]?.kind === 'match-play') issues.push(issue('missing-game', pool.id));
         const game = games[0];
         const savedRound = saved[0];
         if (savedRound && (savedRound.eventId !== workspace.event.id
@@ -353,7 +353,7 @@ function sourceFor(pool: PurseRankedPool, workspace: EventWorkspace, rounds: rea
   const results = saved.games?.results.filter((result) => result.gameId === source.gameId) ?? [];
   const game = definitions[0];
   const result = results[0];
-  if (!game || game.kind === 'churchy' || game.kind === 'nassau' || !result || definitions.length !== 1 || results.length !== 1) return blocked('missing-game');
+  if (!game || game.kind === 'churchy' || game.kind === 'nassau' || game.kind === 'match-play' || !result || definitions.length !== 1 || results.length !== 1) return blocked('missing-game');
   const roster = snapshot.players.map((player) => player.playerId);
   if (game.kind === 'wolf' && !wolfGroupMatchesRound(game, saved)) return blocked('team-setup-required');
   const metricRoster = game.kind === 'wolf' ? game.playerIds : roster;

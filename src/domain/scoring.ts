@@ -25,6 +25,7 @@ export type HoleScore = (
   | { readonly kind: 'picked-up'; readonly reportedStrokes?: number }
   | { readonly kind: 'did-not-finish' }) & {
     readonly churchy?: ChurchySpecials; readonly kp?: KpEntry | null;
+    /** Shared game-ID-bound match/press ledger; the game kind and proof distinguish Nassau from Match Play. */
     readonly nassau?: readonly NassauHoleRecord[]; readonly wolf?: readonly WolfHoleRecord[];
     readonly dots?: readonly DotsHoleRecord[];
   };

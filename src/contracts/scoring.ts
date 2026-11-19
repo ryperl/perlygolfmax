@@ -330,7 +330,7 @@ function validateRoundScores(value: unknown, lean = false): value is RoundScores
     }
     if (!isRoundGamesView(value.games, context) || value.games.configuration.eventId !== value.eventId
       || value.games.configuration.roundId !== value.roundId
-      || value.games.results.some((result) => (!['churchy', 'wolf', 'nassau', 'dots'].includes(result.kind ?? '') && result.players.length !== cards.length) || result.players.some((player) => {
+      || value.games.results.some((result) => (!['churchy', 'wolf', 'nassau', 'match-play', 'dots'].includes(result.kind ?? '') && result.players.length !== cards.length) || result.players.some((player) => {
         const card = cardsById.get(player.playerId);
         if (!card && result.kind === 'churchy') return false;
         return !card || card.displayName !== player.displayName || player.totalHoles !== count
@@ -356,7 +356,7 @@ function validateRoundScores(value: unknown, lean = false): value is RoundScores
     for (const result of value.games.results) {
       const game = value.games.configuration.games.find((entry) => entry.id === result.gameId);
       if (!game) return false;
-      if (game.kind === 'wolf' || game.kind === 'nassau' || game.kind === 'dots') continue;
+      if (game.kind === 'wolf' || game.kind === 'nassau' || game.kind === 'match-play' || game.kind === 'dots') continue;
       if (game.kind === 'churchy') {
         const group: unknown = value.groups.find((entry: unknown) => isRecord(entry) && entry.number === game.groupNumber);
         const expected = calculateChurchyResults(game, cards.map((card) => {
