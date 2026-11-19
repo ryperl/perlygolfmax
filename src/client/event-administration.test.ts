@@ -17,7 +17,7 @@ describe('Authenticated event administration client', () => {
       .mockResolvedValueOnce(json({ eventId: id, requestId, state: 'deleted' }));
     const client = createEventAdministrationClient('https://fictional.example/api', () => Promise.resolve('fictional-token'), send);
     await client.listQuick(signal(), 'fictional-current', 'archived');
-    expect(send.mock.calls[0]?.[0]).toBe('https://fictional.example/api/administration/quick-rounds?status=archived&cursor=fictional-current');
+    expect(send.mock.calls[0]?.[0]).toBe('https://fictional.example/api/organizer/quick-rounds?status=archived&cursor=fictional-current');
     await client.restore(event, requestId, signal());
     await client.deleteArchived(event, event.name, requestId, signal());
     expect(send.mock.calls[2]?.[1]).toMatchObject({ method: 'POST', credentials: 'omit', cache: 'no-store',

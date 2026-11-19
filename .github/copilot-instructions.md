@@ -507,6 +507,10 @@
   refresh confirmation independently of collapsed sections.
 - Keep limits effective across instances; fail closed on missing configuration
   or limit-store failure. CORS and Functions keys are not user authentication.
+- Azure Functions rejects HTTP routes starting with `admin` or `runtime`,
+  including `administration`. Use `organizer` for management routes and verify
+  their actual authentication responses before frontend publication; indexed
+  deployment metadata alone does not prove a route is reachable.
 - Read `docs/operations.md` before identity, infrastructure, deployment or
   recovery changes. Preserve existing SWA/DNS and identity/data continuity;
   IaC scaffolding and execution require their separate approvals.

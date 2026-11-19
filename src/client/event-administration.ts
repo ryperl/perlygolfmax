@@ -24,7 +24,7 @@ export function createEventAdministrationClient(apiUrl: string, getToken: () => 
     signal.throwIfAborted();
     const token = await getToken();
     signal.throwIfAborted();
-    const response = await send(`${apiUrl}/administration/${path}`, {
+    const response = await send(`${apiUrl}/organizer/${path}`, {
       signal, cache: 'no-store', credentials: 'omit', method: input ? 'POST' : 'GET',
       headers: { Authorization: `Bearer ${token}`, ...(input ? { 'Content-Type': 'application/json',
         'Idempotency-Key': input.requestId, ...(input.expected ? { 'If-Match': input.expected } : {}) } : {}) },

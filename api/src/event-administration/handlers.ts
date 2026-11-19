@@ -62,11 +62,11 @@ export function createEventAdministrationHandler(resolve: () => EventAdministrat
 
 export function registerEventAdministration(resolve: () => EventAdministrationApi): void {
   const routes: readonly { readonly action: EventAdministrationAction; readonly route: string; readonly method: 'GET' | 'POST' }[] = [
-    { action: 'quick-rounds', route: 'administration/quick-rounds', method: 'GET' },
-    { action: 'restore', route: 'administration/events/{id}/restore', method: 'POST' },
-    { action: 'delete', route: 'administration/events/{id}/delete', method: 'POST' },
-    { action: 'deletions', route: 'administration/deletions', method: 'GET' },
-    { action: 'continue', route: 'administration/events/{id}/delete/continue', method: 'POST' },
+    { action: 'quick-rounds', route: 'organizer/quick-rounds', method: 'GET' },
+    { action: 'restore', route: 'organizer/events/{id}/restore', method: 'POST' },
+    { action: 'delete', route: 'organizer/events/{id}/delete', method: 'POST' },
+    { action: 'deletions', route: 'organizer/deletions', method: 'GET' },
+    { action: 'continue', route: 'organizer/events/{id}/delete/continue', method: 'POST' },
   ];
   for (const route of routes) app.http(`event-administration-${route.action}`, {
     route: route.route, methods: [route.method], authLevel: 'anonymous',

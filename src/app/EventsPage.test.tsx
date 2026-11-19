@@ -36,8 +36,8 @@ describe('EventsPage composition', () => {
       await userEvent.click(await screen.findByRole('button', { name: 'Load Quick rounds' }));
       await waitFor(() => { expect(send).toHaveBeenCalledTimes(2); });
       expect(send.mock.calls.map(([url]) => url)).toEqual([
-        'https://fictional.example.test/api/administration/quick-rounds?status=active',
-        'https://fictional.example.test/api/administration/deletions',
+        'https://fictional.example.test/api/organizer/quick-rounds?status=active',
+        'https://fictional.example.test/api/organizer/deletions',
       ]);
       for (const [, options] of send.mock.calls) expect(options).toMatchObject({
         cache: 'no-store', credentials: 'omit', headers: { Authorization: 'Bearer fictional-token' } });

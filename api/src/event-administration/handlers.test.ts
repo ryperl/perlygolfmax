@@ -14,7 +14,7 @@ function fixture(organizer = true) {
   const api = { verify, limiter, administration: new TableEventAdministration(f.table,
     (identity) => identity.objectId === creator.objectId && identity.tenantId === creator.tenantId) };
   function request(action: 'restore' | 'delete' | 'continue', body: unknown = {}, headers: Record<string, string> = {}) {
-    return new HttpRequest({ method: 'POST', url: `https://fictional.example/api/administration/${action}`,
+    return new HttpRequest({ method: 'POST', url: `https://fictional.example/api/organizer/${action}`,
       params: { id: event.id }, headers: { Authorization: 'Bearer fictional', 'Content-Type': 'application/json',
         'If-Match': row.etag, 'Idempotency-Key': identifier(980), ...headers },
       body: { string: JSON.stringify(body) } });

@@ -689,6 +689,17 @@ these lifecycle rules independently of discovery.
 
 ### Organizer Quick-round recovery and permanent deletion
 
+Organizer endpoints use `/api/organizer/...`. Azure Functions
+`ScriptHost.ValidateHttpFunction` rejects custom routes beginning with `admin`
+or `runtime` using a prefix check; `administration/...` is also rejected even
+when deployment metadata lists it. The client/actual-registration workflow test
+covers this host rule, and live verification must reach `401` on protected
+organizer GETs, not accept an empty host `404` as authorization proof.
+The TEST API readiness gate probes all five organizer routes plus the targeted
+player/HI routes without credentials and with fictional identifiers. It requires
+the expected authentication response before allowing frontend publication; no
+authenticated business mutation is performed by that gate.
+
 The bootstrapped organizer may list authoritative, fully published Quick-round
 headers in bounded pages, including legacy archives without an owner membership.
 This is a separate protected directory; it does not fabricate an owner or expose
