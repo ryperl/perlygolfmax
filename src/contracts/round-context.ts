@@ -48,10 +48,11 @@ export function roundMatchesSnapshot(workspace: EventWorkspace, snapshot: RoundS
     && round.cards.length === players.size
     && round.cards.every((card) => players.get(card.playerId) === card.displayName)
     && (round.games === undefined || (workspace.event.role === 'owner'
-      ? sameJsonValue(round.games.results, calculateGameResults(round.games.configuration.games, snapshot, round.cards))
+      ? sameJsonValue(round.games.results, calculateGameResults(round.games.configuration.games, snapshot, round.cards,
+        round.stringRulesVersion ?? 1, round.dotsCategorySweepsVersion ?? 0))
       : round.games.configuration.games.filter((game) => game.basis === 'gross').every((game) =>
         sameJsonValue(round.games?.results.find((result) => result.gameId === game.id),
-          calculateGameResults([game], snapshot, round.cards)[0]))));
+          calculateGameResults([game], snapshot, round.cards, round.stringRulesVersion ?? 1, round.dotsCategorySweepsVersion ?? 0)[0]))));
 }
 
 export function roundScoresMatchWorkspace(workspace: EventWorkspace, rounds: readonly RoundScores[]): boolean {

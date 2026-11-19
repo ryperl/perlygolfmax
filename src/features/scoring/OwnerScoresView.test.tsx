@@ -39,19 +39,21 @@ async function loaded(user = userEvent.setup()) {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); document.documentElement.scrollTop = 0; });
 
 describe('hole-first owner scoring', () => {
-  it('identifies an older String API and retains the current hole and draft when an app update is required', async () => {
+  it.each(['String', 'Category Sweep'] as const)('identifies an older %s API and retains the current hole and draft when an app update is required', async (rule) => {
     const initial: RoundScores = { ...fictionalRoundScores, games: {
       configuration: { eventId: fictionalRoundScores.eventId, roundId: fictionalRoundScores.roundId,
         etag: 'fictional-string-revision', games: [{ id: fictionalId(996), name: 'Fictional String',
           kind: 'dots', version: 1, mode: 'individual', groupNumber: 1, playerIds: fictionalRoundScores.cards.map((card) => card.playerId),
-          specials: [{ kind: 'string', units: 1 }], stakeMinor: null }] }, results: [],
+          specials: rule === 'String' ? [{ kind: 'string', units: 1 }]
+            : [{ kind: 'long-drive', units: 1 }, { kind: 'blue-plate', units: 1 }], stakeMinor: null }] }, results: [],
     } };
     const store = memoryScores(initial);
     vi.mocked(store.client.save).mockRejectedValue(new PrivateRequestError(426,
       'This scoring view needs an app update. Copy any unsaved scores, then refresh the page. Nothing was confirmed saved.'));
     mount(store);
     await loaded();
-    expect(screen.getByRole('note')).toHaveTextContent('This API uses previous String calculations.');
+    expect(screen.getByRole('note')).toHaveTextContent(rule === 'String'
+      ? 'This API uses previous String calculations.' : 'Automatic Long Drive + Blue Plate category sweeps require the newer API.');
     await enter(userEvent.setup(), '4');
     await userEvent.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     await screen.findByText(/This scoring view needs an app update/);

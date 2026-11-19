@@ -13,6 +13,7 @@ import { creator, event } from '../../test/fixtures.js';
 import { identifier } from '../../test/catalog-fixtures.js';
 import { createScoringHandler } from './handlers.js';
 import { ApiError } from '../errors.js';
+import { createPurseHandler } from '../purse/handlers.js';
 
 async function fixture() {
   const f = await publicFixture();
@@ -35,6 +36,110 @@ async function fixture() {
 }
 
 describe('Dots HTTP namespaces and public internal authority', () => {
+  it.each(['owner', 'public'] as const)('negotiates category sweeps for %s before mutations and publishes coherent full/lean pages without rewriting saved inputs', async (role) => {
+    const f = await fixture();
+    const workspace = await f.workspace.get(creator, event.id);
+    const snapshot = workspace.rounds.find((round) => round.id === f.roundId);
+    if (!snapshot) throw new Error('Missing fictional round');
+    f.seed({ ...f.row(`round:${f.roundId}`), content: JSON.stringify({ ...snapshot,
+      teeProfile: { ...snapshot.teeProfile, totalPar: snapshot.teeProfile.totalPar + 1,
+        holes: snapshot.teeProfile.holes.map((hole) => hole.number === 1 ? { ...hole, par: 5 } : hole) } }) });
+    const game: DotsGameDefinition = { ...f.game,
+      specials: [{ kind: 'long-drive', units: 1 }, { kind: 'blue-plate', units: 1 }] };
+    const ownerApi = { verify: vi.fn().mockResolvedValue(creator), limiter: f.api.limiter, scores: f.scores };
+    const writer = role === 'owner' ? createScoringHandler(() => ownerApi, 'score-hole')
+      : createPublicHandler(() => f.api, 'score-hole');
+    const staged = role === 'owner' ? createScoringHandler(() => ownerApi, 'score-game-hole')
+      : createPublicHandler(() => f.api, 'score-game-hole');
+    const gameWriter = role === 'owner' ? createScoringHandler(() => ownerApi, 'round-games')
+      : createPublicHandler(() => f.api, 'games');
+    const reader = role === 'owner' ? createScoringHandler(() => ownerApi, 'scores')
+      : createPublicHandler(() => f.api, 'scores');
+    const get = (query = '') => new HttpRequest({ method: 'GET', url: `https://fictional.example.test/api/fixture?${query}`,
+      params: { id: event.id, roundId: f.roundId } });
+    const empty = new Map(f.rows);
+    f.submit.mockClear();
+    expect(await gameWriter(f.request({ games: [game] }, 26000), f.context))
+      .toMatchObject({ status: 426, jsonBody: { code: 'CATEGORY_SWEEPS_CLIENT_UPDATE_REQUIRED' } });
+    expect(f.rows).toEqual(empty);
+    const setup = await gameWriter(f.request({ games: [game] }, 26000, {}, '?categorySweeps=1'), f.context);
+    expect(setup.status).toBe(200);
+    const initial = await f.scores.get(f.actor, event.id, f.roundId);
+    const score = { kind: 'strokes', strokes: 5, dots: [{ number: 1, gameId: game.id,
+      gameEtag: initial.games?.configuration.etag ?? '', players: [], contests: [
+        { kind: 'long-drive', status: 'awarded', winnerId: f.playerId },
+        { kind: 'blue-plate', status: 'awarded', winnerId: f.playerId },
+      ] }] };
+    const untouched = await reader(get(), f.context);
+    expect(untouched.status).toBe(200);
+    expect(untouched.jsonBody).not.toHaveProperty('dotsCategorySweepsVersion');
+    expect(decodeRoundScores(untouched.jsonBody)).not.toBeNull();
+    const rows = new Map(f.rows);
+    f.submit.mockClear();
+    for (const query of ['', '?categorySweeps=0', '?categorySweeps=1&categorySweeps=1']) {
+      expect(await writer(f.request({ score }, 26001, {}, query), f.context))
+        .toMatchObject({ status: 426, jsonBody: { code: 'CATEGORY_SWEEPS_CLIENT_UPDATE_REQUIRED' } });
+    }
+    expect(await staged(f.request({ privateUpload: {} }, 26001), f.context)).toMatchObject({ status: 426 });
+    expect(await gameWriter(f.request({ privateUpload: {} }, 26002), f.context)).toMatchObject({ status: 426 });
+    if (role === 'owner') {
+      const kp = createScoringHandler(() => ownerApi, 'round-kp');
+      expect(await kp(f.request({ privateUpload: {} }, 26003), f.context)).toMatchObject({ status: 426 });
+      expect(await kp(f.request({ version: 1, context: 'fictional-kp-context', status: 'open', decisions: [] }, 26003), f.context))
+        .toMatchObject({ status: 426 });
+    }
+    expect(f.submit).not.toHaveBeenCalled();
+    expect(f.rows).toEqual(rows);
+    const saved = await writer(f.request({ score }, 26001, {}, '?categorySweeps=1&format=lean'), f.context);
+    expect(saved.status).toBe(200);
+    expect(await writer(f.request({ score }, 26001, {}, '?categorySweeps=1&format=lean'), f.context)).toEqual(saved);
+    if (!isRecord(saved.jsonBody)) throw new Error('Missing fictional response');
+    const round = decodeRoundScores(saved.jsonBody.round);
+    expect(round?.dotsCategorySweepsVersion).toBe(1);
+    expect(round?.games?.results[0]?.dots?.awards.map((award) => [award.kind, award.dots]))
+      .toEqual([['blue-plate', 1], ['long-drive', 1], ['category-sweep', 1]]);
+    const originalReceipt = { ...f.row(`score-change:${identifier(26001)}`) };
+    const originalCapture = { ...f.row(`index-capture:${f.roundId}`) };
+    const originalCard = { ...f.row(`score-card:${f.roundId}:${f.playerId}`) };
+    for (const format of ['', '&format=lean']) {
+      expect(await reader(get(`legacy=1${format}`), f.context)).toMatchObject({ status: 426 });
+      const current = await reader(get(`categorySweeps=1${format}`), f.context);
+      expect(current.status).toBe(200);
+      expect(decodeRoundScores(current.jsonBody)?.games?.results[0]?.players[0]?.totalPoints).toBe(3);
+      const hash = createHash('sha256').update(JSON.stringify(current.jsonBody)).digest('hex');
+      const page = await reader(get(`categorySweeps=1${format}&privatePart=0&privateHash=${hash}`), f.context);
+      expect(page).toMatchObject({ status: 200, jsonBody: { privateRead: { sha256: hash, index: 0 } } });
+    }
+    const history = createScoringHandler(() => ownerApi, 'score-history');
+    const historyRequest = (query: string) => new HttpRequest({ method: 'GET',
+      url: `https://fictional.example.test/api/fixture?${query}`,
+      params: { id: event.id, roundId: f.roundId, playerId: f.playerId } });
+    expect(await history(historyRequest(''), f.context)).toMatchObject({ status: 426 });
+    const currentHistory = await history(historyRequest('categorySweeps=1'), f.context);
+    expect(currentHistory.status).toBe(200);
+    expect(isScoreHistoryPage(currentHistory.jsonBody)).toBe(true);
+    if (!isScoreHistoryPage(currentHistory.jsonBody)) throw new Error('Missing fictional history');
+    expect(currentHistory.jsonBody.changes.flatMap((change) => change.dotAwardAudit ?? []))
+      .toContainEqual(expect.objectContaining({ dotsCategorySweepsVersion: 1 }));
+    expect(f.row(`score-change:${identifier(26001)}`)).toEqual(originalReceipt);
+    expect(f.row(`index-capture:${f.roundId}`)).toEqual(originalCapture);
+    expect(f.row(`score-card:${f.roundId}:${f.playerId}`)).toEqual(originalCard);
+    if (role === 'owner') {
+      const purse = createPurseHandler(() => ({ verify: ownerApi.verify, limiter: f.api.limiter, purse: f.purse }));
+      const beforeMoney = new Map(f.rows);
+      f.submit.mockClear();
+      const plan = { eventId: event.id, currency: 'USD', funding: { kind: 'fixed', budgetMinor: 100 },
+        pools: [{ id: identifier(26010), name: 'Fictional sweep pot', source: { kind: 'manual' },
+          awardUnit: 'pot', amountMinor: 100, recipientIds: [f.playerId] }] };
+      expect(await purse(f.request({ plan, resolutions: [] }, 26011), f.context))
+        .toMatchObject({ status: 426, jsonBody: { code: 'CATEGORY_SWEEPS_CLIENT_UPDATE_REQUIRED' } });
+      expect(await purse(f.request({ privateUpload: {} }, 26011), f.context)).toMatchObject({ status: 426 });
+      expect(f.rows).toEqual(beforeMoney);
+      expect(f.submit).not.toHaveBeenCalled();
+      expect(await purse(f.request({ plan, resolutions: [] }, 26011, {}, '?categorySweeps=1'), f.context))
+        .toMatchObject({ status: 200 });
+    }
+  });
   it.each(['owner', 'public'] as const)('negotiates corrected String for %s before mutations, preserves retry identity and pages the projected leaf once', async (role) => {
     const f = await fixture();
     const game: DotsGameDefinition = { ...f.game, specials: [{ kind: 'string', units: 1 }, { kind: 'birdy-string', units: 2 }] };

@@ -258,7 +258,13 @@
   manual legacy calls until opt-in, target IDs and raw-only/old-client echoes.
   Nonrepresentable old reads/writes require an update before any mutation.
   Category carries resolve independently in actual order; final unclaimed stays
-  unawarded. King requires every eligible category-hole award owned directly or
+  unawarded. Ordinary Dots automatically adds one Category Sweep dot when the
+  same golfer wins enabled Long Drive and Blue Plate on the same hole, including
+  existing rounds. Share with current teammates; never multiply the bonus,
+  infer it from carried ownership/second qualifiers or alter linked High/Low
+  Sweep or Churchie. Negotiate the derived calculation context, guard affected
+  old writes/publications before mutation, and preserve original receipts.
+  King requires every eligible category-hole award owned directly or
   through carry, individual x1 only after complete inputs. No fixed hole counts.
   Assassin needs both approach qualifiers or both longest drives in a 2-v-2
   side. Optional second KP/Blue Plate/Long Drive selections never win extra

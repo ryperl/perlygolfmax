@@ -43,6 +43,43 @@ async function openGameStandings(page: Page, name: string) {
   })) await summary.click();
 }
 
+test('existing Dots automatically shares one category sweep, removes split-partner bonuses and retains failed correction drafts', async ({ page }, testInfo) => {
+  const fixture = await openDotsFixture(page, testInfo, 'category-sweeps');
+  try {
+    await page.setViewportSize({ width: 320, height: 900 });
+    const result = () => fixture.read().games?.results.find((game) => game.kind === 'dots');
+    expect(result()?.players.map((player) => player.totalPoints)).toEqual([3, 3, 0, 0]);
+    expect(result()?.dots?.awards.filter((award) => award.kind === 'category-sweep'))
+      .toEqual([expect.objectContaining({ dots: 1, earnedBy: dotsPlayers[0], recipientIds: dotsPlayers.slice(0, 2) })]);
+    const original = fixture.read().cards.map((card) => card.holes.map((hole) => hole.score.kind));
+    const form = page.getByRole('form', { name: 'Group 1 hole 1 entry', exact: true });
+    await expect(form.getByRole('combobox', { name: 'Long Drive result', exact: true })).toHaveValue(dotsPlayers[0] ?? '');
+    await form.getByRole('combobox', { name: 'Blue Plate result', exact: true }).selectOption(dotsPlayers[1] ?? '');
+    fixture.pauseNextFailure();
+    await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+    await expect.poll(() => fixture.counters().requests.length).toBe(1);
+    fixture.releaseFailure();
+    await expect(form.getByRole('button', { name: 'Save & Next Hole', exact: true })).toBeEnabled();
+    await expect(form.getByRole('combobox', { name: 'Blue Plate result', exact: true })).toHaveValue(dotsPlayers[1] ?? '');
+    expect(result()?.players.slice(0, 2).map((player) => player.totalPoints)).toEqual([3, 3]);
+    await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+    await expect(page.getByRole('form', { name: 'Group 1 hole 2 entry', exact: true })).toBeVisible();
+    expect(fixture.counters().requests[1]).toEqual(fixture.counters().requests[0]);
+    expect(fixture.counters().writes).toBe(1);
+    expect(result()?.players.slice(0, 2).map((player) => player.totalPoints)).toEqual([2, 2]);
+    expect(result()?.dots?.awards.some((award) => award.kind === 'category-sweep')).toBe(false);
+    expect(fixture.read().cards.map((card) => card.holes.map((hole) => hole.score.kind))).toEqual(original);
+    await page.reload();
+    await page.getByRole('button', { name: 'Games', exact: true }).click();
+    await openGameStandings(page, 'Fictional current Dots');
+    const ledger = page.getByRole('region', { name: 'Fictional current Dots results', exact: true });
+    await expect(ledger.getByRole('row').filter({ has: page.getByRole('rowheader', { name: 'Fictional golfer 1', exact: true }) })
+      .getByRole('cell').first()).toHaveText('2');
+    expect(fixture.counters().pageErrors).toEqual([]);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  } finally { await fixture.close(); }
+});
+
 test('existing Dots cards recalculate inclusive String and exclusive Birdie String, including later corrections', async ({ page }, testInfo) => {
   const fixture = await openDotsFixture(page, testInfo, 'string-rules');
   try {

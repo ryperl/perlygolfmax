@@ -11,6 +11,7 @@ import { isScorecard } from '../../../src/contracts/scoring.js';
 import { isRecord } from '../../../src/contracts/events.js';
 import { privateContent } from '../private-values.js';
 import { ApiError } from '../errors.js';
+import { hasCategorySweeps } from '../../../src/contracts/category-sweeps.js';
 
 export async function correctionAuditCards(
   table: TableClient, eventId: string, round: RoundSnapshot, lock: StoredScoringLock,
@@ -59,7 +60,11 @@ export function buildDotAwardAudit(
     if (canonical(previousAwards) === canonical(nextAwards)) return [];
     const stringRules = [...previousAwards, ...nextAwards]
       .some((award) => award.kind === 'string' || award.kind === 'birdy-string');
+    const categorySweeps = game.kind === 'dots' ? hasCategorySweeps([game])
+      : game.kind === 'wolf' && hasCategorySweeps(games.filter((entry) =>
+        entry.kind === 'dots' && entry.mode === 'linked' && entry.linkedGameId === game.id));
     return [{ ...(stringRules ? { stringRulesVersion: 2 as const } : {}),
+      ...(categorySweeps ? { dotsCategorySweepsVersion: 1 as const } : {}),
       gameId: game.id, kind: game.kind, version: game.version, configuration: game, gameEtag,
       inputRevision: afterRound.inputRevision ?? null, before: previousAwards, after: nextAwards }];
   });

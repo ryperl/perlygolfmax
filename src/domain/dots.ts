@@ -379,9 +379,9 @@ export function calculateDots(
       const score = round.cards.find((entry) => entry.playerId === playerId)?.holes.find((entry) => entry.number === number)?.score;
       return par === undefined ? [] : [{ playerId, number, strokes: score?.kind === 'strokes' ? score.strokes : null, par }];
     }));
-    const add = (kind: DotsSpecialKind, earnedBy: string | null, recipients: readonly string[], count: number,
+    const add = (kind: DotsSpecialKind | 'category-sweep', earnedBy: string | null, recipients: readonly string[], count: number,
       source: DotAward['source'], sourceHoles: readonly number[], reason: string, suffix = '', multiplier = context.multiplier) => {
-      const base = units.get(kind);
+      const base = kind === 'category-sweep' ? 1 : units.get(kind);
       if (base === undefined || context.status !== 'ready' || recipients.length === 0) return;
       const dots = exact(BigInt(base) * BigInt(count) * BigInt(multiplier));
       if (dots === null) { mark(hole, 'unavailable', 'arithmetic-range'); issues.push('arithmetic-range'); return; }
@@ -465,6 +465,16 @@ export function calculateDots(
       if (!winner) continue;
       add(kind, winner, own(winner), carry.holes.length, 'manual', carry.holes, 'Winner collects current and carried category awards.');
       carry.holes = [];
+    }
+    if (profile === 'dots' && round.dotsCategorySweepsVersion !== 0 && defaultPar === 5
+      && units.has('long-drive') && units.has('blue-plate')) {
+      const drive = record?.contests.find((contest) => contest.kind === 'long-drive');
+      const approach = record?.contests.find((contest) => contest.kind === 'blue-plate');
+      if (drive?.status === 'awarded' && approach?.status === 'awarded'
+        && drive.winnerId !== undefined && drive.winnerId === approach.winnerId) {
+        add('category-sweep', drive.winnerId, own(drive.winnerId), 1, 'derived', [hole.number],
+          'The same golfer won Long Drive and Blue Plate on this hole.', '', 1);
+      }
     }
     if (units.has('sweep') && game.mode === 'linked' && context.status === 'ready'
       && context.sides.length === 2 && context.sides.every((side) => side.length === 2)) {

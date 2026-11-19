@@ -800,6 +800,21 @@ except Birdie 2 and Eagle 5. All of these rules use gross qualifications:
   or Blue Plate qualifier, or second longest fairway drive. The second golfer
   receives no separate category award. Leave it Not relevant when unknown;
   no Assassin is inferred. Individual and solo Wolf contexts omit these controls.
+- **Category Sweep** is automatic in ordinary Dots whenever Long Drive and
+  Blue Plate are both enabled, including existing rounds. The same golfer must
+  win both on the same par-5 hole; partners splitting wins, second qualifiers
+  and historical carried ownership do not qualify. Award one extra dot to that
+  golfer and current teammates, never multiplied by carries, category units or
+  stakes. Missing decisions stay pending; no winner is invented.
+  This is separate from the saved linked High/Low Sweep and Churchie Sweep.
+  Current clients negotiate `categorySweeps=1`; current round projections and
+  newly authored affected audit receipts carry `dotsCategorySweepsVersion: 1`.
+  Unmarked old full/lean responses retain their original calculation context.
+  Unsupported affected score/game/KP writes fail with HTTP 426 before mutation;
+  reads and purse publications fail before publication whenever legacy
+  recomputation would disagree. No alternate legacy totals are returned.
+  Raw cards, captures, original audits, saved Wolf final-hole choices and
+  stale purse tie decisions remain unchanged.
 - King is an individual x1 round-end bonus per category. One golfer must own
   every eligible hole's award directly or through carry; final unclaimed
   awards prevent that category's King. Actual layout counts determine coverage.

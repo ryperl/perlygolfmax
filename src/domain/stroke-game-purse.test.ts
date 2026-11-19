@@ -10,6 +10,41 @@ import { matchGamesFixture } from './match-games.test-support.js';
 import type { DotsGameDefinition } from './dots.js';
 
 describe('stroke-game place awards and overall boundaries', () => {
+  it('recalculates category-sweep-funded awards without silently reusing a now-stale purse tie decision', () => {
+    const f = matchGamesFixture();
+    const first = f.ids[0], second = f.ids[1], third = f.ids[2];
+    if (!first || !second || !third) throw new Error('Missing fictional category players');
+    const game: DotsGameDefinition = { id: f.wolf.id, name: 'Fictional categories', kind: 'dots', version: 1,
+      mode: 'individual', stakeMinor: null, groupNumber: 1, playerIds: f.ids,
+      specials: [{ kind: 'long-drive', units: 1 }, { kind: 'blue-plate', units: 1 }, { kind: 'other', units: 1 }] };
+    const snapshot = { ...f.snapshot, teeProfile: { ...f.snapshot.teeProfile,
+      holes: f.snapshot.teeProfile.holes.map((hole) => ({ ...hole, par: hole.number <= 2 ? 5 : 4 })) } };
+    const cards = f.cards.map((card, index) => ({ ...card, holes: card.holes.map((hole) => ({ ...hole,
+      score: { kind: 'strokes' as const, strokes: 4, ...(index === 0 && hole.number <= 2 ? { dots: [{
+        number: hole.number, gameId: game.id, gameEtag: 'fictional-game-revision',
+        players: hole.number === 2 ? [{ playerId: second, counts: { other: 1 }, calls: [] }] : [],
+        contests: [{ kind: 'long-drive' as const, status: 'awarded' as const, winnerId: hole.number === 1 ? first : second },
+          { kind: 'blue-plate' as const, status: 'awarded' as const, winnerId: hole.number === 1 ? first : third }],
+      }] } : {}) },
+    })) }));
+    const baseRound = { ...f.round(cards, [game]), layout: snapshot.teeProfile.holes, stringRulesVersion: 2 as const };
+    const current = { ...baseRound, dotsCategorySweepsVersion: 1 as const, games: {
+      configuration: { eventId: baseRound.eventId, roundId: baseRound.roundId, games: [game], etag: null },
+      results: calculateGameResults([game], snapshot, cards) } };
+    const legacy = { ...baseRound, games: { ...current.games, results: calculateGameResults([game], snapshot, cards, 2, 0) } };
+    const base = purseTestContext();
+    const workspace: EventWorkspace = { ...base.workspace, event: { ...base.workspace.event, id: current.eventId },
+      rounds: [snapshot], roster: snapshot.players };
+    const pool = { ...base.pool, source: { kind: 'round-game' as const, roundId: current.roundId, gameId: game.id },
+      awardUnit: 'per-golfer' as const, tiePolicy: 'organizer' as const, prizes: [{ place: 1, amountMinor: 100 }] };
+    const plan = { ...base.plan, eventId: current.eventId, pools: [pool] };
+    const resolutions = [{ poolId: pool.id, rank: 1, orderedEntrantIds: [first, second] }];
+    expect(calculatePurse(plan, workspace, [legacy], resolutions).issues).toEqual([]);
+    const changed = calculatePurse(plan, workspace, [current], resolutions);
+    expect(changed.issues).toContainEqual({ code: 'invalid-resolution', poolId: pool.id });
+    expect(changed.pools[0]?.shares).toEqual([]);
+    expect(resolutions).toEqual([{ poolId: pool.id, rank: 1, orderedEntrantIds: [first, second] }]);
+  });
   it('recalculates String-funded place prizes and invalidates a manual resolution whose tied set changed', () => {
     const f = matchGamesFixture();
     const game: DotsGameDefinition = { id: f.wolf.id, name: 'Fictional String', kind: 'dots', version: 1,

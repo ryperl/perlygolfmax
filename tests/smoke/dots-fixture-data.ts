@@ -27,7 +27,7 @@ const dots: DotsGameDefinition = { id: strokeGameId(961), name: 'Fictional linke
 function project(round: RoundScores, games = round.games?.configuration.games ?? [], snapshot = dotsFixture.snapshot): RoundScores {
   const results = calculateGameResults(games, { ...snapshot, groups: round.groups,
     players: snapshot.players.filter((player) => round.cards.some((card) => card.playerId === player.playerId)) },
-  round.cards, round.stringRulesVersion ?? 1);
+  round.cards, round.stringRulesVersion ?? 1, round.dotsCategorySweepsVersion ?? 0);
   return { ...round, games: {
     configuration: { eventId: round.eventId, roundId: round.roundId,
       etag: round.games?.configuration.etag ?? 'fictional-dots-games-v1', games },
@@ -46,27 +46,38 @@ function workspace(round: RoundScores, snapshot = dotsFixture.snapshot): EventWo
 
 export async function openDotsFixture(page: Page, testInfo: TestInfo,
   scenario: 'setup' | 'linked' | 'old-api' | 'rotating-3' | 'rotating-6' | 'individual-1' | 'individual-2' | 'individual-3'
-    | 'string-rules' | 'called-targets' = 'setup') {
+    | 'string-rules' | 'called-targets' | 'category-sweeps' = 'setup') {
   const server = await createServer({ configFile: false, cacheDir: testInfo.outputPath('vite-cache'),
     server: { host: '127.0.0.1', port: 0, hmr: false }, esbuild: { jsx: 'automatic' },
     optimizeDeps: { noDiscovery: true, include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'] },
     logLevel: 'error' });
   const playerCount = scenario.startsWith('individual-') ? Number(scenario.slice(-1)) : 4;
-  const modernRules = scenario === 'string-rules' || scenario === 'called-targets';
+  const categorySweeps = scenario === 'category-sweeps';
+  const modernRules = scenario === 'string-rules' || scenario === 'called-targets' || categorySweeps;
   const snapshot = scenario === 'string-rules' ? { ...dotsFixture.snapshot, teeProfile: { ...dotsFixture.snapshot.teeProfile,
     holes: dotsFixture.snapshot.teeProfile.holes.map((hole) => ({ ...hole, par: hole.number === 2 ? 5 : hole.number === 3 ? 3 : hole.par })) } }
-    : dotsFixture.snapshot;
+    : categorySweeps ? { ...dotsFixture.snapshot, teeProfile: { ...dotsFixture.snapshot.teeProfile,
+      totalPar: dotsFixture.snapshot.teeProfile.totalPar + 1,
+      holes: dotsFixture.snapshot.teeProfile.holes.map((hole) => ({ ...hole, par: hole.number === 1 ? 5 : 4 })) } }
+      : dotsFixture.snapshot;
   const base = strokeGamesRound(playerCount === 4 ? { ...dotsFixture, snapshot } : strokeGameFixture(9, playerCount));
   const ids = dotsPlayers.slice(0, playerCount);
-  const seeded = scenario === 'string-rules';
+  const seeded = scenario === 'string-rules' || categorySweeps;
   const stringScores = [[4, 4, 3], [3, 4, 1]] as const;
   const initial: RoundScores = { ...base, setupLocked: seeded, lastUpdatedAt: seeded ? '2026-01-01T00:00:00Z' : null,
     teeStrokeAllocation: true, ...(modernRules ? { stringRulesVersion: 2 as const } : {}),
+    ...(categorySweeps ? { dotsCategorySweepsVersion: 1 as const } : {}),
     ...(scenario === 'called-targets' ? { dotsCallTargets: true as const } : {}),
     groups: [{ ...base.groups[0], number: 1, playerIds: ids }],
     cards: base.cards.slice(0, playerCount).map((card, index) => ({ ...card,
       etag: seeded ? `fictional-string-card-${String(index)}` : null, updatedAt: seeded ? '2026-01-01T00:00:00Z' : null,
-      holes: card.holes.map((hole) => ({ ...hole, score: seeded && hole.number <= 3
+      holes: card.holes.map((hole) => ({ ...hole, score: categorySweeps && hole.number === 1
+        ? { kind: 'strokes', strokes: 5, ...(index === 0 ? { dots: [{
+          number: 1, gameId: strokeGameId(963), gameEtag: 'fictional-dots-games-v1', players: [],
+          contests: [{ kind: 'long-drive', status: 'awarded', winnerId: card.playerId },
+            { kind: 'blue-plate', status: 'awarded', winnerId: card.playerId }],
+        }] } : {}) }
+        : !categorySweeps && seeded && hole.number <= 3
         ? { kind: 'strokes', strokes: stringScores[index]?.[hole.number - 1]
           ?? (snapshot.teeProfile.holes.find((entry) => entry.number === hole.number)?.par ?? 4) + 1 }
         : { kind: 'unplayed' } })) })),
@@ -81,8 +92,10 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
     specials: [...(['sandy', 'hogan', 'seve', 'pully', 'dime', 'super-dime', 'murphy', 'chippy', 'walk'] as const)
       .map((kind) => ({ kind, units: 1 })), { kind: 'birdie', units: 2 }] };
   const modern: DotsGameDefinition = { id: strokeGameId(963), name: 'Fictional current Dots', kind: 'dots', version: 1,
-    mode: 'individual', groupNumber: 1, playerIds: dotsPlayers, stakeMinor: null,
-    specials: scenario === 'string-rules' ? [{ kind: 'string', units: 1 }, { kind: 'birdy-string', units: 3 },
+    ...(categorySweeps ? { mode: 'fixed', partnerIds: dotsPlayers } : { mode: 'individual' }),
+    groupNumber: 1, playerIds: dotsPlayers, stakeMinor: null,
+    specials: categorySweeps ? [{ kind: 'long-drive', units: 1 }, { kind: 'blue-plate', units: 1 }]
+      : scenario === 'string-rules' ? [{ kind: 'string', units: 1 }, { kind: 'birdy-string', units: 3 },
       { kind: 'birdie', units: 2 }, { kind: 'eagle', units: 4 }]
       : [{ kind: 'paree', units: 1 }, { kind: 'murphy', units: 1 }, { kind: 'sandy', units: 1 }, { kind: 'pully', units: 1 }] };
   let stored = project(initial, modernRules ? [modern] : scenario.startsWith('rotating') ? [dotsFixture.skins, rotating]
@@ -115,7 +128,8 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
           const lean = new URL(request.url()).searchParams.get('format') === 'lean';
           roundReadFormats.push(lean ? 'lean' : 'full');
           if (modernRules) expect(new URL(request.url()).searchParams.get('stringRules')).toBe('2');
-          return route.fulfill({ json: lean ? leanRoundScores(stored, false, false, modernRules, scenario === 'called-targets') : stored });
+          if (categorySweeps) expect(new URL(request.url()).searchParams.get('categorySweeps')).toBe('1');
+          return route.fulfill({ json: lean ? leanRoundScores(stored, false, false, modernRules, scenario === 'called-targets', categorySweeps) : stored });
         }
         throw new Error(`Unexpected fictional Dots read: ${path}`);
       }
@@ -138,7 +152,7 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
           recordedBy: { kind: 'public-score', eventId: stored.eventId } } };
         expect(isRoundScores(stored)).toBe(true);
         return route.fulfill({ json: new URL(request.url()).searchParams.get('format') === 'lean'
-          ? { ...result, round: leanRoundScores(result.round, false, false, modernRules, scenario === 'called-targets') } : result });
+          ? { ...result, round: leanRoundScores(result.round, false, false, modernRules, scenario === 'called-targets', categorySweeps) } : result });
       }
       if (!isHoleScore(payload.score)) throw new Error('Invalid fictional Dots score request');
       const parts = path.split('/'), playerId = parts[5], holeNumber = Number(parts[7]);
@@ -166,7 +180,7 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
         recordedBy: { kind: 'public-score', eventId: stored.eventId } } };
       expect(isScoreWriteResult(result)).toBe(true);
       return route.fulfill({ json: new URL(request.url()).searchParams.get('format') === 'lean'
-        ? leanScoreWriteResult(result, false, false, modernRules, scenario === 'called-targets') : result });
+        ? leanScoreWriteResult(result, false, false, modernRules, scenario === 'called-targets', categorySweeps) : result });
     });
     await page.goto(`${origin}/#events?event=${stored.eventId}&round=${stored.roundId}`);
     await expect(page.getByRole('form', { name: 'Group 1 hole 1 entry', exact: true })).toBeVisible();

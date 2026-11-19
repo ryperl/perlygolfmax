@@ -39,6 +39,92 @@ function context(number = 1, multiplier: 1 | 2 | 3 = 1, sides: readonly (readonl
 }
 
 describe('source-only Dots declaration review', () => {
+  it('awards one automatic same-golfer category sweep in individual, fixed, rotating and linked modes, never Churchie', () => {
+    const f = fixture([5], ['long-drive', 'blue-plate']);
+    const records = [record(1, [], [
+      { kind: 'long-drive', status: 'awarded', winnerId: 'A', secondId: 'B' },
+      { kind: 'blue-plate', status: 'awarded', winnerId: 'A', secondId: 'C' },
+    ])];
+    const rotating: DotsGameDefinition = { id: f.game.id, name: f.game.name, kind: 'dots', version: 2,
+      groupNumber: 1, playerIds: ids, mode: 'rotating', rotationHoles: 3, stakeMinor: null, specials: f.game.specials };
+    for (const game of [f.game, fixed(f.game), rotating, linked(f.game)]) {
+      const saved = records.map((entry) => ({ ...entry, ...(game.version === 2 ? { rotation: { playerIds: ids } } : {}) }));
+      const result = calculateDots(game, f.round, saved, [context(1, 3)]);
+      expect(result.status).toBe('complete');
+      expect(result.awards.find((award) => award.kind === 'category-sweep')).toMatchObject({
+        earnedBy: 'A', recipientIds: game.mode === 'individual' ? ['A'] : ['A', 'B'],
+        units: 1, count: 1, multiplier: 1, dots: 1, sourceHoles: [1], source: 'derived',
+      });
+      expect(calculateDots(game, { ...f.round, dotsCategorySweepsVersion: 0 }, saved, [context(1, 3)])
+        .awards.some((award) => award.kind === 'category-sweep')).toBe(false);
+      expect(calculateDots(game, f.round, saved, [context(1, 3)], 'churcie-v3')
+        .awards.some((award) => award.kind === 'category-sweep')).toBe(false);
+    }
+    expect(totals(calculateDots(f.game, f.round, records))).toEqual([3, 0, 0, 0]);
+    expect(totals(calculateDots(linked(f.game), f.round, records, [context(1, 3)]))).toEqual([7, 7, 0, 0]);
+  });
+
+  it('does not award split-partner/second-qualifier wins, missing decisions, disabled categories or historical carry ownership', () => {
+    const f = fixture([5, 5], ['long-drive', 'blue-plate']);
+    const wins = (drive: string, approach: string): readonly DotsContest[] => [
+      { kind: 'long-drive', status: 'awarded', winnerId: drive },
+      { kind: 'blue-plate', status: 'awarded', winnerId: approach },
+    ];
+    for (const contests of [wins('A', 'B'), wins('A', 'B').map((contest) => ({ ...contest, secondId: 'C' })),
+      wins('A', 'A').slice(0, 1), [{ kind: 'long-drive' as const, status: 'no-qualifier' as const },
+        { kind: 'blue-plate' as const, status: 'awarded' as const, winnerId: 'A' }]]) {
+      const result = calculateDots(fixed(f.game), f.round, [record(1, [], contests)]);
+      expect(result.awards.some((award) => award.kind === 'category-sweep')).toBe(false);
+      if (contests.length === 1) expect(result.holes[0]?.status).toBe('pending');
+    }
+    const historical = [record(1, [], [{ kind: 'long-drive', status: 'awarded', winnerId: 'A' },
+      { kind: 'blue-plate', status: 'no-qualifier' }]), record(2, [], [
+      { kind: 'long-drive', status: 'no-qualifier' }, { kind: 'blue-plate', status: 'awarded', winnerId: 'A' },
+    ])];
+    expect(calculateDots(f.game, f.round, historical).awards.some((award) => award.kind === 'category-sweep')).toBe(false);
+    const onlyDrive = { ...f.game, specials: [{ kind: 'long-drive' as const, units: 1 }] };
+    expect(calculateDots(onlyDrive, f.round, [record(1, [], wins('A', 'A').slice(0, 1))]).awards
+      .some((award) => award.kind === 'category-sweep')).toBe(false);
+    const invalid = calculateDots(f.game, f.round, [record(1, [], wins('missing', 'missing'))]);
+    expect(invalid.status).toBe('unavailable');
+    expect(invalid.awards).toEqual([]);
+  });
+
+  it('keeps carries and category units independent from the one-dot sweep, and retains linked High/Low Sweep', () => {
+    const f = fixture([5, 5], ['long-drive', 'blue-plate', 'sweep']);
+    const game = linked({ ...f.game, specials: f.game.specials.map((special) => ({ ...special, units: 4 })) });
+    const records = [record(1, [], [{ kind: 'long-drive', status: 'no-qualifier' }, { kind: 'blue-plate', status: 'no-qualifier' }]),
+      record(2, [], [{ kind: 'long-drive', status: 'awarded', winnerId: 'C' }, { kind: 'blue-plate', status: 'awarded', winnerId: 'C' }])];
+    const contexts = [context(1, 3), { ...context(2, 3), highWinnerIds: ['C', 'D'], lowWinnerIds: ['C', 'D'] }];
+    const result = calculateDots(game, f.round, records, contexts);
+    expect(result.holes[1]?.awards.map((award) => [award.kind, award.dots])).toEqual([
+      ['blue-plate', 24], ['long-drive', 24], ['category-sweep', 1], ['sweep', 12],
+    ]);
+    expect(result.holes[1]?.awards.find((award) => award.kind === 'category-sweep')?.recipientIds).toEqual(['C', 'D']);
+    const pending = calculateDots(game, f.round, records, [context(1), { ...context(2), status: 'pending', sides: [] }]);
+    expect(pending.holes[1]?.status).toBe('pending');
+    expect(pending.holes[1]?.awards).toEqual([]);
+  });
+
+  it('uses the current rotation or solo side and does not invent a winner while earlier category carries are unresolved', () => {
+    const f = fixture([4, 4, 4, 5], ['long-drive', 'blue-plate']);
+    const game: DotsGameDefinition = { id: f.game.id, name: f.game.name, kind: 'dots', version: 2,
+      groupNumber: 1, playerIds: ids, mode: 'rotating', rotationHoles: 3, stakeMinor: null, specials: f.game.specials };
+    const saved = [record(4, [], [
+      { kind: 'long-drive', status: 'awarded', winnerId: 'A' },
+      { kind: 'blue-plate', status: 'awarded', winnerId: 'A' },
+    ])];
+    const rotated = calculateDots(game, f.round, [{ ...record(), rotation: { playerIds: ids } }, ...saved]);
+    expect(rotated.awards.find((award) => award.kind === 'category-sweep')?.recipientIds).toEqual(['A', 'C']);
+    const solo = calculateDots(linked(f.game), f.round, saved,
+      f.round.layout.map((hole) => context(hole.number, 3, [['A'], ['B', 'C', 'D']])));
+    expect(solo.awards.find((award) => award.kind === 'category-sweep')).toMatchObject({ dots: 1, recipientIds: ['A'] });
+    const earlier = fixture([5, 5], ['long-drive', 'blue-plate']);
+    const unresolved = calculateDots(earlier.game, earlier.round, saved.map((entry) => ({ ...entry, number: 2 })));
+    expect(unresolved.holes.map((hole) => hole.status)).toEqual(['pending', 'pending']);
+    expect(unresolved.awards).toEqual([expect.objectContaining({ kind: 'category-sweep', number: 2, dots: 1 })]);
+    expect(unresolved.awards[0]?.sourceHoles).toEqual([2]);
+  });
   const failedKinds = ['paree', 'murphy', 'pully-murphy'] as const;
   const incompatible = ['hogan', 'seve', 'sandy', 'haz-par', 'chippy', 'pully', 'dime', 'super-dime'] as const;
   it.each(failedKinds.flatMap((kind) => incompatible.map((special) => ({ kind, special }))))(
@@ -714,7 +800,9 @@ describe('contests, carry, King and derived partner specials', () => {
       { kind: 'blue-plate', status: 'awarded', winnerId: plate[index] ?? 'A' },
     ]));
     const result = calculateDots(game, round, records);
-    expect(totals(result)).toEqual([1, 2, 4, 1]);
+    expect(totals(result)).toEqual([1, 2, 5, 1]);
+    expect(result.awards.filter((award) => award.kind === 'category-sweep'))
+      .toEqual([expect.objectContaining({ number: 2, earnedBy: 'C', dots: 1 })]);
     expect(result.awards.some((award) => award.kind === 'king-of-the-hill')).toBe(false);
   });
 

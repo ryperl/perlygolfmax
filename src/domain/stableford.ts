@@ -153,10 +153,11 @@ function playerResult(
 
 export function calculateGameResults(
   games: readonly RoundGameDefinition[], round: RoundSnapshot, cards: readonly Scorecard[], stringRulesVersion: 1 | 2 = 2,
+  dotsCategorySweepsVersion: 0 | 1 = 1,
 ): readonly RoundGameResult[] {
   const layout = [...round.teeProfile.holes].sort((left, right) => left.number - right.number);
   const courseHandicaps = games.some((game) => game.kind === 'wolf' || game.kind === 'nassau') ? publishedCourseHandicaps(round) : [];
-  const internal = calculateInternalGameResults(games, { roundId: round.id, layout, groups: round.groups, cards, stringRulesVersion,
+  const internal = calculateInternalGameResults(games, { roundId: round.id, layout, groups: round.groups, cards, stringRulesVersion, dotsCategorySweepsVersion,
     courseHandicaps: games.some((game) => game.kind === 'wolf') ? courseHandicaps : [],
     teeStrokeAllocation: round.teeProfile.strokeAllocation,
     ...(round.playerTees ? { playerTees: round.playerTees } : {}) });

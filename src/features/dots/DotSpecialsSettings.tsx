@@ -26,6 +26,11 @@ export function DotSpecialsSettings({ specials, mode, onChange, supportedKinds =
   const allSelected = available.every((special) => specials.some((entry) => entry.kind === special.kind));
   return <fieldset className="dots-specials" aria-label="Enabled specials and whole-dot units">
     <legend>Specials</legend>
+    {context === 'dots' && specials.some((special) => special.kind === 'long-drive')
+      && specials.some((special) => special.kind === 'blue-plate') && <p>
+        Category sweep: the same golfer winning Long Drive and Blue Plate on a hole earns 1 extra dot,
+        shared with current teammates. Carries do not increase this bonus. Separate from linked High/Low Sweep.
+      </p>}
     <DotPresetControls specials={specials} mode={mode} supportedKinds={supportedKinds} context={context}
       onChange={onChange} store={presetStore} />
     <div className="dots-specials-toolbar">

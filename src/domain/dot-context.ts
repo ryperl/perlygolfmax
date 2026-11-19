@@ -37,6 +37,7 @@ export interface DotAward {
 }
 
 export interface DotRoundInput {
+  readonly dotsCategorySweepsVersion?: 0 | 1;
   readonly stringRulesVersion?: 1 | 2;
   readonly layout: readonly CourseHole[];
   readonly groups: readonly RoundGroup[];

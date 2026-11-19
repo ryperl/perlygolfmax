@@ -31,6 +31,36 @@ function fixture() {
 }
 
 describe('optional independent Dots/Wolf composition', () => {
+  it('adds category sweeps to current linked prefix results without replacing a saved legacy final-hole Wolf receipt', () => {
+    const f = fixture();
+    const dots: DotsGameDefinition = { ...f.dots, specials: [{ kind: 'long-drive', units: 1 }, { kind: 'blue-plate', units: 1 }] };
+    const games = [f.wolf, dots];
+    const layout = f.snapshot.teeProfile.holes.map((hole) => ({ ...hole, par: hole.number === 1 ? 5 : 4 }));
+    const cards = f.cards.map((card): Scorecard => ({ ...card, holes: card.holes.map((hole) =>
+      card.playerId === f.anchor && hole.number === 1 ? { ...hole, score: { ...hole.score, dots: [{
+        number: 1, gameId: dots.id, gameEtag: 'fictional-game-revision', players: [], contests: [
+          { kind: 'long-drive', status: 'awarded', winnerId: f.anchor },
+          { kind: 'blue-plate', status: 'awarded', winnerId: f.anchor },
+        ],
+      }] } } : hole) }));
+    const context = { ...f.round(cards, games), layout };
+    const old = calculateInternalGameResults(games, { ...context, dotsCategorySweepsVersion: 0 });
+    const receipt = old.get(f.wolf.id)?.wolf?.comeback?.receipt;
+    if (!receipt) throw new Error('Missing fictional legacy category candidate');
+    const partnerId = f.ids.find((id) => id !== receipt.wolfId);
+    if (!partnerId) throw new Error('Missing fictional partner');
+    const saved = cards.map((card): Scorecard => card.playerId !== f.anchor ? card : { ...card,
+      holes: card.holes.map((hole) => hole.number !== 17 ? hole : { ...hole, score: { ...hole.score, wolf: [{
+        number: 17, choice: { gameId: f.wolf.id, gameEtag: 'fictional-game-revision', mode: 'partner', partnerId }, comeback: receipt,
+      }] } }) });
+    const modern = calculateInternalGameResults(games, { ...context, cards: saved, dotsCategorySweepsVersion: 1 });
+    expect(modern.get(f.wolf.id)?.wolf?.comeback).toEqual({ status: 'saved', receipt, changed: true });
+    expect(modern.get(f.wolf.id)?.wolf?.holes.filter((hole) => hole.number >= 17).map((hole) => hole.wolfId))
+      .toEqual([receipt.wolfId, receipt.wolfId]);
+    expect(modern.get(dots.id)?.dots?.awards.filter((award) => award.kind === 'category-sweep'))
+      .toEqual([expect.objectContaining({ dots: 1, earnedBy: f.anchor, recipientIds: f.ids.slice(0, 2) })]);
+    expect(saved[0]?.holes.find((hole) => hole.number === 17)?.score.wolf?.[0]?.comeback).toBe(receipt);
+  });
   it('keeps rotating groups, acknowledged order, result versions and exact settlements independent', () => {
     const f = matchGamesFixture(8);
     const groups = [{ number: 1, playerIds: f.ids.slice(0, 4), startingHole: 16 },

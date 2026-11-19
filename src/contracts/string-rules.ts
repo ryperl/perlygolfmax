@@ -18,7 +18,7 @@ export function stringRoundScores(round: RoundScores, negotiated = false): Round
   if (round.stringRulesVersion !== 2 || !games.some((game) =>
     (game.kind === 'dots' || game.kind === 'churchy' && game.version === 3)
       && game.specials.some((special) => special.kind === 'string' || special.kind === 'birdy-string'))) return legacy;
-  const context = { ...round, stringRulesVersion: 1 as const };
+  const context = { ...round, stringRulesVersion: 1 as const, dotsCategorySweepsVersion: round.dotsCategorySweepsVersion ?? 0 as const };
   const internal = calculateInternalGameResults(games, context);
   for (const result of round.games?.results ?? []) {
     const game = games.find((entry) => entry.id === result.gameId);

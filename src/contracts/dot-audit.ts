@@ -26,7 +26,9 @@ export function isDotAward(value: unknown): value is DotAward {
 }
 
 export function isDotAwardAudit(value: unknown): value is DotAwardAudit {
-  return isRecord(value) && Object.keys(value).length === (value.stringRulesVersion === undefined ? 8 : 9)
+  return isRecord(value) && Object.keys(value).length === 8
+      + (value.stringRulesVersion === undefined ? 0 : 1) + (value.dotsCategorySweepsVersion === undefined ? 0 : 1)
+    && (value.dotsCategorySweepsVersion === undefined || value.dotsCategorySweepsVersion === 1)
     && (value.stringRulesVersion === undefined || value.stringRulesVersion === 2) && isUuid(value.gameId)
     && (value.kind === 'dots' || value.kind === 'wolf' || value.kind === 'churchy' && value.version === 3)
     && (value.version === 1 || value.version === 2 || value.version === 3)

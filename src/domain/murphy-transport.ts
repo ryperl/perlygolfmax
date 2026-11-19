@@ -83,6 +83,7 @@ export function murphyRoundScores(round: RoundScores, negotiated = false, pareeT
   const games = round.games;
   if (!games) return { ...legacy, cards };
   const internal = calculateInternalGameResults(games.configuration.games, { ...round, cards,
+    dotsCategorySweepsVersion: round.dotsCategorySweepsVersion ?? 0,
     stringRulesVersion: round.stringRulesVersion ?? 1 });
   const results = games.results.map((result) => {
     const game = games.configuration.games.find((entry) => entry.id === result.gameId);

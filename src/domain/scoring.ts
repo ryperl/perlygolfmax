@@ -67,6 +67,7 @@ export interface PlayerCourseHandicap {
 
 export interface RoundScores {
   readonly stringRulesVersion?: 2;
+  readonly dotsCategorySweepsVersion?: 1;
   readonly churchyMurphyTargets?: true;
   readonly churchyPareeTargets?: true;
   readonly dotsCallTargets?: true;

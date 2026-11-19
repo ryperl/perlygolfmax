@@ -89,6 +89,7 @@ export function planGroup(round: RoundScores, playerIds: readonly string[], hole
   }) }));
   const before: DotRoundInput = { layout: round.layout, groups: round.groups, cards: round.cards,
     stringRulesVersion: round.stringRulesVersion ?? 1,
+    dotsCategorySweepsVersion: round.dotsCategorySweepsVersion ?? 0,
     playerLayouts: round.playerTees?.map((entry) => ({ playerId: entry.playerId, layout: entry.profile.holes })) ?? [] };
   for (const game of round.games?.configuration.games ?? []) {
     if (game.kind !== 'dots' && (game.kind !== 'churchy' || game.version !== 3)) continue;

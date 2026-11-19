@@ -131,6 +131,7 @@ function validateRoundScores(value: unknown, lean = false): value is RoundScores
       || !Array.isArray(value.supportedGameKinds) || !value.supportedGameKinds.includes('dots')
       || isRecord(value.permissions) && value.permissions.role === 'tester')) return false;
   if (isRecord(value) && value.stringRulesVersion !== undefined && value.stringRulesVersion !== 2) return false;
+  if (isRecord(value) && value.dotsCategorySweepsVersion !== undefined && value.dotsCategorySweepsVersion !== 1) return false;
   if (isRecord(value) && value.churchyMurphyTargets !== undefined
     && (value.churchyMurphyTargets !== true || value.churchyEnabled !== true
       || isRecord(value.permissions) && value.permissions.role === 'tester')) return false;
@@ -313,6 +314,7 @@ function validateRoundScores(value: unknown, lean = false): value is RoundScores
   if (value.games !== undefined) {
     const context: RoundGameScoringContext = { roundId: value.roundId, groups, layout, cards,
       stringRulesVersion: value.stringRulesVersion === 2 ? 2 : 1,
+      dotsCategorySweepsVersion: value.dotsCategorySweepsVersion === 1 ? 1 : 0,
       ...(value.playerTees ? { playerTees: value.playerTees } : {}), ...(courseHandicaps ? { courseHandicaps } : {}),
       ...(typeof value.teeStrokeAllocation === 'boolean' ? { teeStrokeAllocation: value.teeStrokeAllocation } : {}),
       ...(isRecord(value.gameInputContext) && typeof value.gameInputContext.courseVersionId === 'string'

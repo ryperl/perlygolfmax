@@ -18,6 +18,19 @@ function Editor({ onChange, ...props }: Omit<DotSpecialsSettingsProps, 'specials
 }
 
 describe('shared specials setup and presets', () => {
+  it('explains automatic same-golfer category sweeps only for ordinary Dots, without a new setting or changed High/Low selection', () => {
+    const onChange = vi.fn();
+    const specials: readonly DotsSpecialSelection[] = [{ kind: 'long-drive', units: 4 }, { kind: 'blue-plate', units: 2 }];
+    const view = render(<DotSpecialsSettings mode="individual" specials={specials} onChange={onChange} />);
+    expect(screen.getByText(/Category sweep: the same golfer/)).toHaveTextContent('Carries do not increase this bonus');
+    expect(screen.queryByLabelText('Category Sweep')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Sweep · Automatic')).not.toBeChecked();
+    expect(onChange).not.toHaveBeenCalled();
+    view.rerender(<DotSpecialsSettings mode="linked" specials={specials} context="churcie" onChange={onChange} />);
+    expect(screen.queryByText(/Category sweep: the same golfer/)).not.toBeInTheDocument();
+    view.rerender(<DotSpecialsSettings mode="individual" specials={specials.slice(0, 1)} onChange={onChange} />);
+    expect(screen.queryByText(/Category sweep: the same golfer/)).not.toBeInTheDocument();
+  });
   it('aliases only canonical Dime as Sticky in Churchie and retains custom units while selecting all compatible specials', () => {
     const onChange = vi.fn<DotSpecialsSettingsProps['onChange']>();
     render(<Editor mode="linked" context="churcie" supportedKinds={allKinds} onChange={onChange} />);
