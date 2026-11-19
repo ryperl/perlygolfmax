@@ -28,7 +28,7 @@ import { savedGrossProgress } from './saved-gross-progress';
 import type { KpEntry, KpSelection } from '../../domain/kp';
 import { calculateKp } from '../../domain/kp';
 import { KpPanel } from '../kp';
-import { scoreEntryText } from '../../contracts/scoring';
+import { parseScoreEntry, scoreEntryText } from '../../contracts/scoring';
 import { EventReviewBanner } from '../event-review';
 import { roundReviewNotices } from '../../domain/event-review';
 import { RoundAccent } from '../round-theme';
@@ -423,6 +423,8 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
           onWolfChange={(records) => { editMatch({ wolf: records }); }} />}
         playerGameControls={(playerId) => group.playerIds[0] && <RoundGameHoleControls round={round} groupNumber={group.number}
           holeNumber={hole.number} playerId={playerId} saved={savedHole(cardFor(round, group.playerIds[0]), hole.number)}
+          playerScore={parseScoreEntry(drafts.get(entryKey(playerId, hole.number))?.text
+            ?? scoreEntryText(savedHole(cardFor(round, playerId), hole.number)))}
           draft={drafts.get(entryKey(group.playerIds[0], hole.number))}
           disabled={busy || !canEditGroup || drafts.get(entryKey(group.playerIds[0], hole.number))?.status === 'conflict'}
           onNassauChange={(records) => { editMatch({ nassau: records }); }}

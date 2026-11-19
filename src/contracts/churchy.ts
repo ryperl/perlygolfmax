@@ -5,7 +5,7 @@ import { boundedText } from './catalog.js';
 import { calculateChurchyInternalSettlement, churchyPairs, churchySettlement, defaultChurchySpecials } from '../domain/churchy.js';
 import { sameJsonValue } from './round-context.js';
 import { dotsSpecialCatalog } from '../domain/dots.js';
-import { isDotsHoleRecord } from './dots.js';
+import { isChurchyV3HoleRecord } from './dots.js';
 import { isChurchyV3Result } from './churchy-v3.js';
 
 function exact(value: unknown): value is number {
@@ -57,7 +57,7 @@ export function isChurchyDefinition(value: unknown): value is ChurchyGameDefinit
 export function isChurchySpecials(value: unknown): value is ChurchySpecials {
   if (isRecord(value) && value.version === 3) {
     const record = Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'version'));
-    return isDotsHoleRecord(record);
+    return isChurchyV3HoleRecord(record);
   }
   return isRecord(value) && keys(value, value.version === 2
     ? ['version', 'gameId', 'gameEtag', 'paree', 'murphy', 'murphyPresses', 'sandyCount', 'pully', 'sticky', 'otherDots']

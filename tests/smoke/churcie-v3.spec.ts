@@ -16,6 +16,79 @@ async function savePar(page: Page, hole: number) {
   await expect(page.getByRole('form', { name: `Group 1 hole ${String(hole + 1)} entry`, exact: true })).toBeVisible();
 }
 
+test('Churchie birdie Murphy permits par Sandy/Pully, retains target on retry/reload, and follows a raw-only score correction', async ({ page }, testInfo) => {
+  const fixture = await openChurcieV3Fixture(page, testInfo, 'murphy-targets');
+  try {
+    await page.setViewportSize({ width: 320, height: 900 });
+    await page.evaluate(() => {
+      document.documentElement.dataset.theme = 'dark';
+      document.documentElement.style.fontSize = '125%';
+    });
+    await order(page);
+    const form = page.getByRole('form', { name: 'Group 1 hole 10 entry', exact: true });
+    await form.getByRole('button', { name: 'Dots for Fictional golfer 2 · Churchie', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Dots · Fictional golfer 2', exact: true });
+    await dialog.getByRole('checkbox', { name: 'Murphy called · Fictional golfer 2', exact: true }).check();
+    await expect(dialog.getByText('Pending · enter a gross score', { exact: true })).toBeVisible();
+    await dialog.getByRole('checkbox', { name: 'Murphy for birdie · Fictional golfer 2', exact: true }).check();
+    const increase = dialog.getByRole('button', { name: 'Increase Murphy stakes · Fictional golfer 2', exact: true });
+    await increase.click();
+    await increase.click();
+    await expect(increase).toBeDisabled();
+    await expect(dialog.getByLabel('Murphy stakes · Fictional golfer 2', { exact: true })).toHaveText('×3');
+    for (const button of await dialog.locator('.murphy-call button').all()) {
+      expect(await button.evaluate((element) => element.getBoundingClientRect().height >= 44)).toBe(true);
+    }
+    await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+    await form.getByRole('button', { name: 'Par for blanks', exact: true }).click();
+    await form.getByRole('button', { name: 'Dots for Fictional golfer 2 · Churchie', exact: true }).click();
+    await expect(dialog.getByText('Missed · opponents earn · needs 3 or better', { exact: true })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Increase Sandy for Fictional golfer 2', exact: true }).click();
+    await dialog.getByRole('checkbox', { name: 'Pully for Fictional golfer 2', exact: true }).check();
+    await expect(dialog.getByRole('alert')).toHaveCount(0);
+    await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+    fixture.failNextAcknowledgement();
+    await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('Service request failed (503)');
+    const interrupted = fixture.counters().requests[0];
+    await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+    await expect(page.getByRole('form', { name: 'Group 1 hole 11 entry', exact: true })).toBeVisible();
+    expect(fixture.counters().requests[1]).toEqual(interrupted);
+    expect(fixture.counters().writes).toBe(4);
+    const canonical = fixture.read().cards[0]?.holes.find((hole) => hole.number === 10)?.score.churchy;
+    expect(canonical).toMatchObject({ version: 3, players: [{
+      playerId: churciePlayers[1], counts: { sandy: 1, pully: 1 },
+      calls: [{ kind: 'murphy', result: 'pending', murphyTarget: 'birdie', murphyPresses: 2 }],
+    }] });
+    const specials = () => fixture.read().games?.results.find((game) => game.kind === 'churchy')
+      ?.churchy?.holes.find((hole) => hole.number === 10)?.specials ?? [];
+    expect(specials()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ special: 'Sandy', playerId: churciePlayers[1], dots: 1 }),
+      expect.objectContaining({ special: 'Pully', playerId: churciePlayers[1], dots: 1 }),
+      expect.objectContaining({ special: 'Murphy', playerId: churciePlayers[1], dots: 3,
+        winners: expect.arrayContaining([churciePlayers[2], churciePlayers[3]]) }),
+    ]));
+    await page.reload();
+    await page.getByRole('combobox', { name: 'Jump to hole', exact: true }).selectOption('10');
+    await form.getByRole('button', { name: 'Dots for Fictional golfer 2 · Churchie', exact: true }).click();
+    await expect(dialog.getByRole('checkbox', { name: 'Murphy for birdie · Fictional golfer 2', exact: true })).toBeChecked();
+    await expect(dialog.getByLabel('Murphy stakes · Fictional golfer 2', { exact: true })).toHaveText('×3');
+    await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+    await form.getByLabel('Fictional golfer 2 score', { exact: true }).fill('3');
+    await form.getByRole('button', { name: 'Dots for Fictional golfer 2 · Churchie', exact: true }).click();
+    await expect(dialog.getByText('Made · needs 3 or better', { exact: true })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+    await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+    await expect(page.getByRole('form', { name: 'Group 1 hole 11 entry', exact: true })).toBeVisible();
+    expect(fixture.counters().writes).toBe(5);
+    expect(fixture.read().cards[0]?.holes.find((hole) => hole.number === 10)?.score.churchy).toEqual(canonical);
+    expect(specials()).toContainEqual(expect.objectContaining({ special: 'Murphy', dots: 3,
+      winners: expect.arrayContaining([churciePlayers[0], churciePlayers[1]]) }));
+    expect(fixture.counters().pageErrors).toEqual([]);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  } finally { await fixture.close(); }
+});
+
 test('Churchie cards refresh and cold-load after another scorer saves a failed Murphy with reversed opponent order', async ({ page }, testInfo) => {
   const fixture = await openChurcieV3Fixture(page, testInfo);
   try {
@@ -37,6 +110,44 @@ test('Churchie cards refresh and cold-load after another scorer saves a failed M
     await expect(cards.getByLabel(/^Hole 10: 5(?:,|$)/)).toBeVisible();
     expect(fixture.counters().writes).toBe(0);
     expect(fixture.counters().requests).toHaveLength(0);
+    expect(fixture.counters().pageErrors).toEqual([]);
+  } finally { await fixture.close(); }
+});
+
+test('Churchie blocks failed-call combinations before saving and preserves explicit corrections and presses', async ({ page }, testInfo) => {
+  const fixture = await openChurcieV3Fixture(page, testInfo);
+  try {
+    await order(page);
+    const form = page.getByRole('form', { name: 'Group 1 hole 10 entry', exact: true });
+    await form.getByRole('button', { name: 'Par for blanks', exact: true }).click();
+    await form.getByLabel('Fictional golfer 2 score', { exact: true }).fill('5');
+    await page.getByRole('button', { name: 'Dots for Fictional golfer 2 · Churchie', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Dots · Fictional golfer 2', exact: true });
+    await dialog.getByRole('button', { name: 'Increase Sandy for Fictional golfer 2', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Call Paree · Fictional golfer 2', exact: true }).click();
+    const paree = dialog.getByRole('combobox', { name: 'Paree call 1 · Fictional golfer 2', exact: true });
+    await expect(paree.getByRole('option', { name: 'Failed · Opponents earn', exact: true })).toHaveJSProperty('disabled', true);
+    await expect(dialog.getByText(/Clear this golfer.*par-or-better specials or made calls/)).toBeVisible();
+    expect(fixture.counters().requests).toHaveLength(0);
+    await dialog.getByRole('button', { name: 'Decrease Sandy for Fictional golfer 2', exact: true }).click();
+    await paree.selectOption('failure');
+    await expect(dialog.getByRole('button', { name: 'Increase Sandy for Fictional golfer 2', exact: true })).toBeDisabled();
+    await expect(dialog.getByRole('checkbox', { name: 'Pully for Fictional golfer 2', exact: true })).toBeDisabled();
+    await expect(dialog.getByRole('checkbox', { name: 'Sticky for Fictional golfer 2', exact: true })).toBeDisabled();
+    await dialog.getByRole('button', { name: 'Call Murphy · Fictional golfer 2', exact: true }).click();
+    const murphy = dialog.getByRole('combobox', { name: 'Murphy call 1 · Fictional golfer 2', exact: true });
+    await expect(murphy.getByRole('option', { name: 'Success', exact: true })).toHaveJSProperty('disabled', true);
+    await murphy.selectOption('failure');
+    await dialog.getByRole('combobox', { name: 'Murphy press stage 1 · Fictional golfer 2', exact: true }).selectOption('2');
+    await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+    await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+    await expect(page.getByRole('form', { name: 'Group 1 hole 11 entry', exact: true })).toBeVisible();
+    expect(fixture.counters().writes).toBe(4);
+    const canonical = fixture.counters().requests.find((request) => request.score.churchy !== undefined)?.score.churchy;
+    expect(canonical).toMatchObject({ version: 3, players: [{
+      playerId: churciePlayers[1], counts: { sandy: 0 },
+      calls: [{ kind: 'paree', result: 'failure' }, { kind: 'murphy', result: 'failure', murphyPresses: 2 }],
+    }] });
     expect(fixture.counters().pageErrors).toEqual([]);
   } finally { await fixture.close(); }
 });

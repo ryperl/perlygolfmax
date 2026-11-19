@@ -142,7 +142,7 @@ describe('separate Dots in the scoring workflow', () => {
     expect(raw.compareDocumentPosition(count) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.change(count, { target: { value: '2' } });
     await user.click(screen.getByRole('button', { name: `Call Paree · ${first.displayName}` }));
-    await user.selectOptions(screen.getByLabelText(`Paree call 1 · ${first.displayName}`), 'failure');
+    await user.selectOptions(screen.getByLabelText(`Paree call 1 · ${first.displayName}`), 'success');
     await user.click(screen.getByRole('button', { name: 'Done' }));
     expect(store.client.save).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: /Next hole/ }));
@@ -154,10 +154,13 @@ describe('separate Dots in the scoring workflow', () => {
     await waitFor(() => { expect(store.client.save).toHaveBeenCalledOnce(); });
     await user.click(screen.getByRole('button', { name: `Dots for ${first.displayName} · ${f.game.name}` }));
     expect(screen.getByLabelText(`Sandy count · ${first.displayName}`)).toHaveValue(2);
-    expect(screen.getByLabelText(`Paree call 1 · ${first.displayName}`)).toHaveValue('failure');
+    expect(screen.getByLabelText(`Paree call 1 · ${first.displayName}`)).toHaveValue('success');
     const staged = vi.mocked(store.client.save).mock.calls[0];
     expect(staged?.[2]).toBe(f.round.groups[0]?.playerIds[0]);
     expect(staged?.[4].dots?.[0]?.players[0]?.counts).toEqual({ sandy: 2 });
+    expect(staged?.[4].dots?.[0]?.players[0]?.calls).toEqual([
+      expect.objectContaining({ kind: 'paree', result: 'success' }),
+    ]);
     await user.click(screen.getByRole('button', { name: 'Done' }));
     await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     await waitFor(() => { expect(store.client.save).toHaveBeenCalledTimes(2); });

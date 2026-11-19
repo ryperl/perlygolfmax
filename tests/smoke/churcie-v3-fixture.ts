@@ -47,7 +47,7 @@ function workspace(round: RoundScores): EventWorkspace {
 }
 
 export async function openChurcieV3Fixture(page: Page, testInfo: TestInfo,
-  scenario: 'configured' | 'setup' | 'other-group-started' | 'old-api' = 'configured') {
+  scenario: 'configured' | 'setup' | 'other-group-started' | 'old-api' | 'murphy-targets' = 'configured') {
   const server = await createServer({ configFile: false, cacheDir: testInfo.outputPath('vite-cache'),
     server: { host: '127.0.0.1', port: 0, hmr: false }, esbuild: { jsx: 'automatic' },
     optimizeDeps: { noDiscovery: true, include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'] },
@@ -63,6 +63,7 @@ export async function openChurcieV3Fixture(page: Page, testInfo: TestInfo,
         ? { kind: 'strokes', strokes: 4 } : { kind: 'unplayed' } })) })),
     supportedGameKinds: ['churchy', 'dots', 'wolf', 'ball-drop'], churchyEnabled: true,
     churchyRulesVersions: scenario === 'old-api' ? [1, 2] : [1, 2, 3],
+    ...(scenario === 'murphy-targets' ? { churchyMurphyTargets: true as const } : {}),
     dotsRulesVersions: [1, 2], dotsSpecialKinds: dotsSpecialCatalog.map((entry) => entry.kind),
     internalGamesSupported: true, wolfRulesVersions: [1, 2],
     permissions: { role: 'public', writePlayerIds: churciePlayers, canManageGames: false, canManageInternalGames: !started },
@@ -77,7 +78,7 @@ export async function openChurcieV3Fixture(page: Page, testInfo: TestInfo,
   page.on('pageerror', (error) => { pageErrors.push(error.message); });
   function lean(round: RoundScores) {
     expect(isRoundScores(round)).toBe(true);
-    const wire = leanRoundScores(round);
+    const wire = leanRoundScores(round, scenario === 'murphy-targets');
     expect(decodeRoundScores(wire)).toEqual(round);
     for (const result of wire.round.games?.results ?? []) {
       if (result.churchy) {
@@ -148,7 +149,7 @@ export async function openChurcieV3Fixture(page: Page, testInfo: TestInfo,
         expect(expectedEtag).toBe(replay.result.change.expectedEtag);
         expect(card.playerId).toBe(replay.result.change.playerId);
         expect(holeNumber).toBe(replay.result.change.holeNumber);
-        return route.fulfill({ json: leanScoreWriteResult({ ...replay.result, round: stored }) });
+        return route.fulfill({ json: leanScoreWriteResult({ ...replay.result, round: stored }, scenario === 'murphy-targets') });
       }
       expect(expectedEtag).toBe(card.etag);
       if (card.etag === null) expect(headers['if-none-match']).toBe('*');
@@ -190,7 +191,7 @@ export async function openChurcieV3Fixture(page: Page, testInfo: TestInfo,
         playerId: card.playerId, holeNumber, before, after, expectedEtag, recordedAt,
         recordedBy: { kind: 'public-score', eventId: stored.eventId } } };
       expect(isScoreWriteResult(result)).toBe(true);
-      const wire = leanScoreWriteResult(result);
+      const wire = leanScoreWriteResult(result, scenario === 'murphy-targets');
       expect(isScoreWriteResult({ ...wire, round: decodeRoundScores(wire.round) })).toBe(true);
       lean(stored);
       receipts.set(id, { result, score: payload.score });

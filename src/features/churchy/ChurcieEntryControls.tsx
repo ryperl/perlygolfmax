@@ -1,10 +1,10 @@
 import type { ChurchyGameDefinitionV3, ChurchySpecialsV3 } from '../../domain/churchy';
 import { churchyDotsDefinition, churchyV3Context, churchyV3Records } from '../../domain/churchy';
-import type { RoundScores } from '../../domain/scoring';
+import type { HoleScore, RoundScores } from '../../domain/scoring';
 import { DotsEntryButton, DotsHoleControls } from '../dots';
 import { ChurcieOrderControls } from './ChurcieOrderControls';
 
-export function ChurcieEntryControls({ round, game, holeNumber, saved, draft, disabled, playerId, orderOnly = false, onChange }: {
+export function ChurcieEntryControls({ round, game, holeNumber, saved, draft, disabled, playerId, playerScore, orderOnly = false, onChange }: {
   readonly round: RoundScores;
   readonly game: ChurchyGameDefinitionV3;
   readonly holeNumber: number;
@@ -12,6 +12,7 @@ export function ChurcieEntryControls({ round, game, holeNumber, saved, draft, di
   readonly draft: ChurchySpecialsV3 | undefined;
   readonly disabled: boolean;
   readonly playerId?: string | undefined;
+  readonly playerScore?: HoleScore | null | undefined;
   readonly orderOnly?: boolean;
   readonly onChange: (record: ChurchySpecialsV3) => void;
 }) {
@@ -58,6 +59,10 @@ export function ChurcieEntryControls({ round, game, holeNumber, saved, draft, di
     context={preview.contexts.find((context) => context.number === holeNumber)}
     contextPreview={draft?.rotation !== undefined && acknowledged.rotation === undefined}
     specialLabels={{ dime: 'Sticky' }} allowMurphyPresses
+    scoreDerivedMurphy={round.churchyMurphyTargets === true}
+    playerScores={players.map((card) => ({ playerId: card.playerId,
+      score: (card.playerId === playerId && playerScore !== undefined
+        ? playerScore : card.holes.find((hole) => hole.number === holeNumber)?.score) ?? undefined }))}
     playerId={playerId} groupOnly={playerId === undefined} disabled={locked}
     onChange={(record) => { onChange({ ...record, version: 3 }); }} />;
   return playerId ? <DotsEntryButton name={players.find((player) => player.playerId === playerId)?.displayName ?? 'Golfer unavailable'}

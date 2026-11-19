@@ -2,10 +2,39 @@ import { describe, expect, it, vi } from 'vitest';
 import { churchyV3Fixture } from '../domain/churchy-v3.test-support.js';
 import { fictionalChange } from './scoring.test-support.js';
 import { createScoresClient } from './scoring.js';
-import { leanScoreWriteResult } from '../contracts/lean-round-scores.js';
+import { leanRoundScores, leanScoreWriteResult } from '../contracts/lean-round-scores.js';
 import { strokeGameId } from '../domain/stroke-games.test-support.js';
 
 describe('Churchie v3 declaration client transport', () => {
+  it('negotiates target-aware full/lean reads and preserves the canonical target and request identity in acknowledgements', async () => {
+    const f = churchyV3Fixture(9);
+    const churchy = { ...f.declaration(1, f.ids), players: [{ playerId: f.ids[0] ?? '',
+      counts: { sandy: 1, pully: 1 }, calls: [{ id: strokeGameId(985), kind: 'murphy' as const,
+        result: 'pending' as const, murphyTarget: 'birdie' as const, murphyPresses: 2 as const }] }] };
+    const score = { kind: 'strokes' as const, strokes: 4, churchy };
+    const round = { ...f.round(f.cards.map((card, index) => index ? card : { ...card,
+      holes: card.holes.map((hole) => hole.number === 1 ? { ...hole, score } : hole) })),
+    churchyMurphyTargets: true as const };
+    const result = { round, change: { ...fictionalChange, eventId: round.eventId, roundId: round.roundId,
+      playerId: f.ids[0] ?? '', after: score } };
+    const send = vi.fn<typeof fetch>();
+    const client = createScoresClient('https://fictional.example.test/api', () => Promise.resolve('fictional-token'), send, 'None');
+    const signal = new AbortController().signal;
+    for (const wire of [round, leanRoundScores(round, true)]) {
+      send.mockImplementation(() => Promise.resolve(new Response(JSON.stringify(wire))));
+      expect(await client.load(round.eventId, round.roundId, signal)).toEqual(round);
+    }
+    send.mockImplementation(() => Promise.resolve(new Response(JSON.stringify(leanScoreWriteResult(result, true)))));
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect(await client.save(round.eventId, round.roundId, result.change.playerId, 1, score,
+        result.change.expectedEtag, result.change.id, signal)).toEqual(result);
+    }
+    expect(send.mock.calls[2]).toEqual(send.mock.calls[3]);
+    for (const [url] of send.mock.calls) {
+      expect(typeof url === 'string' ? url : url instanceof URL ? url.href : url.url).toContain('murphy=score-v1');
+    }
+  });
+
   it('uses the dedicated 12 KiB game route and validates coherent acknowledgements and retry identity', async () => {
     const f = churchyV3Fixture(9, 7);
     const churchy = { ...f.declaration(7, f.ids), players: [{ playerId: f.ids[0] ?? '', counts: { other: 2 },

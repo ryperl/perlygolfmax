@@ -48,6 +48,14 @@ export function isDotsRotationStart(value: unknown): value is DotsRotationStart 
 }
 
 export function isDotsHoleRecord(value: unknown): value is DotsHoleRecord {
+  return validateDotsHoleRecord(value, false);
+}
+
+export function isChurchyV3HoleRecord(value: unknown): value is DotsHoleRecord {
+  return validateDotsHoleRecord(value, true);
+}
+
+function validateDotsHoleRecord(value: unknown, murphyTargets: boolean): value is DotsHoleRecord {
   if (!isRecord(value) || !keys(value, ['number', 'gameId', 'gameEtag', 'players', 'contests'], ['rotation'])
     || !positive(value.number) || value.number > 18 || !isUuid(value.gameId) || !isEventRevision(value.gameEtag)
     || !Array.isArray(value.players) || !Array.isArray(value.contests)
@@ -62,11 +70,13 @@ export function isDotsHoleRecord(value: unknown): value is DotsHoleRecord {
     }
     if (Number(player.counts.dime ?? 0) > 0 && Number(player.counts['super-dime'] ?? 0) > 0) return false;
     for (const call of player.calls) {
-      if (!isRecord(call) || !keys(call, ['id', 'kind', 'result'], ['murphyPresses']) || !isUuid(call.id)
+      if (!isRecord(call) || !keys(call, ['id', 'kind', 'result'], ['murphyPresses', ...(murphyTargets ? ['murphyTarget'] : [])]) || !isUuid(call.id)
         || !['paree', 'murphy', 'pully-murphy'].includes(String(call.kind))
         || !['pending', 'success', 'failure'].includes(String(call.result))
         || Object.hasOwn(call, 'murphyPresses') && (call.kind !== 'murphy'
-          || call.murphyPresses !== 0 && call.murphyPresses !== 1 && call.murphyPresses !== 2)) return false;
+          || call.murphyPresses !== 0 && call.murphyPresses !== 1 && call.murphyPresses !== 2)
+        || Object.hasOwn(call, 'murphyTarget') && (call.kind !== 'murphy' || call.result !== 'pending'
+          || call.murphyTarget !== 'par' && call.murphyTarget !== 'birdie')) return false;
       callIds.push(call.id);
     }
   }

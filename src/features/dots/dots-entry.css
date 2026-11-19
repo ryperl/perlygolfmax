@@ -119,6 +119,9 @@ dialog.dots-entry-dialog fieldset > legend {
   margin-block: .35rem;
 }
 .dots-call label { display: grid; gap: .25rem; }
+.dots-call label.dots-special-choice { display: flex; }
+.murphy-outcome { margin-block: .4rem; font-size: .85rem; }
+.murphy-call .dots-count-stepper output { min-width: 2rem; text-align: center; }
 .dots-call select {
   min-width: 0;
   width: 100%;

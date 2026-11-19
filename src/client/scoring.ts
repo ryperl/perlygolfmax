@@ -39,7 +39,7 @@ export function createScoresClient(apiUrl: string, getToken: () => Promise<strin
     async saveKp(eventId, roundId, selection, etag, requestId, signal) {
       if (!isKpSelection(selection) || !isUuid(requestId)
         || etag !== null && !isEventRevision(etag)) throw new Error('Invalid KP settings. Nothing was sent.');
-      const value = await writePrivateValue(gameRequest, `${path(eventId, roundId)}/kp?format=lean`, signal, {
+      const value = await writePrivateValue(gameRequest, `${path(eventId, roundId)}/kp?format=lean&murphy=score-v1`, signal, {
         method: 'PUT', body: selection, requestId, ...(etag === null ? { createOnly: true } : { etag }),
       }, maximumGameConfigurationBytes);
       const round = isRecord(value) ? decodeRoundScores(value.round) : null;
@@ -51,7 +51,7 @@ export function createScoresClient(apiUrl: string, getToken: () => Promise<strin
       return round;
     },
     async load(eventId, roundId, signal) {
-      const value = decodeRoundScores(await readPrivateValue(request, `${path(eventId, roundId)}/scores?format=lean`, signal));
+      const value = decodeRoundScores(await readPrivateValue(request, `${path(eventId, roundId)}/scores?format=lean&murphy=score-v1`, signal));
       if (!value || value.permissions === undefined || value.eventId !== eventId || value.roundId !== roundId
         || value.cards.some((card) => card.etag !== null) && (!value.setupLocked || value.lastUpdatedAt === null)) throw new Error('Invalid owner scorecards response. Nothing was loaded.');
       return value;
@@ -62,7 +62,7 @@ export function createScoresClient(apiUrl: string, getToken: () => Promise<strin
         || !isHoleScore(score) || etag !== null && !isEventRevision(etag) || !isUuid(requestId)
         || inputRevision !== undefined && inputRevision !== null && !isUuid(inputRevision)) throw new Error('Invalid hole save request. Nothing was sent.');
       const hasDeclarations = Boolean(score.nassau?.length || score.wolf?.length || score.dots?.length || score.churchy?.version === 3);
-      const target = `${base}/players/${encodeURIComponent(playerId)}/holes/${String(holeNumber)}${hasDeclarations ? '/games' : ''}?format=lean`;
+      const target = `${base}/players/${encodeURIComponent(playerId)}/holes/${String(holeNumber)}${hasDeclarations ? '/games' : ''}?format=lean&murphy=score-v1`;
       const options = {
         method: 'PUT', body: { score, ...(inputRevision === undefined ? {} : { inputRevision }) }, requestId, ...(etag === null ? { createOnly: true } : { etag }),
       } as const;
@@ -83,7 +83,7 @@ export function createScoresClient(apiUrl: string, getToken: () => Promise<strin
     async history(eventId, roundId, playerId, signal, cursor) {
       const base = path(eventId, roundId);
       if (!isUuid(playerId) || cursor !== undefined && (cursor.length === 0 || cursor.length > 2048)) throw new Error('Invalid score history request.');
-      const value = await request(`${base}/players/${encodeURIComponent(playerId)}/score-history${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, signal);
+      const value = await request(`${base}/players/${encodeURIComponent(playerId)}/score-history?murphy=score-v1${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, signal);
       if (!isScoreHistoryPage(value) || value.changes.some((change) => change.eventId !== eventId || change.roundId !== roundId || change.playerId !== playerId)) {
         throw new Error('Invalid score history response.');
       }
@@ -93,7 +93,7 @@ export function createScoresClient(apiUrl: string, getToken: () => Promise<strin
       const base = path(eventId, roundId);
       if (!isRoundGameDefinitions(games) || games.length === 0 || !isUuid(requestId)
         || etag !== null && !isEventRevision(etag)) throw new Error('Check the game settings. Nothing was sent.');
-      const value = decodeRoundResult(await writePrivateValue(gameRequest, `${base}/games?format=lean`, signal, {
+      const value = decodeRoundResult(await writePrivateValue(gameRequest, `${base}/games?format=lean&murphy=score-v1`, signal, {
         method: 'PUT', body: { games }, requestId, ...(etag === null ? { createOnly: true } : { etag }),
       }, maximumGameConfigurationBytes));
       if (!isGameWriteResult(value) || value.round.permissions === undefined || value.round.eventId !== eventId || value.round.roundId !== roundId

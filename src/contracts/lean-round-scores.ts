@@ -7,6 +7,7 @@ import { isGameConfiguration } from './games.js';
 import type { WolfGameDefinition, WolfResults } from '../domain/wolf.js';
 import { wolfRecordsFor } from '../domain/game-declarations.js';
 import { sameJsonValue } from './round-context.js';
+import { murphyRoundScores, murphyScoreChange } from '../domain/murphy-transport.js';
 
 function without(value: object, ...keys: readonly string[]): Record<string, unknown> {
   return Object.fromEntries(Object.entries(value).filter(([name]) => !keys.includes(name)));
@@ -23,7 +24,8 @@ function leanWolf(value: WolfResults, game: WolfGameDefinition | undefined, roun
 }
 
 /** Omit evidence and duplicate derived views, never captured inputs or canonical write receipts. */
-export function leanRoundScores(round: RoundScores) {
+export function leanRoundScores(input: RoundScores, murphyTargets = false) {
+  const round = murphyRoundScores(input, murphyTargets);
   const games = round.games;
   return {
     version: 1, kind: 'round-scores-lean', round: {
@@ -44,8 +46,8 @@ export function leanRoundScores(round: RoundScores) {
   };
 }
 
-export function leanScoreWriteResult(value: ScoreWriteResult) {
-  return { round: leanRoundScores(value.round), change: without(value.change, 'dotAwardAudit') };
+export function leanScoreWriteResult(value: ScoreWriteResult, murphyTargets = false) {
+  return { round: leanRoundScores(value.round, murphyTargets), change: without(murphyScoreChange(value.change, murphyTargets, value.round), 'dotAwardAudit') };
 }
 
 /**

@@ -10,7 +10,8 @@ import { churchyFixture } from '../../domain/churchy.test-support';
 import { fictionalKpRound } from '../kp/kp.test-support';
 import { matchGamesFixture } from '../../domain/match-games.test-support';
 import { dotsFixture } from '../dots/dots.test-support';
-import type { DotsHoleRecord } from '../../domain/dots';
+import type { DotsGameDefinition, DotsHoleRecord } from '../../domain/dots';
+import { churchyV3Fixture } from '../../domain/churchy-v3.test-support';
 
 const playerIds = fictionalRoundScores.cards.map((card) => card.playerId);
 function entries() {
@@ -29,6 +30,159 @@ function harness(initial = fictionalRoundScores) {
       plan: planGroup(latest, playerIds, 1, drafts), signal: new AbortController().signal, refreshVersion: 0, ...callbacks }) };
 }
 describe('serialized group save protocol', () => {
+  it('permits a raw-only birdie correction of a target-aware Murphy on another card but blocks losing par qualification for Sandy/Pully', () => {
+    const f = churchyV3Fixture(9);
+    const [anchor, peer] = f.ids;
+    if (!anchor || !peer) throw new Error('Missing fictional group');
+    const churchy = { ...f.declaration(1, f.ids), players: [{ playerId: peer, counts: { sandy: 1, pully: 1 },
+      calls: [{ id: fictionalId(997), kind: 'murphy' as const, result: 'pending' as const,
+        murphyTarget: 'birdie' as const, murphyPresses: 2 as const }] }] };
+    const round = { ...f.round(f.cards.map((card) => card.playerId === anchor ? { ...card,
+      holes: card.holes.map((hole) => hole.number === 1 ? { ...hole,
+        score: { kind: 'strokes' as const, strokes: 4, churchy } } : hole) } : card)), churchyMurphyTargets: true as const };
+    const drafts = (text: string) => new Map([[entryKey(peer, 1), editedDraft(text, cardFor(round, peer))]]);
+    const valid = planGroup(round, f.ids, 1, drafts('3'));
+    expect(valid.invalid).toEqual([]);
+    expect(valid.writes).toHaveLength(1);
+    expect(valid.writes[0]?.playerId).toBe(peer);
+    expect(valid.writes[0]?.score.churchy).toBeUndefined();
+    expect(planGroup(round, f.ids, 1, drafts('5')).invalid).toEqual([peer]);
+  });
+
+  it.each(['dots', 'churchy'] as const)('checks a %s peer raw draft against declarations on its anchor, not shared teammate awards', async (kind) => {
+    const dots = dotsFixture(), churchy = churchyV3Fixture(9);
+    const base = kind === 'dots' ? dots.round : churchy.round();
+    const anchor = base.cards[0]?.playerId, peer = base.cards[1]?.playerId;
+    if (!anchor || !peer || !base.games) throw new Error('Missing fictional group');
+    const record = { ...(kind === 'dots' ? { gameId: dots.game.id, gameEtag: 'fictional-game-revision', number: 1, contests: [] }
+      : churchy.declaration(1, churchy.ids)), players: [{ playerId: peer, counts: {}, calls: [{
+      id: fictionalId(988), kind: 'paree' as const, result: 'failure' as const,
+    }] }] };
+    const round: RoundScores = { ...base, cards: base.cards.map((card) => ({ ...card, holes: card.holes.map((hole) => hole.number === 1
+      ? { ...hole, score: { kind: 'strokes', strokes: card.playerId === anchor ? 3 : 4,
+        ...(card.playerId === anchor ? kind === 'dots' ? { dots: [record] } : { churchy: { ...record, version: 3 } } : {}) } } : hole) })) };
+    const drafts = new Map([[entryKey(peer, 1), editedDraft('3', cardFor(round, peer))]]);
+    const plan = planGroup(round, [anchor, peer], 1, drafts);
+    expect(plan.invalid).toEqual([peer]);
+    const store = memoryScores(round);
+    await expect(saveGroupEntries({ client: store.client, round, holeNumber: 1, plan, signal: new AbortController().signal,
+      refreshVersion: 0, onDraft: vi.fn(), onProjection: vi.fn() })).rejects.toThrow('Review all entries');
+    expect(store.client.save).not.toHaveBeenCalled();
+    expect(planGroup(round, [anchor, peer], 1,
+      new Map([[entryKey(peer, 1), editedDraft('4', cardFor(round, peer))]])).invalid).toEqual([]);
+  });
+
+  it.each(['dots', 'churchy'] as const)('blocks a %s rotation-only draft that would newly activate automatic conflicts and allows explicit repair', (kind) => {
+    const dots = dotsFixture(), churchy = churchyV3Fixture(9);
+    const rotating: DotsGameDefinition = { id: dots.game.id, name: dots.game.name, kind: 'dots', version: 2,
+      mode: 'rotating', rotationHoles: 3, groupNumber: 1, playerIds: dots.ids, specials: dots.game.specials, stakeMinor: null };
+    const initial: RoundScores = kind === 'dots' ? { ...dots.round, dotsRulesVersions: [1, 2],
+      games: { configuration: { eventId: dots.round.eventId, roundId: dots.round.roundId,
+        etag: 'fictional-game-revision', games: [rotating] }, results: [] } } : churchy.round();
+    const anchor = initial.cards[0]?.playerId;
+    if (!anchor) throw new Error('Missing fictional anchor');
+    const record = { ...(kind === 'dots' ? { gameId: dots.game.id, gameEtag: 'fictional-game-revision', number: 1, contests: [] }
+      : churchy.declaration(1)), players: [{ playerId: anchor, counts: {}, calls: [{
+      id: fictionalId(989), kind: 'paree' as const, result: 'failure' as const,
+    }] }] };
+    const round: RoundScores = { ...initial, cards: initial.cards.map((card) => card.playerId === anchor ? { ...card,
+      holes: card.holes.map((hole) => hole.number === 1 ? { ...hole, score: { kind: 'strokes', strokes: 3,
+        ...(kind === 'dots' ? { dots: [record] } : { churchy: { ...record, version: 3 } }) } } : hole) } : card) };
+    const ordered = { ...record, rotation: { playerIds: kind === 'dots' ? dots.ids : churchy.ids } };
+    const drafts = (players = ordered.players) => new Map<string, HoleDraft>([[entryKey(anchor, 1), {
+      ...editedDraft('3', cardFor(round, anchor)),
+      ...(kind === 'dots' ? { dots: [{ ...ordered, players }] } : { churchy: { ...ordered, players, version: 3 } }),
+    }]]);
+    expect(planGroup(round, [anchor], 1, drafts()).invalid).toEqual([anchor]);
+    expect(planGroup(round, [anchor], 1, new Map([[entryKey(anchor, 1), editedDraft('3', cardFor(round, anchor))]])).invalid).toEqual([]);
+    expect(planGroup(round, [anchor], 1, drafts([])).invalid).toEqual([]);
+  });
+
+  it.each((['dots', 'churchy'] as const).flatMap((kind) =>
+    (['birdie', 'eagle', 'string', 'birdy-string'] as const).map((automatic) => ({ kind, automatic }))))(
+    'blocks newly earned $automatic in raw-only $kind saves, even though its historical failed call is unchanged', async ({ kind, automatic }) => {
+      const dots = dotsFixture(), churchy = churchyV3Fixture(9);
+      const base = kind === 'dots' ? dots.round : churchy.round();
+      const anchor = base.cards[0]?.playerId;
+      if (!anchor || !base.games) throw new Error('Missing fictional cards');
+      const number = automatic === 'birdie' || automatic === 'eagle' ? 1 : 3;
+      const record = { number, gameId: kind === 'dots' ? dots.game.id : churchy.game.id,
+        gameEtag: base.games.configuration.etag ?? 'fictional-game-revision', contests: [],
+        players: [{ playerId: anchor, counts: {}, calls: [{ id: fictionalId(987), kind: 'paree' as const, result: 'failure' as const }] }] };
+      const round: RoundScores = { ...base,
+        games: { ...base.games, configuration: { ...base.games.configuration, games: base.games.configuration.games.map((game) =>
+          game.kind === 'dots' || game.kind === 'churchy' && game.version === 3 ? { ...game,
+            specials: [{ kind: 'paree' as const, units: 1 }, { kind: automatic, units: 1 }] } : game) } },
+        cards: base.cards.map((card) => card.playerId === anchor ? { ...card, holes: card.holes.map((hole) => ({
+          ...hole, score: { kind: 'strokes', strokes: automatic === 'string' && hole.number === 1 ? 5 : hole.number === number ? 4
+            : automatic === 'birdy-string' ? 3 : 4,
+          ...(hole.number === number ? kind === 'dots' ? { dots: [record] }
+            : { churchy: { ...record, version: 3, ...(number === 1 ? { rotation: { playerIds: churchy.ids } } : {}) } }
+            : kind === 'churchy' && hole.number === 1 ? { churchy: churchy.declaration(1, churchy.ids) } : {}) },
+        })) } : card) };
+      const strokes = automatic === 'eagle' ? '2' : automatic === 'string' ? '4' : '3';
+      const editNumber = automatic === 'string' ? 1 : number;
+      const drafts = new Map([[entryKey(anchor, editNumber), editedDraft(strokes, cardFor(round, anchor))]]);
+      const plan = planGroup(round, [anchor], editNumber, drafts);
+      expect(plan.invalid).toEqual([anchor]);
+      const store = memoryScores(round);
+      await expect(saveGroupEntries({ client: store.client, round, holeNumber: editNumber, plan,
+        signal: new AbortController().signal, refreshVersion: 0, onDraft: vi.fn(), onProjection: vi.fn() })).rejects.toThrow('Review all entries');
+      expect(store.client.save).not.toHaveBeenCalled();
+      const compatible = new Map([[entryKey(anchor, editNumber), editedDraft('5', cardFor(round, anchor))]]);
+      expect(planGroup(round, [anchor], editNumber, compatible).invalid).toEqual([]);
+    },
+  );
+
+  it.each(['dots', 'churchy'] as const)('blocks new/changed failed-call %s extras before sending, preserving historical/raw/peer edits and repairs', async (kind) => {
+    const dots = dotsFixture(), churchy = churchyV3Fixture(9);
+    const round = kind === 'dots' ? dots.round : churchy.round();
+    const ids = round.cards.map((card) => card.playerId), anchor = ids[0], peer = ids[1];
+    if (!anchor || !peer) throw new Error('Missing fictional group');
+    const base = kind === 'dots'
+      ? { number: 1, gameId: dots.game.id, gameEtag: 'fictional-game-revision', players: [], contests: [] }
+      : churchy.declaration(1, ids);
+    const legacy = { playerId: anchor, counts: { sandy: 1 },
+      calls: [{ id: fictionalId(985), kind: 'paree' as const, result: 'failure' as const }] };
+    const record = { ...base, players: [legacy] };
+    const extras = kind === 'dots' ? { dots: [record] } : { churchy: { ...record, version: 3 as const } };
+    const draft = (input: RoundScores, changes: Pick<HoleDraft, 'dots' | 'churchy'> = extras) => new Map<string, HoleDraft>([
+      [entryKey(anchor, 1), { ...editedDraft('4', cardFor(input, anchor)), ...changes }],
+      [entryKey(peer, 1), editedDraft('4', cardFor(input, peer))],
+    ]);
+    const store = memoryScores(round);
+    const invalid = planGroup(round, ids, 1, draft(round));
+    expect(invalid.invalid).toEqual([anchor]);
+    await expect(saveGroupEntries({ client: store.client, round, holeNumber: 1, plan: invalid,
+      signal: new AbortController().signal, refreshVersion: 0, onDraft: vi.fn(), onProjection: vi.fn() }))
+      .rejects.toThrow('incompatible specials for the same golfer and hole');
+    expect(store.client.save).not.toHaveBeenCalled();
+    const historical: RoundScores = { ...round, cards: round.cards.map((card) => card.playerId === anchor ? { ...card,
+      holes: card.holes.map((hole) => hole.number === 1 ? { ...hole, score: { kind: 'strokes', strokes: 4, ...extras } } : hole) } : card) };
+    expect(planGroup(historical, ids, 1, draft(historical)).invalid).toEqual([]);
+    const raw = new Map([[entryKey(anchor, 1), editedDraft('3', cardFor(historical, anchor))]]);
+    expect(planGroup(historical, ids, 1, raw).writes[0]?.score).toMatchObject({ kind: 'strokes', strokes: 3 });
+    const peerRecord = { ...record, players: [{ calls: legacy.calls, counts: { sandy: 1 }, playerId: anchor },
+      { playerId: peer, counts: { sandy: 1 }, calls: [] }] };
+    const peerExtras = kind === 'dots' ? { dots: [peerRecord] } : { churchy: { ...peerRecord, version: 3 as const } };
+    expect(planGroup(historical, ids, 1, draft(historical, peerExtras)).invalid).toEqual([]);
+    const changed = { ...record, players: [{ ...legacy, counts: { sandy: 2 } }] };
+    expect(planGroup(historical, ids, 1, draft(historical,
+      kind === 'dots' ? { dots: [changed] } : { churchy: { ...changed, version: 3 as const } })).invalid).toEqual([anchor]);
+    const repaired = { ...record, players: [{ ...legacy, counts: {} }] };
+    expect(planGroup(historical, ids, 1, draft(historical,
+      kind === 'dots' ? { dots: [repaired] } : { churchy: { ...repaired, version: 3 as const } })).invalid).toEqual([]);
+    for (const players of [
+      [{ ...legacy, counts: {} }], [{ ...legacy, calls: [] }],
+    ]) {
+      const compatible = { ...record, players };
+      const saved: RoundScores = { ...historical, cards: historical.cards.map((card) => card.playerId === anchor ? { ...card,
+        holes: card.holes.map((hole) => hole.number === 1 ? { ...hole, score: { kind: 'strokes', strokes: 4,
+          ...(kind === 'dots' ? { dots: [compatible] } : { churchy: { ...compatible, version: 3 as const } }) } } : hole) } : card) };
+      expect(planGroup(saved, ids, 1, draft(saved)).invalid).toEqual([anchor]);
+    }
+  });
+
   it('prevents every group write for new source conflicts while retaining unchanged historical conflicts for other golfer edits', async () => {
     const f = dotsFixture(), anchor = f.ids[0], peer = f.ids[1];
     if (!anchor || !peer || !f.round.games) throw new Error('Missing fictional group.');
@@ -65,7 +219,7 @@ describe('serialized group save protocol', () => {
       ? { ...card, holes: card.holes.map((hole) => hole.number === 1 ? { ...hole, score: { ...hole.score, dots: [saved, hidden] } } : hole) } : card) };
     const store = memoryScores(round);
     const patch: DotsHoleRecord = { ...saved, players: [{ playerId: anchor, counts: { sandy: 2 },
-      calls: [{ id: fictionalId(982), kind: 'paree', result: 'failure' }] }] };
+      calls: [{ id: fictionalId(982), kind: 'paree', result: 'pending' }] }] };
     const drafts = new Map<string, HoleDraft>([[entryKey(anchor, 1), { ...editedDraft('4', cardFor(round, anchor), undefined, false), dots: [patch] }]]);
     const plan = planGroup(round, [anchor], 1, drafts);
     expect(plan.writes[0]?.score.dots).toEqual([patch]);

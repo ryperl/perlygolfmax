@@ -10,6 +10,7 @@ import type { TableWorkspaceStore } from '../setup/store.js';
 import type { TableScoreStore } from '../scoring/store.js';
 import type { TableTesterAccessStore } from './store.js';
 import { parseScoreWriteBody } from '../scoring/handlers.js';
+import { murphyTransport, supportsMurphyTargets } from '../scoring/murphy-transport.js';
 
 export type TesterAction = 'list' | 'create' | 'revoke' | 'renew' | 'workspace' | 'scores' | 'score-hole';
 export interface TesterApi {
@@ -35,6 +36,7 @@ function scoreRevision(request: HttpRequest): string | null {
 
 export function createTesterHandler(resolveApi: () => TesterApi, action: TesterAction) {
   return async (request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> => {
+    const negotiated = supportsMurphyTargets(request);
     try {
       const api = resolveApi();
       const guest = action === 'workspace' || action === 'scores' || action === 'score-hole';
@@ -47,15 +49,15 @@ export function createTesterHandler(resolveApi: () => TesterApi, action: TesterA
         if (request.method !== (action === 'score-hole' ? 'PUT' : 'GET')) return response(405, { code: 'METHOD_NOT_ALLOWED' });
         if (action === 'workspace') return response(200, privateReadResponse(request, await api.workspace.get(identity, eventId)));
         const roundId = uuid(request.params.roundId);
-        if (action === 'scores') return response(200, privateReadResponse(request, await api.scores.get(identity, eventId, roundId)));
+        if (action === 'scores') return response(200, privateReadResponse(request, murphyTransport(await api.scores.get(identity, eventId, roundId), negotiated)));
         const playerId = uuid(request.params.playerId);
         const requestId = uuid(request.headers.get('Idempotency-Key'));
         const etag = scoreRevision(request);
         const hole = request.params.holeNumber;
         if (typeof hole !== 'string' || !/^(?:[1-9]|1[0-8])$/.test(hole)) throw new ApiError(400, 'INVALID_HOLE_NUMBER');
         const parsed = parseScoreWriteBody(await readJson(request));
-        return response(200, await api.scores.write(identity, eventId, roundId, playerId, Number(hole),
-          parsed.score, etag, requestId, parsed.inputRevision));
+        return response(200, murphyTransport(await api.scores.write(identity, eventId, roundId, playerId, Number(hole),
+          parsed.score, etag, requestId, parsed.inputRevision), negotiated));
       }
       const identity = await api.verify(request.headers.get('authorization'));
       await api.limiter.check(identity, action === 'list' ? 'events-read' : 'events-manage');

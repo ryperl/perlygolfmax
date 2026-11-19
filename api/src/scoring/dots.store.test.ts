@@ -81,8 +81,7 @@ describe('persisted independent Dots and earned Wolf authority', () => {
     expect(isRoundScores(round)).toBe(true);
     expect(decodeRoundScores(leanRoundScores(round))).toEqual(round);
     const special: DotsHoleRecord = { number: 1, gameId: game.id, gameEtag: round.games?.configuration.etag ?? '',
-      players: [{ playerId: f.playerId, counts: { sandy: 2, walk: 1, pickup: 1 },
-        calls: [{ id: identifier(23001), kind: 'murphy', result: 'failure' }] }], contests: [] };
+      players: [{ playerId: f.playerId, counts: { sandy: 2, walk: 1, pickup: 1 }, calls: [] }], contests: [] };
     const score = { kind: 'strokes' as const, strokes: 4, dots: [special] };
     const saved = await f.scores.write(actor, event.id, f.roundId, f.playerId, 1, score, null, identifier(23002));
     expect(isScoreWriteResult(saved)).toBe(true);
@@ -99,9 +98,17 @@ describe('persisted independent Dots and earned Wolf authority', () => {
       .rejects.toMatchObject({ code: 'SCORECARD_CHANGED' });
     await expect(f.scores.saveGames(actor, event.id, f.roundId, [{ ...game, name: 'Fictional changed name' }],
       round.games?.configuration.etag ?? null, identifier(23004))).rejects.toMatchObject({ code: 'MATCH_SETUP_LOCKED' });
+    const failedCall: DotsHoleRecord = { ...special, number: 2,
+      players: [{ playerId: f.playerId, counts: {},
+        calls: [{ id: identifier(23001), kind: 'murphy', result: 'failure' }] }] };
+    const missed = await f.scores.write(actor, event.id, f.roundId, f.playerId, 2,
+      { kind: 'strokes', strokes: 5, dots: [failedCall] }, etag(saved.round, f.playerId), identifier(23005));
+    expect(missed.change.after.dots).toEqual([failedCall]);
     for (const [index, playerId] of f.input.playerIds.slice(1).entries()) {
-      await f.scores.write(actor, event.id, f.roundId, playerId, 1,
+      const peer = await f.scores.write(actor, event.id, f.roundId, playerId, 1,
         { kind: 'strokes', strokes: 4 }, null, identifier(23010 + index));
+      await f.scores.write(actor, event.id, f.roundId, playerId, 2,
+        { kind: 'strokes', strokes: 4 }, etag(peer.round, playerId), identifier(23030 + index));
     }
     const reloaded = await f.scores.get(actor, event.id, f.roundId);
     expect(isRoundScores(reloaded)).toBe(true);

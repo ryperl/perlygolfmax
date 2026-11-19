@@ -758,6 +758,17 @@ except Birdie 2 and Eagle 5. All of these rules use gross qualifications:
   Hogan/Seve with Walk is a review warning, not a prohibition.
   Historical version-1 inputs remain readable; these new checks do not silently
   erase saved calls/awards or rewrite legacy results.
+- A failed Paree, Murphy or Pully Murphy cannot coexist with the same golfer's
+  par-or-better specials or made calls on that hole. This includes Hogan, Seve,
+  Sandy, Pully, Haz Par, Chippy and actually earned Birdie/Eagle/streak awards;
+  Dime/Sticky and SuperDime are also incompatible with a failed call.
+  Controls explain and block conflicting additions/outcomes without deleting
+  saved choices. The API checks new/changed inputs too. Teammates' independent
+  source awards remain separate, and old conflicting records stay readable for
+  explicit correction rather than silently changing historical results.
+  Churchie score-derived **birdie-target Murphy** is target-aware: a missed
+  birdie call followed by gross par may still earn a qualifying Sandy and Pully.
+  Finishing over par or picking up does not make those claims valid.
 - Birdie, Eagle and streaks derive from saved scores. Eagle does not also earn
   Birdie. String starts on the third exact gross par; BirdyString starts on
   the third birdie-or-better. Continue through the actual playing circuit,
@@ -1041,8 +1052,20 @@ and Other entries are never changed by a new default.
 Sandy now allows gross
 par or better. Shared same-golfer exclusions apply, including Sticky/Pully and
 Hogan/Seve; SuperDime replaces Sticky. High/Low remain Churchie's own game.
+The same failed-call/par-or-better compatibility rule applies to current shared
+Churchie specials; correcting an old conflict is explicit, never a read-time
+rewrite of saved cards or awards.
 Murphy press stages multiply its configured units by 1/2/3; Sweep multiplies its
 configured units by the current stake.
+
+On a target-aware API, **Murphy called** records the call, not a claimed outcome.
+Gross par or better makes the default target; **For birdie** on personal par 4/5
+holes requires birdie or better. Blank/invalid entry stays pending; pickup/DNF
+misses. The +/− stakes control stops at **1× / 2× / 3×**. Correcting a saved raw
+score recalculates a target-aware call without another declaration write.
+Existing manual calls retain their saved result until explicit **Use score
+outcome**, target change or removal; merely opening a card never converts them.
+Older APIs retain manual controls, and older clients receive compatible reads.
 
 **Specials and presets** is collapsed during setup. Built-in Dots and Churchie
 presets provide different default units; applying one copies settings into the

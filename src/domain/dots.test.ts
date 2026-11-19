@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateDots, dotsDeclarationIssues, dotsDefinitionMatchesRound, dotsSpecialCatalog, dotsRecordsMatchGame } from './dots.js';
+import { calculateDots, dotsAutomaticWriteConflicts, dotsDeclarationIssues, dotsDeclarationWriteIssues, dotsDefinitionMatchesRound, dotsSpecialCatalog, dotsRecordsMatchGame } from './dots.js';
 import type { DotsContest, DotsGameDefinition, DotsHoleRecord, DotsPlayerDeclaration, DotsSpecialKind } from './dots.js';
 import type { DotHoleContext, DotRoundInput } from './dot-context.js';
 import type { HoleScore } from './scoring.js';
@@ -39,6 +39,135 @@ function context(number = 1, multiplier: 1 | 2 | 3 = 1, sides: readonly (readonl
 }
 
 describe('source-only Dots declaration review', () => {
+  const failedKinds = ['paree', 'murphy', 'pully-murphy'] as const;
+  const incompatible = ['hogan', 'seve', 'sandy', 'haz-par', 'chippy', 'pully', 'dime', 'super-dime'] as const;
+  it.each(failedKinds.flatMap((kind) => incompatible.map((special) => ({ kind, special }))))(
+    'rejects failed $kind with own $special only on writes, preserving historical v1/v2 awards', ({ kind, special }) => {
+      const player = declaration('A', { [special]: 2 }, [{ id: 'failed', kind, result: 'failure' }]);
+      expect(dotsDeclarationWriteIssues(player).conflicts).toContainEqual({ code: 'FAILED_CALL_SPECIAL', kinds: [kind, special] });
+      const readIssues = dotsDeclarationIssues(player);
+      expect(readIssues.conflicts).toEqual(kind === 'murphy' && special === 'hogan'
+        ? [{ code: 'HOGAN_MURPHY', kinds: ['hogan', 'murphy'] }] : []);
+      const f = fixture([4], [kind, special]);
+      const rotating: DotsGameDefinition = { id: f.game.id, name: f.game.name, kind: 'dots', version: 2,
+        mode: 'rotating', rotationHoles: 3, groupNumber: 1, playerIds: ids, specials: f.game.specials, stakeMinor: null };
+      for (const game of [f.game, rotating]) {
+        const records = [{ ...record(1, [player]), ...(game.version === 2 ? { rotation: { playerIds: ids } } : {}) }];
+        if (game.version === 2 && readIssues.conflicts.length) {
+          expect(dotsRecordsMatchGame(records, game, f.round)).toBe(false);
+          expect(calculateDots(game, f.round, records).status).toBe('unavailable');
+          continue;
+        }
+        expect(dotsRecordsMatchGame(records, game, f.round)).toBe(true);
+        const result = calculateDots(game, f.round, records);
+        expect(result.status).toBe('complete');
+        expect(result.awards.find((award) => award.kind === special)).toMatchObject({ earnedBy: 'A', count: 2, dots: 2 });
+        expect(result.awards.find((award) => award.kind === kind)).toMatchObject({ earnedBy: 'A', count: 1, dots: 1 });
+        expect(totals(result)).toEqual(game.version === 1 ? [2, 1, 1, 1] : [2, 2, 1, 1]);
+      }
+      expect(player.counts).toEqual({ [special]: 2 });
+      for (const result of ['pending', 'success'] as const) {
+        expect(dotsDeclarationWriteIssues({ ...player, calls: [{ id: result, kind, result }] }).conflicts
+          .filter((issue) => issue.code === 'FAILED_CALL_SPECIAL')).toEqual([]);
+      }
+      for (const counts of [{}, { [special]: 0 }]) {
+        expect(dotsDeclarationWriteIssues({ ...player, counts }).conflicts).toEqual([]);
+      }
+    },
+  );
+
+  it('deduplicates failed-call pairs despite successful/pending peers, composes old issues, and never compares teammates', () => {
+    const calls: DotsPlayerDeclaration['calls'] = [
+      { id: 'a', kind: 'paree', result: 'failure' }, { id: 'b', kind: 'paree', result: 'failure' },
+      { id: 'c', kind: 'paree', result: 'success' }, { id: 'd', kind: 'paree', result: 'pending' },
+      { id: 'e', kind: 'murphy', result: 'failure' }, { id: 'f', kind: 'pully-murphy', result: 'failure' },
+    ];
+    const player = declaration('A', { sandy: 2, hogan: 1, seve: 1, walk: 1 }, calls);
+    const old = dotsDeclarationIssues(player), write = dotsDeclarationWriteIssues(player);
+    expect(write.conflicts.filter((issue) => issue.code === 'FAILED_CALL_SPECIAL')).toHaveLength(12);
+    for (const kind of failedKinds) {
+      for (const special of ['hogan', 'seve', 'sandy', 'paree']) {
+        expect(write.conflicts).toContainEqual({ code: 'FAILED_CALL_SPECIAL', kinds: [kind, special] });
+      }
+    }
+    expect(write.conflicts.filter((issue) => issue.code !== 'FAILED_CALL_SPECIAL')).toEqual(old.conflicts);
+    expect(write.warnings).toEqual(old.warnings);
+    expect(dotsDeclarationWriteIssues(declaration('A', {}, calls.filter((call) => call.result !== 'success'))).conflicts).toEqual([]);
+    expect(dotsDeclarationWriteIssues(declaration('B', { sandy: 2, dime: 1 })).conflicts).toEqual([]);
+  });
+
+  it.each(failedKinds.flatMap((kind) => failedKinds.map((made) => ({ kind, made }))))(
+    'rejects failed $kind with successful $made but not pending calls or opponent-awarding Walk/Pickup', ({ kind, made }) => {
+      const failed = { id: 'failed', kind, result: 'failure' as const };
+      expect(dotsDeclarationWriteIssues(declaration('A', {}, [failed, { id: 'made', kind: made, result: 'success' }])).conflicts)
+        .toEqual([{ code: 'FAILED_CALL_SPECIAL', kinds: [kind, made] }]);
+      expect(dotsDeclarationWriteIssues(declaration('A', { walk: 1, pickup: 1, gorilla: 1, other: 2 },
+        [failed, { id: 'pending', kind: made, result: 'pending' }])).conflicts).toEqual([]);
+    },
+  );
+
+  it.each(['birdie', 'eagle', 'string', 'birdy-string'] as const)(
+    'rejects newly earned %s using engine qualifications, including earlier score edits, without invalidating old results', (kind) => {
+      const f = fixture([4, 4, 4], ['paree', kind]);
+      const number = kind === 'birdie' || kind === 'eagle' ? 1 : 3;
+      const player = declaration('A', {}, [{ id: 'failed', kind: 'paree', result: 'failure' }]);
+      const records = [record(number, [player])];
+      const strokes = kind === 'eagle' ? 2 : kind === 'string' ? 4 : 3;
+      const after = setScores(f.round, 'A', Array.from({ length: 3 }, () => ({ kind: 'strokes', strokes })));
+      const before = setScores(after, 'A', [{ kind: 'unplayed' }]);
+      expect(dotsAutomaticWriteConflicts(f.game, before, after, records, records)).toEqual(['A']);
+      expect(dotsAutomaticWriteConflicts(f.game, after, after, records, records)).toEqual([]);
+      expect(dotsAutomaticWriteConflicts(f.game, after, after, [], records)).toEqual(['A']);
+      expect(calculateDots(f.game, after, records).awards).toContainEqual(expect.objectContaining({ kind, earnedBy: 'A', number }));
+      const personal = { ...after, playerLayouts: [{ playerId: 'A', layout: after.layout.map((hole) => ({ ...hole, par: 5 })) }] };
+      if (kind === 'birdie') {
+        const personalAfter = setScores(personal, 'A', [{ kind: 'strokes', strokes: 4 }]);
+        expect(dotsAutomaticWriteConflicts(f.game, before, personalAfter, records, records)).toEqual(['A']);
+      }
+    },
+  );
+
+  it('uses the actual playing circuit for newly earned streak conflicts and does not compare shared teammate recipients', () => {
+    const f = fixture([4, 4, 4], ['murphy', 'string']);
+    const round = { ...f.round, groups: [{ number: 1, playerIds: ids, startingHole: 3 }] };
+    const records = [record(2, [declaration('A', {}, [{ id: 'failed', kind: 'murphy', result: 'failure' }])])];
+    const before = setScores(round, 'A', [{ kind: 'strokes', strokes: 4 }, { kind: 'strokes', strokes: 4 }, { kind: 'unplayed' }]);
+    expect(dotsAutomaticWriteConflicts(f.game, before, round, records, records)).toEqual(['A']);
+    expect(dotsAutomaticWriteConflicts(f.game, before, round, [], [record(2, [
+      declaration('B', {}, [{ id: 'failed', kind: 'murphy', result: 'failure' }]),
+    ])])).toEqual(['B']);
+    const peerOnly = setScores(round, 'B', [{ kind: 'strokes', strokes: 5 }]);
+    expect(dotsAutomaticWriteConflicts(f.game, before, peerOnly, [], [record(2, [
+      declaration('B', {}, [{ id: 'failed', kind: 'murphy', result: 'failure' }]),
+    ])])).toEqual([]);
+  });
+
+  it('rechecks automatic awards when a previously missing partner order is first acknowledged', () => {
+    const f = fixture([4], ['paree', 'birdie']);
+    const game: DotsGameDefinition = { id: f.game.id, name: f.game.name, kind: 'dots', version: 2,
+      mode: 'rotating', rotationHoles: 3, groupNumber: 1, playerIds: ids, specials: f.game.specials, stakeMinor: null };
+    const round = setScores(f.round, 'A', [{ kind: 'strokes', strokes: 3 }]);
+    const historical = [record(1, [declaration('A', {}, [{ id: 'failed', kind: 'paree', result: 'failure' }])])];
+    expect(dotsAutomaticWriteConflicts(game, round, round, historical, historical)).toEqual([]);
+    expect(calculateDots(game, round, historical).status).toBe('in-progress');
+    const ordered = historical.map((entry) => ({ ...entry, rotation: { playerIds: ids } }));
+    expect(dotsAutomaticWriteConflicts(game, round, round, historical, ordered)).toEqual(['A']);
+    expect(dotsAutomaticWriteConflicts(game, round, round, ordered, ordered)).toEqual([]);
+    expect(calculateDots(game, round, ordered).status).toBe('complete');
+  });
+
+  it('uses the immutable rotating receipt origin when it differs from the configured starting hole', () => {
+    const f = fixture([4, 4, 4], ['paree', 'string']);
+    const game: DotsGameDefinition = { id: f.game.id, name: f.game.name, kind: 'dots', version: 2,
+      mode: 'rotating', rotationHoles: 3, groupNumber: 1, playerIds: ids, specials: f.game.specials, stakeMinor: null };
+    const records = [{ ...record(3), rotation: { playerIds: ids } },
+      record(2, [declaration('A', {}, [{ id: 'failed', kind: 'paree', result: 'failure' }])])];
+    const before = setScores(f.round, 'A', [{ kind: 'strokes', strokes: 4 }, { kind: 'strokes', strokes: 4 }, { kind: 'unplayed' }]);
+    expect(dotsAutomaticWriteConflicts(game, before, f.round, records, records)).toEqual(['A']);
+    expect(calculateDots(game, f.round, records).awards)
+      .toContainEqual(expect.objectContaining({ kind: 'string', number: 2, earnedBy: 'A' }));
+  });
+
   it.each([0, 1, 2] as const)('rejects Churchie-only Murphy stage %i in ordinary individual, fixed, linked and rotating Dots', (murphyPresses) => {
     const f = fixture([4], ['murphy']);
     const rotating: DotsGameDefinition = { id: f.game.id, name: f.game.name, kind: 'dots', version: 2,

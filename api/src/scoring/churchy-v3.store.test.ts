@@ -15,7 +15,7 @@ import { parseScoreWriteBody } from './handlers.js';
 
 const etagFor = (round: RoundScores, playerId: string) => round.cards.find((card) => card.playerId === playerId)?.etag ?? null;
 
-async function fixture(startingHole = 1) {
+async function fixture(startingHole = 1, specials = defaultChurchySpecialSelections) {
   const f = await publicFixture();
   const workspace = await f.workspace.get(creator, event.id);
   await f.workspace.save(creator, event.id, { ...f.input, rounds: f.input.rounds.map((round) => ({
@@ -24,7 +24,7 @@ async function fixture(startingHole = 1) {
   const game: ChurchyGameDefinitionV3 = {
     id: identifier(24000), name: 'Churchie', kind: 'churchy', version: 3, basis: 'net',
     orderMode: 'approach', groupNumber: 1, playerIds: f.input.playerIds.slice(0, 4),
-    amountPerDotMinor: 50, currency: 'USD', specials: defaultChurchySpecialSelections,
+    amountPerDotMinor: 50, currency: 'USD', specials,
   };
   const round = (await f.scores.saveGames(f.actor, event.id, f.roundId, [game], null, identifier(24001))).round;
   const declaration = (number = startingHole, order?: readonly string[]): ChurchySpecialsV3 => ({
@@ -35,6 +35,230 @@ async function fixture(startingHole = 1) {
 }
 
 describe('Churchie v3 authoritative public conditional transactions', () => {
+  it('checks a peer raw save against its failed-call declaration on the canonical anchor card', async () => {
+    const f = await fixture();
+    const peer = f.game.playerIds[1];
+    if (!peer) throw new Error('Missing fictional peer');
+    const extras = { ...f.declaration(1, f.game.playerIds), players: [{ playerId: peer, counts: {}, calls: [{
+      id: identifier(24970), kind: 'paree' as const, result: 'failure' as const,
+    }] }] };
+    const saved = await f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+      { kind: 'strokes', strokes: 3, churchy: extras }, null, identifier(24971));
+    const rows = new Map(f.rows);
+    f.submit.mockClear();
+    await expect(f.scores.write(f.actor, event.id, f.roundId, peer, 1,
+      { kind: 'strokes', strokes: 3 }, etagFor(saved.round, peer), identifier(24972)))
+      .rejects.toMatchObject({ code: 'CHURCHY_SETUP_CHANGED' });
+    expect(f.submit).not.toHaveBeenCalled();
+    expect(f.rows).toEqual(rows);
+  });
+
+  it('rejects an order-only receipt that would activate a historical failed-call automatic conflict', async () => {
+    const f = await fixture();
+    const first = await f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+      { kind: 'strokes', strokes: 3 }, null, identifier(24980));
+    const card = first.round.cards.find((entry) => entry.playerId === f.playerId);
+    if (!card) throw new Error('Missing fictional card');
+    const legacy = { ...f.declaration(1), players: [{ playerId: f.playerId, counts: {}, calls: [{
+      id: identifier(24981), kind: 'paree' as const, result: 'failure' as const,
+    }] }] };
+    f.seed({ ...f.row(`score-card:${f.roundId}:${f.playerId}`), content: JSON.stringify({
+      playerId: card.playerId, displayName: card.displayName, updatedAt: card.updatedAt,
+      holes: card.holes.map((hole) => hole.number === 1 ? { ...hole, score: { kind: 'strokes', strokes: 3, churchy: legacy } } : hole),
+    }) });
+    const historical = await f.scores.get(f.actor, event.id, f.roundId);
+    expect(isRoundScores(historical)).toBe(true);
+    const raw = await f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+      { kind: 'strokes', strokes: 3 }, etagFor(historical, f.playerId), identifier(24982));
+    expect(raw.change.after.churchy).toEqual(legacy);
+    const rows = new Map(f.rows);
+    f.submit.mockClear();
+    await expect(f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+      { kind: 'strokes', strokes: 3, churchy: { ...legacy, rotation: { playerIds: f.game.playerIds } } },
+      etagFor(raw.round, f.playerId), identifier(24983))).rejects.toMatchObject({ code: 'CHURCHY_SETUP_CHANGED' });
+    expect(f.submit).not.toHaveBeenCalled();
+    expect(f.rows).toEqual(rows);
+  });
+
+  it('retains historical failed-call automatic awards through raw/peer edits but rejects a new automatic kind', async () => {
+    const f = await fixture();
+    const first = await f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+      { kind: 'strokes', strokes: 3, churchy: f.declaration(1, f.game.playerIds) }, null, identifier(24960));
+    const card = first.round.cards.find((entry) => entry.playerId === f.playerId);
+    if (!card) throw new Error('Missing fictional card');
+    const legacy = { ...f.declaration(1, f.game.playerIds), players: [{ playerId: f.playerId, counts: {}, calls: [{
+      id: identifier(24961), kind: 'paree' as const, result: 'failure' as const,
+    }] }] };
+    f.seed({ ...f.row(`score-card:${f.roundId}:${f.playerId}`), content: JSON.stringify({
+      playerId: card.playerId, displayName: card.displayName, updatedAt: card.updatedAt,
+      holes: card.holes.map((hole) => hole.number === 1 ? { ...hole, score: { kind: 'strokes', strokes: 3, churchy: legacy } } : hole),
+    }) });
+    const historic = await f.scores.get(f.actor, event.id, f.roundId);
+    expect(historic.games?.results[0]?.churchy?.awards).toContainEqual(expect.objectContaining({ kind: 'birdie', earnedBy: f.playerId }));
+    expect(isRoundScores(historic)).toBe(true);
+    const raw = await f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+      { kind: 'strokes', strokes: 3 }, etagFor(historic, f.playerId), identifier(24962));
+    expect(raw.round.games?.results[0]?.churchy).toEqual(historic.games?.results[0]?.churchy);
+    const peer = { playerId: f.game.playerIds[1] ?? '', counts: { dime: 1 }, calls: [] };
+    const changed = { ...legacy, players: [...legacy.players, peer] };
+    const edited = await f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+      { kind: 'strokes', strokes: 3, churchy: changed }, etagFor(raw.round, f.playerId), identifier(24963));
+    expect(edited.change.after.churchy).toEqual(changed);
+    f.submit.mockClear();
+    await expect(f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+      { kind: 'strokes', strokes: 2 }, etagFor(edited.round, f.playerId), identifier(24964)))
+      .rejects.toMatchObject({ code: 'CHURCHY_SETUP_CHANGED' });
+    expect(f.submit).not.toHaveBeenCalled();
+  });
+
+  it.each(['birdie', 'eagle', 'string', 'birdy-string'] as const)(
+    'rejects newly earned %s on raw-only saves without treating unchanged failed calls as permission', async (kind) => {
+      const f = await fixture(1, [{ kind: 'paree', units: 1 }, { kind, units: 1 }]);
+      const number = kind === 'birdie' || kind === 'eagle' ? 1 : 3;
+      let round = f.round;
+      for (let hole = 1; hole < number; hole++) {
+        round = (await f.scores.write(f.actor, event.id, f.roundId, f.playerId, hole,
+          { kind: 'strokes', strokes: kind === 'birdy-string' ? 3 : kind === 'string' && hole === 1 ? 5 : 4,
+            ...(hole === 1 ? { churchy: f.declaration(1, f.game.playerIds) } : {}) },
+          etagFor(round, f.playerId), identifier(24940 + hole))).round;
+      }
+      const extras = { ...f.declaration(number, number === 1 ? f.game.playerIds : undefined), players: [{
+        playerId: f.playerId, counts: {}, calls: [{ id: identifier(24940), kind: 'paree' as const, result: 'failure' as const }],
+      }] };
+      round = (await f.scores.write(f.actor, event.id, f.roundId, f.playerId, number,
+        { kind: 'strokes', strokes: 4, churchy: extras },
+        etagFor(round, f.playerId), identifier(24943))).round;
+      const rows = new Map(f.rows);
+      f.submit.mockClear();
+      await expect(f.scores.write(f.actor, event.id, f.roundId, f.playerId, kind === 'string' ? 1 : number,
+        { kind: 'strokes', strokes: kind === 'eagle' ? 2 : kind === 'string' ? 4 : 3 },
+        etagFor(round, f.playerId), identifier(24944))).rejects.toMatchObject({ code: 'CHURCHY_SETUP_CHANGED' });
+      expect(f.submit).not.toHaveBeenCalled();
+      expect(f.rows).toEqual(rows);
+    },
+  );
+
+  it('rejects new mixed failed/made calls but keeps pending/zero/teammate declarations independent', async () => {
+    const f = await fixture();
+    const failure = { id: identifier(24950), kind: 'paree' as const, result: 'failure' as const };
+    const success = { id: identifier(24951), kind: 'murphy' as const, result: 'success' as const };
+    await expect(f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+      { kind: 'strokes', strokes: 4, churchy: { ...f.declaration(1, f.game.playerIds),
+        players: [{ playerId: f.playerId, counts: {}, calls: [failure, success] }] } },
+      null, identifier(24952))).rejects.toMatchObject({ code: 'CHURCHY_SETUP_CHANGED' });
+    const players = [{ playerId: f.playerId, counts: { sandy: 0 },
+      calls: [failure, { ...success, id: identifier(24954), result: 'pending' as const }] },
+    { playerId: f.game.playerIds[1] ?? '', counts: { sandy: 1, dime: 1 }, calls: [success] }];
+    const saved = await f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+      { kind: 'strokes', strokes: 4, churchy: { ...f.declaration(1, f.game.playerIds), players } }, null, identifier(24953));
+    expect(saved.change.after.churchy).toMatchObject({ players });
+    expect(isRoundScores(saved.round)).toBe(true);
+  });
+
+  const combinations = (['paree', 'murphy', 'pully-murphy'] as const).flatMap((kind) =>
+    (['hogan', 'seve', 'sandy', 'haz-par', 'chippy', 'pully', 'dime', 'super-dime'] as const).map((special) => ({ kind, special })));
+  it.each(combinations)('denies new and both edit directions for failed $kind/$special without score/audit writes', async ({ kind, special }) => {
+    for (const direction of ['new', 'add-call', 'add-count'] as const) {
+      const f = await fixture(1, [...defaultChurchySpecialSelections,
+        { kind: 'pully-murphy', units: 1 }, { kind: 'super-dime', units: 1 }, { kind: 'hogan', units: 1 },
+        { kind: 'seve', units: 1 }, { kind: 'haz-par', units: 1 }, { kind: 'chippy', units: 1 }]);
+      const call = { id: identifier(24900), kind, result: 'failure' as const };
+      let round = f.round;
+      if (direction !== 'new') {
+        round = (await f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+          { kind: 'strokes', strokes: 4, churchy: { ...f.declaration(1, f.game.playerIds), players: [{
+            playerId: f.playerId, counts: direction === 'add-call' ? { [special]: 1 } : {},
+            calls: direction === 'add-count' ? [call] : [],
+          }] } }, null, identifier(24901))).round;
+      }
+      const rows = new Map(f.rows);
+      f.submit.mockClear();
+      await expect(f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+        { kind: 'strokes', strokes: 4, churchy: { ...f.declaration(1, f.game.playerIds),
+          players: [{ playerId: f.playerId, counts: { [special]: 1 }, calls: [call] }] } },
+        etagFor(round, f.playerId), identifier(24902))).rejects.toMatchObject({ status: 409, code: 'CHURCHY_SETUP_CHANGED' });
+      expect(f.submit).not.toHaveBeenCalled();
+      expect(f.rows).toEqual(rows);
+    }
+  });
+
+  it('preserves historical failed-call awards/settlement, captures and receipts on raw/peer edits until explicit repair', async () => {
+    const f = await fixture();
+    for (const [index, playerId] of f.game.playerIds.entries()) {
+      const profile = await f.players.get(creator, playerId);
+      await f.players.observe(creator, playerId, identifier(24930 + index), {
+        value: '0.0', effectiveDate: '2026-01-01', source: 'Fictional specials test',
+      }, profile.etag);
+    }
+    const workspace = await f.workspace.get(creator, event.id);
+    await f.workspace.refreshIndices(creator, event.id, f.roundId, identifier(24934), workspace.etag);
+    const refreshed = await f.workspace.get(creator, event.id);
+    const snapshot = refreshed.rounds.find((round) => round.id === f.roundId);
+    if (!snapshot) throw new Error('Missing fictional round');
+    f.seed({ ...f.row(`round:${f.roundId}`), content: JSON.stringify({ ...snapshot,
+      teeProfile: { ...snapshot.teeProfile, totalPar: snapshot.teeProfile.totalPar - 1,
+        holes: snapshot.teeProfile.holes.map((hole) => hole.number === 1 ? { ...hole, par: 3 } : hole) } }) });
+    const call = { id: identifier(24910), kind: 'murphy' as const, result: 'pending' as const, murphyPresses: 2 as const };
+    const initial = { ...f.declaration(1, f.game.playerIds),
+      players: [{ playerId: f.playerId, counts: { sandy: 2 }, calls: [call] }] };
+    let round = (await f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+      { kind: 'strokes', strokes: 3, churchy: initial }, null, identifier(24911))).round;
+    for (const [index, playerId] of f.game.playerIds.slice(1).entries()) {
+      round = (await f.scores.write(f.actor, event.id, f.roundId, playerId, 1,
+        { kind: 'strokes', strokes: 3 }, null, identifier(24912 + index))).round;
+    }
+    const card = round.cards.find((entry) => entry.playerId === f.playerId);
+    if (!card) throw new Error('Missing fictional card');
+    const legacy = { ...initial, players: initial.players.map((player) => ({ ...player,
+      calls: [{ ...call, result: 'failure' as const }] })) };
+    f.seed({ ...f.row(`score-card:${f.roundId}:${f.playerId}`), content: JSON.stringify({
+      playerId: card.playerId, displayName: card.displayName, updatedAt: card.updatedAt,
+      holes: card.holes.map((hole) => hole.number === 1 ? { ...hole, score: { kind: 'strokes', strokes: 3, churchy: legacy } } : hole),
+    }) });
+    const historic = await f.scores.get(f.actor, event.id, f.roundId);
+    const results = historic.games?.results[0]?.churchy;
+    expect(results?.status).not.toBe('unavailable');
+    expect(results?.awards).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'sandy', earnedBy: f.playerId, count: 2, dots: 2 }),
+      expect.objectContaining({ kind: 'murphy', earnedBy: f.playerId, dots: 3 }),
+    ]));
+    expect(isRoundScores(historic)).toBe(true);
+    const capture = { ...f.row(`index-capture:${f.roundId}`) };
+    const receipt = { ...f.row(`score-change:${identifier(24911)}`) };
+    const raw = await f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+      { kind: 'strokes', strokes: 3 }, etagFor(historic, f.playerId), identifier(24916));
+    expect(raw.change.after.churchy).toEqual(legacy);
+    expect(raw.round.games?.results[0]?.churchy).toEqual(results);
+    const peer = { playerId: f.game.playerIds[1] ?? '', counts: { dime: 1 }, calls: [] };
+    const changed = { ...legacy, players: [...legacy.players.map((player) => ({
+      calls: player.calls, counts: player.counts, playerId: player.playerId,
+    })), peer] };
+    const edited = await f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+      { kind: 'strokes', strokes: 3, churchy: changed }, etagFor(raw.round, f.playerId), identifier(24917));
+    expect(edited.change.after.churchy).toEqual(changed);
+    expect(edited.round.games?.results[0]?.churchy?.awards?.filter((award) => award.earnedBy === f.playerId))
+      .toEqual(results?.awards?.filter((award) => award.earnedBy === f.playerId));
+    const contested = { ...changed, contests: [{ kind: 'kp' as const, status: 'no-qualifier' as const }] };
+    const contestEdit = await f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+      { kind: 'strokes', strokes: 3, churchy: contested }, etagFor(edited.round, f.playerId), identifier(24920));
+    expect(contestEdit.change.after.churchy).toEqual(contested);
+    f.submit.mockClear();
+    await expect(f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+      { kind: 'strokes', strokes: 3, churchy: { ...contested, players: [
+        { playerId: f.playerId, counts: { sandy: 3 }, calls: [{ ...call, result: 'failure' as const }] }, peer,
+      ] } }, etagFor(contestEdit.round, f.playerId), identifier(24919))).rejects.toMatchObject({ code: 'CHURCHY_SETUP_CHANGED' });
+    expect(f.submit).not.toHaveBeenCalled();
+    const repair = { ...contested, players: [
+      { playerId: f.playerId, counts: {}, calls: [{ ...call, result: 'failure' as const }] }, peer,
+    ] };
+    const repaired = await f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+      { kind: 'strokes', strokes: 3, churchy: repair }, etagFor(contestEdit.round, f.playerId), identifier(24918));
+    expect(isRoundScores(repaired.round)).toBe(true);
+    expect(repaired.change.after.churchy).toEqual(repair);
+    expect(f.row(`index-capture:${f.roundId}`)).toEqual(capture);
+    expect(f.row(`score-change:${identifier(24911)}`)).toEqual(receipt);
+  });
+
   it.each([1, 10, 7])('acknowledges order with the first score from starting hole %i and whole-round capture', async (start) => {
     const f = await fixture(start);
     const score = { kind: 'strokes' as const, strokes: 4, churchy: f.declaration(start, f.game.playerIds) };

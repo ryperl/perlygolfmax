@@ -1,10 +1,45 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { churchyV3Fixture } from '../../domain/churchy-v3.test-support';
 import type { ChurchySpecialsV3 } from '../../domain/churchy';
 import { ChurcieEntryControls } from './ChurcieEntryControls';
 
+beforeAll(() => {
+  Object.defineProperties(HTMLDialogElement.prototype, {
+    showModal: { configurable: true, value(this: HTMLDialogElement) { this.setAttribute('open', ''); } },
+    close: { configurable: true, value(this: HTMLDialogElement) { this.removeAttribute('open'); } },
+  });
+});
+afterAll(() => {
+  Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal');
+  Reflect.deleteProperty(HTMLDialogElement.prototype, 'close');
+});
+
 describe('Churchie default named category controls', () => {
+  it('uses entered gross rather than stale saved scores, keeps invalid input pending, and gates new Murphy controls on API capability', () => {
+    const f = churchyV3Fixture(9, 1, 'tee');
+    const round = { ...f.round(), churchyMurphyTargets: true as const };
+    const saved: ChurchySpecialsV3 = { version: 3, gameId: f.game.id,
+      gameEtag: round.games?.configuration.etag ?? '', number: 1, contests: [],
+      players: [{ playerId: f.ids[0] ?? '', counts: {}, calls: [{
+        id: 'fictional-call', kind: 'murphy', result: 'pending', murphyTarget: 'par',
+      }] }] };
+    const onChange = vi.fn();
+    const props = { round, game: f.game, saved, draft: undefined, disabled: false,
+      playerId: f.ids[0], holeNumber: 1, onChange };
+    const view = render(<ChurcieEntryControls {...props} playerScore={{ kind: 'strokes', strokes: 5 }} />);
+    fireEvent.click(screen.getByRole('button', { name: /Dots for .*Churchie/ }));
+    expect(screen.getByText('Missed · opponents earn · needs 4 or better')).toBeVisible();
+    view.rerender(<ChurcieEntryControls {...props} playerScore={null} />);
+    expect(screen.getByText('Pending · enter a gross score')).toBeVisible();
+    view.rerender(<ChurcieEntryControls {...props} playerScore={{ kind: 'strokes', strokes: 3 }} />);
+    expect(screen.getByText('Made · needs 4 or better')).toBeVisible();
+    expect(onChange).not.toHaveBeenCalled();
+    view.rerender(<ChurcieEntryControls {...props} round={f.round()} saved={undefined} />);
+    expect(screen.queryByRole('checkbox', { name: /Murphy called/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Call Murphy/ })).toBeVisible();
+  });
+
   it('offers one group-level Blue Plate selector on par 5s and KP on par 3s without inferring an award', () => {
     const f = churchyV3Fixture(9, 1, 'tee');
     const round = { ...f.round(), layout: f.snapshot.teeProfile.holes.map((hole) => ({

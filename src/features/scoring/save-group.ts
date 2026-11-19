@@ -8,8 +8,19 @@ import type { HoleDraft } from './entry-state';
 import { scoreAccessKey, writablePlayerIds } from './score-access';
 import { isHoleScore } from '../../contracts/scoring';
 import { validChurchyCounts } from '../churchy';
-import { churchySpecialsMatchGame, sameChurchySpecials } from '../../domain/churchy';
-import { dotsDeclarationIssues } from '../../domain/dots';
+import { churchySpecialsMatchGame, churchyV3Records, sameChurchySpecials } from '../../domain/churchy';
+import { dotsAutomaticWriteConflicts, dotsDeclarationWriteIssues } from '../../domain/dots';
+import type { DotsPlayerDeclaration } from '../../domain/dots';
+import { dotsRecordsFor } from '../../domain/game-declarations';
+
+function changedDeclarationConflicts(players: readonly DotsPlayerDeclaration[], previous: readonly DotsPlayerDeclaration[] = []): boolean {
+  const canonical = (player: DotsPlayerDeclaration | undefined) => player && JSON.stringify({
+    playerId: player.playerId, counts: Object.entries(player.counts).sort(([a], [b]) => a.localeCompare(b)),
+    calls: player.calls.map((call) => [call.id, call.kind, call.result, call.murphyPresses ?? null]),
+  });
+  return players.some((player) => canonical(player) !== canonical(previous.find((entry) => entry.playerId === player.playerId))
+    && dotsDeclarationWriteIssues(player).conflicts.length > 0);
+}
 
 export interface GroupWrite {
   readonly playerId: string;
@@ -40,7 +51,10 @@ export function planGroup(round: RoundScores, playerIds: readonly string[], hole
       const game = round.games?.configuration.games.find((game) => game.kind === 'churchy' && game.id === specials.gameId);
       if (round.churchyEnabled !== true || game?.kind !== 'churchy'
         || game.version !== 1 && !round.churchyRulesVersions?.includes(game.version)
-        || !churchySpecialsMatchGame(specials, game)) { invalid.push(playerId); continue; }
+        || !churchySpecialsMatchGame(specials, game)
+        || specials.version === 3 && changedDeclarationConflicts(specials.players,
+          saved.churchy?.version === 3 && saved.churchy.gameId === specials.gameId
+            && saved.churchy.number === specials.number ? saved.churchy.players : undefined)) { invalid.push(playerId); continue; }
     }
     if (draft?.dots?.some((record) => {
       const game = round.games?.configuration.games.find((game) => game.kind === 'dots' && game.id === record.gameId);
@@ -48,8 +62,7 @@ export function planGroup(round: RoundScores, playerIds: readonly string[], hole
         || !supportsDotsSpecials(round, game.specials)
         || game.mode === 'individual' && !supportsIndividualDotsPlayerCount(round, game.playerIds.length)) return true;
       const previous = saved.dots?.find((entry) => entry.gameId === record.gameId && entry.number === record.number);
-      return record.players.some((player) => dotsDeclarationIssues(player).conflicts.length > 0
-        && JSON.stringify(player) !== JSON.stringify(previous?.players.find((entry) => entry.playerId === player.playerId)));
+      return changedDeclarationConflicts(record.players, previous?.players);
     })) { invalid.push(playerId); continue; }
     const entry = draft ? entryScore(draft.text, draft.churchy ?? saved.churchy, draft.kp !== undefined ? draft.kp : saved.kp,
       draft.nassau, draft.wolf, draft.dots) : saved;
@@ -65,6 +78,20 @@ export function planGroup(round: RoundScores, playerIds: readonly string[], hole
       writes.push({ playerId, draft, score: scoreDeclarationIntent(entry, saved) });
     }
   }
+  const nextCards = round.cards.map((card) => ({ ...card, holes: card.holes.map((hole) => {
+    const score = targets.get(card.playerId);
+    return hole.number === holeNumber && score ? { ...hole, score } : hole;
+  }) }));
+  const before = { layout: round.layout, groups: round.groups, cards: round.cards,
+    playerLayouts: round.playerTees?.map((entry) => ({ playerId: entry.playerId, layout: entry.profile.holes })) ?? [] };
+  for (const game of round.games?.configuration.games ?? []) {
+    if (game.kind !== 'dots' && (game.kind !== 'churchy' || game.version !== 3)) continue;
+    const previous = game.kind === 'dots' ? dotsRecordsFor(game, round.groups, round.cards) : churchyV3Records(game, round.groups, round.cards);
+    const records = game.kind === 'dots' ? dotsRecordsFor(game, round.groups, nextCards) : churchyV3Records(game, round.groups, nextCards);
+    for (const id of dotsAutomaticWriteConflicts(game, before, { ...before, cards: nextCards }, previous, records)) {
+      if (!invalid.includes(id)) invalid.push(id);
+    }
+  }
   return { targets, writes, unchanged, invalid, conflicts };
 }
 
@@ -78,7 +105,7 @@ export async function saveGroupEntries({ client, round, holeNumber, plan, signal
   readonly onDraft: (key: string, value: HoleDraft | null) => void;
   readonly onProjection: (round: RoundScores) => void;
 }): Promise<RoundScores> {
-  if (plan.invalid.length > 0 || plan.conflicts.length > 0) throw new Error('Review all entries before saving this group.');
+  if (plan.invalid.length > 0 || plan.conflicts.length > 0) throw new Error('Review all entries and resolve incompatible specials for the same golfer and hole before saving this group.');
   const accessKey = scoreAccessKey(round);
   let latest = round;
   const acknowledged = new Map<string, ScoreChange>();

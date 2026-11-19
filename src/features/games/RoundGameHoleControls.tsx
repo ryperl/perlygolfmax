@@ -18,6 +18,7 @@ export interface RoundGameHoleControlsProps {
   readonly groupNumber: number;
   readonly holeNumber: number;
   readonly playerId?: string;
+  readonly playerScore?: HoleScore | null | undefined;
   readonly placement?: 'before' | 'other';
   readonly saved: HoleScore;
   readonly draft?: { readonly nassau?: readonly NassauHoleRecord[]; readonly wolf?: readonly WolfHoleRecord[]; readonly dots?: readonly DotsHoleRecord[];
@@ -29,7 +30,7 @@ export interface RoundGameHoleControlsProps {
   readonly onChurchyChange?: (record: ChurchySpecialsV3) => void;
 }
 
-export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, draft, disabled, onNassauChange, onWolfChange, onSpecialDotsChange, onChurchyChange, playerId, placement }: RoundGameHoleControlsProps) {
+export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, draft, disabled, onNassauChange, onWolfChange, onSpecialDotsChange, onChurchyChange, playerId, playerScore, placement }: RoundGameHoleControlsProps) {
   const games = round.games?.configuration.games.filter((game) =>
     (game.kind === 'nassau' || game.kind === 'wolf' || game.kind === 'dots'
       || game.kind === 'churchy' && game.version === 3 && round.churchyEnabled === true) && game.groupNumber === groupNumber
@@ -44,7 +45,7 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
       return <ChurcieEntryControls key={game.id} round={round} game={game} holeNumber={holeNumber}
         saved={saved.churchy?.version === 3 && saved.churchy.gameId === game.id ? saved.churchy : undefined}
         draft={draft?.churchy?.version === 3 && draft.churchy.gameId === game.id ? draft.churchy : undefined}
-        playerId={playerId} orderOnly={placement === 'before'} disabled={locked || !onChurchyChange}
+        playerId={playerId} playerScore={playerScore} orderOnly={placement === 'before'} disabled={locked || !onChurchyChange}
         onChange={(record) => { onChurchyChange?.(record); }} />;
     }
     if (game.kind === 'nassau') return <div key={game.id}>

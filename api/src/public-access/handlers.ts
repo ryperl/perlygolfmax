@@ -18,6 +18,7 @@ import type { TableQuickRoundStore } from '../quick-round/store.js';
 import { maximumGameConfigurationBytes } from '../../../src/domain/games.js';
 import { isRoundGameDefinitions } from '../../../src/contracts/games.js';
 import { leanRoundScores, leanScoreWriteResult } from '../../../src/contracts/lean-round-scores.js';
+import { murphyTransport, supportsMurphyTargets } from '../scoring/murphy-transport.js';
 
 export type PublicAction = 'events' | 'workspace' | 'scores' | 'score-hole' | 'score-game-hole' | 'event-leaderboard' | 'purse' | 'games';
 export interface PublicApi {
@@ -58,6 +59,9 @@ function continuationToken(request: HttpRequest): string | undefined {
 
 export function createPublicHandler(resolveApi: () => PublicApi, action: PublicAction) {
   return async (request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> => {
+    const negotiated = supportsMurphyTargets(request);
+    const send = (value: unknown) => response(200, murphyTransport(value, negotiated));
+    const read = (value: unknown) => privateReadResponse(request, murphyTransport(value, negotiated));
     try {
       const api = resolveApi();
       if (request.method !== (action === 'score-hole' || action === 'score-game-hole' || action === 'games' ? 'PUT' : 'GET')) return response(405, { code: 'METHOD_NOT_ALLOWED' });
@@ -82,8 +86,7 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
         }
         const value = await api.scores.leaderboard(identity, eventId, chargeRead);
         const summary = view === 'overall' || view === 'event-skins' ? publicLeaderboardSummary(value, view) : value;
-        return response(200, privateReadResponse(request,
-          compact && 'kind' in summary && summary.kind === 'event-skins' ? compactSkinsSummary(summary) : summary));
+        return send(read(compact && 'kind' in summary && summary.kind === 'event-skins' ? compactSkinsSummary(summary) : summary));
       }
       if (action === 'purse') {
         const selectedPlayer = request.query.get('view') === 'player' ? uuid(request.query.get('playerId')) : null;
@@ -93,13 +96,13 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
           if (!detail) throw new ApiError(404, 'PLAYER_NOT_FOUND');
           return response(200, privateReadResponse(request, detail));
         }
-        return response(200, privateReadResponse(request, request.query.get('view') === 'summary' ? publicPurseSummary(value) : value));
+        return send(read(request.query.get('view') === 'summary' ? publicPurseSummary(value) : value));
       }
       const roundId = uuid(request.params.roundId);
       const lean = request.query.get('format') === 'lean';
       if (action === 'scores') {
         const round = await api.scores.get(identity, eventId, roundId);
-        return response(200, privateReadResponse(request, lean ? leanRoundScores(round) : round));
+        return send(read(lean ? leanRoundScores(round, negotiated) : round));
       }
       if (action === 'games') {
         const requestId = uuid(request.headers.get('Idempotency-Key'));
@@ -110,7 +113,7 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
         if (!isRecord(received.value) || Object.keys(received.value).length !== 1
           || !isRoundGameDefinitions(received.value.games)) throw new ApiError(400, 'INVALID_GAME_SETUP');
         const result = await api.scores.saveGames(identity, eventId, roundId, received.value.games, etag, requestId);
-        return response(200, lean ? { ...result, round: leanRoundScores(result.round) } : result);
+        return send(lean ? { ...result, round: leanRoundScores(result.round, negotiated) } : result);
       }
       const playerId = uuid(request.params.playerId);
       const requestId = uuid(request.headers.get('Idempotency-Key'));
@@ -127,7 +130,7 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
       if (action === 'score-game-hole' && !body.score.nassau?.length && !body.score.wolf?.length
         && !body.score.dots?.length && body.score.churchy?.version !== 3) throw new ApiError(400, 'INVALID_GAME_SCORE');
       const result = await api.scores.write(identity, eventId, roundId, playerId, Number(hole), body.score, etag, requestId, body.inputRevision);
-      return response(200, lean ? leanScoreWriteResult(result) : result);
+      return send(lean ? leanScoreWriteResult(result, negotiated) : result);
     } catch (error) {
       const status = error instanceof ApiError ? error.status : 503;
       const code = error instanceof ApiError ? error.code : 'SERVICE_UNAVAILABLE';

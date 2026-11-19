@@ -1,7 +1,10 @@
-import { dotsDeclarationIssues, dotsManualKinds, dotsSpecialCatalog } from '../../domain/dots';
+import { dotsCallResult, dotsDeclarationWriteIssues, dotsManualKinds, dotsSpecialCatalog } from '../../domain/dots';
 import type { DotsCall, DotsGameDefinition, DotsPlayerDeclaration, DotsSpecialKind } from '../../domain/dots';
+import type { HoleScore } from '../../domain/scoring';
+import { MurphyCallControls } from './MurphyCallControls';
 
-export function DotsPlayerControls({ game, declaration, saved, name, par, onChange, specialLabels, allowMurphyPresses = false }: {
+export function DotsPlayerControls({ game, declaration, saved, name, par, onChange, specialLabels, allowMurphyPresses = false,
+  scoreDerivedMurphy = false, score }: {
   readonly game: DotsGameDefinition;
   readonly declaration: DotsPlayerDeclaration;
   readonly saved: DotsPlayerDeclaration | undefined;
@@ -10,16 +13,22 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
   readonly onChange: (value: DotsPlayerDeclaration) => void;
   readonly specialLabels?: Readonly<Partial<Record<DotsSpecialKind, string>>> | undefined;
   readonly allowMurphyPresses?: boolean;
+  readonly scoreDerivedMurphy?: boolean;
+  readonly score?: HoleScore | undefined;
 }) {
   const enabled = (kind: DotsSpecialKind) => game.specials.some((special) => special.kind === kind);
-  const issues = dotsDeclarationIssues(declaration);
+  const context = scoreDerivedMurphy ? { score, par } : undefined;
+  const issues = dotsDeclarationWriteIssues(declaration, context);
+  const failedCallConflict = issues.conflicts.some((issue) => issue.code === 'FAILED_CALL_SPECIAL');
+  const hasFailedCall = declaration.calls.some((call) => dotsCallResult(call, score, par) === 'failure'
+    && (call.murphyTarget !== 'birdie' || score?.kind !== 'strokes' || score.strokes > par));
   const label = (kind: DotsSpecialKind) => specialLabels?.[kind] ?? dotsSpecialCatalog.find((special) => special.kind === kind)?.label ?? kind;
   const active = (kind: DotsSpecialKind) => (declaration.counts[kind] ?? 0) > 0
     || declaration.calls.some((call) => call.kind === kind);
   function blocked(kind: DotsSpecialKind): boolean {
     if (active(kind)) return false;
     const candidate: DotsPlayerDeclaration = { ...declaration, counts: { ...declaration.counts, [kind]: 1 } };
-    return dotsDeclarationIssues(candidate).conflicts.some((issue) => issue.code !== 'DIME_SUPER_DIME' && issue.kinds.includes(kind));
+    return dotsDeclarationWriteIssues(candidate, context).conflicts.some((issue) => issue.code !== 'DIME_SUPER_DIME' && issue.kinds.includes(kind));
   }
   function changeCount(kind: DotsSpecialKind, count: number) {
     const counts = { ...declaration.counts, [kind]: count };
@@ -36,8 +45,11 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
     const count = declaration.counts[kind] ?? 0;
     const replacement: DotsSpecialKind | null = kind === 'dime' ? 'super-dime' : kind === 'super-dime' ? 'dime' : null;
     const savedAlternative = replacement !== null && (saved?.counts[replacement] ?? 0) > 0 && active(replacement) && count <= 0;
+    const positive = { ...declaration, counts: { ...declaration.counts, [kind]: 1 } };
+    const additionBlocked = dotsDeclarationWriteIssues(positive, context).conflicts.some((issue) =>
+      issue.code === 'FAILED_CALL_SPECIAL' && issue.kinds.includes(kind));
     return { count, invalid: !Number.isSafeInteger(count) || count < 0,
-      replacement, savedAlternative, locked: blocked(kind) || savedAlternative };
+      replacement, savedAlternative, additionBlocked, locked: blocked(kind) || savedAlternative };
   }
   function countInput(kind: DotsSpecialKind) {
     const state = countState(kind);
@@ -56,17 +68,20 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
       </label>;
     })}</div>}
     {manual.filter((special) => special.kind === 'sandy' || special.kind === 'other').map((special) => {
-      const { count, invalid, locked } = countState(special.kind);
+      const { count, invalid, locked, additionBlocked } = countState(special.kind);
       return <div className="dots-count-control" key={special.kind}><span>{label(special.kind)}</span>
           <div className="dots-count-stepper">
             <button type="button" aria-label={`Decrease ${label(special.kind)} for ${name}`} disabled={locked || invalid || count <= 0}
               onClick={() => { changeCount(special.kind, count - 1); }}>−</button>
             {countInput(special.kind)}
-            <button type="button" aria-label={`Increase ${label(special.kind)} for ${name}`} disabled={locked || invalid || count >= Number.MAX_SAFE_INTEGER}
+            <button type="button" aria-label={`Increase ${label(special.kind)} for ${name}`} disabled={locked || invalid || additionBlocked || count >= Number.MAX_SAFE_INTEGER}
               onClick={() => { changeCount(special.kind, count + 1); }}>+</button>
           </div></div>;
     })}
-    {calls.filter(enabled).map((kind) => {
+    {scoreDerivedMurphy && enabled('murphy') && <MurphyCallControls calls={declaration.calls} name={name}
+      score={score} par={par} blocked={(declaration.counts.hogan ?? 0) > 0}
+      onChange={(value) => { onChange({ ...declaration, calls: value }); }} />}
+    {calls.filter((kind) => enabled(kind) && !(scoreDerivedMurphy && kind === 'murphy')).map((kind) => {
       const callBlocked = kind === 'murphy' && (declaration.counts.hogan ?? 0) > 0;
       return <div className="dots-call-controls" key={kind}>
         <button type="button" aria-label={`Call ${label(kind)} · ${name}`} disabled={callBlocked} onClick={() => {
@@ -74,14 +89,22 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
             ...(allowMurphyPresses && kind === 'murphy' ? { murphyPresses: 0 as const } : {}) }] });
         }}>Call {label(kind)}</button>
         {callBlocked && <small>Clear this golfer&apos;s Hogan before calling Murphy.</small>}
-        {declaration.calls.filter((call) => call.kind === kind).map((call, index) => <div className="dots-call" key={call.id}>
+        {declaration.calls.filter((call) => call.kind === kind).map((call, index) => {
+          const outcomeBlocked = (result: DotsCall['result']) => dotsDeclarationWriteIssues({ ...declaration,
+            calls: declaration.calls.map((entry) => entry.id === call.id ? { ...entry, result } : entry),
+          }, context).conflicts.some((issue) => issue.code === 'FAILED_CALL_SPECIAL' && issue.kinds.includes(kind));
+          const failureBlocked = call.result !== 'failure' && outcomeBlocked('failure');
+          const successBlocked = call.result !== 'success' && outcomeBlocked('success');
+          return <div className="dots-call" key={call.id}>
           <label>{label(kind)} call {index + 1}
             <select aria-label={`${label(kind)} call ${String(index + 1)} · ${name}`} value={call.result} onChange={(event) => {
               const result = event.target.value;
               if (result === 'pending' || result === 'success' || result === 'failure') onChange({ ...declaration,
                 calls: declaration.calls.map((entry) => entry.id === call.id ? { ...entry, result } : entry) });
-            }}><option value="pending">Called · Outcome pending</option><option value="success">Success</option>
-              <option value="failure">Failed · Opponents earn</option></select></label>
+            }}><option value="pending">Called · Outcome pending</option><option value="success" disabled={successBlocked}>Success</option>
+              <option value="failure" disabled={failureBlocked}>Failed · Opponents earn</option></select></label>
+          {failureBlocked && <small>Clear this golfer&apos;s par-or-better specials or made calls before marking this call failed.</small>}
+          {successBlocked && <small>Correct this golfer&apos;s failed call before recording another made call.</small>}
           {allowMurphyPresses && kind === 'murphy' && <label>Murphy press stage
             <select aria-label={`Murphy press stage ${String(index + 1)} · ${name}`} value={call.murphyPresses ?? 0}
               onChange={(event) => {
@@ -94,7 +117,7 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
           <button type="button" aria-label={`Remove ${label(kind)} call ${String(index + 1)} · ${name}`} onClick={() => {
             onChange({ ...declaration, calls: declaration.calls.filter((entry) => entry.id !== call.id) });
           }}>Remove call</button>
-        </div>)}
+        </div>; })}
       </div>;
     })}
     {single.length > 0 && <details className="dots-count-details"><summary>Details / edit counts</summary>
@@ -110,7 +133,9 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
     </details>}
     {manual.filter((special) => countState(special.kind).invalid).map((special) =>
       <span className="dots-entry-error" role="alert" key={special.kind}>{label(special.kind)} count must be a whole number of 0 or more.</span>)}
-    {issues.conflicts.map((issue) => <p role="alert" key={issue.code}>
+    {hasFailedCall && !failedCallConflict && <p role="note">A failed call excludes this golfer&apos;s par-or-better specials and {label('dime')}. Correct or remove the failed call to enable them.</p>}
+    {failedCallConflict && <p role="alert">This golfer has a failed call and a conflicting par-or-better special, made call or {label('dime')}. Clear or correct the conflicting declaration; saved values have not been removed.</p>}
+    {issues.conflicts.filter((issue) => issue.code !== 'FAILED_CALL_SPECIAL').map((issue) => <p role="alert" key={issue.code}>
       {issue.kinds.map(label).join(' + ')} conflict for {name}. Review saved declarations; new changes cannot save this combination.
     </p>)}
     {issues.warnings.map((issue) => <p key={issue.code} role="note">{issue.kinds.map(label).join(' + ')} for {name}: check your entry. This combination is allowed.</p>)}

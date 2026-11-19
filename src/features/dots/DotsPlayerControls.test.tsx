@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { DotsGameDefinition, DotsPlayerDeclaration } from '../../domain/dots';
+import { dotsSpecialCatalog } from '../../domain/dots';
 import { DotsPlayerControls } from './DotsPlayerControls';
 
 const game: DotsGameDefinition = {
@@ -16,7 +17,76 @@ function Editor() {
     name="Fictional golfer" par={4} onChange={setDeclaration} />;
 }
 
+const compatibleGame: DotsGameDefinition = { ...game,
+  specials: dotsSpecialCatalog.map(({ kind }) => ({ kind, units: 1 })) };
+
+function CompatibleEditor({ initial, changed }: {
+  readonly initial: DotsPlayerDeclaration;
+  readonly changed?: (declaration: DotsPlayerDeclaration) => void;
+}) {
+  const [declaration, setDeclaration] = useState(initial);
+  return <DotsPlayerControls game={compatibleGame} declaration={declaration} saved={initial}
+    name="Fictional golfer" par={4} specialLabels={{ dime: 'Sticky' }} allowMurphyPresses
+    onChange={(value) => { setDeclaration(value); changed?.(value); }} />;
+}
+
 describe('quick per-golfer Dots choices', () => {
+  it('prevents missed calls and par-or-better choices in both directions without clearing existing input', async () => {
+    const user = userEvent.setup(), changed = vi.fn();
+    render(<CompatibleEditor initial={{ playerId: 'a', counts: { sandy: 1 },
+      calls: [{ id: 'fictional-paree', kind: 'paree', result: 'pending' }] }} changed={changed} />);
+    const paree = screen.getByRole('combobox', { name: 'Paree call 1 · Fictional golfer' });
+    expect(within(paree).getByRole('option', { name: 'Failed · Opponents earn' })).toBeDisabled();
+    expect(within(paree).getByRole('option', { name: 'Success' })).toBeEnabled();
+    await user.selectOptions(paree, 'failure');
+    expect(paree).toHaveValue('pending');
+    expect(screen.getByLabelText('Sandy count · Fictional golfer')).toHaveValue(1);
+    expect(changed).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Decrease Sandy for Fictional golfer' }));
+    await user.selectOptions(paree, 'failure');
+    expect(paree).toHaveValue('failure');
+    expect(screen.getByRole('button', { name: 'Increase Sandy for Fictional golfer' })).toBeDisabled();
+    for (const label of ['Hogan', 'Seve', 'Pully', 'Sticky', 'SuperDime', 'Haz Par', 'Chippy']) {
+      expect(screen.getByRole('checkbox', { name: `${label} for Fictional golfer` })).toBeDisabled();
+    }
+    expect(screen.getByRole('button', { name: 'Increase Other for Fictional golfer' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Call Murphy · Fictional golfer' }));
+    const murphy = screen.getByRole('combobox', { name: 'Murphy call 1 · Fictional golfer' });
+    expect(within(murphy).getByRole('option', { name: 'Success' })).toBeDisabled();
+    await user.selectOptions(murphy, 'success');
+    expect(murphy).toHaveValue('pending');
+  });
+
+  it('shows legacy conflicts without removing values and allows explicit count repair while preserving presses and call identities', async () => {
+    const user = userEvent.setup(), changed = vi.fn();
+    const calls: DotsPlayerDeclaration['calls'] = [{ id: 'fictional-murphy', kind: 'murphy', result: 'failure', murphyPresses: 2 }];
+    render(<CompatibleEditor initial={{ playerId: 'a', counts: { sandy: 2, dime: 1 }, calls }} changed={changed} />);
+    expect(screen.getByRole('alert')).toHaveTextContent('saved values have not been removed');
+    const sticky = screen.getByRole('checkbox', { name: 'Sticky for Fictional golfer' });
+    expect(sticky).toBeChecked();
+    expect(sticky).toBeEnabled();
+    expect(screen.getByLabelText('Sandy count · Fictional golfer')).toHaveValue(2);
+    expect(screen.getByRole('button', { name: 'Increase Sandy for Fictional golfer' })).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: 'Murphy press stage 1 · Fictional golfer' })).toHaveValue('2');
+    await user.click(sticky);
+    await user.click(screen.getByRole('button', { name: 'Decrease Sandy for Fictional golfer' }));
+    await user.click(screen.getByRole('button', { name: 'Decrease Sandy for Fictional golfer' }));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(changed).toHaveBeenLastCalledWith({ playerId: 'a', counts: { sandy: 0, dime: 0 }, calls });
+    expect(screen.getByRole('combobox', { name: 'Murphy press stage 1 · Fictional golfer' })).toHaveValue('2');
+  });
+
+  it('lets the scorer correct a failed outcome to made without clearing the compatible special', async () => {
+    const user = userEvent.setup();
+    render(<CompatibleEditor initial={{ playerId: 'a', counts: { sandy: 1 },
+      calls: [{ id: 'fictional-paree', kind: 'paree', result: 'failure' }] }} />);
+    expect(screen.getByRole('alert')).toBeVisible();
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Paree call 1 · Fictional golfer' }), 'success');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Sandy count · Fictional golfer')).toHaveValue(1);
+    expect(screen.getByRole('button', { name: 'Increase Sandy for Fictional golfer' })).toBeEnabled();
+  });
+
   it('uses the Sticky alias without emitting a disabled SuperDime claim, but still clears a selected unsaved alternative', async () => {
     const user = userEvent.setup(), onChange = vi.fn<(value: DotsPlayerDeclaration) => void>();
     const props = { game: { ...game, specials: [{ kind: 'dime' as const, units: 1 }] },

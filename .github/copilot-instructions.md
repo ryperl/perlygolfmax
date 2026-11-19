@@ -266,6 +266,12 @@
   Hogan/Seve, Pully with Dime/SuperDime, Hogan with Murphy/Chippy. Shared
   teammate awards may differ. Hogan/Seve with Walk warns but is allowed.
   Do not make old version-1 records unreadable or silently delete old awards.
+  Failed Paree/Murphy/Pully Murphy excludes that source golfer's same-hole
+  par-or-better manual claims, made calls and earned automatic awards, plus
+  Dime/Sticky/SuperDime. Enforce new/changed inputs in UI/API, including
+  score-derived conflicts, but keep old read calculations and records compatible.
+  Preserve teammate-source independence and explicit repair; never silently
+  clear saved choices or make an old conflict hide an entire round.
   Keep automatic-award choices in setup only; score entry has manual tap
   choices/counters below each golfer alongside KP, not a keyboard-heavy form.
   Select all applies only to compatible setup rules and preserves custom units.
@@ -314,6 +320,13 @@
   again for partner entry. Do not retro-enable or relabel saved Other entries.
   Murphy stages scale configured units by 1/2/3;
   Sweep scales units by the current stake. Neither changes ordinary Dots.
+  Target-aware Murphy is an explicit per-call par/birdie choice with derived
+  gross-personal-par outcomes; blanks stay pending and pickup/DNF misses.
+  A missed birdie Murphy followed by par may coexist with valid Sandy/Pully.
+  Use called checkbox and 1x/2x/3x stakes; never infer a call from a score.
+  Preserve manual calls until explicit opt-in, target identities and raw-only
+  edits. Negotiate target-aware transport/capability and project compatible
+  reads for older clients; never make old browsers reject entire scorecards.
   Category holes use the captured default tee; source qualifications use
   personal tees. Shared presets copy configuration into games, never bind
   live settings. Custom presets are device-local config/units only, injected

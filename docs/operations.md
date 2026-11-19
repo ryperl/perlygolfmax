@@ -309,6 +309,31 @@ order; keep the actual rotation, pair membership, raw cards and recomputed
 points/settlement checks strict. This applies to full and lean reads, including
 refresh after another scorer saves; it never rewrites an award or saved score.
 
+Failed-call compatibility is a separate **write policy**. A source golfer's
+acknowledged failed Paree/Murphy/Pully Murphy cannot coexist on that hole with
+their par-or-better manual claims, made calls or actually earned automatic
+Birdie/Eagle/String/BirdyString awards; the explicit Dime/Sticky/SuperDime family
+is also excluded. Other teammates' source achievements remain independent.
+Apply it to new/changed declarations and newly introduced score-derived conflicts,
+not unchanged historical violations. UI controls must permit explicit clearing
+or outcome correction without silently removing values. Structural/full/lean
+reads and existing versioned calculations remain compatible so an old conflict
+never makes the whole round unreadable or loses historical award evidence.
+
+Target-aware Churchie v3 Murphy calls persist the explicit par/birdie target and
+derive outcomes from captured personal gross par and current saved strokes.
+Canonical outcome stays pending; it is not rewritten on subsequent raw saves.
+Numeric par after a missed birdie target can still qualify for Sandy/Pully;
+bogey/pickup cannot use that exception. Unplayed remains pending, not missed.
+UI uses a called checkbox, optional For birdie and total-stakes 1×/2×/3× stepper.
+Manual legacy calls require explicit opt-in and retain identities/stages.
+Negotiate `murphy=score-v1` throughout scoring paging/acknowledgements; only
+negotiated responses advertise `churchyMurphyTargets`. Unnegotiated reads
+project compatible manual results without changing storage. Preserve retained
+target-aware calls on old/raw-only writes; incompatible manual overrides must
+fail explicitly, never silently downgrade the target or acknowledge an ignored
+edit. Historical projections must not invent past results from current scores.
+
 New Churchie defaults enable KP and Blue Plate at one unit each. KP carries
 only to the next default-tee par 3; Blue Plate is closest qualifying GIR on
 default-tee par 5s and carries only to the next par 5. Categories resolve

@@ -1,4 +1,6 @@
 import type { DotAward, DotHoleContext, DotRoundInput } from './dot-context.js';
+import type { ChurchyGameDefinitionV3 } from './churchy.js';
+import type { HoleScore } from './scoring.js';
 import type { GamePlayerResult } from './games.js';
 import { dotsRotationContext } from './dots-rotation.js';
 import type { DotsRotationContext } from './dots-rotation.js';
@@ -64,6 +66,15 @@ export interface DotsCall {
   readonly id: string; readonly kind: 'paree' | 'murphy' | 'pully-murphy';
   readonly result: 'pending' | 'success' | 'failure';
   readonly murphyPresses?: 0 | 1 | 2;
+  readonly murphyTarget?: 'par' | 'birdie';
+}
+
+export function dotsCallResult(call: DotsCall, score: HoleScore | undefined, par: number | undefined): DotsCall['result'] {
+  if (call.murphyTarget === undefined || call.kind !== 'murphy') return call.result;
+  if (!score || score.kind === 'unplayed') return 'pending';
+  if (score.kind !== 'strokes') return 'failure';
+  if (par === undefined || !Number.isSafeInteger(par) || par < 1) return 'pending';
+  return score.strokes <= par - (call.murphyTarget === 'birdie' ? 1 : 0) ? 'success' : 'failure';
 }
 export interface DotsPlayerDeclaration {
   readonly playerId: string; readonly counts: Readonly<Partial<Record<DotsSpecialKind, number>>>;
@@ -92,7 +103,7 @@ export interface DotsResults {
 
 export interface DotsDeclarationIssue {
   readonly code: 'HOGAN_SEVE' | 'PULLY_DIME' | 'HOGAN_MURPHY' | 'HOGAN_CHIPPY' | 'DIME_SUPER_DIME'
-    | 'HOGAN_WALK' | 'SEVE_WALK';
+    | 'HOGAN_WALK' | 'SEVE_WALK' | 'FAILED_CALL_SPECIAL';
   readonly kinds: readonly DotsSpecialKind[];
 }
 
@@ -115,6 +126,90 @@ export function dotsDeclarationIssues(declaration: DotsPlayerDeclaration): {
   check('HOGAN_WALK', ['hogan', 'walk'], true);
   check('SEVE_WALK', ['seve', 'walk'], true);
   return { conflicts, warnings };
+}
+
+/** New or changed source declarations only; historical calculations retain their original rules. */
+export function dotsDeclarationWriteIssues(declaration: DotsPlayerDeclaration,
+  context?: { readonly score?: HoleScore | undefined; readonly par?: number | undefined; readonly automaticKinds?: readonly DotsSpecialKind[] }): {
+  readonly conflicts: readonly DotsDeclarationIssue[]; readonly warnings: readonly DotsDeclarationIssue[];
+} {
+  const issues = dotsDeclarationIssues(declaration);
+  const conflicts = [...issues.conflicts];
+  const result = (call: DotsCall) => context ? dotsCallResult(call, context.score, context.par) : call.result;
+  const failedCalls = declaration.calls.filter((call) => result(call) === 'failure');
+  const specials = new Set<DotsSpecialKind>([
+    ...parQualified.filter((kind) => (declaration.counts[kind] ?? 0) > 0),
+    ...(['pully', 'dime', 'super-dime'] as const).filter((kind) => (declaration.counts[kind] ?? 0) > 0),
+    ...declaration.calls.filter((call) => result(call) === 'success').map((call) => call.kind),
+    ...(context?.automaticKinds ?? []),
+  ]);
+  const pairs = new Set<string>();
+  for (const call of failedCalls) {
+    for (const special of specials) {
+      if (call.murphyTarget === 'birdie' && context?.score?.kind === 'strokes' && context.score.strokes === context.par
+        && [...parQualified, 'pully', 'paree', 'murphy', 'pully-murphy', 'string'].some((kind) => kind === special)) continue;
+      const key = `${call.kind}:${special}`;
+      if (!pairs.has(key)) conflicts.push({ code: 'FAILED_CALL_SPECIAL', kinds: [call.kind, special] });
+      pairs.add(key);
+    }
+  }
+  return { conflicts, warnings: issues.warnings };
+}
+
+/** Reuse score qualifications and acknowledged order without revalidating historical manual declarations. */
+function dotsAutomaticWriteAwards(game: DotsGameDefinition | ChurchyGameDefinitionV3,
+  round: DotRoundInput, records: readonly DotsHoleRecord[]): readonly DotAward[] {
+  const automatic = game.specials.filter((selection) =>
+    ['birdie', 'eagle', 'string', 'birdy-string'].some((kind) => kind === selection.kind));
+  if (game.version !== 1) {
+    const layout = game.kind === 'churchy' ? [...round.layout].sort((a, b) => a.number - b.number) : round.layout;
+    const first = round.groups.find((group) => group.number === game.groupNumber)?.startingHole ?? layout[0]?.number;
+    const receipts = records.map((record) => ({ ...record, players: [], contests: [] }));
+    if (game.kind === 'churchy' && game.orderMode === 'tee' && first !== undefined) {
+      receipts.push({ number: first, gameId: game.id, gameEtag: '', players: [], contests: [], rotation: { playerIds: game.playerIds } });
+    }
+    return calculateDots({ id: game.id, name: game.name, groupNumber: game.groupNumber, playerIds: game.playerIds,
+      specials: automatic, kind: 'dots', version: 2, mode: 'rotating', stakeMinor: null,
+      rotationHoles: game.kind === 'dots' ? game.rotationHoles : 3 }, { ...round, layout }, receipts).awards
+      .filter((award) => award.source === 'automatic');
+  }
+  return calculateDots({ id: game.id, name: game.name, groupNumber: game.groupNumber, playerIds: game.playerIds,
+    specials: automatic, kind: 'dots', version: 1, mode: 'individual', stakeMinor: null }, round, []).awards
+    .filter((award) => award.source === 'automatic');
+}
+
+/** Reject newly earned automatic conflicts, including streaks affected by an earlier score edit. */
+export function dotsAutomaticWriteConflicts(
+  game: DotsGameDefinition | ChurchyGameDefinitionV3,
+  before: DotRoundInput, after: DotRoundInput,
+  previous: readonly DotsHoleRecord[], records: readonly DotsHoleRecord[],
+): readonly string[] {
+  if (!records.some((record) => record.players.some((player) => player.calls.some((call) => call.result === 'failure' || call.murphyTarget !== undefined)))) return [];
+  const oldAwards = dotsAutomaticWriteAwards(game, before, previous), awards = dotsAutomaticWriteAwards(game, after, records);
+  const orderActivated = !previous.some((record) => record.rotation !== undefined)
+    && records.some((record) => record.rotation !== undefined);
+  const canonical = (player: DotsPlayerDeclaration | undefined) => player && JSON.stringify({
+    playerId: player.playerId, counts: Object.entries(player.counts).sort(([a], [b]) => a.localeCompare(b)),
+    calls: player.calls.map((call) => [call.id, call.kind, call.result, call.murphyPresses ?? null, call.murphyTarget ?? null]),
+  });
+  return [...new Set(records.flatMap((record) => record.players.flatMap((player) => {
+    const prior = previous.find((entry) => entry.number === record.number)?.players.find((entry) => entry.playerId === player.playerId);
+    const changed = canonical(player) !== canonical(prior);
+    const issues = (declaration: DotsPlayerDeclaration, round: DotRoundInput, source: readonly DotAward[]) => {
+      const score = round.cards.find((card) => card.playerId === player.playerId)?.holes.find((hole) => hole.number === record.number)?.score;
+      const par = (round.playerLayouts?.find((entry) => entry.playerId === player.playerId)?.layout ?? round.layout)
+        .find((hole) => hole.number === record.number)?.par;
+      const automaticKinds = dotsSpecialCatalog.filter(({ kind }) => source.some((award) =>
+        award.number === record.number && award.earnedBy === player.playerId && award.kind === kind)).map(({ kind }) => kind);
+      return dotsDeclarationWriteIssues(declaration, { score, par, automaticKinds }).conflicts
+        .filter((issue) => issue.code === 'FAILED_CALL_SPECIAL');
+    };
+    const old = prior ? issues(prior, before, oldAwards) : [];
+    return issues(player, after, awards).some((issue) => changed
+      || !old.some((entry) => entry.kinds.join(':') === issue.kinds.join(':'))
+      || orderActivated && awards.some((award) => award.number === record.number && award.earnedBy === player.playerId
+        && award.kind === issue.kinds[1])) ? [player.playerId] : [];
+  })))];
 }
 
 export const dotsManualKinds: readonly DotsSpecialKind[] = [
@@ -210,6 +305,8 @@ export function dotsRecordsMatchGame(
         callIds.push(call.id);
         if (!enabled.has(call.kind) || call.murphyPresses !== undefined
           && (profile !== 'churcie-v3' || call.kind !== 'murphy' || ![0, 1, 2].includes(call.murphyPresses))) return false;
+        if (call.murphyTarget !== undefined && (profile !== 'churcie-v3' || call.kind !== 'murphy'
+          || !['par', 'birdie'].includes(call.murphyTarget) || call.result !== 'pending')) return false;
         if (call.result === 'success' && score && score.kind !== 'unplayed'
           && (score.kind !== 'strokes' || par === undefined
             || (call.kind === 'pully-murphy' ? score.strokes !== par : score.strokes > par))) return false;
@@ -313,10 +410,11 @@ export function calculateDots(
           count, 'manual', [hole.number], `Declared ${String(count)} ${kind}; qualifying gross facts are honor-system claims.`);
       }
       for (const call of declaration?.calls ?? []) {
-        if (call.result === 'pending') { mark(hole, 'pending', 'unresolved-call'); continue; }
-        if (call.result === 'success' && pending) { mark(hole, 'pending', 'call-needs-score'); continue; }
-        add(call.kind, playerId, call.result === 'failure' ? opponents(playerId) : own(playerId),
-          1 + (profile === 'churcie-v3' ? call.murphyPresses ?? 0 : 0), 'manual', [hole.number], `${dotsSpecialCatalog.find((entry) => entry.kind === call.kind)?.label ?? call.kind} call: ${call.result}.`, call.id);
+        const result = dotsCallResult(call, score, par);
+        if (result === 'pending') { mark(hole, 'pending', 'unresolved-call'); continue; }
+        if (result === 'success' && pending) { mark(hole, 'pending', 'call-needs-score'); continue; }
+        add(call.kind, playerId, result === 'failure' ? opponents(playerId) : own(playerId),
+          1 + (profile === 'churcie-v3' ? call.murphyPresses ?? 0 : 0), 'manual', [hole.number], `${dotsSpecialCatalog.find((entry) => entry.kind === call.kind)?.label ?? call.kind} call: ${result}.`, call.id);
       }
       if (strokes !== null && par !== undefined) {
         if (strokes === par - 1) add('birdie', playerId, own(playerId), 1, 'automatic', [hole.number], 'Exactly one under personal gross par.');

@@ -4,6 +4,8 @@ import type { AccountIdentity } from '../../../src/domain/events.js';
 import type { ScoreActor } from '../../../src/domain/test-access.js';
 import type { EventWorkspace, RoundPlayerSnapshot, RoundSnapshot } from '../../../src/domain/setup.js';
 import type { GameWriteResult, HoleScore, RoundScores, Scorecard, ScoreChange, ScoreHistoryPage, ScoreWriteResult } from '../../../src/domain/scoring.js';
+import { createHash } from 'node:crypto';
+import { retainMurphyTargets } from './murphy-write.js';
 import type { GameChange, GameConfiguration, RoundGameDefinition } from '../../../src/domain/games.js';
 import { gameTeamsMatchRoster, isStablefordGame, sameGameDefinitions, roundGameKinds } from '../../../src/domain/games.js';
 import { maximumPrivateWriteBytes } from '../../../src/contracts/private-values.js';
@@ -38,7 +40,7 @@ import { nassauConfigurationIssues, validateNassauManualPress } from '../../../s
 import { nassauRecordsMatchGame } from '../../../src/contracts/nassau.js';
 import { wolfForHole, wolfGroupMatchesRound } from '../../../src/domain/wolf.js';
 import { dotsDefinitionMatchesRound, dotsRecordsMatchGame } from '../../../src/contracts/dots.js';
-import { dotsDeclarationIssues, dotsFirstPlayedHole, dotsSpecialCatalog } from '../../../src/domain/dots.js';
+import { dotsAutomaticWriteConflicts, dotsDeclarationIssues, dotsDeclarationWriteIssues, dotsFirstPlayedHole, dotsSpecialCatalog } from '../../../src/domain/dots.js';
 import { dotRound, definitionCards, validateInternalGameChanges } from './internal-games.js';
 import { buildDotAwardAudit } from './dot-audit.js';
 import { groupStartingHole } from '../../../src/domain/round-navigation.js';
@@ -519,13 +521,13 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     return receivePrivateWrite(this.table, identity, eventId, `round-games:${roundId}`, expected, requestId, body);
   }
 
-  private async receipt(eventId: string, requestId: string): Promise<ScoreChange | undefined> {
+  private async receipt(eventId: string, requestId: string): Promise<(ScoreChange & { readonly requestHash?: string }) | undefined> {
     const row = await optionalRow(this.table, eventId, `score-change:${requestId}`);
     if (!row) return undefined;
     const change = decode(await privateContent(this.table, eventId, `score-change:${requestId}`, row.content), isScoreChange);
     if (row.kind !== 'score-change' || row.roundId !== change.roundId || row.playerId !== change.playerId
       || change.eventId !== eventId || change.id !== requestId) throw new ApiError(503, 'INVALID_STORED_SCORE_CHANGE');
-    return projectChange(change);
+    return { ...projectChange(change), ...(typeof row.requestHash === 'string' ? { requestHash: row.requestHash } : {}) };
   }
 
   private async acknowledgement(identity: ScoreActor, change: ScoreChange): Promise<ScoreWriteResult> {
@@ -554,10 +556,11 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     if (change.roundId !== roundId || change.playerId !== playerId || change.holeNumber !== holeNumber
       || change.expectedEtag !== expectedEtag || !sameScoreActor(change.recordedBy, identity)
       || (change.expectedInputRevision ?? null) !== (inputRevision ?? null)
-      || !matchesScoreIntent(change.after, score)) {
+      || (change.requestHash !== undefined ? change.requestHash !== createHash('sha256').update(canonical(score)).digest('hex')
+        : !matchesScoreIntent(change.after, score))) {
       throw new ApiError(409, 'SCORE_REQUEST_CONFLICT');
     }
-    const result = await this.acknowledgement(identity, change);
+    const result = await this.acknowledgement(identity, projectChange(change));
     if (result.round.eventStatus !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     return result;
   }
@@ -575,12 +578,15 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     if (state.round.inputRevision && state.round.inputRevision !== inputRevision) throw new ApiError(409, 'SCORE_INPUTS_CHANGED');
     const replay = await this.replay(identity, eventId, roundId, playerId, holeNumber, score, expectedEtag, requestId, inputRevision);
     if (replay) return replay;
+    const requestHash = createHash('sha256').update(canonical(score)).digest('hex');
+    const originalScore = score;
     const cards = await this.cards(eventId, state.round, state.lock);
     const card = cards.find((entry) => entry.playerId === playerId);
     if (!card) throw new ApiError(503, 'INVALID_STORED_SCORECARD');
     if (card.etag !== expectedEtag) throw new ApiError(409, 'SCORECARD_CHANGED');
     const before = card.holes.find((hole) => hole.number === holeNumber);
     if (!before) throw new ApiError(503, 'INVALID_STORED_SCORECARD');
+    score = retainMurphyTargets(score, before.score, dotRound(state.round, cards));
     // Legacy/raw-only clients never erase hidden specials.
     if (state.testerLink && score.churchy && score.churchy.version !== undefined) throw new ApiError(403, 'MATCH_DECLARATIONS_NOT_ALLOWED');
     let savedScore: HoleScore;
@@ -680,6 +686,8 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
           const prior = previous?.players.find((entry) => entry.playerId === declaration.playerId);
           if ((game.version === 2 || canonical(declaration) !== canonical(prior ?? null))
             && dotsDeclarationIssues(declaration).conflicts.length) throw new ApiError(409, 'DOTS_SETUP_CHANGED');
+          if (canonical(declaration) !== canonical(prior ?? null)
+            && dotsDeclarationWriteIssues(declaration).conflicts.length) throw new ApiError(409, 'DOTS_SETUP_CHANGED');
         }
         if (record.rotation) {
           const receipt = dotsRecordsFor(game, state.round.groups, cards).find((entry) => entry.rotation);
@@ -736,6 +744,17 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
           throw new ApiError(409, 'CHURCHY_SETUP_CHANGED');
         }
         const previous = before.score.churchy;
+        for (const declaration of extras.players) {
+          const prior = previous?.version === 3
+            ? previous.players.find((entry) => entry.playerId === declaration.playerId) : undefined;
+          if (canonical(declaration) !== canonical(prior ?? null)
+            && dotsDeclarationWriteIssues(declaration, {
+              score: declaration.playerId === playerId ? savedScore
+                : cards.find((card) => card.playerId === declaration.playerId)?.holes.find((hole) => hole.number === holeNumber)?.score,
+              par: (state.round.playerTees?.find((entry) => entry.playerId === declaration.playerId)?.profile.holes ?? state.round.teeProfile.holes)
+                .find((hole) => hole.number === holeNumber)?.par,
+            }).conflicts.length) throw new ApiError(409, 'CHURCHY_SETUP_CHANGED');
+        }
         const receipts = churchyV3Records(game, state.round.groups, cards);
         const receipt = receipts.find((record) => record.rotation);
         if (extras.rotation && receipt && receipt.number !== holeNumber) throw new ApiError(409, 'CHURCHY_ORDER_CONFLICT');
@@ -754,10 +773,21 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
         }
       }
     }
-    const recordedAt = new Date().toISOString();
-    const actor = scoreActor(identity);
     const nextCards = cards.map((entry) => entry.playerId === playerId ? { ...entry,
       holes: entry.holes.map((hole) => hole.number === holeNumber ? { ...hole, score: savedScore } : hole) } : entry);
+    for (const game of state.games?.games ?? []) {
+      if (game.kind !== 'dots' && (game.kind !== 'churchy' || game.version !== 3)) continue;
+      if (game.kind === 'churchy' && !this.churchyEnabled()) continue;
+      const previous = game.kind === 'dots' ? dotsRecordsFor(game, state.round.groups, cards)
+        : churchyV3Records(game, state.round.groups, cards);
+      const records = game.kind === 'dots' ? dotsRecordsFor(game, state.round.groups, nextCards)
+        : churchyV3Records(game, state.round.groups, nextCards);
+      if (dotsAutomaticWriteConflicts(game, dotRound(state.round, cards), dotRound(state.round, nextCards), previous, records).length) {
+        throw new ApiError(409, game.kind === 'dots' ? 'DOTS_SETUP_CHANGED' : 'CHURCHY_SETUP_CHANGED');
+      }
+    }
+    const recordedAt = new Date().toISOString();
+    const actor = scoreActor(identity);
     const dotAwardAudit = buildDotAwardAudit(state.games?.games ?? [], state.round, state.round,
       cards, nextCards, state.games?.etag ?? null);
     const change: ScoreChange = {
@@ -776,7 +806,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       ['update', { partitionKey: eventId, rowKey: 'event', scoresUpdatedAt: recordedAt }, 'Merge', { etag: state.summary.etag }],
       expectedEtag === null ? ['create', entity] : ['update', entity, 'Replace', { etag: expectedEtag }],
       ['create', {
-        partitionKey: eventId, rowKey: `score-change:${requestId}`, kind: 'score-change', roundId, playerId, content: changeContent,
+        partitionKey: eventId, rowKey: `score-change:${requestId}`, kind: 'score-change', roundId, playerId, requestHash, content: changeContent,
       }],
     ];
     if (!sameKpEntry(savedScore.kp, before.score.kp) && savedScore.kp?.kind === 'measured') {
@@ -830,7 +860,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     try { await this.table.submitTransaction(actions); }
     catch (error) {
       // Transport failures may occur after commit; the immutable receipt is the authoritative acknowledgement.
-      const committed = await this.replay(identity, eventId, roundId, playerId, holeNumber, score, expectedEtag, requestId, inputRevision);
+      const committed = await this.replay(identity, eventId, roundId, playerId, holeNumber, originalScore, expectedEtag, requestId, inputRevision);
       if (committed) return committed;
       if (isConflict(error)) throw new ApiError(409, 'SCORECARD_CHANGED');
       throw error;
