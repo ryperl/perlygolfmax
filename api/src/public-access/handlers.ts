@@ -86,7 +86,7 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
         }
         const value = await api.scores.leaderboard(identity, eventId, chargeRead);
         const summary = view === 'overall' || view === 'event-skins' ? publicLeaderboardSummary(value, view) : value;
-        return send(read(compact && 'kind' in summary && summary.kind === 'event-skins' ? compactSkinsSummary(summary) : summary));
+        return response(200, read(compact && 'kind' in summary && summary.kind === 'event-skins' ? compactSkinsSummary(summary) : summary));
       }
       if (action === 'purse') {
         const selectedPlayer = request.query.get('view') === 'player' ? uuid(request.query.get('playerId')) : null;
@@ -96,13 +96,13 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
           if (!detail) throw new ApiError(404, 'PLAYER_NOT_FOUND');
           return response(200, privateReadResponse(request, detail));
         }
-        return send(read(request.query.get('view') === 'summary' ? publicPurseSummary(value) : value));
+        return response(200, read(request.query.get('view') === 'summary' ? publicPurseSummary(value) : value));
       }
       const roundId = uuid(request.params.roundId);
       const lean = request.query.get('format') === 'lean';
       if (action === 'scores') {
         const round = await api.scores.get(identity, eventId, roundId);
-        return send(read(lean ? leanRoundScores(round, negotiated) : round));
+        return response(200, lean ? privateReadResponse(request, leanRoundScores(round, negotiated)) : read(round));
       }
       if (action === 'games') {
         const requestId = uuid(request.headers.get('Idempotency-Key'));
@@ -113,7 +113,7 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
         if (!isRecord(received.value) || Object.keys(received.value).length !== 1
           || !isRoundGameDefinitions(received.value.games)) throw new ApiError(400, 'INVALID_GAME_SETUP');
         const result = await api.scores.saveGames(identity, eventId, roundId, received.value.games, etag, requestId);
-        return send(lean ? { ...result, round: leanRoundScores(result.round, negotiated) } : result);
+        return lean ? response(200, { ...result, round: leanRoundScores(result.round, negotiated) }) : send(result);
       }
       const playerId = uuid(request.params.playerId);
       const requestId = uuid(request.headers.get('Idempotency-Key'));
@@ -130,7 +130,7 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
       if (action === 'score-game-hole' && !body.score.nassau?.length && !body.score.wolf?.length
         && !body.score.dots?.length && body.score.churchy?.version !== 3) throw new ApiError(400, 'INVALID_GAME_SCORE');
       const result = await api.scores.write(identity, eventId, roundId, playerId, Number(hole), body.score, etag, requestId, body.inputRevision);
-      return send(lean ? leanScoreWriteResult(result, negotiated) : result);
+      return lean ? response(200, leanScoreWriteResult(result, negotiated)) : send(result);
     } catch (error) {
       const status = error instanceof ApiError ? error.status : 503;
       const code = error instanceof ApiError ? error.code : 'SERVICE_UNAVAILABLE';

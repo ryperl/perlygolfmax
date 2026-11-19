@@ -208,6 +208,12 @@ checks; malformed or numerically changed replies are rejected. Private
 `dotAwardAudit` is omitted from routine save acknowledgements, never deleted
 from stored receipts. Legacy full reads and old API responses remain supported.
 Page hashes/quotas, staged transports, conditional writes and host limits stay.
+Typed public scoring reads and save replies select their negotiated full/lean
+projection once before digest-bound paging. Do not send an already projected
+round through recursive compatibility probing again. Untyped aggregate wrappers
+retain their compatibility handling. This removes redundant computation, not
+authority checks, fresh storage reads, quotas or numerical validation contracts;
+no process-wide response cache is introduced.
 The fictional 12-player, three-foursome heavy Wolf/Dots regression is 237,432
 UTF-8 bytes versus 1,059,473 full, below the existing 256 KiB inline threshold.
 

@@ -31,6 +31,17 @@ test('Churchie birdie Murphy permits par Sandy/Pully, retains target on retry/re
     await dialog.getByRole('checkbox', { name: 'Murphy called · Fictional golfer 2', exact: true }).check();
     await expect(dialog.getByText('Pending · enter a gross score', { exact: true })).toBeVisible();
     await dialog.getByRole('checkbox', { name: 'Murphy for birdie · Fictional golfer 2', exact: true }).check();
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+      const spacing = await dialog.locator('.murphy-call').evaluate((element) => {
+        const [called, birdie] = element.querySelectorAll(':scope > label.dots-special-choice');
+        if (!called || !birdie) throw new Error('Missing Murphy call or birdie choice');
+        const first = called.getBoundingClientRect(), second = birdie.getBoundingClientRect();
+        return { gap: second.top - first.bottom, heights: [first.height, second.height] };
+      });
+      expect(spacing.gap, `${theme}: Murphy and birdie controls need a visible gap`).toBeGreaterThanOrEqual(5);
+      for (const height of spacing.heights) expect(height).toBeGreaterThanOrEqual(44);
+    }
     const increase = dialog.getByRole('button', { name: 'Increase Murphy stakes · Fictional golfer 2', exact: true });
     await increase.click();
     await increase.click();
@@ -117,6 +128,8 @@ test('Churchie cards refresh and cold-load after another scorer saves a failed M
 test('Churchie blocks failed-call combinations before saving and preserves explicit corrections and presses', async ({ page }, testInfo) => {
   const fixture = await openChurcieV3Fixture(page, testInfo);
   try {
+    await page.setViewportSize({ width: 320, height: 900 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
     await order(page);
     const form = page.getByRole('form', { name: 'Group 1 hole 10 entry', exact: true });
     await form.getByRole('button', { name: 'Par for blanks', exact: true }).click();
@@ -138,6 +151,22 @@ test('Churchie blocks failed-call combinations before saving and preserves expli
     const murphy = dialog.getByRole('combobox', { name: 'Murphy call 1 · Fictional golfer 2', exact: true });
     await expect(murphy.getByRole('option', { name: 'Success', exact: true })).toHaveJSProperty('disabled', true);
     await murphy.selectOption('failure');
+    for (const width of [320, 390, 430]) for (const font of ['100%', '125%']) for (const theme of ['light', 'dark']) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.evaluate(({ theme, font }) => {
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.fontSize = font;
+      }, { theme, font });
+      const layout = await paree.evaluate((element) => {
+        const row = element.closest('.dots-call');
+        const hint = row?.querySelector(':scope > small'), action = row?.querySelector(':scope > button');
+        if (!row || !hint || !action) throw new Error('Missing Paree hint or remove action');
+        return { gap: action.getBoundingClientRect().top - hint.getBoundingClientRect().bottom,
+          fits: row.scrollWidth <= row.clientWidth };
+      });
+      expect(layout.gap, `${String(width)}px ${font} ${theme}: Paree removal must sit below the wrapped hint`).toBeGreaterThanOrEqual(4);
+      expect(layout.fits).toBe(true);
+    }
     await dialog.getByRole('combobox', { name: 'Murphy press stage 1 · Fictional golfer 2', exact: true }).selectOption('2');
     await dialog.getByRole('button', { name: 'Done', exact: true }).click();
     await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
