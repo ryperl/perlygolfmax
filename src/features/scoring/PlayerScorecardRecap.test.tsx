@@ -6,6 +6,7 @@ import { fictionalRoundScores } from '../../client/scoring.test-support';
 import { PlayerScorecardRecap } from './PlayerScorecardRecap';
 import { scorecardGamesFixture } from './scorecard-games.test-support';
 import { mixedTeeRound } from './tees.test-support';
+import { matchGamesFixture } from '../../domain/match-games.test-support';
 
 function fixture() {
   const first = fictionalRoundScores.cards[0];
@@ -29,6 +30,17 @@ function fixture() {
 }
 
 describe('individual traditional scorecard recap', () => {
+  it('keeps independent Match Play bets out of individual scorecard metrics', () => {
+    const f = matchGamesFixture();
+    const game = { ...f.nassau, kind: 'match-play' as const, name: 'Fictional Match Play',
+      stakes: { ...f.nassau.stakes, frontMinor: 0, backMinor: 0 } };
+    const card = f.cards[0];
+    if (!card) throw new Error('Missing fictional card');
+    render(<PlayerScorecardRecap round={f.round(f.cards, [game])} card={card} gameId={game.id} />);
+    expect(screen.getByText('Match Play bets and presses are in Games and Leaderboard.')).toBeVisible();
+    expect(screen.queryByText(/Nassau match bets/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Planned net settlement · USD')).not.toBeInTheDocument();
+  });
   it('keeps the estimate collapsed until requested and refreshes the expanded saved value', async () => {
     const { round, card } = fixture();
     const available = { playerId: card.playerId, method: 'estimated-18-hole' as const, pcc: 0 as const,

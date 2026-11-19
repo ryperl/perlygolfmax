@@ -12,7 +12,7 @@ import { isStrokeGameResult } from './stroke-games.js';
 import { isChurchyDefinition, isChurchyResult } from './churchy.js';
 import { isPublicScoreIdentity } from './public-access.js';
 import { isWolfDefinition, isWolfResults } from './wolf.js';
-import { isNassauDefinition, isNassauResults } from './nassau.js';
+import { isPressMatchDefinition, isNassauResults } from './nassau.js';
 import { nassauContextFromScores, nassauRecordsFor, wolfInputFromScores, wolfRecordsFor, wolfResultPlayers } from '../domain/game-declarations.js';
 import type { RoundGameScoringContext } from '../domain/game-declarations.js';
 import { sameJsonValue } from './round-context.js';
@@ -48,7 +48,7 @@ function pointsTable(value: unknown, maximum: number): boolean {
 export function isRoundGameDefinition(value: unknown): value is RoundGameDefinition {
   if (isRecord(value) && value.kind === 'dots') return isDotsDefinition(value);
   if (isRecord(value) && value.kind === 'wolf') return isWolfDefinition(value);
-  if (isRecord(value) && value.kind === 'nassau') return isNassauDefinition(value);
+  if (isRecord(value) && (value.kind === 'nassau' || value.kind === 'match-play')) return isPressMatchDefinition(value);
   if (isRecord(value) && value.kind === 'churchy') return isChurchyDefinition(value);
   if (isRecord(value) && (value.kind === 'ball-drop' || value.kind === 'skins' || value.kind === 'stroke-play')) {
     if (!isUuid(value.id) || !boundedText(value.name) || value.version !== 1
@@ -156,17 +156,19 @@ function isPlayerResult(value: unknown, game: StablefordGameDefinition): value i
     || value.status !== 'complete' && value.status !== 'in-progress'
     || (game.basis === 'gross' ? value.playingHandicap !== null : !integer(value.playingHandicap))) return false;
   const holes: GamePlayerResult['holes'][number][] = [];
+  const firstNumber = isRecord(value.holes[0]) ? value.holes[0].number : undefined;
+  if (firstNumber !== 1 && !(value.holes.length === 9 && firstNumber === 10)) return false;
   for (const [index, hole] of value.holes.entries()) {
-    if (!isRecord(hole) || !keys(hole, ['number', 'points', 'strokesReceived']) || hole.number !== index + 1
+    if (!isRecord(hole) || !keys(hole, ['number', 'points', 'strokesReceived']) || hole.number !== index + firstNumber
       || (hole.points !== null && (!points(hole.points, maximumExactPointsForGame(game)) || !allowedPoints.has(hole.points)))
       || (hole.strokesReceived !== null && !integer(hole.strokesReceived))) return false;
     if (unavailable ? hole.points !== null || hole.strokesReceived !== null
       : game.basis === 'gross' ? hole.strokesReceived !== 0 : hole.strokesReceived === null) return false;
-    holes.push({ number: index + 1, points: hole.points, strokesReceived: hole.strokesReceived });
+    holes.push({ number: index + firstNumber, points: hole.points, strokesReceived: hole.strokesReceived });
   }
   const scored = holes.filter((hole) => hole.points !== null).length;
-  if (value.holesScored !== scored || value.frontPoints !== total(holes.slice(0, 9))
-    || value.backPoints !== total(holes.slice(9)) || value.totalPoints !== total(holes)
+  if (value.holesScored !== scored || value.frontPoints !== total(holes.filter((hole) => hole.number <= 9))
+    || value.backPoints !== total(holes.filter((hole) => hole.number > 9)) || value.totalPoints !== total(holes)
     || !unavailable && value.status !== (scored === holes.length ? 'complete' : 'in-progress')) return false;
   if (!unavailable && game.basis === 'net' && integer(value.playingHandicap)) {
     const handicap = BigInt(value.playingHandicap);
@@ -215,10 +217,10 @@ export function isRoundGamesView(value: unknown, context?: RoundGameScoringConte
       seen.add(result.gameId);
       continue;
     }
-    if (game?.kind === 'nassau') {
+    if (game?.kind === 'nassau' || game?.kind === 'match-play') {
       const round = context && nassauContextFromScores(context);
       if (!context || !round || !keys(result, ['gameId', 'kind', 'version', 'players', 'nassau'])
-        || result.kind !== 'nassau' || result.version !== 1 || !Array.isArray(result.players) || result.players.length
+        || result.kind !== game.kind || result.version !== 1 || !Array.isArray(result.players) || result.players.length
         || !isNassauResults(result.nassau, game, round, context.cards,
           nassauRecordsFor(game, context.groups, context.cards), { courseHandicaps: context.courseHandicaps ?? [] })) return false;
       seen.add(result.gameId);

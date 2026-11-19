@@ -93,7 +93,7 @@ describe('saved game declaration merging', () => {
   });
 
   it('requires explicit new-kind capabilities while retaining old API baseline and Churchy flag behavior', () => {
-    for (const kind of ['stroke-play', 'wolf', 'nassau'] as const) {
+    for (const kind of ['stroke-play', 'wolf', 'nassau', 'match-play'] as const) {
       expect(supportsRoundGame({}, kind)).toBe(false);
       expect(supportsRoundGame({ supportedGameKinds: [kind] }, kind)).toBe(true);
     }

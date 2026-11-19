@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { AccountIdentity, EventSummary } from '../../../src/domain/events.js';
 import type { ScoreActor } from '../../../src/domain/test-access.js';
 import type { PlayerProfile } from '../../../src/domain/catalog.js';
+import { roundTee } from '../../../src/domain/round-tee.js';
 import type { EventRosterPlayer, EventSetupInput, EventWorkspace, OverallCompetition, RoundSnapshot } from '../../../src/domain/setup.js';
 import { isPrivateUpload, maximumPrivateWriteBytes } from '../../../src/contracts/private-values.js';
 import { isRecord, isUuid } from '../../../src/contracts/events.js';
@@ -250,6 +251,7 @@ export class TableWorkspaceStore {
       })),
       rounds: workspace.rounds.map((round) => ({
         id: round.id, name: round.name, courseId: round.courseId, courseVersionId: round.courseVersionId,
+        ...(round.roundSide === undefined ? {} : { roundSide: round.roundSide }),
         ...(round.teeTime === undefined ? {} : { teeTime: round.teeTime }),
         ...(round.startDate === undefined ? {} : { startDate: round.startDate }),
         ...(round.inputRevision ? { inputRevision: round.inputRevision } : {}),
@@ -428,7 +430,10 @@ export class TableWorkspaceStore {
   async correctionModel(identity: AccountIdentity, eventId: string, roundId: string): Promise<RoundCorrectionReadModel> {
     const state = await this.correctionState(identity, eventId, roundId);
     const version = await this.courses.readCapturedVersion(state.round.courseId, state.round.courseVersionId);
-    const compatibleTees = version.data.teeProfiles.filter((tee) => compatibleTeeLayouts(state.round.teeProfile, tee));
+    const compatibleTees = version.data.teeProfiles.flatMap((tee) => {
+      const selected = roundTee(tee, state.round.roundSide);
+      return selected && compatibleTeeLayouts(state.round.teeProfile, selected) ? [selected] : [];
+    });
     const ids = new Set(state.round.players.map((player) => player.playerId));
     const gameTeams = state.games?.games.flatMap((game) => isTeamGameDefinition(game)
       ? [{ gameId: game.id, teams: game.teams.map((team) => ({ id: team.id, name: team.name, playerIds: team.playerIds })) }] : []) ?? [];
@@ -473,7 +478,10 @@ export class TableWorkspaceStore {
     if ((body.expected.gamesEtag ?? null) !== (state.games?.etag ?? null)) throw new ApiError(409, 'GAMES_CHANGED');
     if ((body.expected.inputRevision ?? null) !== (state.round.inputRevision ?? null)) throw new ApiError(409, 'ROUND_INPUTS_CHANGED');
     const version = await this.courses.readCapturedVersion(state.round.courseId, state.round.courseVersionId);
-    const byTee = new Map(version.data.teeProfiles.map((tee) => [tee.id, tee]));
+    const byTee = new Map(version.data.teeProfiles.flatMap((tee) => {
+      const selected = roundTee(tee, state.round.roundSide);
+      return selected ? [[selected.id, selected] as const] : [];
+    }));
     const teeProfile = byTee.get(body.correction.teeProfileId);
     if (!teeProfile || !compatibleTeeLayouts(state.round.teeProfile, teeProfile)) throw new ApiError(400, 'INCOMPATIBLE_TEE_PROFILE');
     const roster = state.round.players.map((player) => player.playerId);
@@ -526,11 +534,13 @@ export class TableWorkspaceStore {
     if (!isRecord(updatedRound) || !isEventWorkspace({ ...state.workspace, rounds: state.workspace.rounds.map((round) =>
       round.id === roundId ? updatedRound : round) })) throw new ApiError(503, 'INVALID_STORED_WORKSPACE');
     for (const game of state.games?.games ?? []) {
-      if (game.kind !== 'nassau' && game.kind !== 'wolf' && game.kind !== 'dots') continue;
+      if (game.kind !== 'nassau' && game.kind !== 'match-play' && game.kind !== 'wolf' && game.kind !== 'dots') continue;
       const beforeGroup = state.round.groups.find((group) => group.number === game.groupNumber);
       const afterGroup = updatedRound.groups.find((group) => group.number === game.groupNumber);
       if (beforeGroup?.playerIds[0] !== afterGroup?.playerIds[0]
-        || (game.kind === 'nassau' ? nassauConfigurationIssues(game, updatedRound).length > 0
+        || game.kind === 'match-play'
+          && groupStartingHole(beforeGroup, state.round.teeProfile.holes) !== groupStartingHole(afterGroup, updatedRound.teeProfile.holes)
+        || (game.kind === 'nassau' || game.kind === 'match-play' ? nassauConfigurationIssues(game, updatedRound).length > 0
           : (game.kind === 'dots' ? !dotsDefinitionMatchesRound(game, dotRound(updatedRound, definitionCards(updatedRound)))
             : !wolfGroupMatchesRound(game, { layout: updatedRound.teeProfile.holes, groups: updatedRound.groups }))
             || groupStartingHole(beforeGroup, state.round.teeProfile.holes) !== groupStartingHole(afterGroup, updatedRound.teeProfile.holes))) {
@@ -738,6 +748,7 @@ export class TableWorkspaceStore {
       const requested = input.rounds.find((round) => round.id === saved.id);
       if (!requested || requested.name !== saved.name || requested.courseId !== saved.courseId
         || requested.courseVersionId !== saved.courseVersionId || requested.teeProfileId !== saved.teeProfile.id
+        || (requested.roundSide ?? saved.roundSide ?? 'full') !== (saved.roundSide ?? 'full')
         || canonical(requested.groups.map((group) => ({
           ...group, startingHole: group.startingHole ?? saved.teeProfile.holes[0]?.number,
         }))) !== canonical(saved.groups.map((group) => ({
@@ -770,8 +781,14 @@ export class TableWorkspaceStore {
       }
       const version = publicQuick ? await this.courses.readCapturedVersion(round.courseId, round.courseVersionId)
         : await this.courses.getVersion(identity, round.courseId, round.courseVersionId);
-      const teeProfile = version.data.teeProfiles.find((tee) => tee.id === round.teeProfileId);
+      const sourceTee = version.data.teeProfiles.find((tee) => tee.id === round.teeProfileId);
+      const roundSide = round.roundSide ?? oldRound?.roundSide ?? 'full';
+      const teeProfile = sourceTee && roundTee(sourceTee, roundSide);
       if (!teeProfile) throw new ApiError(400, 'TEE_PROFILE_NOT_FOUND');
+      if (teeProfile.holeCount === 9) {
+        const games = await readGameConfiguration(this.table, id, round.id, configuredGameRounds(access.event.gameRoundIds));
+        if (games?.games.some((game) => game.kind === 'nassau')) throw new ApiError(400, 'NASSAU_REQUIRES_EIGHTEEN_HOLES');
+      }
       if (round.groups.some((group) => group.startingHole !== undefined
         && !teeProfile.holes.some((hole) => hole.number === group.startingHole))) {
         throw new ApiError(400, 'INVALID_GROUP_STARTING_HOLE');
@@ -786,7 +803,10 @@ export class TableWorkspaceStore {
       if (allowPerGolferTees !== true && round.playerTeeSelections?.some((entry) => entry.teeProfileId !== teeProfile.id)) {
         throw new ApiError(400, 'PER_GOLFER_TEES_DISABLED');
       }
-      const availableTees = new Map(version.data.teeProfiles.map((tee) => [tee.id, tee]));
+      const availableTees = new Map(version.data.teeProfiles.flatMap((tee) => {
+        const selected = roundTee(tee, roundSide);
+        return selected ? [[selected.id, selected] as const] : [];
+      }));
       const playerTees: PlayerTeeProfile[] = [];
       for (const selection of selections) {
         if (selection.teeProfileId === teeProfile.id) continue;
@@ -797,6 +817,7 @@ export class TableWorkspaceStore {
       const oldPlayers = new Map(oldRound?.players.map((player) => [player.playerId, player]));
       rounds.push({
         id: round.id, name: round.name, courseId: round.courseId, courseVersionId: round.courseVersionId,
+        ...(roundSide === 'full' ? {} : { roundSide }),
         ...(teeTime === undefined ? {} : { teeTime }),
         ...(startDate === undefined ? {} : { startDate }),
         course: metadata(version.data), teeProfile,

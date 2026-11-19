@@ -65,6 +65,22 @@ function renderGroups(groups: readonly RoundGroup[]) {
 }
 
 describe('round setup editor', () => {
+  it('selects either nine from an eighteen-hole tee and resets out-of-side starts', async () => {
+    const profile = { ...fictionalProfile, holeCount: 18, totalPar: fictionalProfile.totalPar * 2,
+      totalYardage: fictionalProfile.totalYardage * 2, holes: [...fictionalProfile.holes,
+        ...fictionalProfile.holes.map((hole) => ({ ...hole, number: hole.number + 9, sourceId: hole.sourceId + 9, allocation: hole.allocation + 9 }))] };
+    const f = renderEditor([fictionalEntry], { ...fictionalVersion, data: { ...fictionalVersion.data, teeProfiles: [profile] } });
+    const holes = screen.getByLabelText('Round 1 holes');
+    await waitFor(() => { expect(holes).toBeEnabled(); });
+    fireEvent.change(holes, { target: { value: 'back' } });
+    expect(f.changed.mock.lastCall?.[0]).toMatchObject({ roundSide: 'back', groups: [{ startingHole: 10 }] });
+    expect(within(screen.getByLabelText('Round 1 Group 1 starting hole')).getAllByRole('option')).toHaveLength(9);
+    expect(screen.getByText(/9 holes · Par/)).toBeVisible();
+    fireEvent.change(holes, { target: { value: 'front' } });
+    expect(f.changed.mock.lastCall?.[0]).toMatchObject({ roundSide: 'front', groups: [{ startingHole: 1 }] });
+    fireEvent.change(holes, { target: { value: 'full' } });
+    expect(within(screen.getByLabelText('Round 1 Group 1 starting hole')).getAllByRole('option')).toHaveLength(18);
+  });
   it('edits and clears one round tee time without changing course, tee or groups', async () => {
     const f = renderEditor();
     const time = screen.getByLabelText('Round 1 tee time');

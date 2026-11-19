@@ -3,6 +3,15 @@ import { fictionalId, fictionalSetup, fictionalWorkspace } from '../../client/ca
 import { inputFrom, sameRoundInput, sameSetupInput, setupProblems } from './setup-draft';
 
 describe('setup draft presentation', () => {
+  it('retains the captured side on reopen and distinguishes returning to a full round', () => {
+    const saved = fictionalWorkspace.rounds[0];
+    if (!saved) throw new Error('Missing fictional round');
+    const input = inputFrom({ ...fictionalWorkspace, rounds: [{ ...saved, roundSide: 'back' }] });
+    const round = input.rounds[0];
+    if (!round) throw new Error('Missing fictional input');
+    expect(round.roundSide).toBe('back');
+    expect(sameRoundInput(round, { ...round, roundSide: 'full' })).toBe(false);
+  });
   it('retains end dates, detects clearing and explains invalid date ranges', () => {
     const input = inputFrom({ ...fictionalWorkspace, event: { ...fictionalWorkspace.event,
       startDate: '2026-11-06', endDate: '2026-11-10' } });

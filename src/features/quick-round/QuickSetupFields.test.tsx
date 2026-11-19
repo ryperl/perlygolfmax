@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { fictionalId, fictionalPlayers, fictionalProfile, fictionalSetup } from '../../client/catalog.test-support';
 import { QuickSetupFields } from './QuickSetupFields';
+import type { EventSetupInput } from '../../domain/setup';
 
 function Fixture() {
   const [draft, setDraft] = useState({ ...fictionalSetup, allowPerGolferTees: true });
@@ -15,6 +16,24 @@ function Fixture() {
 }
 
 describe('Quick round setup selections', () => {
+  it('supports back/front nine in compact setup and restores the complete layout', () => {
+    const profile = { ...fictionalProfile, holeCount: 18, holes: [...fictionalProfile.holes,
+      ...fictionalProfile.holes.map((hole) => ({ ...hole, number: hole.number + 9, sourceId: hole.sourceId + 9, allocation: hole.allocation + 9 }))] };
+    const changed = vi.fn<(value: EventSetupInput) => void>();
+    function NineFixture() {
+      const [draft, setDraft] = useState<EventSetupInput>(fictionalSetup);
+      return <QuickSetupFields draft={draft} courses={[]} players={fictionalPlayers} profiles={[profile]}
+        full={false} locked={false} disabled={false} onChange={(value) => { setDraft(value); changed(value); }} />;
+    }
+    render(<NineFixture />);
+    fireEvent.change(screen.getByLabelText('Round holes'), { target: { value: 'back' } });
+    expect(changed.mock.lastCall?.[0].rounds[0]).toMatchObject({ roundSide: 'back', groups: [{ startingHole: 10 }] });
+    expect(within(screen.getByLabelText('Group 1 starting hole')).getAllByRole('option')).toHaveLength(9);
+    fireEvent.change(screen.getByLabelText('Round holes'), { target: { value: 'front' } });
+    expect(screen.getByLabelText('Group 1 starting hole')).toHaveValue('1');
+    fireEvent.change(screen.getByLabelText('Round holes'), { target: { value: 'full' } });
+    expect(within(screen.getByLabelText('Group 1 starting hole')).getAllByRole('option')).toHaveLength(18);
+  });
   it('sorts golfer choices by surname before paging without changing assignment identities', () => {
     const players = Array.from({ length: 13 }, (_, index) => ({
       id: fictionalId(index + 1), displayName: index === 12 ? 'Zoe Adams' : `Fictional Zulu${String(index).padStart(2, '0')}`,

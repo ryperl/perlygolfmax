@@ -21,7 +21,7 @@ export function canManageGame(round: RoundScores, game: RoundGameDefinition): bo
   if (game.kind === 'dots' && game.mode === 'individual' && !supportsIndividualDotsPlayerCount(round, game.playerIds.length)) return false;
   if (game.kind === 'dots' && !supportsDotsSpecials(round, game.specials)) return false;
   if (game.kind === 'churchy' && (round.churchyEnabled !== true || game.version !== 1 && !round.churchyRulesVersions?.includes(game.version))) return false;
-  if (game.kind === 'dots' || game.kind === 'wolf' || game.kind === 'nassau') {
+  if (game.kind === 'dots' || game.kind === 'wolf' || game.kind === 'nassau' || game.kind === 'match-play') {
     if (round.setupLocked) return false;
   }
   if (canManageAllRoundGames(round)) return true;

@@ -156,7 +156,7 @@ export function calculateGameResults(
   dotsCategorySweepsVersion: 0 | 1 = 1,
 ): readonly RoundGameResult[] {
   const layout = [...round.teeProfile.holes].sort((left, right) => left.number - right.number);
-  const courseHandicaps = games.some((game) => game.kind === 'wolf' || game.kind === 'nassau') ? publishedCourseHandicaps(round) : [];
+  const courseHandicaps = games.some((game) => game.kind === 'wolf' || game.kind === 'nassau' || game.kind === 'match-play') ? publishedCourseHandicaps(round) : [];
   const internal = calculateInternalGameResults(games, { roundId: round.id, layout, groups: round.groups, cards, stringRulesVersion, dotsCategorySweepsVersion,
     courseHandicaps: games.some((game) => game.kind === 'wolf') ? courseHandicaps : [],
     teeStrokeAllocation: round.teeProfile.strokeAllocation,
@@ -167,7 +167,7 @@ export function calculateGameResults(
       if (!result) throw new Error('Internal game calculation is missing its configured result.');
       return result;
     }
-    if (game.kind === 'nassau') return { gameId: game.id, kind: 'nassau', version: 1, players: [],
+    if (game.kind === 'nassau' || game.kind === 'match-play') return { gameId: game.id, kind: game.kind, version: 1, players: [],
       nassau: calculateNassau(game, round, cards, nassauRecordsFor(game, round.groups, cards), { courseHandicaps }) };
     if (game.kind === 'churchy') {
       const group = round.groups.find((entry) => entry.number === game.groupNumber);

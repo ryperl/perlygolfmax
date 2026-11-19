@@ -1,4 +1,4 @@
-import type { NassauGameDefinition, NassauHoleRecord, NassauManualPress, NassauRoundContext } from './nassau.js';
+import type { PressMatchGameDefinition, NassauHoleRecord, NassauManualPress, NassauRoundContext } from './nassau.js';
 import type { WolfGameDefinition, WolfHoleRecord, WolfRoundInput } from './wolf.js';
 import { sameWolfChoice } from './wolf.js';
 import type { HoleScore, RoundScores, Scorecard } from './scoring.js';
@@ -132,7 +132,7 @@ export function scoreMatchesIntent(saved: HoleScore, intent: HoleScore): boolean
   }
 }
 
-export function gameAnchorPlayerId(game: WolfGameDefinition | NassauGameDefinition | DotsGameDefinition, groups: readonly RoundGroup[]): string | undefined {
+export function gameAnchorPlayerId(game: WolfGameDefinition | PressMatchGameDefinition | DotsGameDefinition, groups: readonly RoundGroup[]): string | undefined {
   return groups.find((group) => group.number === game.groupNumber)?.playerIds[0];
 }
 
@@ -148,7 +148,7 @@ export function dotsInputFromScores(round: RoundGameScoringContext): DotRoundInp
     ...(round.playerTees?.length ? { playerLayouts: round.playerTees.map((entry) => ({ playerId: entry.playerId, layout: entry.profile.holes })) } : {}) };
 }
 
-export function nassauRecordsFor(game: NassauGameDefinition, groups: readonly RoundGroup[], cards: readonly Scorecard[]): readonly NassauHoleRecord[] {
+export function nassauRecordsFor(game: PressMatchGameDefinition, groups: readonly RoundGroup[], cards: readonly Scorecard[]): readonly NassauHoleRecord[] {
   return cards.find((card) => card.playerId === gameAnchorPlayerId(game, groups))?.holes
     .flatMap((hole) => hole.score.nassau?.filter((record) => record.gameId === game.id) ?? []) ?? [];
 }

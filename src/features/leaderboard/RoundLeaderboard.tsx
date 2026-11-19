@@ -117,7 +117,7 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
         }))} />
         : game && <>
       <p className="leaderboard-format">{gameScoringLabel(game)}</p>
-      {game.kind === 'nassau' ? <NassauResults game={game} result={result?.nassau} players={round.cards} />
+      {game.kind === 'nassau' || game.kind === 'match-play' ? <NassauResults game={game} result={result?.nassau} players={round.cards} />
         : game.kind === 'churchy' ? <ChurchyResults game={game} result={result} /> : teamGame && result?.teamSetupRequired ? <>
         <p>Update team assignments. Team standings are unavailable until the teams match this round&apos;s golfers.</p>
         {canManage && <button type="button" disabled={busy} onClick={onManageGames}>Update team assignments</button>}

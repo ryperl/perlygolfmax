@@ -10,14 +10,14 @@ import { mergeNassauRecords, mergeWolfRecords } from '../../src/domain/game-decl
 import { contrastRatio } from './contrast';
 import { matchRound, matchWorkspace, withMatchResults, wolf } from './match-games-fixture-data';
 
-async function openFixture(page: Page, testInfo: TestInfo, late = false) {
+async function openFixture(page: Page, testInfo: TestInfo, late = false, count: 9 | 18 = 18) {
   const server = await createServer({
     configFile: false, cacheDir: testInfo.outputPath('vite-cache'),
     server: { host: '127.0.0.1', port: 0, hmr: false }, esbuild: { jsx: 'automatic' },
     optimizeDeps: { noDiscovery: true, include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'] },
     logLevel: 'error',
   });
-  let stored = matchRound(late);
+  let stored = matchRound(late, count);
   let writes = 0, reads = 0, configWrites = 0;
   const targets: string[] = [];
   expect(isRoundScores(stored)).toBe(true);
@@ -80,7 +80,7 @@ async function openFixture(page: Page, testInfo: TestInfo, late = false) {
       return route.fulfill({ json: result });
     });
     await page.goto(`${origin}/#events?event=${stored.eventId}&round=${stored.roundId}`);
-    await expect(page.getByRole('form', { name: 'Group 1 hole 1 entry', exact: true })).toBeVisible();
+    await expect(page.getByRole('form', { name: `Group 1 hole ${count === 9 ? '17' : '1'} entry`, exact: true })).toBeVisible();
     return {
       close: () => server.close(),
       counters: () => ({ writes, reads, configWrites, targets }),
@@ -102,6 +102,51 @@ async function openFixture(page: Page, testInfo: TestInfo, late = false) {
       },
     };
   } catch (error) { await server.close(); throw error; }
+}
+
+for (const count of [9, 18] as const) {
+  test(`separate ${String(count)}-hole Match Play saves one stake and a two-down press without Nassau bets`, async ({ page }, testInfo) => {
+    const fixture = await openFixture(page, testInfo, false, count);
+    try {
+      await page.setViewportSize({ width: 390, height: 900 });
+      await page.getByRole('button', { name: 'Games', exact: true }).click();
+      await page.getByRole('button', { name: 'Add game', exact: true }).click();
+      const editor = page.getByRole('form', { name: 'Game settings' });
+      await editor.getByRole('combobox', { name: 'Game type', exact: true }).selectOption('match-play');
+      await editor.getByRole('combobox', { name: 'Playing group', exact: true }).selectOption('1');
+      await editor.getByRole('combobox', { name: 'Score basis', exact: true }).selectOption('gross');
+      await editor.getByRole('combobox', { name: 'Side A golfer 1', exact: true }).selectOption('00000000-0000-4000-8000-000000000001');
+      await editor.getByRole('combobox', { name: 'Side B golfer 1', exact: true }).selectOption('00000000-0000-4000-8000-000000000002');
+      await editor.getByRole('textbox', { name: 'Match stake per side · USD $', exact: true }).fill('1.01');
+      await expect(editor.getByRole('textbox', { name: 'Front stake per side · USD $' })).toHaveCount(0);
+      await editor.getByRole('button', { name: 'Save game', exact: true }).click();
+      await expect(page.getByText('Game settings saved.', { exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'Enter scores', exact: true }).click();
+      const start = count === 9 ? 17 : 1;
+      for (const hole of [start, start + 1]) {
+        const form = page.getByRole('form', { name: `Group 1 hole ${String(hole)} entry`, exact: true });
+        await form.getByRole('combobox', { name: `Side A vs Side B · Hole ${String(hole)}`, exact: true }).selectOption('side-a');
+        for (const input of await form.locator('input[inputmode="numeric"]').all()) await input.fill('4');
+        await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+      }
+      const next = count === 9 ? 10 : 3;
+      const form = page.getByRole('form', { name: `Group 1 hole ${String(next)} entry`, exact: true });
+      await form.getByRole('button', { name: 'Stage manual press', exact: true }).click();
+      for (const input of await form.locator('input[inputmode="numeric"]').all()) await input.fill('4');
+      await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+      await expect(page.getByRole('heading', { name: `Hole ${String(next + 1)}`, exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'Games', exact: true }).click();
+      const board = page.getByRole('region', { name: 'Match Play matchboard', exact: true });
+      await expect(board.getByText('Match', { exact: true })).toBeVisible();
+      await expect(board.getByText('Match · manual press', { exact: true })).toBeVisible();
+      await expect(board.getByText('Front', { exact: true })).toHaveCount(0);
+      await expect(board.getByText('Back', { exact: true })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Edit Match Play', exact: true })).toBeDisabled();
+      expect(fixture.counters().configWrites).toBe(1);
+      expect(fixture.counters().targets.filter((path) => path.endsWith('/games'))).toHaveLength(3);
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    } finally { await fixture.close(); }
+  });
 }
 
 async function narrowControls(page: Page, scope: Locator) {

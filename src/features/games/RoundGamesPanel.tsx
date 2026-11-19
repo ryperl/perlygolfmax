@@ -89,8 +89,8 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
       setMessage('This API does not support editing this game. Your draft is retained.');
       return;
     }
-    if ((round.setupLocked || editingRound.setupLocked) && (editor.draft.kind === 'nassau' || editor.draft.kind === 'wolf' || editor.draft.kind === 'dots')) {
-      setMessage('Dots, Nassau and Wolf must be configured before the first saved score. Other game settings remain editable.');
+    if ((round.setupLocked || editingRound.setupLocked) && (editor.draft.kind === 'nassau' || editor.draft.kind === 'match-play' || editor.draft.kind === 'wolf' || editor.draft.kind === 'dots')) {
+      setMessage('Dots, Nassau, Match Play and Wolf must be configured before the first saved score. Other game settings remain editable.');
       return;
     }
     if (editor.draft.kind === 'churchy' && round.churchyEnabled !== true) {
@@ -140,9 +140,9 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
       setMessage('This game is not editable with the current permission or API capability. Your draft is retained.');
       return;
     }
-    if (game?.kind === 'nassau' || game?.kind === 'wolf' || game?.kind === 'dots') {
+    if (game?.kind === 'nassau' || game?.kind === 'match-play' || game?.kind === 'wolf' || game?.kind === 'dots') {
       const group = editingRound.groups.find((entry) => entry.number === game.groupNumber);
-      const ids = game.kind === 'nassau' ? game.sides.flatMap((side) => side.playerIds) : game.playerIds;
+      const ids = game.kind === 'nassau' || game.kind === 'match-play' ? game.sides.flatMap((side) => side.playerIds) : game.playerIds;
       if (!group || ids.some((id) => !group.playerIds.includes(id))
         || game.kind === 'wolf' && group.playerIds.length !== 4
         || game.kind === 'dots' && (ids.length !== group.playerIds.length
@@ -169,7 +169,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
     }
     const intended = game && replaceGame(editor.base, game);
     if (!intended) {
-      setMessage(editor.draft.kind === 'wolf' || editor.draft.kind === 'nassau'
+      setMessage(editor.draft.kind === 'wolf' || editor.draft.kind === 'nassau' || editor.draft.kind === 'match-play'
         ? 'Check the game name, saved playing group, distinct participants and order. Enter USD dollars and cents, or choose No planned money.'
         : editor.draft.kind === 'dots' ? 'Choose a saved playing group, compatible mode and enabled specials with positive whole units. Solo play is stats-only; otherwise use a valid optional USD rate with at most two decimal places.'
         : editor.draft.kind === 'churchy'
@@ -287,7 +287,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
             && games.filter((entry) => entry.kind === 'churchy').length > 1 ? ` · Group ${String(game.groupNumber)}` : ''}</button>}
         {!supportsRoundGame(round, game.kind ?? 'stableford') && <p>This API does not advertise support for editing this game.</p>}
       </div>)}
-      {round.setupLocked && games.some((game) => game.kind === 'nassau' || game.kind === 'wolf' || game.kind === 'dots')
+      {round.setupLocked && games.some((game) => game.kind === 'nassau' || game.kind === 'match-play' || game.kind === 'wolf' || game.kind === 'dots')
         && <p className="game-hint">Setup locked by saved scoring. Score entry retains hole declarations.</p>}
       {!editor && !archived && canManage && <button type="button" disabled={disabled || games.length >= maximumGamesPerRound}
         onClick={() => { open(); }}>Add game</button>}

@@ -7,6 +7,7 @@ import { compatibleTeeLayouts } from '../../domain/tees';
 import { calculateCourseHandicap } from '../../domain/stableford';
 import { comparePlayerNames } from '../../domain/player-order';
 import { CourseHandicap } from '../scoring';
+import { roundTee } from '../../domain/round-tee';
 
 export function QuickSetupFields({ draft, courses, players, profiles, courseHandicaps, locked, disabled, full, onChange }: {
   readonly draft: EventSetupInput;
@@ -25,8 +26,13 @@ export function QuickSetupFields({ draft, courses, players, profiles, courseHand
   const [error, setError] = useState('');
   const round = draft.rounds[0];
   if (!round) return null;
-  const common = profiles.find((profile) => profile.id === round.teeProfileId);
-  const compatible = common ? profiles.filter((profile) => compatibleTeeLayouts(common, profile)) : [];
+  const sourceTee = profiles.find((profile) => profile.id === round.teeProfileId);
+  const playingProfiles = profiles.flatMap((profile) => {
+    const selected = locked && profile.holeCount === 9 ? profile : roundTee(profile, round.roundSide);
+    return selected ? [selected] : [];
+  });
+  const common = playingProfiles.find((profile) => profile.id === round.teeProfileId);
+  const compatible = common ? playingProfiles.filter((profile) => compatibleTeeLayouts(common, profile)) : [];
   const matches = players.filter((player) => player.displayName.toLowerCase().includes(playerQuery.trim().toLowerCase())).sort(comparePlayerNames);
   const last = Math.max(0, Math.ceil(matches.length / 12) - 1);
   const visible = matches.slice(Math.min(page, last) * 12, (Math.min(page, last) + 1) * 12);
@@ -80,18 +86,38 @@ export function QuickSetupFields({ draft, courses, players, profiles, courseHand
       <label>Find saved courses<input type="search" value={courseQuery} onChange={(event) => { setCourseQuery(event.target.value); }} /></label>
       <label>Course<select value={round.courseId} onChange={(event) => {
         const course = courses.find((entry) => entry.id === event.target.value);
-        changeRound({ ...round, courseId: course?.id ?? '', courseVersionId: course?.latestVersionId ?? '', teeProfileId: 0,
+        changeRound({ ...round, courseId: course?.id ?? '', courseVersionId: course?.latestVersionId ?? '', teeProfileId: 0, roundSide: 'full',
           playerTeeSelections: [], groups: round.groups.map(({ number, playerIds }) => ({ number, playerIds })) });
       }}><option value="">Choose a saved course</option>
         {courses.filter((course) => course.id === round.courseId || course.name.toLowerCase().includes(courseQuery.trim().toLowerCase()))
           .map((course) => <option key={course.id} value={course.id}>{course.name}</option>)}
       </select></label>
       <label>Default tee<select value={round.teeProfileId} onChange={(event) => {
-        const tee = profiles.find((profile) => profile.id === Number(event.target.value));
-        changeRound({ ...round, teeProfileId: tee?.id ?? 0, playerTeeSelections: [],
+        const source = profiles.find((profile) => profile.id === Number(event.target.value));
+        const side = source?.holeCount === 18 ? round.roundSide ?? 'full' : 'full';
+        const tee = source && roundTee(source, side);
+        changeRound({ ...round, teeProfileId: tee?.id ?? 0, roundSide: side, playerTeeSelections: [],
           groups: round.groups.map((group) => ({ ...group, startingHole: group.startingHole !== undefined && tee?.holes.some((hole) => hole.number === group.startingHole)
             ? group.startingHole : tee?.holes[0]?.number ?? 1 })) });
-      }}><option value={0}>Choose a tee</option>{profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name} / {profile.category}</option>)}</select></label>
+      }}><option value={0}>Choose a tee</option>{profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name} / {profile.category} / {profile.holeCount} holes</option>)}</select></label>
+      <label>Round holes<select value={round.roundSide ?? 'full'} disabled={sourceTee?.holeCount !== 18} onChange={(event) => {
+        const side = event.target.value;
+        if (side !== 'full' && side !== 'front' && side !== 'back' || !sourceTee) return;
+        const tee = roundTee(sourceTee, side);
+        if (!tee) return;
+        changeRound({ ...round, roundSide: side, playerTeeSelections: (round.playerTeeSelections ?? []).filter((entry) => {
+          const personal = profiles.find((profile) => profile.id === entry.teeProfileId);
+          const selected = personal && roundTee(personal, side);
+          return selected && compatibleTeeLayouts(tee, selected);
+        }), groups: round.groups.map((group) => ({ ...group, startingHole: tee.holes.some((hole) => hole.number === group.startingHole)
+          ? group.startingHole ?? 1 : tee.holes[0]?.number ?? 1 })) });
+      }}>
+        <option value="full">All holes (selected tee)</option>
+        {(sourceTee?.holeCount === 18 || round.roundSide === 'front' || round.roundSide === 'back') && <>
+          <option value="front">9 holes — Front (1–9)</option><option value="back">9 holes — Back (10–18)</option>
+        </>}
+      </select></label>
+      {common && <p>{common.holeCount} holes · Par {common.totalPar} · {common.totalYardage.toLocaleString('en-US')} yards</p>}
       <label>Find saved golfers<input type="search" value={playerQuery} onChange={(event) => { setPlayerQuery(event.target.value); setPage(0); }} /></label>
       <div className="quick-golfer-options">{visible.map((player) => <label key={player.id}>
         <input type="checkbox" checked={draft.playerIds.includes(player.id)} onChange={() => { togglePlayer(player.id); }} />
@@ -118,7 +144,7 @@ export function QuickSetupFields({ draft, courses, players, profiles, courseHand
         </select></label>
         {group.playerIds.map((id) => {
           const player = players.find((entry) => entry.id === id);
-          const tee = profiles.find((profile) => profile.id === round.playerTeeSelections?.find((entry) => entry.playerId === id)?.teeProfileId) ?? common;
+          const tee = playingProfiles.find((profile) => profile.id === round.playerTeeSelections?.find((entry) => entry.playerId === id)?.teeProfileId) ?? common;
           const handicap = player?.handicapIndexValue === undefined ? 'uncaptured-handicap-index'
             : player.handicapIndexValue === null ? 'missing-handicap-index'
             : !tee ? 'missing-tee-ratings' : calculateCourseHandicap(player.handicapIndexValue, tee);

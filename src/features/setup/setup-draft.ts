@@ -8,6 +8,7 @@ import { sameTeeSelections } from '../../domain/tees';
 export function roundInput(round: RoundSnapshot): RoundSetupInput {
   return {
     id: round.id, name: round.name, courseId: round.courseId, courseVersionId: round.courseVersionId,
+    ...(round.roundSide === undefined ? {} : { roundSide: round.roundSide }),
     ...(round.teeTime === undefined ? {} : { teeTime: round.teeTime }),
     ...(round.startDate === undefined ? {} : { startDate: round.startDate }),
     teeProfileId: round.teeProfile.id, groups: round.groups,
@@ -36,6 +37,7 @@ export function sameRoundInput(left: RoundSetupInput, right: RoundSetupInput): b
     && (left.teeTime ?? '') === (right.teeTime ?? '')
     && (left.startDate ?? '') === (right.startDate ?? '')
     && left.courseVersionId === right.courseVersionId && left.teeProfileId === right.teeProfileId
+    && (left.roundSide ?? 'full') === (right.roundSide ?? 'full')
     && sameTeeSelections(left.playerTeeSelections, right.playerTeeSelections, left.teeProfileId)
     && left.groups.length === right.groups.length && left.groups.every((group, index) => {
       const other = right.groups[index];

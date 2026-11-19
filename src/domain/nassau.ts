@@ -16,10 +16,10 @@ export interface NassauSide {
   readonly playerIds: readonly string[];
 }
 
-export interface NassauGameDefinition {
+interface MatchGameDefinition {
   readonly id: string;
   readonly name: string;
-  readonly kind: 'nassau';
+  readonly kind: 'nassau' | 'match-play';
   readonly version: 1;
   readonly basis: 'gross' | 'net';
   readonly groupNumber: number;
@@ -38,6 +38,16 @@ export interface NassauGameDefinition {
   readonly points?: never;
   readonly handicapAllowancePercent?: never;
 }
+
+export interface NassauGameDefinition extends MatchGameDefinition {
+  readonly kind: 'nassau';
+}
+
+export interface MatchPlayGameDefinition extends MatchGameDefinition {
+  readonly kind: 'match-play';
+}
+
+export type PressMatchGameDefinition = NassauGameDefinition | MatchPlayGameDefinition;
 
 export interface NassauManualPress {
   readonly id: string;
@@ -143,7 +153,7 @@ export interface NassauIssue {
 
 export interface NassauResults {
   readonly gameId: string;
-  readonly kind: 'nassau';
+  readonly kind: 'nassau' | 'match-play';
   readonly version: 1;
   readonly status: 'complete' | 'in-progress' | 'unavailable';
   readonly matches: readonly NassauMatchResult[];
@@ -182,7 +192,7 @@ function selectedTee(round: NassauRoundContext, playerId: string): NassauRoundCo
   return round.playerTees?.find((entry) => entry.playerId === playerId)?.profile ?? round.teeProfile;
 }
 
-export function nassauConfigurationIssues(game: NassauGameDefinition, round: NassauRoundContext): readonly NassauIssue[] {
+export function nassauConfigurationIssues(game: PressMatchGameDefinition, round: NassauRoundContext): readonly NassauIssue[] {
   const issues: NassauIssue[] = [];
   const sizes = game.sides.map((side) => side.playerIds.length).sort((a, b) => a - b).join(',');
   const expected = game.variant === 'singles' ? '1,1' : game.variant === 'three-way' ? '1,1,1'
@@ -199,12 +209,27 @@ export function nassauConfigurationIssues(game: NassauGameDefinition, round: Nas
     issues.push({ code: 'invalid-group' });
   }
   const tee = round.teeProfile;
-  if (tee.holeCount !== 18 || tee.holes.length !== 18
-    || new Set(tee.holes.map((hole) => hole.number)).size !== 18
+  const count = tee.holes.length;
+  const start = group[0]?.startingHole ?? tee.holes[0]?.number;
+  if ((game.kind === 'nassau' ? count !== 18 : count !== 9 && count !== 18)
+    || tee.holeCount !== count || new Set(tee.holes.map((hole) => hole.number)).size !== count
     || tee.holes.some((hole) => !Number.isInteger(hole.number) || hole.number < 1 || hole.number > 18)
+    || count === 9 && !tee.holes.every((hole) => hole.number <= 9) && !tee.holes.every((hole) => hole.number >= 10)
+    || game.kind === 'match-play' && !tee.holes.some((hole) => hole.number === start)
     || ids.some((id) => !compatibleTeeLayouts(tee, selectedTee(round, id))
       || (round.playerTees?.filter((entry) => entry.playerId === id).length ?? 0) > 1)) issues.push({ code: 'invalid-layout' });
+  if (game.kind === 'match-play' && (game.stakes.frontMinor !== 0 || game.stakes.backMinor !== 0)) {
+    issues.push({ code: 'invalid-definition' });
+  }
   return issues;
+}
+
+function playingNumbers(game: PressMatchGameDefinition, round: NassauRoundContext): readonly number[] {
+  const numbers = [...round.teeProfile.holes].sort((a, b) => a.number - b.number).map((hole) => hole.number);
+  if (game.kind === 'nassau') return Array.from({ length: 18 }, (_, index) => index + 1);
+  const start = round.groups.find((group) => group.number === game.groupNumber)?.startingHole ?? round.teeProfile.holes[0]?.number;
+  const index = numbers.indexOf(start ?? 0);
+  return index < 0 ? numbers : [...numbers.slice(index), ...numbers.slice(0, index)];
 }
 
 function exact(value: bigint): number | null {
@@ -238,7 +263,7 @@ function settleBet(
 }
 
 function holeResults(
-  game: NassauGameDefinition, round: NassauRoundContext, cards: readonly Scorecard[],
+  game: PressMatchGameDefinition, round: NassauRoundContext, cards: readonly Scorecard[],
   records: readonly NassauHoleRecord[], matchId: string, a: NassauSide, b: NassauSide, invalid: boolean,
   published: NassauHandicapInputs,
 ): readonly NassauHoleResult[] {
@@ -253,8 +278,7 @@ function holeResults(
   const lowest = netValid ? Math.min(...values.flatMap((value) => typeof value === 'number' ? [value] : [])) : null;
   const relativeValid = lowest !== null && values.every((value) =>
     typeof value === 'number' && exact(BigInt(value) - BigInt(lowest)) !== null);
-  return Array.from({ length: 18 }, (_, index): NassauHoleResult => {
-    const number = index + 1;
+  return playingNumbers(game, round).map((number): NassauHoleResult => {
     const matching = records.filter((record) => record.number === number);
     const overrides = matching.flatMap((record) => record.outcomes.filter((entry) => entry.matchId === matchId));
     const base = { number, source: 'scores' as const, sideAScore: null, sideBScore: null };
@@ -277,7 +301,7 @@ function holeResults(
       const relative = typeof handicap === 'number' && lowest !== null ? exact(BigInt(handicap) - BigInt(lowest)) : null;
       const allocation = tee.holes.find((hole) => hole.number === number)?.allocation;
       const received = game.basis === 'gross' ? 0 : relative !== null && allocation !== undefined
-        ? handicapStrokesForHole(relative, allocation, 18) : null;
+        ? handicapStrokesForHole(relative, allocation, round.teeProfile.holes.length) : null;
       return [id, received === null || !Number.isSafeInteger(received) ? null : exact(BigInt(score.strokes) - BigInt(received))];
     }));
     const sideScore = (side: NassauSide): number | null => {
@@ -302,10 +326,16 @@ function delta(hole: NassauHoleResult): number {
 type BetInput = Pick<NassauBetResult,
   'id' | 'matchId' | 'segment' | 'origin' | 'parentBetId' | 'manualPress' | 'startHole' | 'endHole' | 'stakeMinor'>;
 
+function betHoles(holes: readonly NassauHoleResult[], bet: Pick<BetInput, 'startHole' | 'endHole'>): readonly NassauHoleResult[] {
+  const first = holes.findIndex((hole) => hole.number === bet.startHole);
+  const last = holes.findIndex((hole) => hole.number === bet.endHole);
+  return first < 0 || last < first ? [] : holes.slice(first, last + 1);
+}
+
 function betResult(
   input: BetInput, holes: readonly NassauHoleResult[], sides: readonly NassauSide[], stale = false, blocked = false,
 ): NassauBetResult {
-  const window = holes.filter((hole) => hole.number >= input.startHole && hole.number <= input.endHole);
+  const window = betHoles(holes, input);
   const known = window.filter((hole) => hole.status === 'complete');
   const remainingHoles = window.length - known.length;
   const lead = known.reduce((position, hole) => position + delta(hole), 0);
@@ -319,20 +349,23 @@ function betResult(
 }
 
 function prefixAt(holes: readonly NassauHoleResult[], bet: NassauBetResult, after: number): number | null {
-  if (!Number.isInteger(after) || after < bet.startHole || after >= bet.endHole) return null;
-  const prefix = holes.filter((hole) => hole.number >= bet.startHole && hole.number <= after);
-  return prefix.length !== after - bet.startHole + 1 || prefix.some((hole) => hole.status !== 'complete')
+  const window = betHoles(holes, bet);
+  const index = window.findIndex((hole) => hole.number === after);
+  if (index < 0 || index === window.length - 1) return null;
+  const prefix = window.slice(0, index + 1);
+  return prefix.some((hole) => hole.status !== 'complete')
     ? null : prefix.reduce((position, hole) => position + delta(hole), 0);
 }
 
 function proofFor(
-  game: NassauGameDefinition, round: NassauRoundContext, match: NassauMatchResult, bet: NassauBetResult, after: number, lead: number,
+  game: PressMatchGameDefinition, round: NassauRoundContext, match: NassauMatchResult, bet: NassauBetResult, after: number, lead: number,
   published: NassauHandicapInputs,
 ): string {
   const publicHandicaps = published.courseHandicaps;
   const ids = [...match.sideA.playerIds, ...match.sideB.playerIds];
   // Lossless semantic receipt, not a credential/hash. No HI observations, actor IDs or shared config etags.
-  return `nassau-v1:${JSON.stringify([
+  const next = match.holes[match.holes.findIndex((hole) => hole.number === after) + 1]?.number;
+  return `${game.kind === 'match-play' ? 'match-play-v1' : 'nassau-v1'}:${JSON.stringify([
     [game.id, game.basis, game.variant, game.groupNumber, game.sides.map((side) => [side.id, side.playerIds]),
       game.stakes.frontMinor, game.stakes.backMinor, game.stakes.overallMinor, game.automaticPresses],
     [round.id, round.inputRevision ?? null, round.courseVersionId, ids.map((id) => {
@@ -341,20 +374,22 @@ function proofFor(
       return [id, handicap?.courseHandicap ?? null, handicap?.unavailableReason ?? null, tee.id,
         tee.strokeAllocation, [...tee.holes].sort((a, b) => a.number - b.number).map((hole) => [hole.number, hole.allocation])];
     })],
-    [match.id, bet.id, bet.parentBetId, bet.startHole, bet.endHole, bet.stakeMinor, lead, after + 1],
-    match.holes.filter((hole) => hole.number >= bet.startHole && hole.number <= after)
+    [match.id, bet.id, bet.parentBetId, bet.startHole, bet.endHole, bet.stakeMinor, lead, next],
+    betHoles(match.holes, { startHole: bet.startHole, endHole: after })
       .map((hole) => [hole.number, hole.outcome, hole.source]),
   ])}`;
 }
 
 function optionAt(
-  game: NassauGameDefinition, round: NassauRoundContext, match: NassauMatchResult, bet: NassauBetResult, after: number,
+  game: PressMatchGameDefinition, round: NassauRoundContext, match: NassauMatchResult, bet: NassauBetResult, after: number,
   published: NassauHandicapInputs,
 ): NassauPressOption | null {
   if (bet.status === 'stale' || bet.stakeMinor === null) return null;
   const lead = prefixAt(match.holes, bet, after);
   if (lead === null || Math.abs(lead) < 2) return null;
-  return { parentBetId: bet.id, matchId: match.id, declaredAfterHole: after, startHole: after + 1,
+  const next = match.holes[match.holes.findIndex((hole) => hole.number === after) + 1]?.number;
+  if (next === undefined) return null;
+  return { parentBetId: bet.id, matchId: match.id, declaredAfterHole: after, startHole: next,
     pressingSide: lead > 0 ? 'b' : 'a', proof: proofFor(game, round, match, bet, after, lead, published) };
 }
 
@@ -365,7 +400,7 @@ function sameOption(press: NassauManualPress, option: NassauPressOption | null):
 }
 
 export function calculateNassau(
-  game: NassauGameDefinition, round: RoundSnapshot, cards: readonly Scorecard[], records: readonly NassauHoleRecord[] = [],
+  game: PressMatchGameDefinition, round: RoundSnapshot, cards: readonly Scorecard[], records: readonly NassauHoleRecord[] = [],
   published?: NassauHandicapInputs,
 ): NassauResults {
   return calculateNassauFromHandicaps(game, round, cards, records,
@@ -374,7 +409,7 @@ export function calculateNassau(
 
 /** Recomputes public results from captured layouts and full CH, without private HI or fabricated tee metadata. */
 export function calculateNassauFromHandicaps(
-  game: NassauGameDefinition, round: NassauRoundContext, cards: readonly Scorecard[], records: readonly NassauHoleRecord[],
+  game: PressMatchGameDefinition, round: NassauRoundContext, cards: readonly Scorecard[], records: readonly NassauHoleRecord[],
   published: NassauHandicapInputs,
 ): NassauResults {
   const issues: NassauIssue[] = [...nassauConfigurationIssues(game, round)];
@@ -390,7 +425,7 @@ export function calculateNassauFromHandicaps(
   });
   const matchIds = new Set(matches.map((match) => match.id));
   for (const record of ownRecords) {
-    if (!Number.isInteger(record.number) || record.number < 1 || record.number > 18
+    if (!Number.isInteger(record.number) || !round.teeProfile.holes.some((hole) => hole.number === record.number)
       || ownRecords.filter((entry) => entry.number === record.number).length !== 1
       || new Set(record.outcomes.map((entry) => entry.matchId)).size !== record.outcomes.length
       || record.outcomes.some((entry) => !['scores', 'side-a', 'side-b', 'halved'].includes(entry.outcome))) {
@@ -413,24 +448,32 @@ export function calculateNassauFromHandicaps(
         bets.push(bet);
         next = null;
         if (!game.automaticPresses || bet.status === 'stale' || invalidConfiguration || recordInvalid) continue;
-        for (let after = bet.startHole; after < bet.endHole; after++) {
+        const window = betHoles(match.holes, bet);
+        for (const [index, hole] of window.slice(0, -1).entries()) {
+          const after = hole.number;
           const lead = prefixAt(match.holes, bet, after);
           if (lead === null) break;
           if (Math.abs(lead) >= 2) {
-            next = { id: `${bet.id}:auto:${String(after + 1)}`, matchId: match.id, segment: bet.segment,
-              origin: 'automatic', parentBetId: bet.id, manualPress: null, startHole: after + 1,
+            const startHole = window[index + 1]?.number;
+            if (startHole === undefined) break;
+            next = { id: `${bet.id}:auto:${String(startHole)}`, matchId: match.id, segment: bet.segment,
+              origin: 'automatic', parentBetId: bet.id, manualPress: null, startHole,
               endHole: bet.endHole, stakeMinor: bet.stakeMinor };
             break;
           }
         }
       }
     };
-    for (const { segment, start, end } of segments) add({
+    const first = match.holes[0]?.number, last = match.holes.at(-1)?.number;
+    const primary = game.kind === 'match-play'
+      ? first === undefined || last === undefined ? [] : [{ segment: 'overall' as const, start: first, end: last }] : segments;
+    for (const { segment, start, end } of primary) add({
       id: `${match.id}:${segment}`, matchId: match.id, segment, origin: 'primary', parentBetId: null,
       manualPress: null, startHole: start, endHole: end,
       stakeMinor: segment === 'front' ? game.stakes.frontMinor : segment === 'back' ? game.stakes.backMinor : game.stakes.overallMinor,
     });
-    for (const { press, number } of [...manual].sort((a, b) => a.press.startHole - b.press.startHole
+    for (const { press, number } of [...manual].sort((a, b) =>
+      match.holes.findIndex((hole) => hole.number === a.press.startHole) - match.holes.findIndex((hole) => hole.number === b.press.startHole)
       || (a.press.id < b.press.id ? -1 : a.press.id > b.press.id ? 1 : 0))) {
       if (press.matchId !== match.id) continue;
       const parent = bets.find((bet) => bet.id === press.parentBetId);
@@ -446,7 +489,7 @@ export function calculateNassauFromHandicaps(
     for (const bet of bets) {
       if (bet.status === 'stale') continue;
       let after = bet.startHole - 1;
-      for (const hole of match.holes.filter((hole) => hole.number >= bet.startHole && hole.number <= bet.endHole)) {
+      for (const hole of betHoles(match.holes, bet)) {
         if (hole.status !== 'complete') break;
         after = hole.number;
       }
@@ -470,7 +513,7 @@ export function calculateNassauFromHandicaps(
   const unavailable = issues.length > 0 || allBets.some((bet) => bet.status === 'unavailable' || bet.status === 'stale');
   const status = unavailable ? 'unavailable' : pending > 0 ? 'in-progress' : 'complete';
   const settlementStatus = unavailable ? 'unavailable' : pending > 0 ? resolved.length ? 'partial' : 'pending' : 'complete';
-  return { gameId: game.id, kind: 'nassau', version: 1, status, matches, stalePresses, issues,
+  return { gameId: game.id, kind: game.kind, version: 1, status, matches, stalePresses, issues,
     pressOptions: issues.length ? [] : pressOptions,
     settlement: { currency: 'USD', status: settlementStatus, resolvedBetCount: resolved.length, pendingBetCount: pending,
       players: ids.map((id, index) => playerSettlement(id, unavailable || !resolved.length ? null : exact(rawBalances[index] ?? 0n))),
@@ -479,7 +522,7 @@ export function calculateNassauFromHandicaps(
 
 /** Validate a new declaration against the current saved position, not a client-authored lead. */
 export function validateNassauManualPress(
-  game: NassauGameDefinition, round: RoundSnapshot, cards: readonly Scorecard[],
+  game: PressMatchGameDefinition, round: RoundSnapshot, cards: readonly Scorecard[],
   records: readonly NassauHoleRecord[], press: NassauManualPress, published?: NassauHandicapInputs,
 ): NassauPressValidation {
   if (records.some((record) => record.gameId === game.id && record.presses.some((entry) => entry.id === press.id))) {
@@ -491,7 +534,7 @@ export function validateNassauManualPress(
 
 /** Replay an existing receipt at its historical declaration hole, including already-played child holes. */
 export function revalidateNassauManualPress(
-  game: NassauGameDefinition, round: RoundSnapshot, cards: readonly Scorecard[],
+  game: PressMatchGameDefinition, round: RoundSnapshot, cards: readonly Scorecard[],
   records: readonly NassauHoleRecord[], press: NassauManualPress, published?: NassauHandicapInputs,
 ): NassauPressValidation {
   const result = calculateNassau(game, round, cards, records, published);

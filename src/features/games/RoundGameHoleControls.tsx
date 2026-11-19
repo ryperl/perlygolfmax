@@ -32,7 +32,7 @@ export interface RoundGameHoleControlsProps {
 
 export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, draft, disabled, onNassauChange, onWolfChange, onSpecialDotsChange, onChurchyChange, playerId, playerScore, placement }: RoundGameHoleControlsProps) {
   const games = round.games?.configuration.games.filter((game) =>
-    (game.kind === 'nassau' || game.kind === 'wolf' || game.kind === 'dots'
+    (game.kind === 'nassau' || game.kind === 'match-play' || game.kind === 'wolf' || game.kind === 'dots'
       || game.kind === 'churchy' && game.version === 3 && round.churchyEnabled === true) && game.groupNumber === groupNumber
     && (placement !== 'before' || game.kind === 'wolf' || game.kind === 'churchy')
     && (placement !== 'other' || game.kind !== 'wolf')
@@ -48,8 +48,8 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
         playerId={playerId} playerScore={playerScore} orderOnly={placement === 'before'} disabled={locked || !onChurchyChange}
         onChange={(record) => { onChurchyChange?.(record); }} />;
     }
-    if (game.kind === 'nassau') return <div key={game.id}>
-      {!supportsRoundGame(round, 'nassau') && <p>Nassau declarations unavailable: API support is required.</p>}
+    if (game.kind === 'nassau' || game.kind === 'match-play') return <div key={game.id}>
+      {!supportsRoundGame(round, game.kind) && <p>{game.kind === 'match-play' ? 'Match Play' : 'Nassau'} declarations unavailable: API support is required.</p>}
       <NassauHoleControls game={game} result={round.games?.results.find((result) => result.gameId === game.id)?.nassau}
         holeNumber={holeNumber} etag={etag ?? ''} disabled={locked}
         saved={saved.nassau?.find((record) => record.gameId === game.id && record.number === holeNumber)}

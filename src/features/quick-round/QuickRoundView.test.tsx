@@ -14,7 +14,7 @@ beforeEach(() => { window.history.replaceState(null, '', '#events?quick=1'); });
 async function choose() {
   const course = await screen.findByRole('combobox', { name: 'Course' });
   fireEvent.change(course, { target: { value: fictionalVersion.courseId } });
-  await screen.findByRole('option', { name: 'Fictional Teal / Fictional A' });
+  await screen.findByRole('option', { name: 'Fictional Teal / Fictional A / 9 holes' });
   fireEvent.change(screen.getByLabelText('Default tee'), { target: { value: '901' } });
   fireEvent.click(screen.getByLabelText('Fictional Player 1', { exact: true }));
 }
@@ -310,7 +310,7 @@ describe('public Quick round controller', () => {
     fireEvent.change(screen.getByLabelText('Event name'), { target: { value: 'Fictional waiting draft' } });
     fireEvent.click(screen.getByRole('button', { name: 'Compact setup' }));
     await act(async () => { finish?.(fictionalVersion); await Promise.resolve(); });
-    expect(screen.getByRole('option', { name: 'Fictional Teal / Fictional A' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Fictional Teal / Fictional A / 9 holes' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Open full setup' }));
     expect(screen.getByLabelText('Event name')).toHaveValue('Fictional waiting draft');
     expect(source.client.version).toHaveBeenCalledOnce();

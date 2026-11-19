@@ -1,7 +1,7 @@
-import type { NassauGameDefinition, NassauHoleRecord, NassauOutcome, NassauResults } from '../../domain/nassau';
+import type { PressMatchGameDefinition, NassauHoleRecord, NassauOutcome, NassauResults } from '../../domain/nassau';
 
 export function NassauHoleControls({ game, result, holeNumber, etag, saved, draft, disabled, onChange }: {
-  readonly game: NassauGameDefinition;
+  readonly game: PressMatchGameDefinition;
   readonly result: NassauResults | undefined;
   readonly holeNumber: number;
   readonly etag: string;
@@ -37,7 +37,7 @@ export function NassauHoleControls({ game, result, holeNumber, etag, saved, draf
       const staged = record.presses.some((press) => press.parentBetId === option.parentBetId);
       const alreadySaved = saved?.presses.some((press) => press.parentBetId === option.parentBetId) === true;
       return <div key={option.parentBetId}>
-        <span>{match?.sideA.name ?? 'Side A'} vs {match?.sideB.name ?? 'Side B'} · {parent?.segment ?? 'Match'} ·
+        <span>{match?.sideA.name ?? 'Side A'} vs {match?.sideB.name ?? 'Side B'} · {game.kind === 'match-play' ? 'Match' : parent?.segment ?? 'Match'} ·
           {' '}{option.pressingSide === 'a' ? match?.sideA.name ?? 'Side A' : match?.sideB.name ?? 'Side B'} press · Starts hole {option.startHole}
           {parent && `, ends hole ${String(parent.endHole)}`}</span>
         <button type="button" disabled={alreadySaved || staged} onClick={() => {

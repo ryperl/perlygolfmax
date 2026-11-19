@@ -45,7 +45,7 @@ export function sourceChoices(value: EventPurseView): readonly SourceChoice[] {
     ...(value.workspace.overallCompetition
       ? [{ key: 'overall', label: 'Overall competition · individual awards', source: { kind: 'overall' as const }, team: false }] : []),
     ...value.workspace.rounds.flatMap((snapshot) =>
-      (value.roundScores.find((round) => round.roundId === snapshot.id)?.games?.configuration.games ?? []).filter((game) => game.kind !== 'churchy' && game.kind !== 'nassau').map((game) => ({
+      (value.roundScores.find((round) => round.roundId === snapshot.id)?.games?.configuration.games ?? []).filter((game) => game.kind !== 'churchy' && game.kind !== 'nassau' && game.kind !== 'match-play').map((game) => ({
         key: `${snapshot.id}:${game.id}`, label: `${snapshot.name} · ${game.name}${isTeamGameDefinition(game) ? ' · team awards' : ''}`,
         source: { kind: 'round-game' as const, roundId: snapshot.id, gameId: game.id }, team: isTeamGameDefinition(game),
       }))),

@@ -59,7 +59,7 @@ export function GameSettings({
 }: GameSettingsProps) {
   const allowanceHint = useId();
   const stableford = draft.kind === undefined || draft.kind === 'stableford';
-  const matchGame = draft.kind === 'nassau' || draft.kind === 'wolf';
+  const matchGame = draft.kind === 'nassau' || draft.kind === 'match-play' || draft.kind === 'wolf';
   const matchLocked = (matchGame || draft.kind === 'dots') && setupLocked;
   const churchyLocked = setupLocked;
   const [teamQuery, setTeamQuery] = useState('');
@@ -91,17 +91,18 @@ export function GameSettings({
           <input value={draft.kind === 'churchy' ? 'Churchie' : draft.name} disabled={draft.kind === 'churchy'} maxLength={100} onChange={(event) => { onChange({ ...draft, name: event.target.value }); }} />
         </label>
         <label>Game type<select value={draft.kind ?? 'stableford'}
-          disabled={draft.kind === 'churchy' || existing && (internalOnly || draft.kind === 'wolf' && draft.wolfVersion !== 2)} onChange={(event) => {
+          disabled={draft.kind === 'churchy' || existing && (internalOnly || draft.kind === 'match-play' || draft.kind === 'wolf' && draft.wolfVersion !== 2)} onChange={(event) => {
           const kind = event.target.value;
           if ((!internalOnly && (kind === 'stableford' || kind === 'ball-drop' || kind === 'skins'))
             || (kind === 'wolf' && (existing || wolfV2Supported)
-              || !internalOnly && (kind === 'stroke-play' || kind === 'nassau')) && supportedGameKinds?.includes(kind)
+              || !internalOnly && (kind === 'stroke-play' || kind === 'nassau' || kind === 'match-play' && !existing)) && supportedGameKinds?.includes(kind)
             || kind === 'dots' && supportedGameKinds?.includes('dots')
             || kind === 'churchy' && churchyEnabled && churchyV3Supported && allowChurchyCreation && !setupLocked) onChange(setGameKind(draft, kind, roster.length));
         }}>
           {!internalOnly && <><option value="stableford">Stableford</option><option value="ball-drop">Ball Drop</option><option value="skins">Skins</option>
           <option value="stroke-play" disabled={!supportedGameKinds?.includes('stroke-play')}>Stroke Play</option>
-          <option value="nassau" disabled={setupLocked || !supportedGameKinds?.includes('nassau')}>Nassau · Match play</option></>}
+          <option value="nassau" disabled={setupLocked || !supportedGameKinds?.includes('nassau')}>Nassau · Match play</option>
+          <option value="match-play" disabled={setupLocked || existing && draft.kind !== 'match-play' || !supportedGameKinds?.includes('match-play')}>Match Play · With presses</option></>}
           <option value="wolf" disabled={setupLocked || !supportedGameKinds?.includes('wolf') || !existing && !wolfV2Supported}>Wolf / PIG · Earned dots</option>
           <option value="dots" disabled={setupLocked || !supportedGameKinds?.includes('dots')}>Dots · Separate specials</option>
           {churchyEnabled && (draft.kind === 'churchy' || churchyV3Supported && allowChurchyCreation && !churchyLocked) && <option value="churchy">Churchie</option>}
@@ -143,9 +144,9 @@ export function GameSettings({
             <option value="net">Net</option>
           </select>
         </label>}
-        {matchGame && <section aria-label={`${draft.kind === 'wolf' ? 'Wolf' : 'Nassau'} setup`}>
+        {matchGame && <section aria-label={`${draft.kind === 'wolf' ? 'Wolf' : draft.kind === 'match-play' ? 'Match Play' : 'Nassau'} setup`}>
           <p>Configure before this round&apos;s first saved score. Setup and participant order lock once scoring starts.
-            Net uses 100% captured Course Handicap off the lowest {draft.kind === 'nassau' ? 'within each match' : 'of the four golfers'}.</p>
+            Net uses 100% captured Course Handicap off the lowest {draft.kind === 'nassau' || draft.kind === 'match-play' ? 'within each match' : 'of the four golfers'}.</p>
           <label>Playing group<select value={draft.groupNumber ?? ''} onChange={(event) => {
             const group = groups.find((entry) => entry.number === Number(event.target.value));
             if (group) onChange({ ...draft, groupNumber: group.number,
@@ -180,8 +181,9 @@ export function GameSettings({
             {draft.wolfVersion !== 2 && <p>Legacy Wolf · This game will not convert to earned-dot rules.</p>}
             <label>Allow PIG<input type="checkbox" checked={draft.allowPig ?? false} onChange={(event) => { onChange({ ...draft, allowPig: event.target.checked }); }} /></label>
           </> : <>
-            <p>18 holes only. Front 1–9, back 10–18 and overall are independent match bets. Ties push; no carry.</p>
-            <label>Nassau format<select value={draft.nassauVariant ?? 'singles'} onChange={(event) => {
+            <p>{draft.kind === 'match-play' ? 'One match and stake over the saved 9- or 18-hole playing circuit. Ties push; no carry.'
+              : '18 holes only. Front 1–9, back 10–18 and overall are independent match bets. Ties push; no carry.'}</p>
+            <label>{draft.kind === 'match-play' ? 'Match Play' : 'Nassau'} format<select value={draft.nassauVariant ?? 'singles'} onChange={(event) => {
               const value = event.target.value;
               if (value === 'singles' || value === 'three-way' || value === 'one-v-two' || value === 'two-v-two-best-ball' || value === 'two-v-two-aggregate') onChange(setNassauVariant(draft, value));
             }}><option value="singles">Singles · 1 vs 1</option><option value="three-way">Three-way · three pairwise matches</option>
@@ -199,7 +201,8 @@ export function GameSettings({
                     {roster.find((entry) => entry.playerId === playerId)?.displayName ?? 'Golfer unavailable'}</option>)}
               </select></label>)}
             </fieldset>)}
-            {['Front', 'Back', 'Overall'].map((label, index) => <label key={label}>{label} stake per side · USD $<input inputMode="decimal"
+            {(draft.kind === 'match-play' ? [{ label: 'Match', index: 2 }]
+              : ['Front', 'Back', 'Overall'].map((label, index) => ({ label, index }))).map(({ label, index }) => <label key={label}>{label} stake per side · USD $<input inputMode="decimal"
               value={draft.nassauStakes?.[index] ?? ''} onChange={(event) => { onChange({ ...draft,
                 nassauStakes: [0, 1, 2].map((position) => position === index ? event.target.value : draft.nassauStakes?.[position] ?? '') }); }} /></label>)}
             <button type="button" onClick={() => { onChange({ ...draft, nassauStakes: ['0', '0', '0'] }); }}>No planned money</button>

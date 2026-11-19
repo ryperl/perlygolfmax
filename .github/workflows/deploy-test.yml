@@ -18,7 +18,6 @@ jobs:
 
   package:
     if: github.ref == 'refs/heads/ryperl-microsoft-perly-golf-foundation'
-    needs: validate
     environment: perlygolfmax-test
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -169,7 +168,7 @@ jobs:
           JS
 
   api:
-    needs: package
+    needs: [validate, package]
     environment: perlygolfmax-test
     runs-on: ubuntu-latest
     timeout-minutes: 15

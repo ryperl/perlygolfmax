@@ -73,7 +73,7 @@ export function isTeeProfile(value: unknown): value is TeeProfile {
   let par = 0;
   let yards = 0;
   for (const hole of holes) {
-    if (!isRecord(hole) || !positiveInteger(hole.number, value.holeCount)
+    if (!isRecord(hole) || !positiveInteger(hole.number, 18)
       || !positiveInteger(hole.sourceId) || !positiveInteger(hole.length, 2_000)
       || !positiveInteger(hole.par, 10) || !positiveInteger(hole.allocation, value.holeCount)) return false;
     numbers.add(hole.number);
@@ -90,7 +90,9 @@ export function isTeeProfile(value: unknown): value is TeeProfile {
       || !Number.isFinite(rating.bogey) || rating.bogey <= 0 || rating.bogey > 200) return false;
     ratingTypes.add(rating.type);
   }
-  return numbers.size === value.holeCount && allocations.size === value.holeCount
+  const validNumbers = value.holeCount === 18 || [...numbers].every((number) => number <= 9)
+    || [...numbers].every((number) => number >= 10);
+  return validNumbers && numbers.size === value.holeCount && allocations.size === value.holeCount
     && sourceIds.size === value.holeCount && ratingTypes.size === 3 && par === value.totalPar && yards === value.totalYardage;
 }
 

@@ -11,14 +11,15 @@ import { fictionalChange } from './scoring.test-support';
 import { leanScoreWriteResult } from '../contracts/lean-round-scores';
 
 describe('bounded game declaration score transport', () => {
-  it('stages large commands on the dedicated scoring route with stable identity, then validates the complete acknowledgement', async () => {
+  it.each(['nassau', 'match-play'] as const)('stages large %s commands on the dedicated scoring route with stable identity, then validates the complete acknowledgement', async (kind) => {
     const f = matchGamesFixture();
-    const games = Array.from({ length: 3 }, (_, index) => ({ ...f.nassau, id: strokeGameId(3000 + index) }));
+    const games = Array.from({ length: 3 }, (_, index) => ({ ...f.nassau, kind, id: strokeGameId(3000 + index),
+      ...(kind === 'match-play' ? { stakes: { ...f.nassau.stakes, frontMinor: 0, backMinor: 0 } } : {}) }));
     const score: HoleScore = { kind: 'strokes', strokes: 4, nassau: games.map((game, index) => ({
       number: 3, gameId: game.id, gameEtag: 'fictional-game-revision', outcomes: [],
       presses: [{ id: strokeGameId(3100 + index), matchId: nassauMatchId(game.id, 0, 1),
-        parentBetId: `${nassauMatchId(game.id, 0, 1)}:front`, declaredAfterHole: 2, startHole: 3,
-        pressingSide: 'b' as const, proof: `nassau-v1:${'a'.repeat(5000)}` }],
+        parentBetId: `${nassauMatchId(game.id, 0, 1)}:${kind === 'match-play' ? 'overall' : 'front'}`, declaredAfterHole: 2, startHole: 3,
+        pressingSide: 'b' as const, proof: `${kind === 'match-play' ? 'match-play-v1' : 'nassau-v1'}:${'a'.repeat(5000)}` }],
     })) };
     const playerId = f.ids[0];
     if (!playerId) throw new Error('Missing fictional player');

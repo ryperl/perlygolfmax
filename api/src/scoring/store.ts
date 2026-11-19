@@ -281,7 +281,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     const kpProjection = await this.kpProjection(workspace.event.id, round.id, access.event.kpRoundIds);
     const kpPot = access.testerLink || !kpProjection.kp ? undefined : await readKpPot(this.table, workspace.event.id, round.id, access.event.purseConfigured);
     const visibleGames = access.testerLink && games ? games.games.filter((game) =>
-      game.kind !== 'wolf' && game.kind !== 'nassau' && game.kind !== 'dots'
+      game.kind !== 'wolf' && game.kind !== 'nassau' && game.kind !== 'match-play' && game.kind !== 'dots'
       && !(game.kind === 'churchy' && game.version !== 1)) : games?.games;
     const projection: RoundScores = {
       stringRulesVersion: 2,
@@ -298,7 +298,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
         dotsSpecialKinds: dotsSpecialCatalog.map((entry) => entry.kind),
         internalGamesSupported: true } : {}),
       supportedGameKinds: roundGameKinds.filter((kind) => (kind !== 'churchy' || this.churchyEnabled())
-        && (!access.testerLink || kind !== 'wolf' && kind !== 'nassau' && kind !== 'dots')),
+        && (!access.testerLink || kind !== 'wolf' && kind !== 'nassau' && kind !== 'match-play' && kind !== 'dots')),
       gameInputContext: { courseVersionId: capturedRound.courseVersionId, teeProfileId: capturedRound.teeProfile.id },
       teeStrokeAllocation: round.teeProfile.strokeAllocation,
       eventId: workspace.event.id, eventName: workspace.event.name, eventStatus: workspace.event.status,
@@ -434,17 +434,19 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     validateInternalGameChanges(state.games?.games ?? [], games, state.round,
       state.publicAccess === true && state.event.quickRound !== true);
     const grant = this.writer(state, undefined, true, true);
-    const previousMatches = state.games?.games.filter((game) => game.kind === 'nassau' || game.kind === 'wolf' || game.kind === 'dots') ?? [];
+    const previousMatches = state.games?.games.filter((game) => game.kind === 'nassau' || game.kind === 'match-play' || game.kind === 'wolf' || game.kind === 'dots') ?? [];
     if (state.round.scoringStarted && (
       previousMatches.some((previous) => !games.some((game) => sameGameDefinitions([game], [previous])))
-      || games.some((game) => (game.kind === 'nassau' || game.kind === 'wolf' || game.kind === 'dots')
+      || games.some((game) => (game.kind === 'nassau' || game.kind === 'match-play' || game.kind === 'wolf' || game.kind === 'dots')
         && !previousMatches.some((previous) => sameGameDefinitions([game], [previous]))))) {
       throw new ApiError(409, 'MATCH_SETUP_LOCKED');
     }
     for (const game of games) {
       const previous = state.games?.games.find((entry) => entry.id === game.id);
+      if (previous && previous.kind !== game.kind && (previous.kind === 'match-play'
+        || game.kind === 'match-play')) throw new ApiError(400, 'MATCH_KIND_FIXED');
       if (previous && sameGameDefinitions([game], [previous])) continue;
-      if (game.kind === 'nassau' && nassauConfigurationIssues(game, state.round).length) throw new ApiError(400, 'INVALID_NASSAU_GROUP');
+      if ((game.kind === 'nassau' || game.kind === 'match-play') && nassauConfigurationIssues(game, state.round).length) throw new ApiError(400, 'INVALID_NASSAU_GROUP');
       if (game.kind === 'wolf' && !wolfGroupMatchesRound(game, { layout: state.round.teeProfile.holes, groups: state.round.groups })) {
         throw new ApiError(400, 'INVALID_WOLF_GROUP');
       }
@@ -634,7 +636,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       if (error instanceof GameDeclarationConflictError) throw new ApiError(409, error.code);
       throw error;
     }
-    if (!state.lock && state.games?.games.some((game) => game.kind === 'nassau'
+    if (!state.lock && state.games?.games.some((game) => game.kind === 'nassau' || game.kind === 'match-play'
       ? nassauConfigurationIssues(game, state.round).length > 0
       : game.kind === 'dots' ? !dotsDefinitionMatchesRound(game, dotRound(state.round, definitionCards(state.round)))
         : game.kind === 'wolf' && !wolfGroupMatchesRound(game, { layout: state.round.teeProfile.holes, groups: state.round.groups }))) {
@@ -647,7 +649,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     if ((nassauChanged || wolfChanged) && state.testerLink) throw new ApiError(403, 'MATCH_DECLARATIONS_NOT_ALLOWED');
     for (const record of nassauChanged ? score.nassau ?? [] : []) {
       const game = state.games?.games.find((entry) => entry.id === record.gameId);
-      if (game?.kind !== 'nassau' || record.gameEtag !== state.games?.etag || record.number !== holeNumber
+      if (game?.kind !== 'nassau' && game?.kind !== 'match-play' || record.gameEtag !== state.games?.etag || record.number !== holeNumber
         || gameAnchorPlayerId(game, state.round.groups) !== playerId
         || nassauConfigurationIssues(game, state.round).length || !nassauRecordsMatchGame([record], game)) {
         throw new ApiError(409, 'MATCH_SETUP_CHANGED');
