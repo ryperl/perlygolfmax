@@ -73,8 +73,8 @@ Configured smoke tests explicitly forward the same public Vite configuration
 and expectation flags as their build. No corporate feed credentials are passed.
 Test packaging and its configured browser suite run alongside complete CI;
 API publication waits for both jobs to succeed. Both browser suites retain
-all configured projects and use four workers. Frontend publication still
-waits for API publication and readiness.
+all configured projects and the original worker policy. Frontend publication
+still waits for API publication and readiness.
 This avoids repeated slow Ubuntu mirror downloads that exhausted both 15- and
 25-minute jobs before browser tests began. The whole-job budget stays 25 minutes;
 individual test timeouts, retries, assertions, browser coverage and Azure
