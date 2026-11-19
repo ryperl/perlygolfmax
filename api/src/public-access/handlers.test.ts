@@ -12,7 +12,7 @@ import { isEventWorkspace } from '../../../src/contracts/setup.js';
 import { isRoundScores, isScoreWriteResult } from '../../../src/contracts/scoring.js';
 import { isEventLeaderboardView } from '../../../src/contracts/event-leaderboard.js';
 import { isEventPurseView } from '../../../src/contracts/purse-settings.js';
-import { isRecord } from '../../../src/contracts/events.js';
+import { isEventPage, isRecord } from '../../../src/contracts/events.js';
 import { isPublicPurseSummary } from '../../../src/contracts/public-purse.js';
 import { isPublicLeaderboardSummary } from '../../../src/contracts/public-leaderboard.js';
 import { createPublicHandler } from './handlers.js';
@@ -45,6 +45,23 @@ async function fixture() {
 }
 
 describe('explicit unsigned public HTTP namespace', () => {
+  it('returns a healthy public directory when unrelated deletions are pending or complete', async () => {
+    const f = await fixture();
+    f.seed({ partitionKey: identifier(5990), rowKey: 'event', kind: 'event-deletion', status: 'deleting' });
+    f.seed({ partitionKey: identifier(5991), rowKey: 'event', kind: 'event-deletion', status: 'deleted' });
+    f.submit.mockClear();
+    f.create.mockClear();
+    const result = await f.invoke('events');
+    expect(result.status).toBe(200);
+    expect(result.headers).toMatchObject({ 'Cache-Control': 'no-store' });
+    expect(isEventPage(result.jsonBody)).toBe(true);
+    if (!isEventPage(result.jsonBody)) throw new Error('Invalid fictional public directory.');
+    expect(result.jsonBody.events.map((entry) => entry.id)).toEqual([event.id]);
+    expect(result.jsonBody.events[0]).toMatchObject({ status: 'active', role: 'viewer' });
+    expect(f.api.verify).not.toHaveBeenCalled();
+    expect(f.submit).not.toHaveBeenCalled();
+    expect(f.create).not.toHaveBeenCalled();
+  });
   it('serves opt-in lossless compact skins with the same quota, freshness and archive guards as legacy reads', async () => {
     const f = await fixture();
     const current = await f.workspace.get(creator, event.id);

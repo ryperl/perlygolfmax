@@ -723,6 +723,11 @@ Partial failures are explicit and resumable, never acknowledged as completed.
 A minimal nonbusiness tombstone prevents identifier reuse/resurrection; platform
 backup/log erasure is not claimed. No real event is deleted by deploying the
 feature, and no migration or automatic retention policy is introduced.
+Public discovery excludes both pending and completed deletion tombstones through
+its normal `PUBLIC_EVENT_NOT_AVAILABLE` contract. A deleted event must remain
+unavailable without turning unrelated active-event discovery into a `404`.
+Storage failures and malformed active records still fail explicitly, and bounded
+pages retain their continuation even when a page contains only tombstones.
 
 The current scoring slice is online: per-hole
 gross strokes, unplayed holes and explicit pickup/DNF dispositions with audited

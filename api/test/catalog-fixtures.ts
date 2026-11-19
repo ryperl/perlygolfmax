@@ -84,7 +84,7 @@ export function memoryTable() {
     const source = new TableClient('https://fictional.table.core.windows.net', 'Events').listEntities();
     vi.spyOn(source, 'byPage').mockImplementation(async function* (settings) {
       const filter = options?.queryOptions?.filter ?? '';
-      const conditions = [...filter.matchAll(/(PartitionKey|RowKey|kind|roundId|playerId) (eq|ge|lt) '([^']*)'/g)];
+      const conditions = [...filter.matchAll(/(PartitionKey|RowKey|kind|roundId|playerId|eventId) (eq|ge|lt) '([^']*)'/g)];
       const matches = [...rows.values()].filter((row) => conditions.every((condition) => {
         const value = condition[1] === 'PartitionKey' ? row.partitionKey : condition[1] === 'RowKey' ? row.rowKey : row[condition[1] ?? ''];
         const expected = condition[3] ?? '';

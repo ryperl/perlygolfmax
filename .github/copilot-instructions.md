@@ -107,6 +107,8 @@
   event-owned data/locators. Never delete shared catalogs or unrelated events,
   acknowledge partial cleanup as success, or allow old/delayed writes to recreate
   data. Retain only the minimal technical tombstone needed for safe recovery.
+  Pending/completed tombstones must not poison unrelated public discovery;
+  preserve its unavailable-event contract, paging and direct-access denial.
   No automatic retention or provider backup/log erasure is implied.
 - Public app access is an explicit product decision: any visitor may read all
   active events/rosters/cards/standings/purse amounts and score any saved group,

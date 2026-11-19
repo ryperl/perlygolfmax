@@ -1,12 +1,52 @@
 import { describe, expect, it } from 'vitest';
 import { memoryTable, identifier } from '../../test/catalog-fixtures.js';
-import { event, member } from '../../test/fixtures.js';
+import { creator, event, member } from '../../test/fixtures.js';
 import { TableEventStore } from '../events/store.js';
 import { TablePublicEventStore } from './store.js';
 import { readEventAccess } from '../event-access.js';
 import { createPublicApi } from './runtime.js';
+import { TableEventAdministration } from '../event-administration/store.js';
 
 describe('unsigned bounded active-event discovery', () => {
+  it('keeps unrelated active events discoverable during and after a confirmed event deletion', async () => {
+    const f = memoryTable();
+    const active = f.seed({ partitionKey: event.id, rowKey: 'event', ...event, status: 'active' });
+    const deletedId = identifier(5900);
+    const archived = f.seed({ partitionKey: deletedId, rowKey: 'event', name: 'Fictional deletion target',
+      createdAt: event.createdAt, status: 'archived', quickRound: true, quickRoundReady: true });
+    const administration = new TableEventAdministration(f.table, () => true);
+    const store = new TablePublicEventStore(f.table);
+    const requestId = identifier(5901);
+    let result = await administration.deleteArchived(creator, deletedId, archived.etag,
+      'Fictional deletion target', requestId);
+    expect(result.state).toBe('deleting');
+    expect((await store.list({ kind: 'public-browse' })).events.map((item) => item.id)).toEqual([event.id]);
+    for (let attempt = 0; result.state !== 'deleted' && attempt < 10; attempt++) {
+      result = await administration.continueDeletion(creator, deletedId, requestId);
+    }
+    expect(result.state).toBe('deleted');
+    expect((await store.list({ kind: 'public-browse' })).events.map((item) => item.id)).toEqual([event.id]);
+    await expect(readEventAccess(f.table, { kind: 'public-score', eventId: deletedId }, deletedId))
+      .rejects.toMatchObject({ status: 404, code: 'PUBLIC_EVENT_NOT_AVAILABLE' });
+    expect(f.rows.get(`${event.id}|event`)).toEqual(active);
+  });
+
+  it('retains the directory cursor through a full page of deletion markers', async () => {
+    const f = memoryTable();
+    for (let index = 0; index < 51; index++) f.seed(index < 50
+      ? { partitionKey: identifier(6000 + index), rowKey: 'event', kind: 'event-deletion',
+        status: index % 2 ? 'deleted' : 'deleting' }
+      : { partitionKey: identifier(6000 + index), rowKey: 'event', name: 'Fictional surviving event',
+        createdAt: event.createdAt, status: 'active' });
+    const store = new TablePublicEventStore(f.table);
+    const first = await store.list({ kind: 'public-browse' });
+    expect(first.events).toEqual([]);
+    expect(first.continuationToken).toBeDefined();
+    const second = await store.list({ kind: 'public-browse' }, first.continuationToken);
+    expect(second.events.map((item) => item.id)).toEqual([identifier(6050)]);
+    expect(second.continuationToken).toBeUndefined();
+    expect(f.submit).not.toHaveBeenCalled();
+  });
   it('projects dates, normalizes explicit stored clears and fails closed on malformed calendar dates', async () => {
     const f = memoryTable();
     const row = { partitionKey: event.id, rowKey: 'event', ...event, status: 'active', startDate: '2024-02-29',
