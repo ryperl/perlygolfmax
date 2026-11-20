@@ -8,7 +8,7 @@ import { NassauHoleControls } from '../nassau';
 import { WolfHoleControls } from '../wolf';
 import type { DotsHoleRecord } from '../../domain/dots';
 import { dotsRotationContext } from '../../domain/dots';
-import { DotsEntryButton, DotsHoleControls } from '../dots';
+import { DotsEntryButton, DotsHoleControls, DotsRotationControls } from '../dots';
 import { groupStartingHole } from '../../domain/round-navigation';
 import type { ChurchySpecials, ChurchySpecialsV3 } from '../../domain/churchy';
 import { ChurcieEntryControls } from '../churchy';
@@ -34,7 +34,7 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
   const games = round.games?.configuration.games.filter((game) =>
     (game.kind === 'nassau' || game.kind === 'match-play' || game.kind === 'wolf' || game.kind === 'dots'
       || game.kind === 'churchy' && game.version === 3 && round.churchyEnabled === true) && game.groupNumber === groupNumber
-    && (placement !== 'before' || game.kind === 'wolf' || game.kind === 'churchy')
+    && (placement !== 'before' || game.kind === 'wolf' || game.kind === 'churchy' || game.kind === 'dots' && game.version === 2)
     && (placement !== 'other' || game.kind !== 'wolf')
     && (!playerId || (game.kind === 'dots' || game.kind === 'churchy') && game.playerIds.includes(playerId))) ?? [];
   const etag = round.games?.configuration.etag;
@@ -77,11 +77,14 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
       }
       return <div key={game.id}>
       {!supportsRoundGame(round, 'wolf') && <p>Wolf declarations unavailable: API support is required.</p>}
+      {game.version === 2 && game.highLowSweep === true && round.wolfHighLowSweep !== true
+        && <p>Wolf High/Low Sweep declarations require advertised API support.</p>}
       <WolfHoleControls game={game} wolfId={game.version === 2
         ? result?.holes.find((hole) => hole.number === holeNumber)?.wolfId ?? null
         : wolfForHole(game, round, holeNumber)} players={round.cards}
         comeback={result?.comeback} holes={result?.holes} reviewMessages={reviewMessages}
-        holeNumber={holeNumber} etag={etag ?? ''} disabled={locked || game.version === 2 && !round.wolfRulesVersions?.includes(2)}
+        holeNumber={holeNumber} etag={etag ?? ''} disabled={locked || game.version === 2
+          && (!round.wolfRulesVersions?.includes(2) || game.highLowSweep === true && round.wolfHighLowSweep !== true)}
         saved={saved.wolf?.find((record) => record.choice.gameId === game.id && record.number === holeNumber)}
         draft={draft?.wolf?.find((record) => record.choice.gameId === game.id && record.number === holeNumber)}
         onChange={(record) => { onWolfChange([...(draft?.wolf ?? []).filter((entry) => entry.choice.gameId !== game.id), record]); }} />
@@ -97,7 +100,19 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
       const rotationLocked = records.some((record) => record.rotation !== undefined);
       const individualUnsupported = game.mode === 'individual' && !supportsIndividualDotsPlayerCount(round, game.playerIds.length);
       const dotsLocked = locked || !onSpecialDotsChange || individualUnsupported || !supportsDotsSpecials(round, game.specials)
-        || game.version === 2 && !round.dotsRulesVersions?.includes(2);
+        || game.version === 2 && !round.dotsRulesVersions?.includes(2)
+        || game.sweepRule === 'manual-v1' && round.dotsManualSweep !== true;
+      if (placement === 'before' && game.version === 2 && rotation) {
+        const record = staged ?? saved.dots?.find((record) => record.gameId === game.id && record.number === holeNumber)
+          ?? { number: holeNumber, gameId: game.id, gameEtag: etag ?? '', players: [], contests: [] };
+        return <fieldset key={game.id} disabled={dotsLocked}><legend>{game.name}</legend>
+          {!round.dotsRulesVersions?.includes(2) && <p>Rotating Dots edits require advertised API version-2 support.</p>}
+          <DotsRotationControls game={game} holeNumber={holeNumber} record={record} rotation={rotation}
+            locked={rotationLocked} players={round.cards}
+            onChange={(record) => { onSpecialDotsChange?.([...(draft?.dots ?? []).filter((entry) => entry.gameId !== game.id),
+              { ...record, gameEtag: etag ?? '' }]); }} />
+        </fieldset>;
+      }
       const controls = <DotsHoleControls game={game} holeNumber={holeNumber}
       par={round.layout.find((hole) => hole.number === holeNumber)?.par ?? 0} etag={etag ?? ''} players={round.cards}
       playerPars={game.playerIds.map((playerId) => ({ playerId,
@@ -113,6 +128,7 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
       context={game.mode === 'linked' ? round.games?.results.find((result) => result.gameId === game.linkedGameId)?.wolf?.contexts
         ?.find((context) => context.number === holeNumber) : rotation?.contexts.find((context) => context.number === holeNumber)}
       playerId={playerId} groupOnly={!playerId} rotation={rotation} rotationLocked={rotationLocked}
+      showRotation={placement !== 'other'}
       disabled={dotsLocked}
       onChange={(record) => { onSpecialDotsChange?.([...(draft?.dots ?? []).filter((entry) => entry.gameId !== game.id), record]); }} />;
       return playerId ? <DotsEntryButton key={game.id} name={round.cards.find((card) => card.playerId === playerId)?.displayName ?? 'Golfer unavailable'}
@@ -122,6 +138,7 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
       </DotsEntryButton> : <Fragment key={game.id}>
         {individualUnsupported && <p>Individual Dots edits for this group size require advertised API support.</p>}
         {game.version === 2 && !round.dotsRulesVersions?.includes(2) && <p>Rotating Dots edits require advertised API version-2 support.</p>}
+        {game.sweepRule === 'manual-v1' && round.dotsManualSweep !== true && <p>Manual Sweep edits require advertised API support.</p>}
         {controls}
       </Fragment>;
     }

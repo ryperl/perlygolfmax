@@ -749,6 +749,13 @@ winning-side golfer**. Pre-drive PIG earns **3 per winning-side golfer**.
 There is no High contest for a solo hole or multiplication by opponent count.
 Net uses 100% captured CH off the lowest foursome member and personal tees.
 
+Earned Wolf has an optional **High/Low Sweep** setting, off by default. If the
+same partnered side wins both High and Low, each winning teammate earns one
+extra dot. Solo holes, ties and split wins do not qualify; no carry, stake or
+category multiplier enlarges this bonus. A legacy linked Dots High/Low Sweep
+must be removed or explicitly changed to manual before enabling the Wolf option,
+so the same automatic bonus is never awarded twice.
+
 The trailing golfer becomes Wolf for both final played holes: select after
 16 played holes in an eighteen-hole round, or 7 in a nine-hole round. Use
 Wolf plus explicitly linked prefix specials, with the next printed rotation
@@ -785,11 +792,15 @@ Past earned dots stay with their original recipients when partners change.
 Existing version-1 games are never silently converted.
 
 These are rotating **special-dot sharing** formats, not a separate Sixes
-match-points engine. They do not invent High/Low contests, Sweep or extra bets.
+match-points engine. They do not invent base High/Low contests or extra bets;
+an explicitly declared manual Sweep is an independent special.
 Their multiplier is x1 and their foursome settles independently.
 
-Select enabled specials and whole-dot units before scoring. Defaults are 1,
-except Birdie 2 and Eagle 5. All of these rules use gross qualifications:
+Select enabled specials and whole-dot units before scoring. **Dots common**
+selects every available special for the current mode/API, just like **Select
+all**, preserving existing custom units. Unsupported choices such as individual
+Assassin are not newly selected. Defaults are 1, except Birdie 2 and Eagle 5.
+Score-qualified specials use gross qualifications:
 
 - Hogan, Seve, Sandy, called Paree, called Murphy, Haz Par and Chippy allow
   par or better. Hogan/Seve use GIR/missed green on par 3s, without a fairway
@@ -866,9 +877,21 @@ except Birdie 2 and Eagle 5. All of these rules use gross qualifications:
   every eligible hole's award directly or through carry; final unclaimed
   awards prevent that category's King. Actual layout counts determine coverage.
   Assassin needs both closest approach qualifiers or both longest drives in a
-  2-v-2 side. Each category is checked independently. Sweep needs actual
-  linked High and Low wins by the same pair; neither is invented for unsupported
-  standalone/individual contexts.
+  2-v-2 side. Each category is checked independently.
+- **Sweep** in new ordinary Dots is scorer-declared, with configured whole units
+  and normal current-teammate/context sharing. It does not require High/Low or a
+  gross-par qualification. Saved linked automatic Sweep remains unchanged;
+  **Use manual Sweep** is an explicit before-scoring choice, retaining its units.
+  This is separate from the automatic category bonus and base-game High/Low
+  Sweep, and does not change Churchie's configured Sweep.
+
+Manual Dots Sweep uses `sweepRule: "manual-v1"`; Wolf's opt-in bonus uses
+`highLowSweep: true` on version 2. Clients require `dotsManualSweep` /
+`wolfHighLowSweep` capabilities and negotiate `sweepRules=2`; affected rounds
+and new private audit snapshots carry `sweepRulesVersion: 2`. Unsupported
+affected reads/writes require an app update before mutation or publication,
+never alternate successful legacy totals. Unmarked old definitions and
+immutable receipts retain their original meaning.
 
 Thief and full Sixes match engines remain deferred. Shared setup presets are
 available as copied configurations, not additional scoring engines. Dots cannot stack
@@ -927,8 +950,12 @@ distinguish fixed partners, rotating blocks and saved Wolf sides.
 par, without overwriting saved scores, explicit clears, pickups or other
 staged edits. It is an explicit draft action, never an automatic score.
 Adjust exceptions and acknowledge the same Save & Next; no separate Dots save
-or keyboard is required for the common path. Group contests and the first-hole
-partner order remain separate from per-golfer declarations and KP distances.
+or keyboard is required for the common path. Initial Sixes/Modified Sixes
+partner order is above the score fields on the first played hole; once saved,
+entry shows only the current teams, not editable order or a future cycle.
+Group contests remain below score fields, separate from per-golfer declarations
+and KP distances. The canonical order receipt and server-marked late recovery
+remain unchanged.
 
 The API advertises `dotsRulesVersions`, `wolfRulesVersions`,
 `internalGamesSupported` and narrow

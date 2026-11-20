@@ -2,6 +2,7 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './test';
 import { contrastRatio } from './contrast';
 import { dotsPlayers, openDotsFixture } from './dots-fixture-data';
+import { dotsSpecialCatalog } from '../../src/domain/dots';
 
 async function narrowControls(page: Page, scope: Locator) {
   for (const select of await scope.getByRole('combobox').all()) {
@@ -42,6 +43,104 @@ async function openGameStandings(page: Page, name: string) {
     return details.open;
   })) await summary.click();
 }
+
+test('Dots common selects all available specials and a standalone manual Sweep without resetting custom units', async ({ page }, testInfo) => {
+  const fixture = await openDotsFixture(page, testInfo, 'setup-sweep');
+  try {
+    await page.setViewportSize({ width: 320, height: 900 });
+    await page.getByRole('button', { name: 'Games', exact: true }).click();
+    await page.getByRole('button', { name: 'Add game', exact: true }).click();
+    const form = page.getByRole('form', { name: 'Game settings', exact: true });
+    await expect(form.getByRole('combobox', { name: 'Dots playing group', exact: true })).toHaveValue('1');
+    await form.getByLabel('Sandy', { exact: true }).check();
+    await form.getByLabel('Sandy units', { exact: true }).fill('3');
+    await form.getByRole('combobox', { name: 'Specials preset', exact: true }).selectOption('built-in:dots-common');
+    await form.getByRole('button', { name: 'Apply preset', exact: true }).click();
+    const specials = form.getByRole('group', { name: 'Enabled specials and whole-dot units', exact: true });
+    for (const checkbox of await specials.getByRole('checkbox').all()) {
+      if (await checkbox.isEnabled()) await expect(checkbox).toBeChecked();
+    }
+    await expect(form.getByLabel('Sweep', { exact: true })).toBeChecked();
+    await expect(form.getByLabel('Sweep · Automatic', { exact: true })).toHaveCount(0);
+    await expect(form.getByLabel('Assassin · Automatic', { exact: true })).not.toBeChecked();
+    await expect(form.getByLabel('Sandy units', { exact: true })).toHaveValue('3');
+    await form.getByRole('button', { name: 'Save game', exact: true }).click();
+    await expect(page.getByText('Game settings saved.', { exact: true })).toBeVisible();
+    const game = fixture.counters().configurations[0]?.find((game) => game.kind === 'dots');
+    expect(game).toMatchObject({ mode: 'individual', sweepRule: 'manual-v1' });
+    if (game?.kind !== 'dots') throw new Error('Missing fictional common Dots');
+    expect(game.specials).toHaveLength(dotsSpecialCatalog.length - 1);
+    expect(game.specials).toContainEqual({ kind: 'sandy', units: 3 });
+    expect(fixture.counters().writes).toBe(0);
+    expect(fixture.counters().pageErrors).toEqual([]);
+  } finally { await fixture.close(); }
+});
+
+test('manual Sweep stays independent of High/Low through save retries and raw-score corrections', async ({ page }, testInfo) => {
+  const fixture = await openDotsFixture(page, testInfo, 'manual-sweep');
+  try {
+    await page.setViewportSize({ width: 320, height: 900 });
+    const form = page.getByRole('form', { name: 'Group 1 hole 1 entry', exact: true });
+    await form.getByRole('button', { name: 'Par for blanks', exact: true }).click();
+    const open = () => form.getByRole('button', { name: 'Dots for Fictional golfer 2 · Fictional current Dots', exact: true }).click();
+    await open();
+    const dialog = page.getByRole('dialog', { name: 'Dots · Fictional golfer 2', exact: true });
+    await dialog.getByRole('checkbox', { name: 'Sweep for Fictional golfer 2', exact: true }).check();
+    await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+    fixture.pauseNextFailure();
+    await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+    await expect.poll(() => fixture.counters().requests.length).toBe(1);
+    fixture.releaseFailure();
+    await expect(form.getByRole('button', { name: 'Save & Next Hole', exact: true })).toBeEnabled();
+    await open();
+    await expect(dialog.getByRole('checkbox', { name: 'Sweep for Fictional golfer 2', exact: true })).toBeChecked();
+    await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+    await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+    await expect(page.getByRole('form', { name: 'Group 1 hole 2 entry', exact: true })).toBeVisible();
+    expect(fixture.counters().requests[1]).toEqual(fixture.counters().requests[0]);
+    const result = () => fixture.read().games?.results.find((game) => game.kind === 'dots');
+    expect(result()?.players.map((player) => player.totalPoints)).toEqual([0, 2, 0, 0]);
+    const saved = fixture.read().cards[0]?.holes[0]?.score.dots;
+    await page.getByRole('combobox', { name: 'Jump to hole', exact: true }).selectOption('1');
+    await form.getByLabel('Fictional golfer 2 score', { exact: true }).fill('5');
+    await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+    await expect(page.getByRole('form', { name: 'Group 1 hole 2 entry', exact: true })).toBeVisible();
+    expect(result()?.players.map((player) => player.totalPoints)).toEqual([0, 2, 0, 0]);
+    expect(fixture.read().cards[0]?.holes[0]?.score.dots).toEqual(saved);
+    expect(fixture.counters().writes).toBe(5);
+    expect(fixture.counters().pageErrors).toEqual([]);
+  } finally { await fixture.close(); }
+});
+
+test('Wolf High/Low Sweep is opt-in and gives one extra dot to each winning teammate', async ({ page }, testInfo) => {
+  const fixture = await openDotsFixture(page, testInfo, 'setup-sweep');
+  try {
+    await page.getByRole('button', { name: 'Games', exact: true }).click();
+    await page.getByRole('button', { name: 'Add game', exact: true }).click();
+    const form = page.getByRole('form', { name: 'Game settings', exact: true });
+    await form.getByRole('combobox', { name: 'Game type', exact: true }).selectOption('wolf');
+    const sweep = form.getByLabel('High/Low Sweep · +1 dot per winning teammate', { exact: true });
+    await expect(sweep).not.toBeChecked();
+    await sweep.check();
+    await form.getByRole('button', { name: 'Save game', exact: true }).click();
+    await expect(page.getByText('Game settings saved.', { exact: true })).toBeVisible();
+    expect(fixture.counters().configurations[0]?.find((game) => game.kind === 'wolf')).toMatchObject({ version: 2, highLowSweep: true });
+    const wolfId = fixture.read().games?.results.find((game) => game.kind === 'wolf')?.wolf?.holes.find((hole) => hole.number === 1)?.wolfId;
+    const partnerId = dotsPlayers.find((id) => id !== wolfId);
+    if (!wolfId || !partnerId) throw new Error('Missing fictional winning side');
+    const winning = new Set([wolfId, partnerId]);
+    await page.getByRole('button', { name: 'Enter scores', exact: true }).click();
+    const entry = page.getByRole('form', { name: 'Group 1 hole 1 entry', exact: true });
+    await entry.getByRole('combobox', { name: 'Wolf declaration', exact: true }).selectOption(`partner:${partnerId}`);
+    for (const [index, playerId] of dotsPlayers.entries()) await entry.getByLabel(`Fictional golfer ${String(index + 1)} score`, { exact: true }).fill(winning.has(playerId) ? '3' : '4');
+    await entry.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+    await expect(page.getByRole('form', { name: 'Group 1 hole 2 entry', exact: true })).toBeVisible();
+    const players = fixture.read().games?.results.find((game) => game.kind === 'wolf')?.players;
+    expect(players).toHaveLength(4);
+    expect(players?.map((player) => player.totalPoints)).toEqual(players?.map((player) => winning.has(player.playerId) ? 3 : 0));
+    expect(fixture.counters().pageErrors).toEqual([]);
+  } finally { await fixture.close(); }
+});
 
 test('existing Dots automatically shares one category sweep, removes split-partner bonuses and retains failed correction drafts', async ({ page }, testInfo) => {
   const fixture = await openDotsFixture(page, testInfo, 'category-sweeps');
@@ -336,6 +435,10 @@ for (const rotationHoles of [3, 6] as const) {
         document.documentElement.style.fontSize = '125%';
       });
       let form = page.getByRole('form', { name: 'Group 1 hole 1 entry', exact: true });
+      const initialOrder = await form.getByRole('region', { name: 'Fictional rotating Dots partner rotation', exact: true }).boundingBox();
+      const scoreFields = await form.getByLabel('Fictional golfer 1 score', { exact: true }).boundingBox();
+      if (!initialOrder || !scoreFields) throw new Error('Missing fictional initial team controls');
+      expect(initialOrder.y + initialOrder.height).toBeLessThanOrEqual(scoreFields.y);
       const order = [dotsPlayers[0], dotsPlayers[2], dotsPlayers[1], dotsPlayers[3]];
       for (const [index, playerId] of order.entries()) {
         if (!playerId) throw new Error('Missing fictional rotating golfer.');
@@ -371,7 +474,9 @@ for (const rotationHoles of [3, 6] as const) {
       await page.getByRole('combobox', { name: 'Jump to hole', exact: true }).selectOption(String(rotationHoles + 1));
       form = page.getByRole('form', { name: `Group 1 hole ${String(rotationHoles + 1)} entry`, exact: true });
       await expect(form.getByRole('combobox', { name: 'Dots P1', exact: true })).toHaveCount(0);
-      await expect(form.getByText('Saved partners · Fictional golfer 1 + Fictional golfer 2 vs Fictional golfer 3 + Fictional golfer 4', { exact: true })).toBeVisible();
+      await expect(form.getByText('Saved teams · Fictional golfer 1 + Fictional golfer 2 vs Fictional golfer 3 + Fictional golfer 4', { exact: true })).toBeVisible();
+      await expect(form.getByText('Preview partner cycle', { exact: true })).toHaveCount(0);
+      await expect(form.getByText(/Cycle starts on hole/)).toHaveCount(0);
       await stageSandy(form);
       await form.getByRole('button', { name: 'Par for blanks', exact: true }).click();
       await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();

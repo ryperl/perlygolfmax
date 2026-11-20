@@ -31,6 +31,10 @@ describe('separate Dots in the scoring workflow', () => {
     await screen.findByRole('heading', { name: 'Round scorecard' });
     await user.click(screen.getByRole('button', { name: 'Enter scores' }));
     await user.selectOptions(screen.getByLabelText('Jump to hole'), '9');
+    const firstScorer = round.cards[0];
+    if (!firstScorer) throw new Error('Missing fictional golfer');
+    expect(screen.getByLabelText('Dots P1').compareDocumentPosition(
+      screen.getByRole('textbox', { name: `${firstScorer.displayName} score` })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     for (const [index, playerId] of f.ids.entries()) await user.selectOptions(screen.getByLabelText(`Dots P${String(index + 1)}`), playerId);
     expect(store.client.save).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Par for blanks' }));
@@ -40,19 +44,21 @@ describe('separate Dots in the scoring workflow', () => {
     await user.click(screen.getByRole('button', { name: `Increase Sandy for ${scorer.displayName}` }));
     await user.click(screen.getByRole('button', { name: 'Done' }));
     await user.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
-    await screen.findByRole('form', { name: 'Group 1 hole 1 entry' });
+    const nextForm = await screen.findByRole('form', { name: 'Group 1 hole 1 entry' });
     const first = vi.mocked(store.client.save).mock.calls[0];
     expect(first?.[2]).toBe(f.ids[0]);
     expect(first?.[3]).toBe(9);
     expect(first?.[4].dots?.[0]).toMatchObject({ number: 9, rotation: { playerIds: f.ids },
       players: [{ playerId: scorer.playerId, counts: { sandy: 1 } }] });
     expect(screen.queryByLabelText('Dots P1')).not.toBeInTheDocument();
-    expect(within(screen.getByRole('region', { name: `${game.name} partner rotation` })).getByText(/Cycle starts on hole 9/)).toBeVisible();
+    expect(within(screen.getByRole('region', { name: `${game.name} partner rotation` })).getByText(/Saved teams/)).toBeVisible();
+    expect(within(nextForm).queryByText(/Cycle starts on hole/)).not.toBeInTheDocument();
+    expect(within(nextForm).queryByText('Preview partner cycle')).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText('Jump to hole'), '3');
     const firstName = round.cards[0]?.displayName ?? '', thirdName = round.cards[2]?.displayName ?? '';
-    expect(screen.getByText(/Saved partners/)).toHaveTextContent(`${firstName} + ${thirdName}`);
+    expect(screen.getByText(/Saved teams/)).toHaveTextContent(`${firstName} + ${thirdName}`);
     expect(store.client.save).toHaveBeenCalledTimes(4);
-    expect(screen.getByRole('button', { name: `Clear ${game.name} hole specials` })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: `Clear ${game.name} hole specials` })).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText('Jump to hole'), '9');
     await user.click(screen.getByRole('button', { name: `Clear ${game.name} hole specials` }));
     expect(screen.queryByLabelText('Dots P1')).not.toBeInTheDocument();

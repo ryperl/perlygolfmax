@@ -8,7 +8,7 @@ import './dots-entry.css';
 
 export function DotsHoleControls({ game, holeNumber, par, playerPars, etag, saved, draft, players, context, disabled, onChange,
   playerId: selectedPlayerId, groupOnly = false, rotation, rotationLocked = false, specialLabels, contextLabel = 'Wolf',
-  contextPreview = false, allowMurphyPresses = false, scoreDerivedMurphy = false, scoreDerivedParee = false, playerScores }: {
+  contextPreview = false, allowMurphyPresses = false, scoreDerivedMurphy = false, scoreDerivedParee = false, playerScores, showRotation = true }: {
   readonly game: DotsGameDefinition;
   readonly holeNumber: number;
   readonly par: number;
@@ -31,6 +31,7 @@ export function DotsHoleControls({ game, holeNumber, par, playerPars, etag, save
   readonly scoreDerivedMurphy?: boolean;
   readonly scoreDerivedParee?: boolean;
   readonly playerScores?: readonly { readonly playerId: string; readonly score: HoleScore | undefined }[] | undefined;
+  readonly showRotation?: boolean;
 }) {
   const record = draft ?? saved ?? { number: holeNumber, gameId: game.id, gameEtag: etag, players: [], contests: [] };
   const enabled = (kind: string) => game.specials.some((special) => special.kind === kind);
@@ -46,7 +47,7 @@ export function DotsHoleControls({ game, holeNumber, par, playerPars, etag, save
     && (value.contests.length > 0 || value.players.some((player) => player.calls.length > 0
       || Object.values(player.counts).some((count) => count !== 0)));
   const clearable = hasSelections(record);
-  if (groupOnly && !selectedPlayerId && game.mode !== 'rotating' && game.mode !== 'linked'
+  if (groupOnly && !selectedPlayerId && (game.mode !== 'rotating' || !showRotation) && game.mode !== 'linked'
     && eligibleContests.length === 0 && !clearable && !hasSelections(saved)) return null;
   function changePlayer(player: DotsPlayerDeclaration) {
     onChange({ ...record, gameEtag: etag, players: [...record.players.filter((entry) => entry.playerId !== player.playerId), player] });
@@ -55,7 +56,7 @@ export function DotsHoleControls({ game, holeNumber, par, playerPars, etag, save
     onChange({ ...record, gameEtag: etag, contests: [...record.contests.filter((entry) => entry.kind !== contest.kind), contest] });
   }
   return <fieldset disabled={disabled}><legend>{game.name} specials · Hole {holeNumber}</legend>
-    {!selectedPlayerId && game.version === 2 && rotation && <DotsRotationControls game={game} holeNumber={holeNumber}
+    {!selectedPlayerId && showRotation && game.version === 2 && rotation && <DotsRotationControls game={game} holeNumber={holeNumber}
       record={record} rotation={rotation} locked={rotationLocked} players={players}
       onChange={(value) => { onChange({ ...value, gameEtag: etag }); }} />}
     {selectedPlayerId && game.mode === 'rotating' && <p className="dots-entry-partner">{context?.status === 'ready'

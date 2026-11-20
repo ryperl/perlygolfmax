@@ -18,6 +18,35 @@ function Editor({ onChange, ...props }: Omit<DotSpecialsSettingsProps, 'specials
 }
 
 describe('shared specials setup and presets', () => {
+  it('makes Dots common select every available dot, preserving custom units and skipping incompatible choices', () => {
+    const onChange = vi.fn();
+    render(<Editor mode="individual" supportedKinds={allKinds} manualSweep onChange={onChange} />);
+    fireEvent.change(screen.getByLabelText('Specials preset'), { target: { value: 'built-in:dots-common' } });
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Apply preset' }));
+    const checkboxes = screen.getAllByRole('checkbox');
+    for (const checkbox of checkboxes.filter((input) => !input.hasAttribute('disabled'))) expect(checkbox).toBeChecked();
+    expect(screen.getByLabelText('Assassin · Automatic')).not.toBeChecked();
+    expect(screen.getByLabelText('Sweep')).toBeChecked();
+    expect(screen.queryByLabelText('Sweep · Automatic')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Sandy units')).toHaveValue(7);
+    expect(screen.getByLabelText('Other')).toBeChecked();
+    expect(onChange.mock.lastCall?.[0]).toHaveLength(allKinds.length - 1);
+  });
+
+  it('applies all supported common choices on an older API without trying to select unavailable Sweep or Other', () => {
+    const onChange = vi.fn();
+    render(<Editor mode="fixed" onChange={onChange} />);
+    fireEvent.change(screen.getByLabelText('Specials preset'), { target: { value: 'built-in:dots-common' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply preset' }));
+    expect(screen.getByLabelText('Sweep · Automatic')).toBeDisabled();
+    expect(screen.getByLabelText('Sweep · Automatic')).not.toBeChecked();
+    expect(screen.getByLabelText('Other')).not.toBeChecked();
+    expect(screen.getByLabelText('Assassin · Automatic')).toBeChecked();
+    expect(screen.getByLabelText('Blue Plate')).toBeChecked();
+    expect(screen.getByLabelText('Sandy units')).toHaveValue(7);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
   it('explains automatic same-golfer category sweeps only for ordinary Dots, without a new setting or changed High/Low selection', () => {
     const onChange = vi.fn();
     const specials: readonly DotsSpecialSelection[] = [{ kind: 'long-drive', units: 4 }, { kind: 'blue-plate', units: 2 }];
@@ -74,7 +103,7 @@ describe('shared specials setup and presets', () => {
     fireEvent.change(screen.getByLabelText('Specials preset'), { target: { value: 'built-in:dots-common' } });
     expect(screen.getByLabelText('Eagle units')).toHaveValue(4);
     fireEvent.click(screen.getByRole('button', { name: 'Apply preset' }));
-    expect(screen.getByLabelText('Eagle units')).toHaveValue(5);
+    expect(screen.getByLabelText('Eagle units')).toHaveValue(4);
     expect(screen.getByLabelText('Birdie units')).toHaveValue(2);
   });
 

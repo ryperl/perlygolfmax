@@ -1,4 +1,4 @@
-import { dotsCallResult, dotsDeclarationWriteIssues, dotsManualKinds, dotsSpecialCatalog } from '../../domain/dots';
+import { dotsCallResult, dotsDeclarationWriteIssues, dotsManualKindsFor, dotsSpecialCatalog } from '../../domain/dots';
 import type { DotsCall, DotsGameDefinition, DotsPlayerDeclaration, DotsSpecialKind } from '../../domain/dots';
 import type { HoleScore } from '../../domain/scoring';
 import { CalledSpecialControls } from './CalledSpecialControls';
@@ -39,7 +39,7 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
     if (count > 0 && kind === 'dime' && (declaration.counts['super-dime'] ?? 0) > 0 && !(saved?.counts['super-dime'])) counts['super-dime'] = 0;
     onChange({ ...declaration, counts });
   }
-  const manual = dotsSpecialCatalog.filter((special) => enabled(special.kind) && dotsManualKinds.includes(special.kind)
+  const manual = dotsSpecialCatalog.filter((special) => enabled(special.kind) && dotsManualKindsFor(game).includes(special.kind)
     && (special.kind !== 'gorilla' || par === 5 || active(special.kind)));
   const calls: readonly DotsCall['kind'][] = ['paree', 'murphy', 'pully-murphy'];
   const single = manual.filter((special) => special.kind !== 'sandy' && special.kind !== 'other');
@@ -129,7 +129,9 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
       {single.map((special) => {
         const { replacement, savedAlternative } = countState(special.kind);
         return <label key={special.kind}>{label(special.kind)}
-          <small>{special.description}</small>
+          <small>{special.kind === 'sweep' && game.sweepRule === 'manual-v1'
+            ? 'Scorer-declared Sweep; shared with current teammates. Automatic High/Low and category sweeps are separate.'
+            : special.description}</small>
           {replacement && active(replacement) && !savedAlternative && <small>Selecting {label(special.kind)} replaces unsaved {label(replacement)}.</small>}
           {savedAlternative && replacement && <small>Saved {label(replacement)} is retained. Clear it explicitly before choosing {label(special.kind)}.</small>}
           {countInput(special.kind)}

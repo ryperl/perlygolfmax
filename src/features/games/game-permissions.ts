@@ -17,9 +17,11 @@ export function canManageRoundGames(round: RoundScores): boolean {
 export function canManageGame(round: RoundScores, game: RoundGameDefinition): boolean {
   if (round.eventStatus === 'archived') return false;
   if (game.kind === 'wolf' && game.version === 2 && !round.wolfRulesVersions?.includes(2)) return false;
+  if (game.kind === 'wolf' && game.version === 2 && game.highLowSweep === true && round.wolfHighLowSweep !== true) return false;
   if (game.kind === 'dots' && game.version === 2 && !round.dotsRulesVersions?.includes(2)) return false;
   if (game.kind === 'dots' && game.mode === 'individual' && !supportsIndividualDotsPlayerCount(round, game.playerIds.length)) return false;
   if (game.kind === 'dots' && !supportsDotsSpecials(round, game.specials)) return false;
+  if (game.kind === 'dots' && game.sweepRule === 'manual-v1' && round.dotsManualSweep !== true) return false;
   if (game.kind === 'churchy' && (round.churchyEnabled !== true || game.version !== 1 && !round.churchyRulesVersions?.includes(game.version))) return false;
   if (game.kind === 'dots' || game.kind === 'wolf' || game.kind === 'nassau' || game.kind === 'match-play') {
     if (round.setupLocked) return false;

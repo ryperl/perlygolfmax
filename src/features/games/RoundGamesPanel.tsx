@@ -78,6 +78,12 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
   const editingRound = editor?.latest ?? editor?.context ?? round;
   const canManage = canManageRoundGames(round) && (!editor?.latest || canManageRoundGames(editor.latest));
   const disabled = busy || working || archived || !canManage;
+  const draftGame = editor ? buildGame(editor.draft, editor.roster.map((card) => card.playerId)) : null;
+  const sweepDefinitions = [...(editor?.base ?? []), ...(draftGame ? [draftGame] : [])];
+  const unsupportedSweep = sweepDefinitions.some((game) => game.kind === 'dots' && game.sweepRule === 'manual-v1')
+    && (round.dotsManualSweep !== true || editingRound.dotsManualSweep !== true)
+    || sweepDefinitions.some((game) => game.kind === 'wolf' && game.version === 2 && game.highLowSweep === true)
+      && (round.wolfHighLowSweep !== true || editingRound.wolfHighLowSweep !== true);
 
   useEffect(() => { dirtyCallback.current = onDirtyChange; }, [onDirtyChange]);
   useEffect(() => {
@@ -117,6 +123,17 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
     }
     const game = buildGame(editor.draft, editor.roster.map((card) => card.playerId));
     const previousGame = editor.base.find((entry) => entry.id === editor.draft.id);
+    const sweepGames = [...editor.base, ...(game ? [game] : [])];
+    if (sweepGames.some((entry) => entry.kind === 'dots' && entry.sweepRule === 'manual-v1')
+      && (round.dotsManualSweep !== true || editingRound.dotsManualSweep !== true)) {
+      setMessage('Manual Sweep requires API support. Your draft is retained; refresh after an API update.');
+      return;
+    }
+    if (sweepGames.some((entry) => entry.kind === 'wolf' && entry.version === 2 && entry.highLowSweep === true)
+      && (round.wolfHighLowSweep !== true || editingRound.wolfHighLowSweep !== true)) {
+      setMessage('Wolf High/Low Sweep requires API support. Your draft is retained; refresh after an API update.');
+      return;
+    }
     if ([...(previousGame ? [previousGame] : []), ...(game ? [game] : [])].some(hasCustomChurchyName)
       && (round.churchyCustomNames !== true || editingRound.churchyCustomNames !== true)) {
       setMessage('Custom Churchie names require API support. Your draft is retained; refresh after an API update.');
@@ -201,6 +218,12 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
         : editor.draft.kind === 'ball-drop' || editor.draft.kind === 'skins'
         ? 'Check the game name (1–100 characters), supported format, and complete four-person Ball Drop teams. Skins are individual; net always uses 100% Course Handicap.'
         : 'Check the game name (1–100 characters), whole-number points, net allowance (1–100), and complete team assignments. Values must be safe integers within the supported points range.');
+      return;
+    }
+    if (intended.some((entry) => entry.kind === 'wolf' && entry.version === 2 && entry.highLowSweep === true
+      && intended.some((linked) => linked.kind === 'dots' && linked.mode === 'linked' && linked.linkedGameId === entry.id
+        && linked.sweepRule === undefined && linked.specials.some((special) => special.kind === 'sweep')))) {
+      setMessage('Remove or explicitly convert the legacy linked Sweep in Dots before enabling Wolf High/Low Sweep.');
       return;
     }
     const attempt = editor.attempt ?? { games: intended, etag: editor.etag, id: crypto.randomUUID() };
@@ -335,6 +358,8 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
           games={editor.base} internalOnly={!canManageAllRoundGames(editingRound)}
           existing={editor.base.some((game) => game.id === editor.draft.id)}
           wolfV2Supported={round.wolfRulesVersions?.includes(2) === true && editingRound.wolfRulesVersions?.includes(2) === true}
+          wolfHighLowSweepSupported={round.wolfHighLowSweep === true && editingRound.wolfHighLowSweep === true}
+          dotsManualSweepSupported={round.dotsManualSweep === true && editingRound.dotsManualSweep === true}
           dotsV2Supported={round.dotsRulesVersions?.includes(2) === true && editingRound.dotsRulesVersions?.includes(2) === true}
           dotsSpecialKinds={dotsSpecialCatalog.filter(({ kind }) => supportsDotsSpecials(round, [{ kind, units: 1 }])
             && supportsDotsSpecials(editingRound, [{ kind, units: 1 }])).map((special) => special.kind)}
@@ -346,7 +371,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
           holeNumbers={editingRound.layout.map((hole) => hole.number)}
           setupLocked={round.setupLocked || editingRound.setupLocked}
           allowChurchyCreation={!editor.base.some((game) => game.id === editor.draft.id)}
-          saveDisabled={editor.conflict} cancelDisabled={working} retry={editor.attempt !== null}
+          saveDisabled={editor.conflict || unsupportedSweep} cancelDisabled={working} retry={editor.attempt !== null}
           onChange={change} onSave={() => { void save(); }} onCancel={() => {
             setEditor(null);
             setMessage(editor.attempt ? 'Closing editing does not undo an earlier save. Refresh to see the saved settings.' : '');

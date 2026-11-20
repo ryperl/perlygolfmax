@@ -269,16 +269,24 @@
   Assassin needs both approach qualifiers or both longest drives in a 2-v-2
   side. Optional second KP/Blue Plate/Long Drive selections never win extra
   category dots; absent seconds mean no Assassin, not a pending decision.
-  Hide seconds in individual/solo contexts. Sweep needs real linked
-  High/Low outcomes, not fabricated standalone contests. Thief/full Sixes
+  Hide seconds in individual/solo contexts. Unmarked legacy Sweep needs real
+  linked High/Low outcomes. Explicit `sweepRule: "manual-v1"` allows a
+  scorer-declared Sweep with normal units/sharing, without gross qualification.
+  Wolf v2 `highLowSweep: true` is separately opt-in, one extra dot per partnered
+  winning teammate for both High/Low; no solo, carry or multiplier. Never enable
+  both automatic sources for the same match. Require `sweepRules=2`/capabilities,
+  preserve legacy definitions/audits and immutable final-hole Wolf choices.
+  Thief/full Sixes
   match engines remain deferred. Dots cannot stack with Churchie.
 - Rotating Dots version 2 shares specials for Modified Sixes (three played
   holes) and Sixes (six), not a full base-match engine. First-played-hole P1–P4
   order cycles 12/34, 13/24, 14/23 from an acknowledged canonical group-first
   card receipt. Missing order is pending, never inferred fixed partners.
   Preserve the immutable order/origin on clears/raw-only edits and mark absent
-  order recovery late on the server. No retrospective reshuffle or invented
-  High/Low/Sweep. Require explicit `dotsRulesVersions` support, keep legacy
+  order recovery late on the server. Initial Sixes order goes above score
+  fields; after acknowledgement show current teams only, not a future cycle.
+  No retrospective reshuffle or invented High/Low contests; explicit manual
+  Sweep remains independent. Require explicit `dotsRulesVersions` support, keep legacy
   definitions/results unchanged and retain group/input/revision/audit checks.
   New/changed declarations enforce same-source-golfer/whole-hole exclusions:
   Hogan/Seve, Pully with Dime/SuperDime, Hogan with Murphy/Chippy. Shared

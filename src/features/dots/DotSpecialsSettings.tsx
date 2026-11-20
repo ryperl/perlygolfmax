@@ -4,7 +4,7 @@ import { defaultChurchySpecialSelections } from '../../domain/churchy';
 import type { DotsGameDefinition, DotsSpecialKind, DotsSpecialSelection } from '../../domain/dots';
 import type { DotPresetStore } from '../../client/dot-presets';
 import { DotPresetControls } from './DotPresetControls';
-import { dotSpecialLabel, dotSpecialModeCompatible, legacyDotsSpecialKinds } from './dot-preset-options';
+import { allDotSelections, dotSpecialLabel, dotSpecialModeCompatible, legacyDotsSpecialKinds } from './dot-preset-options';
 import './dots-settings.css';
 
 export interface DotSpecialsSettingsProps {
@@ -14,15 +14,16 @@ export interface DotSpecialsSettingsProps {
   readonly supportedKinds?: readonly DotsSpecialKind[];
   readonly context?: 'dots' | 'churcie';
   readonly presetStore?: DotPresetStore;
+  readonly manualSweep?: boolean;
 }
 
 export function DotSpecialsSettings({ specials, mode, onChange, supportedKinds = legacyDotsSpecialKinds,
-  context = 'dots', presetStore }: DotSpecialsSettingsProps) {
+  context = 'dots', presetStore, manualSweep = false }: DotSpecialsSettingsProps) {
   const [expanded, setExpanded] = useState<DotsSpecialKind | null>(null);
   const helpId = useId();
   const defaults = context === 'churcie' ? builtInDefaultUnits : undefined;
   const available = dotsSpecialCatalog.filter((special) => supportedKinds.includes(special.kind)
-    && dotSpecialModeCompatible(special.kind, mode));
+    && dotSpecialModeCompatible(special.kind, mode, manualSweep));
   const allSelected = available.every((special) => specials.some((entry) => entry.kind === special.kind));
   return <fieldset className="dots-specials" aria-label="Enabled specials and whole-dot units">
     <legend>Specials</legend>
@@ -31,31 +32,29 @@ export function DotSpecialsSettings({ specials, mode, onChange, supportedKinds =
         Category sweep: the same golfer winning Long Drive and Blue Plate on a hole earns 1 extra dot,
         shared with current teammates. Carries do not increase this bonus. Separate from linked High/Low Sweep.
       </p>}
-    <DotPresetControls specials={specials} mode={mode} supportedKinds={supportedKinds} context={context}
+    <DotPresetControls specials={specials} mode={mode} supportedKinds={supportedKinds} context={context} manualSweep={manualSweep}
       onChange={onChange} store={presetStore} />
     <div className="dots-specials-toolbar">
       <small>{specials.length} selected · Whole-dot values</small>
       <button type="button" disabled={allSelected} onClick={() => {
-        onChange([...specials.map((special) => ({ ...special })), ...available.filter((special) =>
-          !specials.some((entry) => entry.kind === special.kind)).map((special) => ({
-          kind: special.kind, units: defaults?.get(special.kind) ?? special.defaultUnits,
-        }))]);
+        onChange(allDotSelections(specials, mode, supportedKinds, context, manualSweep));
       }}>Select all</button>
     </div>
     <div className="dots-specials-grid">{dotsSpecialCatalog.map((special) => {
       const selected = specials.find((entry) => entry.kind === special.kind);
       const unsupported = !supportedKinds.includes(special.kind);
-      const incompatible = unsupported || !dotSpecialModeCompatible(special.kind, mode);
+      const incompatible = unsupported || !dotSpecialModeCompatible(special.kind, mode, manualSweep);
       const label = dotSpecialLabel(special.kind, context);
+      const automatic = special.automatic && !(context === 'dots' && manualSweep && special.kind === 'sweep');
       const descriptionId = `${helpId}-${special.kind}`;
       return <div className="dots-special" key={special.kind}>
         <div className="dots-special-row">
           <label className="dots-special-toggle"><input type="checkbox" checked={selected !== undefined}
-            aria-label={`${label}${special.automatic ? ' · Automatic' : ''}`} disabled={incompatible}
+            aria-label={`${label}${automatic ? ' · Automatic' : ''}`} disabled={incompatible}
             onChange={(event) => { onChange(event.target.checked
               ? [...specials, { kind: special.kind, units: defaults?.get(special.kind) ?? special.defaultUnits }]
               : specials.filter((entry) => entry.kind !== special.kind)); }} />
-            <span>{label}{special.automatic && <span className="dots-special-auto" aria-hidden="true">Auto</span>}</span>
+            <span>{label}{automatic && <span className="dots-special-auto" aria-hidden="true">Auto</span>}</span>
           </label>
           {selected && <input className="dots-special-units" aria-label={`${label} units`} type="number" min="1" step="1"
             value={selected.units} disabled={incompatible} onChange={(event) => {
@@ -72,7 +71,9 @@ export function DotSpecialsSettings({ specials, mode, onChange, supportedKinds =
           </button>
         </div>
         {expanded === special.kind && <p className="dots-special-description" id={descriptionId}>
-          {context === 'churcie' ? special.description.replace(/\bDime\b/gu, 'Sticky') : special.description}
+          {context === 'dots' && manualSweep && special.kind === 'sweep'
+            ? 'Scorer-declared Sweep. Shared with current teammates; independent of automatic category and High/Low sweeps.'
+            : context === 'churcie' ? special.description.replace(/\bDime\b/gu, 'Sticky') : special.description}
         </p>}
         {incompatible && <small className="dots-special-reason">{unsupported ? `${label} requires advertised API support.`
           : special.kind === 'sweep' ? 'Sweep requires a linked game with actual High and Low results.'

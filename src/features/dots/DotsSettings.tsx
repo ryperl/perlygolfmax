@@ -15,6 +15,8 @@ export interface DotsSetupDraft {
   readonly dotsPlayers?: readonly string[];
   readonly dotsPlayerIds?: readonly string[];
   readonly dotsSpecials?: readonly DotsSpecialSelection[];
+  readonly dotsSweepRule?: 'manual-v1';
+  readonly dotsLegacySweep?: boolean;
   readonly linkedGameId?: string;
   readonly stake?: string;
 }
@@ -44,7 +46,7 @@ export function DotsPlayingGroupSelect({ draft, groups, onChange, individualPlay
 }
 
 export function DotsSettings({ draft, groups, players, wolves, onChange, v2Supported = false, individualPlayerCounts = [4],
-  supportedKinds, presetStore, hidePlayingGroup = false }: {
+  supportedKinds, presetStore, hidePlayingGroup = false, manualSweepSupported = false }: {
   readonly draft: DotsSetupDraft;
   readonly groups: readonly RoundGroup[];
   readonly players: readonly { readonly playerId: string; readonly displayName: string }[];
@@ -55,6 +57,7 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
   readonly supportedKinds?: readonly DotsSpecialKind[];
   readonly presetStore?: DotPresetStore;
   readonly hidePlayingGroup?: boolean;
+  readonly manualSweepSupported?: boolean;
 }) {
   const group = groups.find((entry) => entry.number === draft.groupNumber);
   const linked = wolves.find((game) => game.id === draft.linkedGameId);
@@ -62,7 +65,9 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
   const mode = draft.dotsMode ?? 'individual';
   const solo = mode === 'individual' && group?.playerIds.length === 1;
   const smallGroup = group !== undefined && group.playerIds.length !== 4;
-  const compatible = dotSpecialModeCompatible;
+  const legacySweep = draft.dotsLegacySweep === true && draft.dotsSweepRule !== 'manual-v1';
+  const manualSweep = draft.dotsSweepRule === 'manual-v1' || manualSweepSupported && !legacySweep;
+  const compatible = (kind: DotsSpecialKind, mode: DotsGameDefinition['mode']) => dotSpecialModeCompatible(kind, mode, manualSweep);
   return <section className="dots-settings" aria-label="Dots setup">
     <div className="dots-setup-fields">
     {!hidePlayingGroup && <DotsPlayingGroupSelect draft={draft} groups={groups} onChange={onChange} individualPlayerCounts={individualPlayerCounts} />}
@@ -110,9 +115,15 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
         onChange={(event) => { onChange({ stake: event.target.value }); }} /></span></label>
       <small>Blank or 0: points only. Enter dollars, e.g. .50.</small>
     </>}
-    <DotSpecialsSettings specials={specials} mode={mode}
+    {legacySweep && <p>Saved legacy Sweep awards linked High/Low wins. It stays automatic until you explicitly change it before scoring.</p>}
+    {legacySweep && manualSweepSupported && <button type="button" onClick={() => {
+      onChange({ dotsSweepRule: 'manual-v1', dotsLegacySweep: false });
+    }}>Use manual Sweep</button>}
+    {!manualSweepSupported && <small>Manual Sweep requires advertised API support.</small>}
+    <DotSpecialsSettings specials={specials} mode={mode} manualSweep={manualSweep}
       {...(supportedKinds === undefined ? {} : { supportedKinds })}
       {...(presetStore === undefined ? {} : { presetStore })}
-      onChange={(dotsSpecials) => { onChange({ dotsSpecials }); }} />
+      onChange={(dotsSpecials) => { onChange({ dotsSpecials,
+        ...(manualSweep && dotsSpecials.some((special) => special.kind === 'sweep') ? { dotsSweepRule: 'manual-v1' } : {}) }); }} />
   </section>;
 }

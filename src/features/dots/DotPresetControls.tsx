@@ -2,7 +2,7 @@ import { useId, useState } from 'react';
 import type { DotPreset, DotPresetStore } from '../../client/dot-presets';
 import { DotPresetStorageError } from '../../client/dot-presets';
 import type { DotsGameDefinition, DotsSpecialKind, DotsSpecialSelection } from '../../domain/dots';
-import { builtInDotPresets, dotSpecialLabel, dotSpecialModeCompatible } from './dot-preset-options';
+import { allDotSelections, builtInDotPresets, dotSpecialLabel, dotSpecialModeCompatible } from './dot-preset-options';
 
 interface LoadedPresets {
   readonly store: DotPresetStore | undefined;
@@ -16,13 +16,14 @@ function readPresets(store: DotPresetStore | undefined): LoadedPresets {
   catch (error) { return { store, entries: [], error: errorMessage(error) }; }
 }
 
-export function DotPresetControls({ specials, mode, supportedKinds, context, onChange, store }: {
+export function DotPresetControls({ specials, mode, supportedKinds, context, onChange, store, manualSweep = false }: {
   readonly specials: readonly DotsSpecialSelection[];
   readonly mode: DotsGameDefinition['mode'];
   readonly supportedKinds: readonly DotsSpecialKind[];
   readonly context: 'dots' | 'churcie';
   readonly onChange: (specials: readonly DotsSpecialSelection[]) => void;
   readonly store: DotPresetStore | undefined;
+  readonly manualSweep?: boolean;
 }) {
   const [loaded, setLoaded] = useState(() => readPresets(store));
   const [selected, setSelected] = useState('');
@@ -36,8 +37,9 @@ export function DotPresetControls({ specials, mode, supportedKinds, context, onC
   const selectedPreset = selected.startsWith('built-in:')
     ? builtInDotPresets.find((preset) => `built-in:${preset.id}` === selected)
     : custom.find((preset) => `device:${preset.id}` === selected);
-  const incompatible = selectedPreset?.specials.filter((special) => !supportedKinds.includes(special.kind)
-    || !dotSpecialModeCompatible(special.kind, mode)) ?? [];
+  const common = selected === 'built-in:dots-common';
+  const incompatible = common ? [] : selectedPreset?.specials.filter((special) => !supportedKinds.includes(special.kind)
+    || !dotSpecialModeCompatible(special.kind, mode, manualSweep)) ?? [];
   return <div className="dot-presets">
     <div className="dot-preset-apply">
       <label>Specials preset<select value={selected} onChange={(event) => { setSelected(event.target.value); }}>
@@ -48,7 +50,9 @@ export function DotPresetControls({ specials, mode, supportedKinds, context, onC
           <option key={preset.id} value={`device:${preset.id}`}>{preset.name}</option>)}</optgroup>}
       </select></label>
       <button type="button" disabled={!selectedPreset || incompatible.length > 0} onClick={() => {
-        if (selectedPreset && incompatible.length === 0) onChange(selectedPreset.specials.map((special) => ({ ...special })));
+        if (selectedPreset && incompatible.length === 0) onChange(common
+          ? allDotSelections(specials, mode, supportedKinds, context, manualSweep)
+          : selectedPreset.specials.map((special) => ({ ...special })));
       }}>Apply preset</button>
     </div>
     {incompatible.length > 0 && <small role="status">Cannot apply: {incompatible.map((special) =>

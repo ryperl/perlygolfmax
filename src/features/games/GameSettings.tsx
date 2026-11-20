@@ -32,6 +32,8 @@ interface GameSettingsProps {
   readonly games?: readonly RoundGameDefinition[];
   readonly internalOnly?: boolean;
   readonly wolfV2Supported?: boolean;
+  readonly wolfHighLowSweepSupported?: boolean;
+  readonly dotsManualSweepSupported?: boolean;
   readonly churchyV2Supported?: boolean;
   readonly churchyV3Supported?: boolean;
   readonly churchyCustomNamesSupported?: boolean;
@@ -59,6 +61,7 @@ export function GameSettings({
   games = [], internalOnly = false, wolfV2Supported = false, churchyV2Supported = false, dotsV2Supported = false,
   dotsIndividualPlayerCounts = [4], dotsSpecialKinds, presetStore, existing = false, churchyV3Supported = false,
   churchyCustomNamesSupported = false, holeNumbers = [], defaultGroupNumber,
+  wolfHighLowSweepSupported = false, dotsManualSweepSupported = false,
 }: GameSettingsProps) {
   const allowanceHint = useId();
   const stableford = draft.kind === undefined || draft.kind === 'stableford';
@@ -74,6 +77,9 @@ export function GameSettings({
   const numbers = [...holeNumbers].sort((a, b) => a - b);
   const start = numbers.indexOf(selectedChurchyGroup?.startingHole ?? numbers[0] ?? 0);
   const circuit = start < 0 ? [] : [...numbers.slice(start), ...numbers.slice(0, start)];
+  const legacyWolfSweep = games.some((game) => game.kind === 'dots' && game.mode === 'linked'
+    && game.linkedGameId === draft.id && game.sweepRule === undefined
+    && game.specials.some((special) => special.kind === 'sweep'));
   const teamFeedback = teamDraftFeedback(draft, rosterIds);
   const assigned = (draft.teams ?? []).flatMap((team) => team.playerIds).filter(Boolean);
   const teams = (draft.teams ?? []).map((team, index) => ({ team, index })).filter(({ team }) =>
@@ -192,6 +198,13 @@ export function GameSettings({
               <option key={playerId} value={playerId}>{roster.find((entry) => entry.playerId === playerId)?.displayName ?? 'Golfer unavailable'}</option>)}</select></label>)}
             <p>P1–P4 rotate from the saved group&apos;s starting hole.</p>
             {draft.wolfVersion === 2 && <>
+              <label><input type="checkbox" checked={draft.wolfHighLowSweep ?? false}
+                disabled={!wolfHighLowSweepSupported || legacyWolfSweep && !draft.wolfHighLowSweep}
+                onChange={(event) => { onChange({ ...draft, wolfHighLowSweep: event.target.checked }); }} />
+                High/Low Sweep · +1 dot per winning teammate
+              </label>
+              {!wolfHighLowSweepSupported && <small>High/Low Sweep requires advertised Wolf API support.</small>}
+              {legacyWolfSweep && <small>Remove or explicitly convert the legacy linked High/Low Sweep in Dots before enabling this option.</small>}
               <label>USD per dot difference<span>$ <input aria-label="USD per dot difference" inputMode="decimal" value={draft.stake ?? ''}
                 onChange={(event) => { onChange({ ...draft, stake: event.target.value }); }} /></span></label>
               <small>Optional dollars and cents. Blank or 0 means points-only; one individual settlement per opponent.</small>
@@ -233,6 +246,7 @@ export function GameSettings({
         </section>}
         {draft.kind === 'dots' && <DotsSettings draft={draft} groups={groups} players={roster} hidePlayingGroup
           v2Supported={dotsV2Supported}
+          manualSweepSupported={dotsManualSweepSupported}
           individualPlayerCounts={dotsIndividualPlayerCounts}
           {...(dotsSpecialKinds ? { supportedKinds: dotsSpecialKinds } : {})}
           {...(presetStore ? { presetStore } : {})}

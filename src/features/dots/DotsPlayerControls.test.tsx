@@ -31,6 +31,21 @@ function CompatibleEditor({ initial, changed }: {
 }
 
 describe('quick per-golfer Dots choices', () => {
+  it('offers a scorer-declared Sweep checkbox and custom count without requiring High/Low or gross par', async () => {
+    const user = userEvent.setup(), changed = vi.fn<(declaration: DotsPlayerDeclaration) => void>();
+    const manual: DotsGameDefinition = { ...game, specials: [{ kind: 'sweep', units: 2 }], sweepRule: 'manual-v1' };
+    render(<DotsPlayerControls game={manual} declaration={{ playerId: 'a', counts: {}, calls: [] }}
+      saved={undefined} name="Fictional golfer" par={4} score={{ kind: 'picked-up', reportedStrokes: 7 }} onChange={changed} />);
+    await user.click(screen.getByLabelText('Sweep for Fictional golfer'));
+    expect(changed).toHaveBeenLastCalledWith({ playerId: 'a', counts: { sweep: 1 }, calls: [] });
+    await user.click(screen.getByText('Details / edit counts'));
+    const count = screen.getByLabelText('Sweep count · Fictional golfer');
+    await user.clear(count);
+    await user.type(count, '3');
+    expect(changed.mock.lastCall?.[0].counts.sweep).toBe(3);
+    expect(screen.getByText(/Scorer-declared Sweep; shared with current teammates/)).toBeVisible();
+    expect(screen.queryByText(/The same partnered pair wins linked High and Low/)).not.toBeInTheDocument();
+  });
   it('prevents missed calls and par-or-better choices in both directions without clearing existing input', async () => {
     const user = userEvent.setup(), changed = vi.fn();
     render(<CompatibleEditor initial={{ playerId: 'a', counts: { sandy: 1 },

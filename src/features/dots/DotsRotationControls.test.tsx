@@ -26,9 +26,8 @@ describe('first-played Dots partner order', () => {
     expect(onChange.mock.calls[0]?.[0].rotation?.playerIds).toEqual([f.ids[0], '', '', '']);
     expect(onChange.mock.lastCall?.[0]).toMatchObject({ number: 8, rotation: { playerIds: f.ids } });
     expect(screen.getByText(/Partner preview/)).toHaveTextContent(`${f.round.cards[0]?.displayName ?? ''} + ${f.round.cards[1]?.displayName ?? ''}`);
-    fireEvent.click(screen.getByText('Preview partner cycle'));
-    expect(screen.getAllByRole('listitem').map((item) => item.textContent.match(/Hole (\d+)/)?.[1]))
-      .toEqual(['8', '9', '1', '2', '3', '4', '5', '6', '7']);
+    expect(screen.queryByText('Preview partner cycle')).not.toBeInTheDocument();
+    expect(screen.queryByRole('listitem')).not.toBeInTheDocument();
   });
 
   it('never offers an editable acknowledged order and keeps missing late recovery on the first actually played hole', () => {
@@ -40,7 +39,8 @@ describe('first-played Dots partner order', () => {
     const props = { game, record, players: f.round.cards, onChange };
     const view = render(<DotsRotationControls {...props} holeNumber={2} rotation={dotsRotationContext(game, f.round, [record])} locked />);
     expect(screen.queryByLabelText('Dots P1')).not.toBeInTheDocument();
-    expect(screen.getByText(/marked late by the server/)).toBeVisible();
+    expect(screen.getByText(/Order recovered late, marked by the server/)).toBeVisible();
+    expect(screen.queryByText(/Cycle starts/)).not.toBeInTheDocument();
     const { rotation: omitted, ...missing } = record;
     void omitted;
     view.rerender(<DotsRotationControls {...props} record={missing} holeNumber={2}

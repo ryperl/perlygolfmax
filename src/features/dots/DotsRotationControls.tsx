@@ -15,11 +15,11 @@ export function DotsRotationControls({ game, holeNumber, record, rotation, locke
   const complete = order.length === 4 && new Set(order).size === 4 && order.every((id) => game.playerIds.includes(id));
   const current = rotation.contexts.find((context) => context.number === holeNumber);
   return <section aria-label={`${game.name} partner rotation`}>
-    <h4>{game.rotationHoles === 3 ? 'Modified Sixes' : 'Sixes'} · Partners every {game.rotationHoles} holes</h4>
-    {current?.status === 'ready' && <p>{locked ? 'Saved partners' : 'Partner preview'} · {current.sides.map((side) =>
-      side.map(name).join(' + ')).join(' vs ')}</p>}
-    {locked ? <p>Cycle starts on hole {rotation.firstHole}. P1–P4 order is saved and cannot change.
-      {rotation.rotation?.recordedLate && ' Recovered after scoring started; marked late by the server.'}</p>
+    <h4>{game.rotationHoles === 3 ? 'Modified Sixes' : 'Sixes'} · {locked ? 'Current teams' : 'Set initial order'}</h4>
+    {current?.status === 'ready' && <p>{locked ? 'Saved teams' : 'Partner preview'} · {current.sides.map((side) =>
+      side.map(name).join(' + ')).join(' vs ')}
+      {locked && rotation.rotation?.recordedLate && <small> · Order recovered late, marked by the server</small>}</p>}
+    {locked ? current?.status !== 'ready' && <p role="alert">Current teams are unavailable. Refresh and review saved inputs.</p>
       : eligible ? <>
         <p>Choose the first played hole&apos;s order. Save &amp; Next saves it with this hole; the order then locks.</p>
         {rotation.firstHole !== null && <p role="note">Scores already exist. Saving the recovered order is marked late by the server.</p>}
@@ -33,10 +33,6 @@ export function DotsRotationControls({ game, holeNumber, record, rotation, locke
           }}><option value="">Choose golfer</option>{game.playerIds.map((id) =>
             <option key={id} value={id}>{name(id)}</option>)}</select></label>)}</div>
         {!complete && <p>Sharing is pending until all four positions are chosen and saved.</p>}
-        {complete && <details><summary>Preview partner cycle</summary>
-          <ul>{rotation.contexts.map((context) => <li key={context.number}>Hole {context.number} · {
-            context.status === 'ready' ? context.sides.map((side) => side.map(name).join(' + ')).join(' vs ') : 'Pending order'}</li>)}</ul>
-        </details>}
       </> : <p>Partner order is missing. Return to first played hole {rotation.firstHole} to recover it; no partners are inferred.</p>}
   </section>;
 }

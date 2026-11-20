@@ -358,9 +358,9 @@ test('Churchie tee creation copies device presets, preserves custom units after 
     await editor.getByRole('combobox', { name: 'Specials preset', exact: true }).selectOption('built-in:dots-common');
     await expect(editor.getByLabel('Eagle units', { exact: true })).toHaveValue('4');
     await editor.getByRole('button', { name: 'Apply preset', exact: true }).click();
-    await expect(editor.getByLabel('Eagle units', { exact: true })).toHaveValue('5');
+    await expect(editor.getByLabel('Eagle units', { exact: true })).toHaveValue('4');
     await editor.getByLabel('Eagle units', { exact: true }).fill('7');
-    await editor.getByRole('button', { name: 'Select all', exact: true }).click();
+    await expect(editor.getByRole('button', { name: 'Select all', exact: true })).toBeDisabled();
     await expect(editor.getByLabel('Eagle units', { exact: true })).toHaveValue('7');
     for (const name of ['Assassin · Automatic', 'Sweep · Automatic', 'Other']) {
       await expect(editor.getByRole('checkbox', { name, exact: true })).toBeChecked();

@@ -9,6 +9,7 @@ import { preserveScoreExtras } from '../../src/domain/scoring';
 import type { GameWriteResult, HoleScore, RoundScores, ScoreWriteResult } from '../../src/domain/scoring';
 import type { RoundGameDefinition } from '../../src/domain/games';
 import type { DotsGameDefinition } from '../../src/domain/dots';
+import { dotsSpecialCatalog } from '../../src/domain/dots';
 import type { WolfGameDefinition } from '../../src/domain/wolf';
 import type { EventWorkspace } from '../../src/domain/setup';
 import { calculateGameResults } from '../../src/domain/stableford';
@@ -46,14 +47,15 @@ function workspace(round: RoundScores, snapshot = dotsFixture.snapshot): EventWo
 
 export async function openDotsFixture(page: Page, testInfo: TestInfo,
   scenario: 'setup' | 'linked' | 'old-api' | 'rotating-3' | 'rotating-6' | 'individual-1' | 'individual-2' | 'individual-3'
-    | 'string-rules' | 'called-targets' | 'category-sweeps' = 'setup') {
+    | 'string-rules' | 'called-targets' | 'category-sweeps' | 'manual-sweep' | 'setup-sweep' = 'setup') {
   const server = await createServer({ configFile: false, cacheDir: testInfo.outputPath('vite-cache'),
     server: { host: '127.0.0.1', port: 0, hmr: false }, esbuild: { jsx: 'automatic' },
     optimizeDeps: { noDiscovery: true, include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'] },
     logLevel: 'error' });
   const playerCount = scenario.startsWith('individual-') ? Number(scenario.slice(-1)) : 4;
   const categorySweeps = scenario === 'category-sweeps';
-  const modernRules = scenario === 'string-rules' || scenario === 'called-targets' || categorySweeps;
+  const sweepRules = scenario === 'manual-sweep' || scenario === 'setup-sweep';
+  const modernRules = scenario === 'string-rules' || scenario === 'called-targets' || categorySweeps || scenario === 'manual-sweep';
   const snapshot = scenario === 'string-rules' ? { ...dotsFixture.snapshot, teeProfile: { ...dotsFixture.snapshot.teeProfile,
     holes: dotsFixture.snapshot.teeProfile.holes.map((hole) => ({ ...hole, par: hole.number === 2 ? 5 : hole.number === 3 ? 3 : hole.par })) } }
     : categorySweeps ? { ...dotsFixture.snapshot, teeProfile: { ...dotsFixture.snapshot.teeProfile,
@@ -65,8 +67,11 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
   const seeded = scenario === 'string-rules' || categorySweeps;
   const stringScores = [[4, 4, 3], [3, 4, 1]] as const;
   const initial: RoundScores = { ...base, setupLocked: seeded, lastUpdatedAt: seeded ? '2026-01-01T00:00:00Z' : null,
-    teeStrokeAllocation: true, ...(modernRules ? { stringRulesVersion: 2 as const } : {}),
+    teeStrokeAllocation: true, ...(modernRules || sweepRules ? { stringRulesVersion: 2 as const } : {}),
     ...(categorySweeps ? { dotsCategorySweepsVersion: 1 as const } : {}),
+    ...(sweepRules ? { dotsManualSweep: true as const, wolfHighLowSweep: true as const, sweepRulesVersion: 2 as const,
+      dotsCategorySweepsVersion: 1 as const,
+      dotsSpecialKinds: dotsSpecialCatalog.map((special) => special.kind) } : {}),
     ...(scenario === 'called-targets' ? { dotsCallTargets: true as const } : {}),
     groups: [{ ...base.groups[0], number: 1, playerIds: ids }],
     cards: base.cards.slice(0, playerCount).map((card, index) => ({ ...card,
@@ -94,12 +99,18 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
   const modern: DotsGameDefinition = { id: strokeGameId(963), name: 'Fictional current Dots', kind: 'dots', version: 1,
     ...(categorySweeps ? { mode: 'fixed', partnerIds: dotsPlayers } : { mode: 'individual' }),
     groupNumber: 1, playerIds: dotsPlayers, stakeMinor: null,
-    specials: categorySweeps ? [{ kind: 'long-drive', units: 1 }, { kind: 'blue-plate', units: 1 }]
+    ...(scenario === 'manual-sweep' ? { sweepRule: 'manual-v1' as const } : {}),
+    specials: scenario === 'manual-sweep' ? [{ kind: 'sweep', units: 2 }]
+      : categorySweeps ? [{ kind: 'long-drive', units: 1 }, { kind: 'blue-plate', units: 1 }]
       : scenario === 'string-rules' ? [{ kind: 'string', units: 1 }, { kind: 'birdy-string', units: 3 },
       { kind: 'birdie', units: 2 }, { kind: 'eagle', units: 4 }]
       : [{ kind: 'paree', units: 1 }, { kind: 'murphy', units: 1 }, { kind: 'sandy', units: 1 }, { kind: 'pully', units: 1 }] };
   let stored = project(initial, modernRules ? [modern] : scenario.startsWith('rotating') ? [dotsFixture.skins, rotating]
-    : scenario === 'setup' || scenario.startsWith('individual-') ? [dotsFixture.skins] : [dotsFixture.skins, wolf, dots], snapshot);
+    : scenario === 'setup' || scenario === 'setup-sweep' || scenario.startsWith('individual-') ? [dotsFixture.skins] : [dotsFixture.skins, wolf, dots], snapshot);
+  const wireRound = (round: RoundScores) => leanRoundScores(round, sweepRules, sweepRules, modernRules || sweepRules,
+    scenario === 'called-targets' || sweepRules, categorySweeps || sweepRules, sweepRules, sweepRules);
+  const wireWrite = (result: ScoreWriteResult) => leanScoreWriteResult(result, sweepRules, sweepRules, modernRules || sweepRules,
+    scenario === 'called-targets' || sweepRules, categorySweeps || sweepRules, sweepRules, sweepRules);
   let writes = 0, configWrites = 0, failPaused = false, roundReads = 0;
   const roundReadFormats: string[] = [];
   let releaseFailure: (() => void) | null = null;
@@ -127,9 +138,10 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
           roundReads++;
           const lean = new URL(request.url()).searchParams.get('format') === 'lean';
           roundReadFormats.push(lean ? 'lean' : 'full');
-          if (modernRules) expect(new URL(request.url()).searchParams.get('stringRules')).toBe('2');
+          if (modernRules || sweepRules) expect(new URL(request.url()).searchParams.get('stringRules')).toBe('2');
           if (categorySweeps) expect(new URL(request.url()).searchParams.get('categorySweeps')).toBe('1');
-          return route.fulfill({ json: lean ? leanRoundScores(stored, false, false, modernRules, scenario === 'called-targets', categorySweeps) : stored });
+          if (sweepRules) expect(new URL(request.url()).searchParams.get('sweepRules')).toBe('2');
+          return route.fulfill({ json: lean ? wireRound(stored) : stored });
         }
         throw new Error(`Unexpected fictional Dots read: ${path}`);
       }
@@ -152,7 +164,7 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
           recordedBy: { kind: 'public-score', eventId: stored.eventId } } };
         expect(isRoundScores(stored)).toBe(true);
         return route.fulfill({ json: new URL(request.url()).searchParams.get('format') === 'lean'
-          ? { ...result, round: leanRoundScores(result.round, false, false, modernRules, scenario === 'called-targets', categorySweeps) } : result });
+          ? { ...result, round: wireRound(result.round) } : result });
       }
       if (!isHoleScore(payload.score)) throw new Error('Invalid fictional Dots score request');
       const parts = path.split('/'), playerId = parts[5], holeNumber = Number(parts[7]);
@@ -180,7 +192,7 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
         recordedBy: { kind: 'public-score', eventId: stored.eventId } } };
       expect(isScoreWriteResult(result)).toBe(true);
       return route.fulfill({ json: new URL(request.url()).searchParams.get('format') === 'lean'
-        ? leanScoreWriteResult(result, false, false, modernRules, scenario === 'called-targets', categorySweeps) : result });
+        ? wireWrite(result) : result });
     });
     await page.goto(`${origin}/#events?event=${stored.eventId}&round=${stored.roundId}`);
     await expect(page.getByRole('form', { name: 'Group 1 hole 1 entry', exact: true })).toBeVisible();
