@@ -307,7 +307,7 @@ describe('catalog-manager scoped event player Handicap Index refresh', () => {
     expect(f.rows.has(`${event.id}|player-index-refresh:${identifier(900)}`)).toBe(false);
   });
 
-  it.each(['wolf-dots', 'churchy'] as const)('audits changed %s awards without rewriting saved cards, locks or original captures', async (kind) => {
+  it.each(['wolf-dots', 'wolf-sweep', 'churchy'] as const)('audits changed %s awards without rewriting saved cards, locks or original captures', async (kind) => {
     const f = await scoringFixture();
     for (const [index, playerId] of f.input.playerIds.entries()) {
       const profile = await f.players.get(creator, playerId);
@@ -317,11 +317,12 @@ describe('catalog-manager scoped event player Handicap Index refresh', () => {
     }
     const partnerId = f.input.playerIds[1] ?? '';
     const wolf = { id: identifier(1300), name: 'Fictional Net Wolf', kind: 'wolf' as const, version: 2 as const,
-      basis: 'net' as const, groupNumber: 1, playerIds: f.input.playerIds, allowPig: true, stakeMinor: null };
+      basis: 'net' as const, groupNumber: 1, playerIds: f.input.playerIds, allowPig: true, stakeMinor: null,
+      ...(kind === 'wolf-sweep' ? { highLowSweep: true as const } : {}) };
     const churchy = { id: identifier(1301), name: 'Churchie', kind: 'churchy' as const, version: 3 as const,
       basis: 'net' as const, groupNumber: 1, playerIds: f.input.playerIds, orderMode: 'approach' as const,
       amountPerDotMinor: 50, currency: 'USD' as const, specials: defaultChurchySpecialSelections };
-    const games: readonly RoundGameDefinition[] = kind === 'churchy' ? [churchy] : [wolf, {
+    const games: readonly RoundGameDefinition[] = kind === 'churchy' ? [churchy] : kind === 'wolf-sweep' ? [wolf] : [wolf, {
       id: identifier(1302), name: 'Fictional Linked Dots', kind: 'dots', version: 1,
       groupNumber: 1, playerIds: f.input.playerIds, mode: 'linked', linkedGameId: wolf.id,
       specials: [{ kind: 'sweep', units: 1 }],
@@ -344,7 +345,10 @@ describe('catalog-manager scoped event player Handicap Index refresh', () => {
     const observation = observed.currentIndex;
     if (!observation) throw new Error('Missing fictional observation');
     const expected = f.rows.get(`${event.id}|event`)?.etag ?? '';
-    await f.workspace.refreshPlayerIndex(creator, event.id, f.playerId, observation.id, expected, identifier(1340));
+    const acknowledgement = await f.workspace.refreshPlayerIndex(creator, event.id, f.playerId, observation.id, expected, identifier(1340));
+    expect(isEventHandicapRefreshResult(acknowledgement)).toBe(true);
+    expect(await f.workspace.refreshPlayerIndex(creator, event.id, f.playerId, observation.id, expected, identifier(1340)))
+      .toEqual(acknowledgement);
     for (const [key, row] of preserved) expect(f.rows.get(key), key).toEqual(row);
     expect((await f.scores.get(creator, event.id, f.roundId)).cards).toEqual(round.cards);
     const key = `player-index-refresh:${identifier(1340)}`;
@@ -361,6 +365,11 @@ describe('catalog-manager scoped event player Handicap Index refresh', () => {
     expect(audit?.after.map((award) => award.kind)).toContain(kind === 'churchy' ? 'low' : 'wolf-high');
     if (kind === 'wolf-dots') {
       expect(correction?.dotAwardAudit?.find((entry) => entry.kind === 'dots')?.after.map((award) => award.kind)).toContain('sweep');
+    }
+    if (kind === 'wolf-sweep') {
+      expect(audit?.sweepRulesVersion).toBe(2);
+      expect(audit?.before.some((award) => award.kind === 'wolf-sweep')).toBe(false);
+      expect(audit?.after).toContainEqual(expect.objectContaining({ kind: 'wolf-sweep', dots: 1, multiplier: 1 }));
     }
   });
 });

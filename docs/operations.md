@@ -332,6 +332,12 @@ calculation context and immutable audits remain readable. Tester projections,
 setup permissions, scoring locks, quotas and payload ceilings do not change;
 publish the compatible API before the frontend.
 
+Owner input-correction and manager roster-HI refresh acknowledgements retain
+their allowlisted input/workspace shapes and do not expose Sweep configuration
+or award audits. They need no new negotiation or blanket catalog guard.
+Their private immutable correction snapshots retain explicit rule context;
+later response paths exposing those snapshots must negotiate before returning them.
+
 ## Churchie versions, capability rollout and kill switch
 
 The user-facing name is Churchie; internal `churchy` data and the existing
