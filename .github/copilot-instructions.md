@@ -291,6 +291,13 @@
   New/changed declarations enforce same-source-golfer/whole-hole exclusions:
   Hogan/Seve, Pully with Dime/SuperDime, Hogan with Murphy/Chippy. Shared
   teammate awards may differ. Hogan/Seve with Walk warns but is allowed.
+  Also block same-source Chippy/Pully, Seve with KP/Long Drive qualification,
+  and Sandy/KP on a default-tee par 3, including first/second category
+  qualifiers, never historical carry ownership. Seve with Blue Plate or
+  Gorilla is explicitly allowed. Use personal gross score/par to prevent
+  newly invalid score-qualified claims and require explicit same-save repair
+  on score changes. Keep current UI/group preflight/API checks consistent;
+  negotiate `dotCoexistence=2`, preserving valid old writes and historical reads.
   Do not make old version-1 records unreadable or silently delete old awards.
   Failed Paree/Murphy/Pully Murphy excludes that source golfer's same-hole
   par-or-better manual claims, made calls and earned automatic awards, plus

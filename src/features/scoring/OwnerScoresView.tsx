@@ -101,6 +101,12 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
   const accessChanged = round !== null && drafts.size > 0 && draftAccess.current !== scoreAccessKey(round);
   const hole = round?.layout.find((item) => item.number === (holeNumber ?? groupStartingHole(group, round.layout)));
   const canEditGroup = !!group && !!hole && group.playerIds.length > 0 && group.playerIds.every((id) => writeIds.includes(id)) && !accessChanged;
+  const localPlayerScores = round?.cards.map((card) => {
+    const local = hole && drafts.get(entryKey(card.playerId, hole.number));
+    return { playerId: card.playerId, score: !hole ? undefined : local
+      ? entryScore(local.text, local.churchy, local.kp, local.nassau, local.wolf, local.dots) ?? undefined
+      : savedHole(card, hole.number) };
+  });
   const resolvedGroup = group?.number;
   const resolvedHole = hole?.number;
   useLayoutEffect(() => {
@@ -422,6 +428,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
       {round.eventStatus === 'archived' && <p role="status">Archived event: owner read-only. Drafts cannot be saved.</p>}
       {screen === 'entry' && group && hole && <GroupHoleEntry groups={round.groups} groupNumber={group.number} layout={round.layout} hole={hole}
         beforeScores={group.playerIds[0] && <RoundGameHoleControls round={round} groupNumber={group.number} holeNumber={hole.number} placement="before"
+          playerScores={localPlayerScores}
           saved={savedHole(cardFor(round, group.playerIds[0]), hole.number)}
           draft={drafts.get(entryKey(group.playerIds[0], hole.number))}
           disabled={busy || !canEditGroup || drafts.get(entryKey(group.playerIds[0], hole.number))?.status === 'conflict'}
@@ -430,6 +437,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
           onChurchyChange={(record) => { if (group.playerIds[0]) editDots(group.playerIds[0], record); }}
           onWolfChange={(records) => { editMatch({ wolf: records }); }} />}
         playerGameControls={(playerId) => group.playerIds[0] && <RoundGameHoleControls round={round} groupNumber={group.number}
+          playerScores={localPlayerScores}
           holeNumber={hole.number} playerId={playerId} saved={savedHole(cardFor(round, group.playerIds[0]), hole.number)}
           playerScore={parseScoreEntry(drafts.get(entryKey(playerId, hole.number))?.text
             ?? scoreEntryText(savedHole(cardFor(round, playerId), hole.number)))}
@@ -440,6 +448,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
           onChurchyChange={(record) => { if (group.playerIds[0]) editDots(group.playerIds[0], record); }}
           onWolfChange={(records) => { editMatch({ wolf: records }); }} />}
         gameControls={group.playerIds[0] && <RoundGameHoleControls round={round} groupNumber={group.number} holeNumber={hole.number} placement="other"
+          playerScores={localPlayerScores}
           saved={savedHole(cardFor(round, group.playerIds[0]), hole.number)}
           draft={drafts.get(entryKey(group.playerIds[0], hole.number))}
           disabled={busy || !canEditGroup || drafts.get(entryKey(group.playerIds[0], hole.number))?.status === 'conflict'}

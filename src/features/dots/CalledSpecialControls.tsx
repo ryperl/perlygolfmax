@@ -2,7 +2,7 @@ import { dotsCallResult } from '../../domain/dots';
 import type { DotsCall } from '../../domain/dots';
 import type { HoleScore } from '../../domain/scoring';
 
-export function CalledSpecialControls({ kind, calls, name, score, par, blocked, onChange, hasOpponents = true }: {
+export function CalledSpecialControls({ kind, calls, name, score, par, blocked, onChange, hasOpponents = true, validateCalls }: {
   readonly kind: 'murphy' | 'paree';
   readonly calls: readonly DotsCall[];
   readonly name: string;
@@ -11,11 +11,12 @@ export function CalledSpecialControls({ kind, calls, name, score, par, blocked, 
   readonly blocked: boolean;
   readonly onChange: (calls: readonly DotsCall[]) => void;
   readonly hasOpponents?: boolean;
+  readonly validateCalls?: ((calls: readonly DotsCall[]) => boolean) | undefined;
 }) {
   const selected = calls.filter((call) => call.kind === kind);
   const label = kind === 'murphy' ? 'Murphy' : 'Paree';
-  function newCall(): DotsCall {
-    return { id: crypto.randomUUID(), kind, result: 'pending',
+  function newCall(id: string = crypto.randomUUID()): DotsCall {
+    return { id, kind, result: 'pending',
       ...(kind === 'murphy' ? { murphyTarget: 'par', murphyPresses: 0 } : { pareeTarget: 'par' }) };
   }
   function scoreTarget(call: DotsCall): DotsCall {
@@ -32,9 +33,13 @@ export function CalledSpecialControls({ kind, calls, name, score, par, blocked, 
       const stage = call?.murphyPresses ?? 0;
       const automatic = kind === 'murphy' ? call?.murphyTarget !== undefined : call?.pareeTarget !== undefined;
       const target = par - (kind === 'murphy' && call?.murphyTarget === 'birdie' ? 1 : 0);
+      const candidate = call ? undefined : newCall('new-call-candidate');
+      const nextCalls = candidate ? [...calls, candidate] : calls;
+      const targetChange = call ? calls.map((entry) => entry.id === call.id ? { ...call, result: 'pending' as const,
+        murphyTarget: call.murphyTarget === 'birdie' ? 'par' as const : 'birdie' as const } : entry) : calls;
       return <div className={`dots-call ${kind}-call${call ? '' : ' is-uncalled'}`} key={index === 0 ? 'primary' : call?.id}>
         <label className="dots-special-choice">
-          <input type="checkbox" checked={call !== undefined} disabled={!call && blocked}
+          <input type="checkbox" checked={call !== undefined} disabled={!call && (blocked || validateCalls?.(nextCalls) === false)}
             aria-label={`${label} called${suffix} · ${name}`}
             onChange={() => { onChange(call ? calls.filter((entry) => entry.id !== call.id)
               : [...calls, newCall()]); }} />
@@ -43,7 +48,7 @@ export function CalledSpecialControls({ kind, calls, name, score, par, blocked, 
         {call && <>
         {kind === 'murphy' && <label className="dots-special-choice">
           <input type="checkbox" checked={call.murphyTarget === 'birdie'}
-            disabled={par !== 4 && par !== 5 && call.murphyTarget !== 'birdie'}
+            disabled={par !== 4 && par !== 5 && call.murphyTarget !== 'birdie' || validateCalls?.(targetChange) === false}
             aria-label={`Murphy for birdie${suffix} · ${name}`}
             onChange={(event) => { replace(call, { ...call, result: 'pending',
               murphyTarget: event.target.checked ? 'birdie' : 'par' }); }} />
@@ -53,7 +58,7 @@ export function CalledSpecialControls({ kind, calls, name, score, par, blocked, 
           ? result === 'pending' ? 'Pending · enter a gross score'
             : `${result === 'success' ? 'Made' : hasOpponents ? 'Missed · opponents earn' : 'Missed · no opponents'} · needs ${String(target)} or better`
           : `Manual result: ${result === 'success' ? 'Made' : result === 'failure' ? 'Missed' : 'Pending'}`}</p>
-        {!automatic && <button type="button" onClick={() => {
+        {!automatic && <button type="button" disabled={validateCalls?.(calls.map((entry) => entry.id === call.id ? scoreTarget(call) : entry)) === false} onClick={() => {
           replace(call, scoreTarget(call));
         }}>Use score outcome{suffix}</button>}
         {kind === 'murphy' && <div className="dots-count-control"><span>Murphy stakes{suffix}</span>
@@ -69,6 +74,7 @@ export function CalledSpecialControls({ kind, calls, name, score, par, blocked, 
       </div>;
     })}
     {kind === 'paree' && selected.length > 0 && <button type="button" aria-label={`Add another Paree call · ${name}`}
+      disabled={validateCalls?.([...calls, newCall('new-call-candidate')]) === false}
       onClick={() => { onChange([...calls, newCall()]); }}>Add another Paree call</button>}
     {blocked && selected.length === 0 && <small>Clear this golfer&apos;s Hogan before calling Murphy.</small>}
   </div>;

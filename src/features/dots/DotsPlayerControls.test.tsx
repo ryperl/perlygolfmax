@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { DotsGameDefinition, DotsPlayerDeclaration } from '../../domain/dots';
@@ -31,6 +31,70 @@ function CompatibleEditor({ initial, changed }: {
 }
 
 describe('quick per-golfer Dots choices', () => {
+  it('blocks Chippy/Pully in both directions for one source without blocking another golfer or hiding repairable saved claims', () => {
+    const changed = vi.fn<(declaration: DotsPlayerDeclaration) => void>();
+    function Current({ initial }: { readonly initial: DotsPlayerDeclaration }) {
+      const [value, setValue] = useState(initial);
+      return <DotsPlayerControls game={compatibleGame} declaration={value} saved={initial}
+        name="Fictional golfer" par={4} score={{ kind: 'strokes', strokes: 4 }} coexistenceRules
+        onChange={(next) => { setValue(next); changed(next); }} />;
+    }
+    const view = render(<Current initial={{ playerId: 'a', counts: {}, calls: [] }} />);
+    fireEvent.click(screen.getByLabelText('Chippy for Fictional golfer'));
+    expect(screen.getByLabelText('Pully for Fictional golfer')).toBeDisabled();
+    expect(screen.getByLabelText('Pully for Fictional golfer')).toHaveAttribute('title', expect.stringContaining('Chippy'));
+    fireEvent.click(screen.getByLabelText('Chippy for Fictional golfer'));
+    fireEvent.click(screen.getByLabelText('Pully for Fictional golfer'));
+    expect(screen.getByLabelText('Chippy for Fictional golfer')).toBeDisabled();
+    view.unmount();
+    render(<Current initial={{ playerId: 'a', counts: { chippy: 1, pully: 1 }, calls: [] }} />);
+    expect(screen.getByLabelText('Chippy for Fictional golfer')).toBeEnabled();
+    expect(screen.getByLabelText('Pully for Fictional golfer')).toBeEnabled();
+    expect(screen.getByRole('alert')).toHaveTextContent('same golfer on this hole');
+    fireEvent.click(screen.getByLabelText('Pully for Fictional golfer'));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(changed.mock.lastCall?.[0].counts).toEqual({ chippy: 1, pully: 0 });
+  });
+
+  it('disables score-qualified additions on bogey/pickup but keeps saved claims editable and Gorilla valid on a personal par five', () => {
+    const changed = vi.fn<(declaration: DotsPlayerDeclaration) => void>();
+    const props = { game: compatibleGame, declaration: { playerId: 'a', counts: {}, calls: [] }, saved: undefined,
+      name: 'Fictional golfer', par: 5, coexistenceRules: true, onChange: changed };
+    const view = render(<DotsPlayerControls {...props} score={{ kind: 'strokes', strokes: 6 }} />);
+    for (const label of ['Hogan', 'Seve', 'Haz Par', 'Chippy', 'Pully']) expect(screen.getByLabelText(`${label} for Fictional golfer`)).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Increase Sandy for Fictional golfer' })).toBeDisabled();
+    expect(screen.getByLabelText('Gorilla for Fictional golfer')).toBeEnabled();
+    view.rerender(<DotsPlayerControls {...props} score={{ kind: 'picked-up', reportedStrokes: 7 }}
+      declaration={{ playerId: 'a', counts: { sandy: 2 }, calls: [] }} />);
+    expect(screen.getByRole('button', { name: 'Decrease Sandy for Fictional golfer' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Increase Sandy for Fictional golfer' })).toBeDisabled();
+    expect(screen.getByLabelText('Sandy count · Fictional golfer')).toHaveValue(2);
+    expect(changed).not.toHaveBeenCalled();
+  });
+
+  it('allows Seve with Blue Plate and Gorilla but blocks Seve for the same actual KP/Long Drive source qualifier', () => {
+    const props = { game: compatibleGame, declaration: { playerId: 'a', counts: {}, calls: [] }, saved: undefined,
+      name: 'Fictional golfer', par: 5, score: { kind: 'strokes' as const, strokes: 5 }, coexistenceRules: true, onChange: vi.fn() };
+    const view = render(<DotsPlayerControls {...props} contests={[{ kind: 'long-drive', status: 'awarded', winnerId: 'b', secondId: 'a' }]} />);
+    expect(screen.getByLabelText('Seve for Fictional golfer')).toBeDisabled();
+    view.rerender(<DotsPlayerControls {...props} contests={[{ kind: 'kp', status: 'awarded', winnerId: 'a' }]} />);
+    expect(screen.getByLabelText('Seve for Fictional golfer')).toBeDisabled();
+    view.rerender(<DotsPlayerControls {...props} contests={[{ kind: 'blue-plate', status: 'awarded', winnerId: 'a' },
+      { kind: 'long-drive', status: 'awarded', winnerId: 'b' }]} />);
+    expect(screen.getByLabelText('Seve for Fictional golfer')).toBeEnabled();
+    expect(screen.getByLabelText('Gorilla for Fictional golfer')).toBeEnabled();
+  });
+
+  it('blocks Sandy when the same golfer holds KP on a par three, but permits a teammate source and an empty category', () => {
+    const props = { game: compatibleGame, declaration: { playerId: 'a', counts: {}, calls: [] }, saved: undefined,
+      name: 'Fictional golfer', par: 3, score: { kind: 'strokes' as const, strokes: 3 }, coexistenceRules: true, onChange: vi.fn() };
+    const view = render(<DotsPlayerControls {...props} contests={[{ kind: 'kp', status: 'awarded', winnerId: 'a' }]} />);
+    expect(screen.getByRole('button', { name: 'Increase Sandy for Fictional golfer' })).toBeDisabled();
+    view.rerender(<DotsPlayerControls {...props} contests={[{ kind: 'kp', status: 'awarded', winnerId: 'b' }]} />);
+    expect(screen.getByRole('button', { name: 'Increase Sandy for Fictional golfer' })).toBeEnabled();
+    view.rerender(<DotsPlayerControls {...props} contests={[{ kind: 'kp', status: 'no-qualifier' }]} />);
+    expect(screen.getByRole('button', { name: 'Increase Sandy for Fictional golfer' })).toBeEnabled();
+  });
   it('offers a scorer-declared Sweep checkbox and custom count without requiring High/Low or gross par', async () => {
     const user = userEvent.setup(), changed = vi.fn<(declaration: DotsPlayerDeclaration) => void>();
     const manual: DotsGameDefinition = { ...game, specials: [{ kind: 'sweep', units: 2 }], sweepRule: 'manual-v1' };

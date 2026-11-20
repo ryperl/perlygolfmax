@@ -47,20 +47,21 @@ function workspace(round: RoundScores, snapshot = dotsFixture.snapshot): EventWo
 
 export async function openDotsFixture(page: Page, testInfo: TestInfo,
   scenario: 'setup' | 'linked' | 'old-api' | 'rotating-3' | 'rotating-6' | 'individual-1' | 'individual-2' | 'individual-3'
-    | 'string-rules' | 'called-targets' | 'category-sweeps' | 'manual-sweep' | 'setup-sweep' = 'setup') {
+    | 'string-rules' | 'called-targets' | 'category-sweeps' | 'manual-sweep' | 'setup-sweep' | 'coexistence' = 'setup') {
   const server = await createServer({ configFile: false, cacheDir: testInfo.outputPath('vite-cache'),
     server: { host: '127.0.0.1', port: 0, hmr: false }, esbuild: { jsx: 'automatic' },
     optimizeDeps: { noDiscovery: true, include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'] },
     logLevel: 'error' });
   const playerCount = scenario.startsWith('individual-') ? Number(scenario.slice(-1)) : 4;
   const categorySweeps = scenario === 'category-sweeps';
+  const coexistence = scenario === 'coexistence';
   const sweepRules = scenario === 'manual-sweep' || scenario === 'setup-sweep';
-  const modernRules = scenario === 'string-rules' || scenario === 'called-targets' || categorySweeps || scenario === 'manual-sweep';
+  const modernRules = scenario === 'string-rules' || scenario === 'called-targets' || categorySweeps || scenario === 'manual-sweep' || coexistence;
   const snapshot = scenario === 'string-rules' ? { ...dotsFixture.snapshot, teeProfile: { ...dotsFixture.snapshot.teeProfile,
     holes: dotsFixture.snapshot.teeProfile.holes.map((hole) => ({ ...hole, par: hole.number === 2 ? 5 : hole.number === 3 ? 3 : hole.par })) } }
-    : categorySweeps ? { ...dotsFixture.snapshot, teeProfile: { ...dotsFixture.snapshot.teeProfile,
-      totalPar: dotsFixture.snapshot.teeProfile.totalPar + 1,
-      holes: dotsFixture.snapshot.teeProfile.holes.map((hole) => ({ ...hole, par: hole.number === 1 ? 5 : 4 })) } }
+    : categorySweeps || coexistence ? { ...dotsFixture.snapshot, teeProfile: { ...dotsFixture.snapshot.teeProfile,
+      totalPar: dotsFixture.snapshot.teeProfile.totalPar + (coexistence ? 0 : 1),
+      holes: dotsFixture.snapshot.teeProfile.holes.map((hole) => ({ ...hole, par: hole.number === 1 ? 5 : coexistence && hole.number === 2 ? 3 : 4 })) } }
       : dotsFixture.snapshot;
   const base = strokeGamesRound(playerCount === 4 ? { ...dotsFixture, snapshot } : strokeGameFixture(9, playerCount));
   const ids = dotsPlayers.slice(0, playerCount);
@@ -69,6 +70,7 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
   const initial: RoundScores = { ...base, setupLocked: seeded, lastUpdatedAt: seeded ? '2026-01-01T00:00:00Z' : null,
     teeStrokeAllocation: true, ...(modernRules || sweepRules ? { stringRulesVersion: 2 as const } : {}),
     ...(categorySweeps ? { dotsCategorySweepsVersion: 1 as const } : {}),
+    ...(coexistence ? { dotsCoexistenceRulesVersion: 2 as const } : {}),
     ...(sweepRules ? { dotsManualSweep: true as const, wolfHighLowSweep: true as const, sweepRulesVersion: 2 as const,
       dotsCategorySweepsVersion: 1 as const,
       dotsSpecialKinds: dotsSpecialCatalog.map((special) => special.kind) } : {}),
@@ -100,7 +102,9 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
     ...(categorySweeps ? { mode: 'fixed', partnerIds: dotsPlayers } : { mode: 'individual' }),
     groupNumber: 1, playerIds: dotsPlayers, stakeMinor: null,
     ...(scenario === 'manual-sweep' ? { sweepRule: 'manual-v1' as const } : {}),
-    specials: scenario === 'manual-sweep' ? [{ kind: 'sweep', units: 2 }]
+    specials: coexistence ? (['hogan', 'seve', 'chippy', 'pully', 'sandy', 'gorilla', 'kp', 'blue-plate', 'long-drive'] as const)
+      .map((kind) => ({ kind, units: 1 }))
+      : scenario === 'manual-sweep' ? [{ kind: 'sweep', units: 2 }]
       : categorySweeps ? [{ kind: 'long-drive', units: 1 }, { kind: 'blue-plate', units: 1 }]
       : scenario === 'string-rules' ? [{ kind: 'string', units: 1 }, { kind: 'birdy-string', units: 3 },
       { kind: 'birdie', units: 2 }, { kind: 'eagle', units: 4 }]
@@ -141,7 +145,8 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
           if (modernRules || sweepRules) expect(new URL(request.url()).searchParams.get('stringRules')).toBe('2');
           if (categorySweeps) expect(new URL(request.url()).searchParams.get('categorySweeps')).toBe('1');
           if (sweepRules) expect(new URL(request.url()).searchParams.get('sweepRules')).toBe('2');
-          return route.fulfill({ json: lean ? wireRound(stored) : stored });
+          if (coexistence) expect(new URL(request.url()).searchParams.get('dotCoexistence')).toBe('2');
+          return route.fulfill({ json: lean && !coexistence ? wireRound(stored) : stored });
         }
         throw new Error(`Unexpected fictional Dots read: ${path}`);
       }
@@ -192,7 +197,7 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
         recordedBy: { kind: 'public-score', eventId: stored.eventId } } };
       expect(isScoreWriteResult(result)).toBe(true);
       return route.fulfill({ json: new URL(request.url()).searchParams.get('format') === 'lean'
-        ? wireWrite(result) : result });
+        ? coexistence ? result : wireWrite(result) : result });
     });
     await page.goto(`${origin}/#events?event=${stored.eventId}&round=${stored.roundId}`);
     await expect(page.getByRole('form', { name: 'Group 1 hole 1 entry', exact: true })).toBeVisible();

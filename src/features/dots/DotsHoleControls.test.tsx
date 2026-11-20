@@ -7,6 +7,50 @@ import { DotsHoleControls } from './DotsHoleControls';
 import { dotsFixture } from './dots.test-support';
 
 describe('separate Dots hole declarations', () => {
+  it.each([['kp', 3, 'KP'], ['long-drive', 5, 'Long Drive']] as const)(
+    'excludes a source Seve golfer from %s winner and second qualifier choices while allowing explicit saved repair', (kind, par, label) => {
+      const f = dotsFixture();
+      const a = f.ids[0], b = f.ids[1];
+      if (!a || !b) throw new Error('Missing fictional golfer');
+      const game: DotsGameDefinition = { ...f.game, mode: 'fixed', partnerIds: f.ids,
+        specials: [{ kind, units: 1 }, { kind: 'assassin', units: 1 }, { kind: 'seve', units: 1 }] };
+      const record: DotsHoleRecord = { number: 1, gameId: game.id, gameEtag: 'fictional',
+        players: [{ playerId: a, counts: { seve: 1 }, calls: [] }], contests: [{ kind, status: 'awarded', winnerId: b }] };
+      const props = { game, players: f.round.cards, holeNumber: 1, par, etag: 'fictional',
+        saved: record, draft: undefined, groupOnly: true, disabled: false, coexistenceRules: true, onChange: vi.fn() };
+      const view = render(<DotsHoleControls {...props} />);
+      expect(screen.getByLabelText(`${label} result`).querySelector(`option[value="${a}"]`)).toBeDisabled();
+      expect(screen.getByLabelText(new RegExp(`${label} second-`)).querySelector(`option[value="${a}"]`)).toBeDisabled();
+      view.rerender(<DotsHoleControls {...props} saved={{ ...record, contests: [{ kind, status: 'awarded', winnerId: a }] }} />);
+      expect(screen.getByLabelText(`${label} result`).querySelector(`option[value="${a}"]`)).toBeEnabled();
+      expect(screen.getByRole('alert')).toHaveTextContent('Correct the conflicting claim or change this category selection');
+      expect(props.onChange).not.toHaveBeenCalled();
+    },
+  );
+
+  it('blocks a Sandy source golfer from a par-three KP while leaving other golfers eligible', () => {
+    const f = dotsFixture(), a = f.ids[0], b = f.ids[1];
+    if (!a || !b) throw new Error('Missing fictional golfer');
+    const game: DotsGameDefinition = { ...f.game, specials: [{ kind: 'sandy', units: 1 }, { kind: 'kp', units: 1 }] };
+    const saved: DotsHoleRecord = { number: 1, gameId: game.id, gameEtag: 'fictional', contests: [],
+      players: [{ playerId: a, counts: { sandy: 1 }, calls: [] }] };
+    render(<DotsHoleControls game={game} players={f.round.cards} holeNumber={1} par={3} etag="fictional" saved={saved}
+      draft={undefined} groupOnly disabled={false} coexistenceRules onChange={vi.fn()} />);
+    expect(screen.getByLabelText('KP result').querySelector(`option[value="${a}"]`)).toBeDisabled();
+    expect(screen.getByLabelText('KP result').querySelector(`option[value="${b}"]`)).toBeEnabled();
+  });
+
+  it('retains Blue Plate/Gorilla availability for a Seve source and does not compare teammates', () => {
+    const f = dotsFixture(), a = f.ids[0];
+    if (!a) throw new Error('Missing fictional golfer');
+    const game: DotsGameDefinition = { ...f.game, specials: [{ kind: 'seve', units: 1 }, { kind: 'gorilla', units: 1 }, { kind: 'blue-plate', units: 1 }] };
+    const saved: DotsHoleRecord = { number: 1, gameId: game.id, gameEtag: 'fictional', contests: [],
+      players: [{ playerId: a, counts: { seve: 1, gorilla: 1 }, calls: [] }] };
+    render(<DotsHoleControls game={game} players={f.round.cards} holeNumber={1} par={5} etag="fictional" saved={saved}
+      draft={undefined} groupOnly disabled={false} coexistenceRules onChange={vi.fn()} />);
+    expect(screen.getByLabelText('Blue Plate result').querySelector(`option[value="${a}"]`)).toBeEnabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
   it('identifies fixed versus saved linked partners and solo context in each golfer entry', () => {
     const f = dotsFixture(), playerId = f.ids[0];
     if (!playerId) throw new Error('Missing fictional player');

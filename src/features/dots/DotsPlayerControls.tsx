@@ -1,10 +1,11 @@
-import { dotsCallResult, dotsDeclarationWriteIssues, dotsManualKindsFor, dotsSpecialCatalog } from '../../domain/dots';
-import type { DotsCall, DotsGameDefinition, DotsPlayerDeclaration, DotsSpecialKind } from '../../domain/dots';
+import { dotsCallResult, dotsDeclarationWriteIssues, dotsCoexistenceWriteIssues, dotsManualKindsFor, dotsSpecialCatalog } from '../../domain/dots';
+import type { DotsCall, DotsContest, DotsGameDefinition, DotsPlayerDeclaration, DotsSpecialKind } from '../../domain/dots';
 import type { HoleScore } from '../../domain/scoring';
 import { CalledSpecialControls } from './CalledSpecialControls';
+import { coexistenceMessage } from './coexistence-message';
 
 export function DotsPlayerControls({ game, declaration, saved, name, par, onChange, specialLabels, allowMurphyPresses = false,
-  scoreDerivedMurphy = false, scoreDerivedParee = false, score }: {
+  scoreDerivedMurphy = false, scoreDerivedParee = false, score, contests = [], coexistenceRules = false, categoryPar }: {
   readonly game: DotsGameDefinition;
   readonly declaration: DotsPlayerDeclaration;
   readonly saved: DotsPlayerDeclaration | undefined;
@@ -16,11 +17,16 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
   readonly scoreDerivedMurphy?: boolean;
   readonly scoreDerivedParee?: boolean;
   readonly score?: HoleScore | undefined;
+  readonly contests?: readonly DotsContest[];
+  readonly coexistenceRules?: boolean;
+  readonly categoryPar?: number | undefined;
 }) {
   const enabled = (kind: DotsSpecialKind) => game.specials.some((special) => special.kind === kind);
   const hasOpponents = game.mode !== 'individual' || game.playerIds.length > 1;
   const context = scoreDerivedMurphy || scoreDerivedParee ? { score, par } : undefined;
-  const issues = dotsDeclarationWriteIssues(declaration, context);
+  const validate = (value: DotsPlayerDeclaration) => coexistenceRules
+    ? dotsCoexistenceWriteIssues(value, { score, par, contests, categoryPar }) : dotsDeclarationWriteIssues(value, context);
+  const issues = validate(declaration);
   const failedCallConflict = issues.conflicts.some((issue) => issue.code === 'FAILED_CALL_SPECIAL');
   const hasFailedCall = declaration.calls.some((call) => dotsCallResult(call, score, par) === 'failure'
     && (call.murphyTarget !== 'birdie' || score?.kind !== 'strokes' || score.strokes > par));
@@ -30,7 +36,7 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
   function blocked(kind: DotsSpecialKind): boolean {
     if (active(kind)) return false;
     const candidate: DotsPlayerDeclaration = { ...declaration, counts: { ...declaration.counts, [kind]: 1 } };
-    return dotsDeclarationWriteIssues(candidate, context).conflicts.some((issue) => issue.code !== 'DIME_SUPER_DIME' && issue.kinds.includes(kind));
+    return validate(candidate).conflicts.some((issue) => issue.code !== 'DIME_SUPER_DIME' && issue.kinds.includes(kind));
   }
   function changeCount(kind: DotsSpecialKind, count: number) {
     const counts = { ...declaration.counts, [kind]: count };
@@ -48,43 +54,49 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
     const replacement: DotsSpecialKind | null = kind === 'dime' ? 'super-dime' : kind === 'super-dime' ? 'dime' : null;
     const savedAlternative = replacement !== null && (saved?.counts[replacement] ?? 0) > 0 && active(replacement) && count <= 0;
     const positive = { ...declaration, counts: { ...declaration.counts, [kind]: 1 } };
-    const additionBlocked = dotsDeclarationWriteIssues(positive, context).conflicts.some((issue) =>
-      issue.code === 'FAILED_CALL_SPECIAL' && issue.kinds.includes(kind));
+    const additions = validate(positive).conflicts.filter((issue) => issue.kinds.includes(kind));
+    const additionBlocked = additions.some((issue) => issue.code !== 'DIME_SUPER_DIME');
     return { count, invalid: !Number.isSafeInteger(count) || count < 0,
-      replacement, savedAlternative, additionBlocked, locked: blocked(kind) || savedAlternative };
+      replacement, savedAlternative, additionBlocked, locked: blocked(kind) || savedAlternative,
+      reason: additions.find((issue) => issue.code !== 'DIME_SUPER_DIME') };
   }
   function countInput(kind: DotsSpecialKind) {
     const state = countState(kind);
     return <input aria-label={`${label(kind)} count · ${name}`} type="number" inputMode="numeric"
-      min="0" step="1" disabled={state.locked} aria-invalid={state.invalid} value={state.count} onChange={(event) => {
+      min="0" step="1" disabled={state.locked && !state.invalid} aria-invalid={state.invalid} value={state.count} onChange={(event) => {
         changeCount(kind, event.target.value === '' ? 0 : Number(event.target.value));
       }} />;
   }
   return <div className="dots-player-controls">
     {single.length > 0 && <div className="dots-quick-choices">{single.map((special) => {
-      const { count, locked } = countState(special.kind);
+      const { count, locked, reason } = countState(special.kind);
       return <label className="dots-special-choice" key={special.kind}>
         <input type="checkbox" checked={count > 0} disabled={locked} aria-label={`${label(special.kind)} for ${name}`}
+          title={locked && reason ? coexistenceMessage(reason, label) : undefined}
           onChange={(event) => { changeCount(special.kind, event.target.checked ? 1 : 0); }} />
         <span>{special.kind === 'super-dime' ? <>Super<wbr />Dime</> : label(special.kind)}{count > 1 && <small> ×{count}</small>}</span>
       </label>;
     })}</div>}
     {manual.filter((special) => special.kind === 'sandy' || special.kind === 'other').map((special) => {
-      const { count, invalid, locked, additionBlocked } = countState(special.kind);
+      const { count, invalid, locked, additionBlocked, reason } = countState(special.kind);
       return <div className="dots-count-control" key={special.kind}><span>{label(special.kind)}</span>
           <div className="dots-count-stepper">
             <button type="button" aria-label={`Decrease ${label(special.kind)} for ${name}`} disabled={locked || invalid || count <= 0}
               onClick={() => { changeCount(special.kind, count - 1); }}>−</button>
             {countInput(special.kind)}
             <button type="button" aria-label={`Increase ${label(special.kind)} for ${name}`} disabled={locked || invalid || additionBlocked || count >= Number.MAX_SAFE_INTEGER}
+              title={reason ? coexistenceMessage(reason, label) : undefined}
               onClick={() => { changeCount(special.kind, count + 1); }}>+</button>
-          </div></div>;
+          </div>{coexistenceRules && reason && <small>{coexistenceMessage(reason, label)}</small>}</div>;
     })}
     {scoreDerivedMurphy && enabled('murphy') && <CalledSpecialControls kind="murphy" calls={declaration.calls} name={name}
       score={score} par={par} blocked={(declaration.counts.hogan ?? 0) > 0} hasOpponents={hasOpponents}
+      validateCalls={coexistenceRules ? (calls) => validate({ ...declaration, calls }).conflicts.length === 0 : undefined}
       onChange={(value) => { onChange({ ...declaration, calls: value }); }} />}
     {scoreDerivedParee && enabled('paree') && <CalledSpecialControls kind="paree" calls={declaration.calls} name={name}
-      score={score} par={par} blocked={false} hasOpponents={hasOpponents} onChange={(value) => { onChange({ ...declaration, calls: value }); }} />}
+      score={score} par={par} blocked={false} hasOpponents={hasOpponents}
+      validateCalls={coexistenceRules ? (calls) => validate({ ...declaration, calls }).conflicts.length === 0 : undefined}
+      onChange={(value) => { onChange({ ...declaration, calls: value }); }} />}
     {calls.filter((kind) => enabled(kind) && !(scoreDerivedMurphy && kind === 'murphy')
       && !(scoreDerivedParee && kind === 'paree')).map((kind) => {
       const callBlocked = kind === 'murphy' && (declaration.counts.hogan ?? 0) > 0;
@@ -95,9 +107,9 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
         }}>Call {label(kind)}</button>
         {callBlocked && <small>Clear this golfer&apos;s Hogan before calling Murphy.</small>}
         {declaration.calls.filter((call) => call.kind === kind).map((call, index) => {
-          const outcomeBlocked = (result: DotsCall['result']) => dotsDeclarationWriteIssues({ ...declaration,
+          const outcomeBlocked = (result: DotsCall['result']) => validate({ ...declaration,
             calls: declaration.calls.map((entry) => entry.id === call.id ? { ...entry, result } : entry),
-          }, context).conflicts.some((issue) => issue.code === 'FAILED_CALL_SPECIAL' && issue.kinds.includes(kind));
+          }).conflicts.some((issue) => issue.kinds.includes(kind));
           const failureBlocked = call.result !== 'failure' && outcomeBlocked('failure');
           const successBlocked = call.result !== 'success' && outcomeBlocked('success');
           return <div className="dots-call" key={call.id}>
@@ -142,9 +154,12 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
       <span className="dots-entry-error" role="alert" key={special.kind}>{label(special.kind)} count must be a whole number of 0 or more.</span>)}
     {hasFailedCall && !failedCallConflict && <p role="note">A failed call excludes this golfer&apos;s par-or-better specials and {label('dime')}. Correct or remove the failed call to enable them.</p>}
     {failedCallConflict && <p role="alert">This golfer has a failed call and a conflicting par-or-better special, made call or {label('dime')}. Clear or correct the conflicting declaration; saved values have not been removed.</p>}
-    {issues.conflicts.filter((issue) => issue.code !== 'FAILED_CALL_SPECIAL').map((issue) => <p role="alert" key={issue.code}>
-      {issue.kinds.map(label).join(' + ')} conflict for {name}. Review saved declarations; new changes cannot save this combination.
+    {issues.conflicts.filter((issue) => issue.code !== 'FAILED_CALL_SPECIAL').map((issue) => <p role="alert" key={`${issue.code}:${issue.kinds.join(':')}`}>
+      {coexistenceMessage(issue, label)} Review {name}&apos;s declarations; saved values have not been removed.
     </p>)}
+    {coexistenceRules && manual.some((special) => countState(special.kind).locked) && <p className="dots-entry-hint">
+      Unavailable choices conflict with this golfer&apos;s score or other selections. Clear the conflicting choice or correct the score.
+    </p>}
     {issues.warnings.map((issue) => <p key={issue.code} role="note">{issue.kinds.map(label).join(' + ')} for {name}: check your entry. This combination is allowed.</p>)}
     {manual.length === 0 && !calls.some(enabled) && <small>No individual entries enabled; automatic specials use saved scores.</small>}
   </div>;

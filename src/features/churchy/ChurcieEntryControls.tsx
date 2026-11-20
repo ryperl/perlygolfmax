@@ -5,7 +5,7 @@ import { DotsEntryButton, DotsHoleControls } from '../dots';
 import { ChurcieOrderControls } from './ChurcieOrderControls';
 import { gameDisplayName } from '../games';
 
-export function ChurcieEntryControls({ round, game, holeNumber, saved, draft, disabled, playerId, playerScore, orderOnly = false, onChange }: {
+export function ChurcieEntryControls({ round, game, holeNumber, saved, draft, disabled, playerId, playerScore, playerScores, orderOnly = false, onChange }: {
   readonly round: RoundScores;
   readonly game: ChurchyGameDefinitionV3;
   readonly holeNumber: number;
@@ -14,6 +14,7 @@ export function ChurcieEntryControls({ round, game, holeNumber, saved, draft, di
   readonly disabled: boolean;
   readonly playerId?: string | undefined;
   readonly playerScore?: HoleScore | null | undefined;
+  readonly playerScores?: readonly { readonly playerId: string; readonly score: HoleScore | undefined }[] | undefined;
   readonly orderOnly?: boolean;
   readonly onChange: (record: ChurchySpecialsV3) => void;
 }) {
@@ -71,7 +72,8 @@ export function ChurcieEntryControls({ round, game, holeNumber, saved, draft, di
     specialLabels={{ dime: 'Sticky' }} allowMurphyPresses
     scoreDerivedMurphy={round.churchyMurphyTargets === true}
     scoreDerivedParee={round.churchyPareeTargets === true}
-    playerScores={players.map((card) => ({ playerId: card.playerId,
+    coexistenceRules={round.dotsCoexistenceRulesVersion === 2}
+    playerScores={playerScores ?? players.map((card) => ({ playerId: card.playerId,
       score: (card.playerId === playerId && playerScore !== undefined
         ? playerScore : card.holes.find((hole) => hole.number === holeNumber)?.score) ?? undefined }))}
     playerId={playerId} groupOnly={playerId === undefined} disabled={locked}

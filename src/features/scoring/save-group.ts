@@ -9,7 +9,7 @@ import { scoreAccessKey, writablePlayerIds } from './score-access';
 import { isHoleScore } from '../../contracts/scoring';
 import { validChurchyCounts } from '../churchy';
 import { churchySpecialsMatchGame, churchyV3Records, sameChurchySpecials } from '../../domain/churchy';
-import { dotsAutomaticWriteConflicts, dotsDeclarationWriteIssues } from '../../domain/dots';
+import { dotsAutomaticWriteConflicts, dotsCoexistenceWriteConflicts, dotsDeclarationWriteIssues } from '../../domain/dots';
 import type { DotsPlayerDeclaration } from '../../domain/dots';
 import { dotsRecordsFor } from '../../domain/game-declarations';
 import type { DotRoundInput } from '../../domain/dot-context';
@@ -95,6 +95,11 @@ export function planGroup(round: RoundScores, playerIds: readonly string[], hole
     if (game.kind !== 'dots' && (game.kind !== 'churchy' || game.version !== 3)) continue;
     const previous = game.kind === 'dots' ? dotsRecordsFor(game, round.groups, round.cards) : churchyV3Records(game, round.groups, round.cards);
     const records = game.kind === 'dots' ? dotsRecordsFor(game, round.groups, nextCards) : churchyV3Records(game, round.groups, nextCards);
+    if (round.dotsCoexistenceRulesVersion === 2) {
+      for (const id of dotsCoexistenceWriteConflicts(game, before, { ...before, cards: nextCards }, previous, records)) {
+        if (!invalid.includes(id)) invalid.push(id);
+      }
+    }
     for (const id of dotsAutomaticWriteConflicts(game, before, { ...before, cards: nextCards }, previous, records)) {
       if (!invalid.includes(id)) invalid.push(id);
     }

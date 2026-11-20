@@ -800,6 +800,27 @@ Select enabled specials and whole-dot units before scoring. **Dots common**
 selects every available special for the current mode/API, just like **Select
 all**, preserving existing custom units. Unsupported choices such as individual
 Assassin are not newly selected. Defaults are 1, except Birdie 2 and Eagle 5.
+
+Coexistence checks apply to the **source golfer and whole hole**, not to the
+teammate receiving shared dots. Chippy and Pully cannot coexist for one source.
+Seve cannot coexist with that golfer's KP or Long Drive qualification; Sandy
+cannot coexist with that golfer's KP on a captured default-tee par 3. Category
+winner and second-qualifier selections are checked, not historical carried
+ownership. **Seve with Blue Plate or Gorilla is explicitly allowed**.
+Current score entry disables invalid additions and keeps saved choices
+available for explicit repair. A score correction cannot newly invalidate
+saved score-qualified claims without repairing those claims in the same save.
+The entire group intent is checked before any score write, and the API checks
+the same source restrictions against current saved inputs. Existing invalid
+historical claims remain readable; unrelated peer edits do not silently repair
+or erase them.
+
+New clients negotiate `dotCoexistence=2`; supporting round responses advertise
+`dotsCoexistenceRulesVersion: 2`. This is write-validation support, not a new
+award calculation. Unsupported affected writes require an app update before
+mutation; unaffected older reads and valid writes remain compatible. Churchie
+v3 shares these restrictions; legacy Churchie v1/v2 retains its saved rules.
+
 Score-qualified specials use gross qualifications:
 
 - Hogan, Seve, Sandy, called Paree, called Murphy, Haz Par and Chippy allow

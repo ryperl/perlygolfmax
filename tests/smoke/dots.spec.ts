@@ -44,6 +44,90 @@ async function openGameStandings(page: Page, name: string) {
   })) await summary.click();
 }
 
+test('same-source dot choices reject Chippy/Pully and Seve/KP/Long Drive while allowing Seve/Blue Plate/Gorilla', async ({ page }, testInfo) => {
+  const fixture = await openDotsFixture(page, testInfo, 'coexistence');
+  try {
+    await page.setViewportSize({ width: 320, height: 900 });
+    const form = page.getByRole('form', { name: 'Group 1 hole 1 entry', exact: true });
+    await form.getByRole('button', { name: 'Par for blanks', exact: true }).click();
+    await form.getByRole('button', { name: 'Dots for Fictional golfer 1 · Fictional current Dots', exact: true }).click();
+    const dialog = form.getByRole('dialog', { name: 'Dots · Fictional golfer 1', exact: true });
+    await dialog.getByRole('checkbox', { name: 'Chippy for Fictional golfer 1', exact: true }).check();
+    await expect(dialog.getByRole('checkbox', { name: 'Pully for Fictional golfer 1', exact: true })).toBeDisabled();
+    await dialog.getByRole('checkbox', { name: 'Chippy for Fictional golfer 1', exact: true }).uncheck();
+    await dialog.getByRole('checkbox', { name: 'Seve for Fictional golfer 1', exact: true }).check();
+    await expect(dialog.getByRole('checkbox', { name: 'Gorilla for Fictional golfer 1', exact: true })).toBeEnabled();
+    await dialog.getByRole('checkbox', { name: 'Gorilla for Fictional golfer 1', exact: true }).check();
+    await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+    await expect(form.getByRole('combobox', { name: 'Long Drive result', exact: true }).locator(`option[value="${dotsPlayers[0] ?? ''}"]`)).toHaveJSProperty('disabled', true);
+    await expect(form.getByRole('combobox', { name: 'Blue Plate result', exact: true }).locator(`option[value="${dotsPlayers[0] ?? ''}"]`)).toHaveJSProperty('disabled', false);
+    await form.getByRole('combobox', { name: 'Blue Plate result', exact: true }).selectOption(dotsPlayers[0] ?? '');
+    await form.getByRole('combobox', { name: 'Long Drive result', exact: true }).selectOption(dotsPlayers[1] ?? '');
+    await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+    const second = page.getByRole('form', { name: 'Group 1 hole 2 entry', exact: true });
+    await expect(second).toBeVisible();
+    const result = fixture.read().games?.results.find((game) => game.kind === 'dots')?.dots;
+    expect(result?.awards.filter((award) => award.earnedBy === dotsPlayers[0]).map((award) => award.kind))
+      .toEqual(expect.arrayContaining(['seve', 'gorilla', 'blue-plate']));
+    await second.getByRole('button', { name: 'Par for blanks', exact: true }).click();
+    await second.getByRole('button', { name: 'Dots for Fictional golfer 1 · Fictional current Dots', exact: true }).click();
+    const nextDialog = second.getByRole('dialog', { name: 'Dots · Fictional golfer 1', exact: true });
+    await nextDialog.getByRole('checkbox', { name: 'Seve for Fictional golfer 1', exact: true }).check();
+    await nextDialog.getByRole('button', { name: 'Done', exact: true }).click();
+    await expect(second.getByRole('combobox', { name: 'KP result', exact: true }).locator(`option[value="${dotsPlayers[0] ?? ''}"]`)).toHaveJSProperty('disabled', true);
+    await second.getByRole('button', { name: 'Dots for Fictional golfer 1 · Fictional current Dots', exact: true }).click();
+    await nextDialog.getByRole('checkbox', { name: 'Seve for Fictional golfer 1', exact: true }).uncheck();
+    await nextDialog.getByRole('button', { name: 'Increase Sandy for Fictional golfer 1', exact: true }).click();
+    await nextDialog.getByRole('button', { name: 'Done', exact: true }).click();
+    await expect(second.getByRole('combobox', { name: 'KP result', exact: true }).locator(`option[value="${dotsPlayers[0] ?? ''}"]`)).toHaveJSProperty('disabled', true);
+    await second.getByRole('button', { name: 'Dots for Fictional golfer 1 · Fictional current Dots', exact: true }).click();
+    await nextDialog.getByRole('button', { name: 'Decrease Sandy for Fictional golfer 1', exact: true }).click();
+    await nextDialog.getByRole('button', { name: 'Done', exact: true }).click();
+    await second.getByRole('combobox', { name: 'KP result', exact: true }).selectOption(dotsPlayers[0] ?? '');
+    await second.getByRole('button', { name: 'Dots for Fictional golfer 1 · Fictional current Dots', exact: true }).click();
+    await expect(nextDialog.getByRole('button', { name: 'Increase Sandy for Fictional golfer 1', exact: true })).toBeDisabled();
+    await nextDialog.getByRole('button', { name: 'Done', exact: true }).click();
+    expect(fixture.counters().writes).toBe(4);
+    expect(fixture.counters().pageErrors).toEqual([]);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  } finally { await fixture.close(); }
+});
+
+test('a changed score cannot leave its saved Hogan invalid and partial-save repair retains the intended hole', async ({ page }, testInfo) => {
+  const fixture = await openDotsFixture(page, testInfo, 'coexistence');
+  try {
+    const form = page.getByRole('form', { name: 'Group 1 hole 1 entry', exact: true });
+    await form.getByRole('button', { name: 'Par for blanks', exact: true }).click();
+    await form.getByRole('button', { name: 'Dots for Fictional golfer 1 · Fictional current Dots', exact: true }).click();
+    const dialog = form.getByRole('dialog', { name: 'Dots · Fictional golfer 1', exact: true });
+    await dialog.getByRole('checkbox', { name: 'Hogan for Fictional golfer 1', exact: true }).check();
+    await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+    await form.getByRole('combobox', { name: 'Blue Plate result', exact: true }).selectOption('none');
+    await form.getByRole('combobox', { name: 'Long Drive result', exact: true }).selectOption('none');
+    await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+    await expect(page.getByRole('form', { name: 'Group 1 hole 2 entry', exact: true })).toBeVisible();
+    await page.getByRole('combobox', { name: 'Jump to hole', exact: true }).selectOption('1');
+    await form.getByLabel('Fictional golfer 1 score', { exact: true }).fill('6');
+    await form.getByRole('button', { name: 'Dots for Fictional golfer 1 · Fictional current Dots', exact: true }).click();
+    await expect(dialog.getByRole('checkbox', { name: 'Hogan for Fictional golfer 1', exact: true })).toBeChecked();
+    await expect(dialog.getByRole('checkbox', { name: 'Hogan for Fictional golfer 1', exact: true })).toBeEnabled();
+    await expect(dialog.getByRole('checkbox', { name: 'Pully for Fictional golfer 1', exact: true })).toBeDisabled();
+    await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+    await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+    await expect(page.getByText(/Review all entries|Check every intended entry|Nothing sent/).first()).toBeVisible();
+    expect(fixture.counters().writes).toBe(4);
+    await expect(form).toBeVisible();
+    await form.getByRole('button', { name: 'Dots for Fictional golfer 1 · Fictional current Dots', exact: true }).click();
+    await dialog.getByRole('checkbox', { name: 'Hogan for Fictional golfer 1', exact: true }).uncheck();
+    await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+    await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+    await expect(page.getByRole('form', { name: 'Group 1 hole 2 entry', exact: true })).toBeVisible();
+    expect(fixture.counters().writes).toBe(5);
+    expect(fixture.read().games?.results.find((game) => game.kind === 'dots')?.dots?.issues).toEqual([]);
+    expect(fixture.counters().pageErrors).toEqual([]);
+  } finally { await fixture.close(); }
+});
+
 test('Dots common selects all available specials and a standalone manual Sweep without resetting custom units', async ({ page }, testInfo) => {
   const fixture = await openDotsFixture(page, testInfo, 'setup-sweep');
   try {

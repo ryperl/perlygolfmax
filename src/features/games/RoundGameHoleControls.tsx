@@ -19,6 +19,7 @@ export interface RoundGameHoleControlsProps {
   readonly holeNumber: number;
   readonly playerId?: string;
   readonly playerScore?: HoleScore | null | undefined;
+  readonly playerScores?: readonly { readonly playerId: string; readonly score: HoleScore | undefined }[] | undefined;
   readonly placement?: 'before' | 'other';
   readonly saved: HoleScore;
   readonly draft?: { readonly nassau?: readonly NassauHoleRecord[]; readonly wolf?: readonly WolfHoleRecord[]; readonly dots?: readonly DotsHoleRecord[];
@@ -30,7 +31,7 @@ export interface RoundGameHoleControlsProps {
   readonly onChurchyChange?: (record: ChurchySpecialsV3) => void;
 }
 
-export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, draft, disabled, onNassauChange, onWolfChange, onSpecialDotsChange, onChurchyChange, playerId, playerScore, placement }: RoundGameHoleControlsProps) {
+export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, draft, disabled, onNassauChange, onWolfChange, onSpecialDotsChange, onChurchyChange, playerId, playerScore, playerScores, placement }: RoundGameHoleControlsProps) {
   const games = round.games?.configuration.games.filter((game) =>
     (game.kind === 'nassau' || game.kind === 'match-play' || game.kind === 'wolf' || game.kind === 'dots'
       || game.kind === 'churchy' && game.version === 3 && round.churchyEnabled === true) && game.groupNumber === groupNumber
@@ -46,6 +47,7 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
         saved={saved.churchy?.version === 3 && saved.churchy.gameId === game.id ? saved.churchy : undefined}
         draft={draft?.churchy?.version === 3 && draft.churchy.gameId === game.id ? draft.churchy : undefined}
         playerId={playerId} playerScore={playerScore} orderOnly={placement === 'before'} disabled={locked || !onChurchyChange}
+        playerScores={playerScores}
         onChange={(record) => { onChurchyChange?.(record); }} />;
     }
     if (game.kind === 'nassau' || game.kind === 'match-play') return <div key={game.id}>
@@ -119,8 +121,9 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
         par: round.playerTees?.find((entry) => entry.playerId === playerId)?.profile.holes.find((hole) => hole.number === holeNumber)?.par
           ?? round.layout.find((hole) => hole.number === holeNumber)?.par ?? 0 }))}
       scoreDerivedMurphy={round.dotsCallTargets === true} scoreDerivedParee={round.dotsCallTargets === true}
+      coexistenceRules={round.dotsCoexistenceRulesVersion === 2}
       allowMurphyPresses={round.dotsCallTargets === true}
-      playerScores={round.cards.map((card) => ({ playerId: card.playerId,
+      playerScores={playerScores ?? round.cards.map((card) => ({ playerId: card.playerId,
         score: (card.playerId === playerId && playerScore !== undefined
           ? playerScore : card.holes.find((hole) => hole.number === holeNumber)?.score) ?? undefined }))}
       saved={saved.dots?.find((record) => record.gameId === game.id && record.number === holeNumber)}

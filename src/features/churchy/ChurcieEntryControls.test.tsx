@@ -16,6 +16,30 @@ afterAll(() => {
 });
 
 describe('Churchie default named category controls', () => {
+  it('applies confirmed same-source restrictions in Churchie v3 while preserving Seve/Blue Plate/Gorilla and draft scores', () => {
+    const f = churchyV3Fixture(9, 1, 'tee'), a = f.ids[0];
+    if (!a) throw new Error('Missing fictional golfer');
+    const game = { ...f.game, specials: (['chippy', 'pully', 'seve', 'sandy', 'gorilla', 'blue-plate', 'long-drive', 'kp'] as const)
+      .map((kind) => ({ kind, units: 1 })) };
+    const round = { ...f.round(), dotsCoexistenceRulesVersion: 2 as const, layout: f.round().layout.map((hole) => ({ ...hole, par: 5 })) };
+    const record: ChurchySpecialsV3 = { ...f.declaration(1), players: [{ playerId: a, counts: { chippy: 1 }, calls: [] }], contests: [] };
+    const props = { round, game, holeNumber: 1, saved: record, draft: undefined, playerId: a, disabled: false, onChange: vi.fn() };
+    const view = render(<ChurcieEntryControls {...props} playerScore={{ kind: 'strokes', strokes: 5 }} />);
+    fireEvent.click(screen.getByRole('button', { name: /Dots for .*Churchie/ }));
+    expect(screen.getByRole('checkbox', { name: /^Pully for / })).toBeDisabled();
+    view.rerender(<ChurcieEntryControls {...props} playerScore={{ kind: 'strokes', strokes: 6 }} />);
+    expect(screen.getByRole('button', { name: /Increase Sandy/ })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: /^Gorilla for / })).toBeEnabled();
+    view.rerender(<ChurcieEntryControls {...props} playerScore={{ kind: 'strokes', strokes: 5 }}
+      saved={{ ...record, players: [{ playerId: a, counts: { seve: 1, gorilla: 1 }, calls: [] }],
+        contests: [{ kind: 'blue-plate', status: 'awarded', winnerId: a }] }} />);
+    expect(screen.getByRole('checkbox', { name: /^Seve for / })).toBeChecked();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    view.rerender(<ChurcieEntryControls {...props} playerScore={{ kind: 'strokes', strokes: 5 }}
+      saved={{ ...record, players: [], contests: [{ kind: 'long-drive', status: 'awarded', winnerId: a }] }} />);
+    expect(screen.getByRole('checkbox', { name: /^Seve for / })).toBeDisabled();
+    expect(props.onChange).not.toHaveBeenCalled();
+  });
   it('identifies the custom named game in its scorer controls without changing the saved declaration identity', () => {
     const f = churchyV3Fixture(9, 1, 'tee');
     const onChange = vi.fn();

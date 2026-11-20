@@ -30,6 +30,73 @@ function harness(initial = fictionalRoundScores) {
       plan: planGroup(latest, playerIds, 1, drafts), signal: new AbortController().signal, refreshVersion: 0, ...callbacks }) };
 }
 describe('serialized group save protocol', () => {
+  it('checks a raw score correction against saved peer claims before sending any group card, and permits explicit repair', async () => {
+    const f = dotsFixture();
+    const [anchor, peer] = f.ids;
+    if (!anchor || !peer || !f.round.games) throw new Error('Missing fictional group');
+    const game = { ...f.game, specials: [{ kind: 'hogan' as const, units: 1 }] };
+    const record: DotsHoleRecord = { gameId: game.id, gameEtag: f.round.games.configuration.etag ?? '',
+      number: 1, contests: [], players: [{ playerId: peer, counts: { hogan: 1 }, calls: [] }] };
+    const round: RoundScores = { ...f.round, dotsCoexistenceRulesVersion: 2,
+      games: { ...f.round.games, configuration: { ...f.round.games.configuration, games: [game] } },
+      cards: f.round.cards.map((card) => card.playerId === anchor ? { ...card, holes: card.holes.map((hole) =>
+        hole.number === 1 ? { ...hole, score: { ...hole.score, dots: [record] } } : hole) } : card) };
+    const drafts = new Map<string, HoleDraft>([[entryKey(peer, 1), editedDraft('5', cardFor(round, peer))]]);
+    const plan = planGroup(round, f.ids, 1, drafts);
+    expect(plan.invalid).toEqual([peer]);
+    const store = memoryScores(round);
+    await expect(saveGroupEntries({ client: store.client, round, holeNumber: 1, plan,
+      signal: new AbortController().signal, refreshVersion: 0, onDraft: vi.fn(), onProjection: vi.fn() })).rejects.toThrow('Review all entries');
+    expect(store.client.save).not.toHaveBeenCalled();
+    drafts.set(entryKey(anchor, 1), { ...editedDraft('4', cardFor(round, anchor)),
+      dots: [{ ...record, players: [{ playerId: peer, counts: { hogan: 0 }, calls: [] }] }] });
+    expect(planGroup(round, f.ids, 1, drafts).invalid).toEqual([]);
+    expect(record.players[0]?.counts.hogan).toBe(1);
+  });
+
+  it('checks changed category selections against their same-source Seve while allowing Blue Plate/Gorilla and historical unrelated peers', () => {
+    const f = dotsFixture();
+    const [anchor, peer] = f.ids;
+    if (!anchor || !peer || !f.round.games) throw new Error('Missing fictional group');
+    const game = { ...f.game, specials: [{ kind: 'seve' as const, units: 1 }, { kind: 'gorilla' as const, units: 1 },
+      { kind: 'blue-plate' as const, units: 1 }, { kind: 'long-drive' as const, units: 1 }] };
+    const record: DotsHoleRecord = { gameId: game.id, gameEtag: f.round.games.configuration.etag ?? '',
+      number: 1, contests: [], players: [{ playerId: peer, counts: { seve: 1, gorilla: 1 }, calls: [] }] };
+    const round: RoundScores = { ...f.round, dotsCoexistenceRulesVersion: 2,
+      layout: f.round.layout.map((hole) => ({ ...hole, par: 5 })),
+      games: { ...f.round.games, configuration: { ...f.round.games.configuration, games: [game] } },
+      cards: f.round.cards.map((card) => ({ ...card, holes: card.holes.map((hole) => ({
+        ...hole, score: { kind: 'strokes', strokes: 5, ...(card.playerId === anchor && hole.number === 1 ? { dots: [record] } : {}) },
+      })) })) };
+    const draft = (kind: 'long-drive' | 'blue-plate', winnerId: string) => new Map<string, HoleDraft>([[entryKey(anchor, 1), {
+      ...editedDraft('5', cardFor(round, anchor)), dots: [{ ...record, contests: [{ kind, status: 'awarded', winnerId }] }],
+    }]]);
+    expect(planGroup(round, f.ids, 1, draft('long-drive', peer)).invalid).toEqual([peer]);
+    expect(planGroup(round, f.ids, 1, draft('long-drive', anchor)).invalid).toEqual([]);
+    expect(planGroup(round, f.ids, 1, draft('blue-plate', peer)).invalid).toEqual([]);
+  });
+
+  it('requires explicit Sandy/KP repair for the same golfer on a default-tee par three, not for teammates', () => {
+    const f = dotsFixture();
+    const [anchor, peer] = f.ids;
+    if (!anchor || !peer || !f.round.games) throw new Error('Missing fictional group');
+    const game = { ...f.game, specials: [{ kind: 'sandy' as const, units: 1 }, { kind: 'kp' as const, units: 1 }] };
+    const record: DotsHoleRecord = { gameId: game.id, gameEtag: f.round.games.configuration.etag ?? '',
+      number: 1, contests: [], players: [{ playerId: peer, counts: { sandy: 1 }, calls: [] }] };
+    const round: RoundScores = { ...f.round, dotsCoexistenceRulesVersion: 2,
+      layout: f.round.layout.map((hole) => ({ ...hole, par: 3 })),
+      games: { ...f.round.games, configuration: { ...f.round.games.configuration, games: [game] } },
+      cards: f.round.cards.map((card) => ({ ...card, holes: card.holes.map((hole) => ({
+        ...hole, score: { kind: 'strokes', strokes: 3, ...(card.playerId === anchor && hole.number === 1 ? { dots: [record] } : {}) },
+      })) })) };
+    const selection = (winnerId: string, sandy = 1) => new Map<string, HoleDraft>([[entryKey(anchor, 1), {
+      ...editedDraft('3', cardFor(round, anchor)), dots: [{ ...record,
+        players: [{ playerId: peer, counts: { sandy }, calls: [] }], contests: [{ kind: 'kp', status: 'awarded', winnerId }] }],
+    }]]);
+    expect(planGroup(round, f.ids, 1, selection(peer)).invalid).toEqual([peer]);
+    expect(planGroup(round, f.ids, 1, selection(anchor)).invalid).toEqual([]);
+    expect(planGroup(round, f.ids, 1, selection(peer, 0)).invalid).toEqual([]);
+  });
   it('retains a new Dots call draft but refuses to send it if advertised call support disappears', async () => {
     const f = dotsFixture(), playerId = f.ids[0];
     if (!playerId || !f.round.games) throw new Error('Missing fictional game');
