@@ -15,6 +15,7 @@ import { ChurchyNamesClientUpdateRequired } from '../../../src/contracts/churchy
 import { CategorySweepsClientUpdateRequired } from '../../../src/contracts/category-sweeps.js';
 import { StringRulesClientUpdateRequired } from '../../../src/contracts/string-rules.js';
 import { DotsCallsClientUpdateRequired } from '../../../src/domain/murphy-transport.js';
+import { DotsCoexistenceClientUpdateRequired } from '../../../src/contracts/dot-coexistence.js';
 
 export type TesterAction = 'list' | 'create' | 'revoke' | 'renew' | 'workspace' | 'scores' | 'score-hole';
 export interface TesterApi {
@@ -66,7 +67,7 @@ export function createTesterHandler(resolveApi: () => TesterApi, action: TesterA
         if (typeof hole !== 'string' || !/^(?:[1-9]|1[0-8])$/.test(hole)) throw new ApiError(400, 'INVALID_HOLE_NUMBER');
         const parsed = parseScoreWriteBody(await readJson(request));
         return response(200, murphyTransport(await api.scores.write(identity, eventId, roundId, playerId, Number(hole),
-          parsed.score, etag, requestId, parsed.inputRevision, stringRules, dotsCalls, categorySweeps, churchyNames), negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames));
+          parsed.score, etag, requestId, parsed.inputRevision, stringRules, dotsCalls, categorySweeps, churchyNames, true, false), negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames));
       }
       const identity = await api.verify(request.headers.get('authorization'));
       await api.limiter.check(identity, action === 'list' ? 'events-read' : 'events-manage');
@@ -89,8 +90,8 @@ export function createTesterHandler(resolveApi: () => TesterApi, action: TesterA
       if (!isRevokeTesterLink(body)) throw new ApiError(400, 'INVALID_TESTER_REVOCATION');
       return response(200, await api.testers.revoke(identity, eventId, body, etag, requestId));
     } catch (error) {
-      const status = error instanceof ApiError || error instanceof StringRulesClientUpdateRequired || error instanceof DotsCallsClientUpdateRequired || error instanceof CategorySweepsClientUpdateRequired || error instanceof ChurchyNamesClientUpdateRequired ? error.status : 503;
-      const code = error instanceof ApiError || error instanceof StringRulesClientUpdateRequired || error instanceof DotsCallsClientUpdateRequired || error instanceof CategorySweepsClientUpdateRequired || error instanceof ChurchyNamesClientUpdateRequired ? error.code : 'SERVICE_UNAVAILABLE';
+      const status = error instanceof ApiError || error instanceof StringRulesClientUpdateRequired || error instanceof DotsCallsClientUpdateRequired || error instanceof CategorySweepsClientUpdateRequired || error instanceof ChurchyNamesClientUpdateRequired || error instanceof DotsCoexistenceClientUpdateRequired ? error.status : 503;
+      const code = error instanceof ApiError || error instanceof StringRulesClientUpdateRequired || error instanceof DotsCallsClientUpdateRequired || error instanceof CategorySweepsClientUpdateRequired || error instanceof ChurchyNamesClientUpdateRequired || error instanceof DotsCoexistenceClientUpdateRequired ? error.code : 'SERVICE_UNAVAILABLE';
       // Only fixed classifications are logged, never headers, bodies, secrets, or raw provider errors.
       if (status >= 500) context.error('Tester API failed', { code, invocationId: context.invocationId });
       else context.warn('Tester API rejected', { code, status, invocationId: context.invocationId });

@@ -1,4 +1,5 @@
 import { HttpRequest, InvocationContext } from '@azure/functions';
+import { coexistenceRoundScores } from '../../../src/contracts/dot-coexistence.js';
 import { describe, expect, it, vi } from 'vitest';
 import type { DotsCall, DotsGameDefinition, DotsHoleRecord } from '../../../src/domain/dots.js';
 import type { HoleScore, RoundScores } from '../../../src/domain/scoring.js';
@@ -92,7 +93,7 @@ describe('ordinary Dots authoritative calls and independent transport', () => {
     expect(projected?.dots?.[0]?.players[0]?.calls).toEqual([
       { id: f.paree.id, kind: 'paree', result: 'success' }, { id: f.murphy.id, kind: 'murphy', result: 'failure' },
     ]);
-    expect(decodeRoundScores(leanRoundScores(current.round, true, true, true))).toEqual(legacy);
+    expect(decodeRoundScores(leanRoundScores(current.round, true, true, true))).toEqual(coexistenceRoundScores(legacy));
     if (!projected?.dots) throw new Error('Missing fictional projection');
     const echoed = await f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1, projected,
       etag(current.round, f.playerId), identifier(28202), undefined, true, false);

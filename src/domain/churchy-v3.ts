@@ -1,6 +1,6 @@
 import type { ChurchyGameDefinitionV3, ChurchyHoleReceipt, ChurchyLane, ChurchyPlayerInput, ChurchySpecialsV3 } from './churchy.js';
 import { calculateChurchyInternalSettlement } from './churchy.js';
-import { calculateDots, dotsDeclarationIssues, dotsDefinitionMatchesRound, dotsRecordsMatchGame, dotsSpecialCatalog } from './dots.js';
+import { calculateDots, dotsDeclarationIssues, dotsDefinitionMatchesRound, dotsRecordsMatchGame, dotsSpecialCatalog, sameDotsPlayerDeclaration } from './dots.js';
 import type { DotsGameDefinition, DotsHoleRecord, DotsRotationContext } from './dots.js';
 import type { DotAward, DotRoundInput } from './dot-context.js';
 import type { GamePlayerResult, RoundGameResult } from './games.js';
@@ -56,10 +56,13 @@ function dotRecords(records: readonly ChurchySpecialsV3[]): readonly DotsHoleRec
 }
 
 export function churchyV3RecordsMatchGame(records: readonly ChurchySpecialsV3[], game: ChurchyGameDefinitionV3,
-  round: DotRoundInput): boolean {
+  round: DotRoundInput, previous?: { readonly records: readonly ChurchySpecialsV3[]; readonly round: DotRoundInput }): boolean {
   return !churchyV3Context(game, round, records).contexts.some((entry) => entry.status === 'unavailable')
-    && records.every((record) => record.players.every((player) => dotsDeclarationIssues(player).conflicts.length === 0))
-    && dotsRecordsMatchGame(dotRecords(records), churchyDotsDefinition(game), round);
+    && records.every((record) => record.players.every((player) => dotsDeclarationIssues(player).conflicts.length === 0
+      || previous?.records.some((entry) => entry.number === record.number && entry.players.some((prior) =>
+        sameDotsPlayerDeclaration(player, prior)))))
+    && dotsRecordsMatchGame(dotRecords(records), churchyDotsDefinition(game), round, [],
+      previous ? { records: dotRecords(previous.records), round: previous.round } : undefined);
 }
 
 const sum = (values: readonly number[]) => {

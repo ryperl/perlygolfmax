@@ -107,8 +107,17 @@ export interface DotsResults {
 
 export interface DotsDeclarationIssue {
   readonly code: 'HOGAN_SEVE' | 'PULLY_DIME' | 'HOGAN_MURPHY' | 'HOGAN_CHIPPY' | 'DIME_SUPER_DIME'
-    | 'HOGAN_WALK' | 'SEVE_WALK' | 'FAILED_CALL_SPECIAL';
+    | 'HOGAN_WALK' | 'SEVE_WALK' | 'FAILED_CALL_SPECIAL' | 'CHIPPY_PULLY' | 'SEVE_CATEGORY' | 'SANDY_KP' | 'SCORE_QUALIFICATION';
   readonly kinds: readonly DotsSpecialKind[];
+}
+
+export function sameDotsPlayerDeclaration(left: DotsPlayerDeclaration | undefined, right: DotsPlayerDeclaration | undefined): boolean {
+  const key = (player: DotsPlayerDeclaration | undefined) => player && JSON.stringify({
+    playerId: player.playerId, counts: Object.entries(player.counts).sort(([a], [b]) => a.localeCompare(b)),
+    calls: player.calls.map((call) => [call.id, call.kind, call.result, call.murphyPresses ?? null,
+      call.murphyTarget ?? null, call.pareeTarget ?? null]),
+  });
+  return key(left) === key(right);
 }
 
 /** Source declarations only: shared awards do not imply incompatible achievements. */
@@ -158,6 +167,79 @@ export function dotsDeclarationWriteIssues(declaration: DotsPlayerDeclaration,
     }
   }
   return { conflicts, warnings: issues.warnings };
+}
+
+/** Write-only rules: never reinterpret historical awards or category carry recipients. */
+export function dotsCoexistenceWriteIssues(declaration: DotsPlayerDeclaration, context: {
+  readonly score?: HoleScore | undefined; readonly par?: number | undefined;
+  readonly categoryPar?: number | undefined;
+  readonly contests?: readonly DotsContest[]; readonly automaticKinds?: readonly DotsSpecialKind[];
+} = {}): { readonly conflicts: readonly DotsDeclarationIssue[]; readonly warnings: readonly DotsDeclarationIssue[] } {
+  const issues = dotsDeclarationWriteIssues(declaration, context);
+  const conflicts = [...issues.conflicts];
+  const has = (kind: DotsSpecialKind) => (declaration.counts[kind] ?? 0) > 0;
+  if (has('chippy') && has('pully')) conflicts.push({ code: 'CHIPPY_PULLY', kinds: ['chippy', 'pully'] });
+  if (has('seve')) {
+    for (const kind of ['kp', 'long-drive'] as const) {
+      if (context.contests?.some((contest) => contest.kind === kind && contest.status === 'awarded'
+        && (contest.winnerId === declaration.playerId || contest.secondId === declaration.playerId))) {
+        conflicts.push({ code: 'SEVE_CATEGORY', kinds: ['seve', kind] });
+      }
+    }
+  }
+  if (has('sandy') && (context.categoryPar === undefined || context.categoryPar === 3)
+    && context.contests?.some((contest) => contest.kind === 'kp' && contest.status === 'awarded'
+      && (contest.winnerId === declaration.playerId || contest.secondId === declaration.playerId))) {
+    conflicts.push({ code: 'SANDY_KP', kinds: ['sandy', 'kp'] });
+  }
+  const { score, par } = context;
+  if (score && score.kind !== 'unplayed') {
+    for (const kind of [...parQualified, 'pully'] as const) {
+      if (has(kind) && (score.kind !== 'strokes' || par === undefined
+        || (kind === 'pully' ? !pullyScore(score.strokes, par) : score.strokes > par))) {
+        conflicts.push({ code: 'SCORE_QUALIFICATION', kinds: [kind] });
+      }
+    }
+    for (const call of declaration.calls) {
+      if (call.result === 'success' && (score.kind !== 'strokes' || par === undefined
+        || (call.kind === 'pully-murphy' ? score.strokes !== par : score.strokes > par))
+        && !conflicts.some((issue) => issue.code === 'SCORE_QUALIFICATION' && issue.kinds[0] === call.kind)) {
+        conflicts.push({ code: 'SCORE_QUALIFICATION', kinds: [call.kind] });
+      }
+    }
+  }
+  return { conflicts, warnings: issues.warnings };
+}
+
+/** Compare source-hole issues, permitting unchanged historical conflicts and unrelated peer saves. */
+export function dotsCoexistenceWriteConflicts(
+  game: DotsGameDefinition | ChurchyGameDefinitionV3, before: DotRoundInput, after: DotRoundInput,
+  previous: readonly DotsHoleRecord[], records: readonly DotsHoleRecord[],
+): readonly string[] {
+  const sourceCategories = (contests: readonly DotsContest[], playerId: string) =>
+    ['kp', 'long-drive'].flatMap((kind) => contests.flatMap((contest) => contest.kind === kind && contest.status === 'awarded'
+      ? contest.winnerId === playerId ? [`${kind}:winner`] : contest.secondId === playerId ? [`${kind}:second`] : [] : [])).join(':');
+  const issues = (player: DotsPlayerDeclaration, record: DotsHoleRecord, round: DotRoundInput) =>
+    dotsCoexistenceWriteIssues(player, {
+      score: round.cards.find((card) => card.playerId === player.playerId)?.holes.find((hole) => hole.number === record.number)?.score,
+      par: (round.playerLayouts?.find((entry) => entry.playerId === player.playerId)?.layout ?? round.layout)
+        .find((hole) => hole.number === record.number)?.par,
+      contests: record.contests,
+      categoryPar: round.layout.find((hole) => hole.number === record.number)?.par,
+    }).conflicts;
+  return [...new Set(records.filter((record) => record.gameId === game.id).flatMap((record) =>
+    record.players.flatMap((player) => {
+      const oldRecord = previous.find((entry) => entry.gameId === game.id && entry.number === record.number);
+      const prior = oldRecord?.players.find((entry) => entry.playerId === player.playerId);
+      const changed = !sameDotsPlayerDeclaration(player, prior);
+      const categoriesChanged = sourceCategories(record.contests, player.playerId)
+        !== sourceCategories(oldRecord?.contests ?? [], player.playerId);
+      const old = prior && oldRecord ? issues(prior, oldRecord, before) : [];
+      return issues(player, record, after).some((issue) => changed
+        || (issue.code === 'SEVE_CATEGORY' || issue.code === 'SANDY_KP') && categoriesChanged
+        || !old.some((entry) => entry.code === issue.code && entry.kinds.join(':') === issue.kinds.join(':')))
+        ? [player.playerId] : [];
+    })))];
 }
 
 /** Reuse score qualifications and acknowledged order without revalidating historical manual declarations. */
@@ -282,6 +364,7 @@ function contextFor(game: DotsGameDefinition, number: number, contexts: readonly
 export function dotsRecordsMatchGame(
   records: readonly DotsHoleRecord[], game: DotsGameDefinition, round: DotRoundInput,
   contexts: readonly DotHoleContext[] = [],
+  previous?: { readonly records: readonly DotsHoleRecord[]; readonly round: DotRoundInput },
 ): boolean {
   if (!dotsDefinitionMatchesRound(game, round) || !unique(records.map((record) => record.number))) return false;
   const rotations = records.filter((record) => record.rotation !== undefined);
@@ -295,21 +378,31 @@ export function dotsRecordsMatchGame(
       || !unique(record.contests.map((contest) => contest.kind))) return false;
     for (const player of record.players) {
       if (!game.playerIds.includes(player.playerId)) return false;
-      if (game.version === 2 && dotsDeclarationIssues(player).conflicts.length) return false;
+      const prior = previous?.records.find((entry) => entry.number === record.number && entry.gameId === game.id)
+        ?.players.find((entry) => entry.playerId === player.playerId);
+      const unchanged = prior !== undefined && sameDotsPlayerDeclaration(player, prior);
+      if (game.version === 2 && dotsDeclarationIssues(player).conflicts.length && !unchanged) return false;
       const personal = round.playerLayouts?.find((entry) => entry.playerId === player.playerId)?.layout ?? round.layout;
       const par = personal.find((entry) => entry.number === record.number)?.par;
       const score = round.cards.find((card) => card.playerId === player.playerId)?.holes.find((entry) => entry.number === record.number)?.score;
+      const oldScore = previous?.round.cards.find((card) => card.playerId === player.playerId)
+        ?.holes.find((entry) => entry.number === record.number)?.score;
+      const oldPar = (previous?.round.playerLayouts?.find((entry) => entry.playerId === player.playerId)?.layout
+        ?? previous?.round.layout)?.find((entry) => entry.number === record.number)?.par;
+      const historical = (kind: string) => unchanged
+        && dotsCoexistenceWriteIssues(prior, { score: oldScore, par: oldPar }).conflicts
+          .some((issue) => issue.code === 'SCORE_QUALIFICATION' && issue.kinds.some((entry) => entry === kind));
       for (const [kind, count] of Object.entries(player.counts)) {
         if (!dotsManualKindsFor(game).some((manual) => manual === kind) || !game.specials.some((entry) => entry.kind === kind)
           || !Number.isSafeInteger(count) || count < 0) return false;
         if (!count) continue;
         if (kind === 'gorilla' && par !== 5) return false;
-        if (score?.kind === 'strokes' && (parQualified.some((entry) => entry === kind) && (par === undefined || score.strokes > par)
+        if (!historical(kind) && score?.kind === 'strokes' && (parQualified.some((entry) => entry === kind) && (par === undefined || score.strokes > par)
           || kind === 'pully' && !pullyScore(score.strokes, par))) return false;
-        if (score && score.kind !== 'unplayed' && score.kind !== 'strokes'
+        if (!historical(kind) && score && score.kind !== 'unplayed' && score.kind !== 'strokes'
           && (parQualified.some((entry) => entry === kind) || kind === 'pully')) return false;
       }
-      if ((player.counts.dime ?? 0) > 0 && (player.counts['super-dime'] ?? 0) > 0) return false;
+      if ((player.counts.dime ?? 0) > 0 && (player.counts['super-dime'] ?? 0) > 0 && !unchanged) return false;
       for (const call of player.calls) {
         callIds.push(call.id);
         if (!enabled.has(call.kind) || call.murphyPresses !== undefined
@@ -318,7 +411,7 @@ export function dotsRecordsMatchGame(
           || !['par', 'birdie'].includes(call.murphyTarget) || call.result !== 'pending')) return false;
         if (call.pareeTarget !== undefined && (call.kind !== 'paree'
           || call.result !== 'pending')) return false;
-        if (call.result === 'success' && score && score.kind !== 'unplayed'
+        if (!historical(call.kind) && call.result === 'success' && score && score.kind !== 'unplayed'
           && (score.kind !== 'strokes' || par === undefined
             || (call.kind === 'pully-murphy' ? score.strokes !== par : score.strokes > par))) return false;
       }

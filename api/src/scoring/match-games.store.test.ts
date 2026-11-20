@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { coexistenceRoundScores } from '../../../src/contracts/dot-coexistence.js';
 import type { NassauGameDefinition, MatchPlayGameDefinition, NassauHoleRecord } from '../../../src/domain/nassau.js';
 import type { WolfGameDefinition, WolfHoleRecord } from '../../../src/domain/wolf.js';
 import type { HoleScore, RoundScores } from '../../../src/domain/scoring.js';
@@ -86,7 +87,7 @@ describe('persisted Nassau and Wolf declarations', () => {
         const expectedEtag = etag(current, anchor);
         const first = await f.scores.write(actor, eventId, f.roundId, anchor, option.startHole, score, expectedEtag, identifier(28021));
         expect(isScoreWriteResult(first)).toBe(true);
-        expect(decodeRoundScores(leanRoundScores(first.round, false, false, true))).toEqual(first.round);
+        expect(decodeRoundScores(leanRoundScores(first.round, false, false, true))).toEqual(coexistenceRoundScores(first.round));
         const lean = leanScoreWriteResult(first, false, false, true);
         expect(isScoreWriteResult({ round: decodeRoundScores(lean.round), change: lean.change })).toBe(true);
         expect(lean.change).toEqual(first.change);

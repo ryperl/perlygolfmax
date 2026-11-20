@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateDots, dotsAutomaticWriteConflicts, dotsDeclarationIssues, dotsDeclarationWriteIssues, dotsDefinitionMatchesRound, dotsSpecialCatalog, dotsRecordsMatchGame } from './dots.js';
+import { calculateDots, dotsAutomaticWriteConflicts, dotsCoexistenceWriteConflicts, dotsCoexistenceWriteIssues, dotsDeclarationIssues, dotsDeclarationWriteIssues, dotsDefinitionMatchesRound, dotsSpecialCatalog, dotsRecordsMatchGame } from './dots.js';
 import type { DotsContest, DotsGameDefinition, DotsHoleRecord, DotsPlayerDeclaration, DotsSpecialKind } from './dots.js';
 import type { DotHoleContext, DotRoundInput } from './dot-context.js';
 import type { HoleScore } from './scoring.js';
@@ -39,6 +39,97 @@ function context(number = 1, multiplier: 1 | 2 | 3 = 1, sides: readonly (readonl
 }
 
 describe('source-only Dots declaration review', () => {
+  it('enforces Chippy/Pully per source in every individual size, fixed, rotating, linked and Churchie v3 mode', () => {
+    const f = fixture([4], ['chippy', 'pully']);
+    const rotating: DotsGameDefinition = { id: f.game.id, name: f.game.name, kind: 'dots', version: 2,
+      groupNumber: 1, playerIds: ids, mode: 'rotating', rotationHoles: 3, stakeMinor: null, specials: f.game.specials };
+    const churchie = { id: f.game.id, name: 'Fictional Churchie', kind: 'churchy' as const, version: 3 as const,
+      groupNumber: 1, playerIds: ids, specials: f.game.specials, basis: 'net' as const,
+      orderMode: 'tee' as const, amountPerDotMinor: 0, currency: 'USD' as const };
+    const individual = [1, 2, 3, 4].map((count) => ({ ...f.game, playerIds: ids.slice(0, count) }));
+    for (const game of [...individual, fixed(f.game), rotating, linked(f.game), churchie]) {
+      const bad = record(1, [declaration('A', { chippy: 1, pully: 1 })]);
+      expect(dotsCoexistenceWriteConflicts(game, f.round, f.round, [], [bad])).toEqual(['A']);
+      expect(dotsCoexistenceWriteConflicts(game, f.round, f.round, [bad], [bad])).toEqual([]);
+      const separate = record(1, [declaration('A', { chippy: 1 }), declaration('B', { pully: 1 })]);
+      expect(dotsCoexistenceWriteConflicts(game, f.round, f.round, [], [separate])).toEqual([]);
+    }
+    const shared = calculateDots(fixed(f.game), f.round, [record(1, [
+      declaration('A', { chippy: 1 }), declaration('B', { pully: 1 }),
+    ])]);
+    expect(shared.awards.map((award) => award.recipientIds)).toEqual([['A', 'B'], ['A', 'B']]);
+    expect(dotsDeclarationWriteIssues(declaration('A', { chippy: 1, pully: 1 })).conflicts).toEqual([]);
+  });
+
+  it('checks actual KP/Long Drive source winners and seconds, never carry ownership, Blue Plate or Gorilla', () => {
+    const f = fixture([3, 5, 5], ['seve', 'kp', 'long-drive', 'blue-plate', 'gorilla']);
+    const source = declaration('A', { seve: 1 });
+    for (const kind of ['kp', 'long-drive'] as const) {
+      for (const selection of [{ winnerId: 'A' }, { winnerId: 'B', secondId: 'A' }]) {
+        expect(dotsCoexistenceWriteIssues(source, { score: { kind: 'strokes', strokes: 3 }, par: 3,
+          contests: [{ kind, status: 'awarded', ...selection }] }).conflicts)
+          .toContainEqual({ code: 'SEVE_CATEGORY', kinds: ['seve', kind] });
+      }
+      expect(dotsCoexistenceWriteIssues(source, { contests: [{ kind, status: 'no-qualifier' }] }).conflicts).toEqual([]);
+    }
+    const saved = record(2, [source]);
+    const selected = { ...saved, contests: [{ kind: 'long-drive' as const, status: 'awarded' as const, winnerId: 'B', secondId: 'A' }] };
+    expect(dotsCoexistenceWriteConflicts(f.game, f.round, f.round, [saved], [selected])).toEqual(['A']);
+    expect(dotsCoexistenceWriteConflicts(f.game, f.round, f.round, [selected], [selected])).toEqual([]);
+    const allowed = record(2, [declaration('A', { seve: 1, gorilla: 1 })],
+      [{ kind: 'blue-plate', status: 'awarded', winnerId: 'A' }]);
+    expect(dotsCoexistenceWriteConflicts(f.game, f.round, f.round, [], [allowed])).toEqual([]);
+    const carry = [record(2, [source], [{ kind: 'long-drive', status: 'no-qualifier' }]),
+      record(3, [], [{ kind: 'long-drive', status: 'awarded', winnerId: 'A' }])];
+    expect(dotsCoexistenceWriteConflicts(f.game, f.round, f.round, [], carry)).toEqual([]);
+    expect(calculateDots(f.game, f.round, [selected]).issues).not.toContain('invalid-dots-records');
+  });
+
+  it('requires explicit repair for newly invalid manual score claims but permits historical and unrelated peer writes', () => {
+    const f = fixture([4], ['hogan', 'seve', 'sandy', 'haz-par', 'chippy', 'pully', 'paree']);
+    for (const kind of ['hogan', 'seve', 'sandy', 'haz-par', 'chippy', 'pully'] as const) {
+      const saved = [record(1, [declaration('A', { [kind]: 1 })])];
+      for (const score of [{ kind: 'strokes' as const, strokes: 5 }, { kind: 'picked-up' as const, reportedStrokes: 7 },
+        { kind: 'did-not-finish' as const }]) {
+        const next = setScores(f.round, 'A', [score]);
+        expect(dotsCoexistenceWriteConflicts(f.game, f.round, next, saved, saved)).toEqual(['A']);
+        expect(dotsCoexistenceWriteConflicts(f.game, next, next, saved, saved)).toEqual([]);
+        expect(dotsCoexistenceWriteConflicts(f.game, next, setScores(next, 'B', [score]), saved, saved)).toEqual([]);
+        expect(dotsCoexistenceWriteConflicts(f.game, f.round, next, saved, [record(1, [declaration('A')])])).toEqual([]);
+      }
+      expect(dotsCoexistenceWriteConflicts(f.game, f.round, setScores(f.round, 'A', [{ kind: 'unplayed' }]), saved, saved)).toEqual([]);
+    }
+    const called = [record(1, [declaration('A', {}, [{ id: 'fictional-call', kind: 'paree', result: 'success' }])])];
+    expect(dotsCoexistenceWriteConflicts(f.game, f.round, setScores(f.round, 'A', [{ kind: 'strokes', strokes: 5 }]), called, called)).toEqual(['A']);
+    const oldRound = setScores(f.round, 'A', [{ kind: 'strokes', strokes: 5 }]);
+    const historical = [record(1, [declaration('A', { hogan: 1 })])];
+    const peerEdit = [record(1, [declaration('A', { hogan: 1 }), declaration('B', { sandy: 1 })])];
+    expect(dotsRecordsMatchGame(peerEdit, f.game, oldRound)).toBe(false);
+    expect(dotsRecordsMatchGame(peerEdit, f.game, oldRound, [], { records: historical, round: oldRound })).toBe(true);
+    expect(dotsCoexistenceWriteConflicts(f.game, oldRound, oldRound, historical, peerEdit)).toEqual([]);
+  });
+
+  it('excludes same-source Sandy/KP on the default par 3 regardless of personal tee par, in both edit directions', () => {
+    const f = fixture([3], ['sandy', 'kp']);
+    const source = declaration('A', { sandy: 1 });
+    for (const selection of [{ winnerId: 'A' }, { winnerId: 'B', secondId: 'A' }]) {
+      const contest: DotsContest = { kind: 'kp', status: 'awarded', ...selection };
+      expect(dotsCoexistenceWriteIssues(source, { score: { kind: 'strokes', strokes: 4 }, par: 4,
+        categoryPar: 3, contests: [contest] }).conflicts).toEqual([{ code: 'SANDY_KP', kinds: ['sandy', 'kp'] }]);
+      const saved = record(1, [source]), selected = record(1, [source], [contest]);
+      expect(dotsCoexistenceWriteConflicts(f.game, f.round, f.round, [saved], [selected])).toEqual(['A']);
+      expect(dotsCoexistenceWriteConflicts(f.game, f.round, f.round, [record(1, [], [contest])], [selected])).toEqual(['A']);
+      expect(dotsCoexistenceWriteConflicts(f.game, f.round, f.round, [selected], [selected])).toEqual([]);
+      expect(dotsCoexistenceWriteConflicts(f.game, f.round, f.round, [selected], [saved])).toEqual([]);
+    }
+    expect(dotsCoexistenceWriteIssues(source, { categoryPar: 3, contests: [{ kind: 'kp', status: 'awarded', winnerId: 'B' }] }).conflicts).toEqual([]);
+    expect(dotsCoexistenceWriteIssues(source, { categoryPar: 3, contests: [{ kind: 'kp', status: 'no-qualifier' }] }).conflicts).toEqual([]);
+    expect(dotsCoexistenceWriteIssues(source, { categoryPar: 5, contests: [
+      { kind: 'blue-plate', status: 'awarded', winnerId: 'A' }, { kind: 'long-drive', status: 'awarded', winnerId: 'A' },
+    ] }).conflicts).toEqual([]);
+    expect(dotsRecordsMatchGame([record(1, [source], [{ kind: 'kp', status: 'awarded', winnerId: 'A' }])], f.game, f.round)).toBe(true);
+  });
+
   it('awards opt-in manual Sweep counts with actual teammates in every mode, without High/Low or gross qualifications', () => {
     const f = fixture([4, 4, 4, 4], ['sweep']);
     const rotating: DotsGameDefinition = { id: f.game.id, name: f.game.name, kind: 'dots', version: 2,

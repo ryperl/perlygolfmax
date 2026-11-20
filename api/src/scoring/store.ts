@@ -40,7 +40,8 @@ import { nassauConfigurationIssues, validateNassauManualPress } from '../../../s
 import { nassauRecordsMatchGame } from '../../../src/contracts/nassau.js';
 import { wolfForHole, wolfGroupMatchesRound } from '../../../src/domain/wolf.js';
 import { dotsDefinitionMatchesRound, dotsRecordsMatchGame } from '../../../src/contracts/dots.js';
-import { dotsAutomaticWriteConflicts, dotsDeclarationIssues, dotsDeclarationWriteIssues, dotsFirstPlayedHole, dotsSpecialCatalog } from '../../../src/domain/dots.js';
+import { dotsAutomaticWriteConflicts, dotsCoexistenceWriteConflicts, dotsDeclarationIssues, dotsDeclarationWriteIssues, dotsFirstPlayedHole, dotsSpecialCatalog } from '../../../src/domain/dots.js';
+import { DotsCoexistenceClientUpdateRequired } from '../../../src/contracts/dot-coexistence.js';
 import { dotRound, definitionCards, validateInternalGameChanges } from './internal-games.js';
 import { buildDotAwardAudit } from './dot-audit.js';
 import { requireStringRules } from './string-rules.js';
@@ -290,6 +291,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       game.kind !== 'wolf' && game.kind !== 'nassau' && game.kind !== 'match-play' && game.kind !== 'dots'
       && !(game.kind === 'churchy' && game.version !== 1)) : games?.games;
     const projection: RoundScores = {
+      ...(!access.testerLink ? { dotsCoexistenceRulesVersion: 2 as const } : {}),
       ...(visibleGames?.some(hasCustomChurchyName) ? { churchyCustomNames: true as const } : {}),
       ...(visibleGames?.some(hasIndependentSweep) ? { sweepRulesVersion: 2 as const } : {}),
       stringRulesVersion: 2,
@@ -618,7 +620,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
   }
 
   async write(identity: ScoreActor, eventId: string, roundId: string, playerId: string, holeNumber: number,
-    score: HoleScore, expectedEtag: string | null, requestId: string, inputRevision?: string | null, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true, sweepRules = true): Promise<ScoreWriteResult> {
+    score: HoleScore, expectedEtag: string | null, requestId: string, inputRevision?: string | null, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true, sweepRules = true, dotCoexistence = true): Promise<ScoreWriteResult> {
     if (!isUuid(requestId) || !isUuid(playerId) || !isHoleScore(score) || !Number.isSafeInteger(holeNumber)
       || expectedEtag !== null && !isEventRevision(expectedEtag)
       || inputRevision !== undefined && inputRevision !== null && !isUuid(inputRevision)) throw new ApiError(400, 'INVALID_SCORE_WRITE');
@@ -667,6 +669,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     const dotsChanged = !sameDotsRecords(savedScore.dots, before.score.dots);
     if (score.dots !== undefined && state.testerLink) throw new ApiError(403, 'MATCH_DECLARATIONS_NOT_ALLOWED');
     if ((nassauChanged || wolfChanged) && state.testerLink) throw new ApiError(403, 'MATCH_DECLARATIONS_NOT_ALLOWED');
+    this.requireCoexistence(state, cards, playerId, holeNumber, savedScore, dotCoexistence && !state.testerLink);
     for (const record of nassauChanged ? score.nassau ?? [] : []) {
       const game = state.games?.games.find((entry) => entry.id === record.gameId);
       if (game?.kind !== 'nassau' && game?.kind !== 'match-play' || record.gameEtag !== state.games?.etag || record.number !== holeNumber
@@ -745,7 +748,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
         }
         for (const declaration of record.players) {
           const prior = previous?.players.find((entry) => entry.playerId === declaration.playerId);
-          if ((game.version === 2 || canonical(declaration) !== canonical(prior ?? null))
+          if (canonical(declaration) !== canonical(prior ?? null)
             && dotsDeclarationIssues(declaration).conflicts.length) throw new ApiError(409, 'DOTS_SETUP_CHANGED');
           if (canonical(declaration) !== canonical(prior ?? null)
             && dotsDeclarationWriteIssues(declaration).conflicts.length) throw new ApiError(409, 'DOTS_SETUP_CHANGED');
@@ -765,6 +768,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       savedScore = { ...savedScore, dots };
       const nextCards = cards.map((entry) => entry.playerId === playerId ? { ...entry,
         holes: entry.holes.map((hole) => hole.number === holeNumber ? { ...hole, score: savedScore } : hole) } : entry);
+      this.requireCoexistence(state, cards, playerId, holeNumber, savedScore, dotCoexistence && !state.testerLink);
       const results = calculateGameResults(state.games?.games ?? [], state.round, nextCards);
       for (const record of score.dots ?? []) {
         const previous = before.score.dots?.find((entry) => entry.gameId === record.gameId);
@@ -775,7 +779,8 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
           .flatMap((hole) => hole.score.dots?.filter((item) => item.gameId === game.id) ?? []) ?? [];
         const contexts = game.mode === 'linked'
           ? results.find((result) => result.gameId === game.linkedGameId)?.wolf?.contexts ?? [] : [];
-        if (!dotsRecordsMatchGame(records, game, dotRound(state.round, nextCards), contexts)) {
+        if (!dotsRecordsMatchGame(records, game, dotRound(state.round, nextCards), contexts,
+          { records: dotsRecordsFor(game, state.round.groups, cards), round: dotRound(state.round, cards) })) {
           throw new ApiError(409, 'DOTS_SETUP_CHANGED');
         }
       }
@@ -829,7 +834,8 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
         }
         const nextCards = cards.map((card) => card.playerId === playerId ? { ...card,
           holes: card.holes.map((hole) => hole.number === holeNumber ? { ...hole, score: savedScore } : hole) } : card);
-        if (!churchyV3RecordsMatchGame(churchyV3Records(game, state.round.groups, nextCards), game, dotRound(state.round, nextCards))) {
+        if (!churchyV3RecordsMatchGame(churchyV3Records(game, state.round.groups, nextCards), game, dotRound(state.round, nextCards),
+          { records: churchyV3Records(game, state.round.groups, cards), round: dotRound(state.round, cards) })) {
           throw new ApiError(409, 'CHURCHY_SETUP_CHANGED');
         }
       }
@@ -932,8 +938,26 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     return this.acknowledgement(identity, change);
   }
 
+  private requireCoexistence(state: Awaited<ReturnType<TableScoreStore['snapshot']>>, cards: readonly Scorecard[],
+    playerId: string, holeNumber: number, score: HoleScore, supported: boolean): void {
+    const next = cards.map((card) => card.playerId === playerId ? { ...card,
+      holes: card.holes.map((hole) => hole.number === holeNumber ? { ...hole, score } : hole) } : card);
+    for (const game of state.games?.games ?? []) {
+      if (game.kind !== 'dots' && (game.kind !== 'churchy' || game.version !== 3)) continue;
+      if (game.kind === 'churchy' && !this.churchyEnabled()) continue;
+      const previous = game.kind === 'dots' ? dotsRecordsFor(game, state.round.groups, cards)
+        : churchyV3Records(game, state.round.groups, cards);
+      const records = game.kind === 'dots' ? dotsRecordsFor(game, state.round.groups, next)
+        : churchyV3Records(game, state.round.groups, next);
+      if (dotsCoexistenceWriteConflicts(game, dotRound(state.round, cards), dotRound(state.round, next), previous, records).length) {
+        if (!supported) throw new DotsCoexistenceClientUpdateRequired();
+        throw new ApiError(409, game.kind === 'dots' ? 'DOTS_SETUP_CHANGED' : 'CHURCHY_SETUP_CHANGED');
+      }
+    }
+  }
+
   async receiveGameScore(identity: ScoreActor, eventId: string, roundId: string, playerId: string, holeNumber: number,
-    body: unknown, expected: string | null, requestId: string, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true, sweepRules = true) {
+    body: unknown, expected: string | null, requestId: string, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true, sweepRules = true, dotCoexistence = true) {
     if (!isUuid(requestId) || !isUuid(playerId) || !Number.isInteger(holeNumber)
       || expected !== null && !isEventRevision(expected)) throw new ApiError(400, 'INVALID_SCORE_WRITE');
     const state = await this.snapshot(identity, eventId, roundId);
@@ -957,10 +981,24 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     const player = state.round.players.find((entry) => entry.playerId === playerId);
     if (!player) throw new ApiError(404, 'ROUND_PLAYER_NOT_FOUND');
     const card = await this.card(eventId, state.round, player, new Set(state.lock?.writtenPlayerIds));
+    let committed = false;
     if (card.etag !== expected) {
       const receipt = await this.receipt(eventId, requestId);
       if (!receipt || receipt.expectedEtag !== expected || receipt.roundId !== roundId || receipt.playerId !== playerId
         || receipt.holeNumber !== holeNumber || !sameScoreActor(receipt.recordedBy, identity)) throw new ApiError(409, 'SCORECARD_CHANGED');
+      committed = true;
+    }
+    if (!committed && isRecord(body) && isHoleScore(body.score)) {
+      const prior = card.holes.find((hole) => hole.number === holeNumber);
+      if (!prior) throw new ApiError(503, 'INVALID_STORED_SCORECARD');
+      const cards = await this.cards(eventId, state.round, state.lock);
+      let saved: HoleScore;
+      try { saved = preserveScoreExtras(retainMurphyTargets(body.score, prior.score, dotRound(state.round, cards)), prior.score); }
+      catch (error) {
+        if (error instanceof GameDeclarationConflictError) throw new ApiError(409, error.code);
+        throw error;
+      }
+      this.requireCoexistence(state, cards, playerId, holeNumber, saved, dotCoexistence);
     }
     return receivePrivateWrite(this.table, identity, eventId, `game-score:${roundId}:${playerId}:${String(holeNumber)}`, expected, requestId, body);
   }

@@ -12,7 +12,7 @@ import { isRecord } from '../contracts/events';
 import { sameJsonValue } from '../contracts/round-context';
 import { createPrivateRequest, readPrivateValue, writePrivateValue } from './private-request';
 
-export const scoringRulesQuery = 'murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1&churchyNames=1&sweepRules=2';
+export const scoringRulesQuery = 'murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1&churchyNames=1&sweepRules=2&dotCoexistence=2';
 
 function decodeRoundResult(value: unknown): unknown {
   return isRecord(value) ? { ...value, round: decodeRoundScores(value.round) } : value;

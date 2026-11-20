@@ -129,6 +129,9 @@ export function decodeRoundScores(value: unknown): RoundScores | null {
 }
 
 function validateRoundScores(value: unknown, lean = false): value is RoundScores {
+  if (isRecord(value) && value.dotsCoexistenceRulesVersion !== undefined
+    && (value.dotsCoexistenceRulesVersion !== 2 || value.internalGamesSupported !== true
+      || isRecord(value.permissions) && value.permissions.role === 'tester')) return false;
   if (isRecord(value) && value.churchyCustomNames !== undefined && value.churchyCustomNames !== true) return false;
   if (isRecord(value) && value.dotsCallTargets !== undefined
     && (value.dotsCallTargets !== true || value.internalGamesSupported !== true

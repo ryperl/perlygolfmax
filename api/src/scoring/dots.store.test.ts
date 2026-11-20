@@ -16,6 +16,7 @@ import { privateContent } from '../private-values.js';
 import { isRecord } from '../../../src/contracts/events.js';
 import { parseScoreWriteBody } from './handlers.js';
 import { TableScoreStore } from './store.js';
+import { coexistenceRoundScores } from '../../../src/contracts/dot-coexistence.js';
 
 function dots(ids: readonly string[], id = 19000): Extract<DotsGameDefinition, { readonly mode: 'individual' }> {
   return { id: identifier(id), name: 'Fictional Dots', kind: 'dots', version: 1, groupNumber: 1,
@@ -81,7 +82,7 @@ describe('persisted independent Dots and earned Wolf authority', () => {
     expect(round.dotsIndividualPlayerCounts).toEqual([1, 2, 3, 4]);
     expect((await f.scores.get(creator, event.id, f.roundId)).dotsIndividualPlayerCounts).toEqual([1, 2, 3, 4]);
     expect(isRoundScores(round)).toBe(true);
-    expect(decodeRoundScores(leanRoundScores(round, false, false, true))).toEqual(round);
+    expect(decodeRoundScores(leanRoundScores(round, false, false, true))).toEqual(coexistenceRoundScores(round));
     const special: DotsHoleRecord = { number: 1, gameId: game.id, gameEtag: round.games?.configuration.etag ?? '',
       players: [{ playerId: f.playerId, counts: { sandy: 2, walk: 1, pickup: 1 }, calls: [] }], contests: [] };
     const score = { kind: 'strokes' as const, strokes: 4, dots: [special] };
@@ -114,7 +115,7 @@ describe('persisted independent Dots and earned Wolf authority', () => {
     }
     const reloaded = await f.scores.get(actor, event.id, f.roundId);
     expect(isRoundScores(reloaded)).toBe(true);
-    expect(decodeRoundScores(leanRoundScores(reloaded, false, false, true))).toEqual(reloaded);
+    expect(decodeRoundScores(leanRoundScores(reloaded, false, false, true))).toEqual(coexistenceRoundScores(reloaded));
     expect(reloaded.games?.results[0]?.players.map((player) => player.totalPoints)).toEqual([
       2, ...f.input.playerIds.slice(1).map(() => 3),
     ]);
@@ -282,7 +283,7 @@ describe('persisted independent Dots and earned Wolf authority', () => {
       { ...score, dots: [clear] }, null, identifier(19302))).rejects.toMatchObject({ code: 'SCORE_REQUEST_CONFLICT' });
   });
 
-  it('rejects foreign, wrong-hole, disabled and unqualified explicit edits without blocking later raw corrections', async () => {
+  it('rejects foreign, wrong-hole, disabled and unqualified edits and requires explicit repair for newly invalid raw corrections', async () => {
     const f = await scoringFixture();
     const game = dots(f.input.playerIds);
     const round = (await f.scores.saveGames(creator, event.id, f.roundId, [game], null, identifier(19400))).round;
@@ -298,8 +299,14 @@ describe('persisted independent Dots and earned Wolf authority', () => {
       .rejects.toMatchObject({ code: 'DOTS_SETUP_CHANGED' });
     const saved = await f.scores.write(creator, event.id, f.roundId, f.playerId, 1,
       { kind: 'strokes', strokes: 4, dots: [base] }, null, identifier(19403));
+    const rows = new Map(f.rows);
+    await expect(f.scores.write(creator, event.id, f.roundId, f.playerId, 1,
+      { kind: 'strokes', strokes: 6 }, etag(saved.round, f.playerId), identifier(19404)))
+      .rejects.toMatchObject({ code: 'DOTS_SETUP_CHANGED' });
+    expect(f.rows).toEqual(rows);
+    const repair = { ...base, players: [] };
     expect((await f.scores.write(creator, event.id, f.roundId, f.playerId, 1,
-      { kind: 'strokes', strokes: 6 }, etag(saved.round, f.playerId), identifier(19404))).change.after.dots).toEqual([base]);
+      { kind: 'strokes', strokes: 6, dots: [repair] }, etag(saved.round, f.playerId), identifier(19404))).change.after.dots).toEqual([repair]);
   });
 
   it('keeps new declarations and derived audit out of legacy tester reads and acknowledgements', async () => {
