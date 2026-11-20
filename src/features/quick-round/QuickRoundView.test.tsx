@@ -13,35 +13,117 @@ beforeEach(() => { window.history.replaceState(null, '', '#events?quick=1'); });
 
 async function choose() {
   const course = await screen.findByRole('combobox', { name: 'Course' });
+  fireEvent.change(screen.getByLabelText('Round / event name'), { target: { value: 'Fictional Quick outing' } });
   fireEvent.change(course, { target: { value: fictionalVersion.courseId } });
   await screen.findByRole('option', { name: 'Fictional Teal / Fictional A / 9 holes' });
   fireEvent.change(screen.getByLabelText('Default tee'), { target: { value: '901' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Add golfers' }));
   fireEvent.click(screen.getByLabelText('Fictional Player 1', { exact: true }));
 }
 
 async function showGames() {
-  const scoresOnly = await screen.findByLabelText('Scores only');
-  if (screen.queryByRole('checkbox', { name: 'Scores only', checked: true })) fireEvent.click(scoresOnly);
-  return screen.findByRole('button', { name: 'Add game' });
+  const add = await screen.findByRole('button', { name: 'Add games' });
+  await waitFor(() => { expect(add).toBeEnabled(); });
+  fireEvent.click(add);
+  return screen.findByRole('form', { name: 'Game settings' });
 }
 
 describe('public Quick round controller', () => {
+  it('retries Add games with the same setup identity and waits for scoring context before opening the editor', async () => {
+    const source = quickSource();
+    vi.mocked(source.client.create).mockRejectedValueOnce(new Error('Fictional interrupted setup'));
+    const load = vi.mocked(source.scores.load).getMockImplementation();
+    if (!load) throw new Error('Missing fictional scores reader');
+    let finish: (() => void) | undefined;
+    vi.mocked(source.scores.load).mockImplementationOnce(async (...args) => {
+      const value = await load(...args);
+      return new Promise((resolve) => { finish = () => { resolve(value); }; });
+    });
+    render(<QuickRoundView {...source} />);
+    await choose();
+    expect(screen.queryByRole('button', { name: 'Save round' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Add games' }));
+    await screen.findByText(/Save is not confirmed/);
+    expect(screen.getByRole('button', { name: 'Start scoring' })).toBeDisabled();
+    expect(screen.getByLabelText('Round / event name')).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry Add games' }));
+    await waitFor(() => { expect(finish).toBeDefined(); });
+    expect(vi.mocked(source.client.create).mock.calls[1]?.slice(0, 2)).toEqual(vi.mocked(source.client.create).mock.calls[0]?.slice(0, 2));
+    expect(screen.queryByRole('form', { name: 'Game settings' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add games' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Start scoring' })).toBeDisabled();
+    expect(screen.getByLabelText('Round / event name')).toBeDisabled();
+    expect(window.location.hash).toContain('quick=1');
+    act(() => { finish?.(); });
+    expect(await screen.findByRole('form', { name: 'Game settings' })).toBeVisible();
+    expect(screen.getByLabelText('Game name')).toHaveValue('Stableford');
+    expect(source.client.create).toHaveBeenCalledTimes(2);
+    expect(source.scores.saveGames).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Start scoring' })).toBeDisabled();
+  });
+
+  it('resumes a failed post-save scoring read without a second create or a fabricated successful game', async () => {
+    const source = quickSource();
+    vi.mocked(source.scores.load).mockRejectedValueOnce(new Error('Fictional post-save read outage'));
+    render(<QuickRoundView {...source} />);
+    await choose();
+    fireEvent.click(screen.getByRole('button', { name: 'Start scoring' }));
+    await screen.findByText(/Fictional post-save read outage/);
+    expect(source.client.create).toHaveBeenCalledOnce();
+    expect(window.location.hash).toContain('quick=1');
+    expect(screen.getByRole('button', { name: 'Start scoring' })).toBeDisabled();
+    expect(screen.getByLabelText('Round / event name')).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry loading games' }));
+    await waitFor(() => { expect(window.location.hash).toContain('&round='); });
+    expect(window.location.hash).not.toContain('quick=1');
+    expect(source.client.create).toHaveBeenCalledOnce();
+    expect(source.client.save).not.toHaveBeenCalled();
+    expect(source.scores.saveGames).not.toHaveBeenCalled();
+  });
+
+  it('requires one name for both identities and starts ordinary score entry without creating a game', async () => {
+    const source = quickSource();
+    render(<QuickRoundView {...source} />);
+    await choose();
+    const name = screen.getByLabelText('Round / event name');
+    fireEvent.change(name, { target: { value: '   ' } });
+    expect(screen.getByRole('button', { name: 'Start scoring' })).toBeDisabled();
+    expect(source.client.create).not.toHaveBeenCalled();
+    fireEvent.change(name, { target: { value: 'Fictional weekday nine' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Start scoring' }));
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Start scoring' })).toBeEnabled(); });
+    expect(screen.getByRole('button', { name: 'Add games' })).toBeEnabled();
+    expect(screen.queryByRole('form', { name: 'Game settings' })).not.toBeInTheDocument();
+    expect(vi.mocked(source.client.create).mock.lastCall?.[1]).toMatchObject({
+      name: 'Fictional weekday nine', rounds: [{ name: 'Fictional weekday nine' }],
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Start scoring' }));
+    const id = vi.mocked(source.client.create).mock.lastCall?.[0];
+    expect(window.location.hash).toContain(`event=${id ?? ''}`);
+    expect(window.location.hash).toContain(`round=${vi.mocked(source.client.create).mock.lastCall?.[1].rounds[0]?.id ?? ''}`);
+    expect(window.location.hash).not.toContain('quick=1');
+    expect(source.scores.saveGames).not.toHaveBeenCalled();
+    expect(source.scores.save).not.toHaveBeenCalled();
+  });
+
   it('lets a reopened unscored Quick round change golfers and retains the saved roster on another visit', async () => {
     const source = quickSource();
     const view = render(<QuickRoundView {...source} eventId={source.workspace.event.id} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Add golfers' }));
     const selected = await screen.findByRole('checkbox', { name: 'Fictional Player 1' });
     await waitFor(() => { expect(selected).toBeEnabled(); });
     expect(selected).toBeChecked();
     fireEvent.click(selected);
-    await waitFor(() => { expect(screen.getByRole('button', { name: 'Save round' })).toBeEnabled(); });
-    fireEvent.click(screen.getByRole('button', { name: 'Save round' }));
-    await screen.findByText('Round setup saved. Choose games or start with scores only.');
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Start scoring' })).toBeEnabled(); });
+    fireEvent.click(screen.getByRole('button', { name: 'Start scoring' }));
+    await screen.findByText('Round setup saved.');
     const saved = vi.mocked(source.client.save).mock.lastCall?.[3];
     expect(saved?.playerIds).not.toContain(fictionalId(1));
     expect(saved?.rounds[0]?.groups.every((group) => !group.playerIds.includes(fictionalId(1)))).toBe(true);
     expect(source.scores.save).not.toHaveBeenCalled();
     view.unmount();
     render(<QuickRoundView {...source} eventId={source.workspace.event.id} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Add golfers' }));
     const reopened = await screen.findByRole('checkbox', { name: 'Fictional Player 1' });
     await waitFor(() => { expect(reopened).toBeEnabled(); });
     expect(reopened).not.toBeChecked();
@@ -85,7 +167,6 @@ describe('public Quick round controller', () => {
     await showGames();
     let finish: ((workspace: typeof source.workspace) => void) | undefined;
     vi.mocked(source.client.load).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
-    fireEvent.click(screen.getByRole('button', { name: 'Add game' }));
     fireEvent.change(screen.getByLabelText('Game name'), { target: { value: 'Fictional refreshed game' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save game' }));
     await waitFor(() => { expect(finish).toBeDefined(); });
@@ -98,10 +179,11 @@ describe('public Quick round controller', () => {
     await screen.findByText('Game settings saved.');
     expect(source.scores.load).toHaveBeenCalledOnce();
     expect(source.scores.saveGames).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to round setup' }));
     fireEvent.click(screen.getByRole('button', { name: 'Open full setup' }));
-    fireEvent.change(screen.getByLabelText('Event name'), { target: { value: 'Fictional after-game setup' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save round' }));
-    await screen.findByText('Round setup saved. Choose games or start with scores only.');
+    fireEvent.change(screen.getByLabelText('Round / event name'), { target: { value: 'Fictional after-game setup' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Start scoring' }));
+    await screen.findByText('Round setup saved.');
     expect(source.client.save).toHaveBeenCalledWith(source.workspace.event.id, latest.etag, expect.any(String),
       expect.objectContaining({ name: 'Fictional after-game setup' }), expect.any(AbortSignal));
   });
@@ -111,22 +193,22 @@ describe('public Quick round controller', () => {
     render(<QuickRoundView {...source} eventId={source.workspace.event.id} />);
     await showGames();
     vi.mocked(source.client.load).mockRejectedValueOnce(new Error('Fictional post-game workspace outage'));
-    fireEvent.click(screen.getByRole('button', { name: 'Add game' }));
     fireEvent.change(screen.getByLabelText('Game name'), { target: { value: 'Fictional acknowledged game' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save game' }));
     await screen.findByText('Game settings saved.');
     expect(screen.getByRole('alert')).toHaveTextContent('Game settings saved. Setup refresh required');
     expect(screen.queryByRole('button', { name: 'Retry save' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to round setup' }));
     fireEvent.click(screen.getByRole('button', { name: 'Open full setup' }));
-    fireEvent.change(screen.getByLabelText('Event name'), { target: { value: 'Fictional retained setup' } });
-    expect(screen.getByRole('button', { name: 'Save round' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Round / event name'), { target: { value: 'Fictional retained setup' } });
+    expect(screen.getByRole('button', { name: 'Start scoring' })).toBeDisabled();
     expect(screen.getByRole('alert')).toHaveTextContent('Setup refresh required');
     expect(source.client.save).not.toHaveBeenCalled();
     vi.mocked(source.client.load).mockResolvedValueOnce({ ...source.workspace, etag: 'reviewed-after-game' });
     fireEvent.click(screen.getByRole('button', { name: 'Refresh & review setup' }));
     await screen.findByRole('button', { name: 'Use latest revision for my draft' });
-    expect(screen.getByLabelText('Event name')).toHaveValue('Fictional retained setup');
-    expect(screen.getByRole('button', { name: 'Save round' })).toBeEnabled();
+    expect(screen.getByLabelText('Round / event name')).toHaveValue('Fictional retained setup');
+    expect(screen.getByRole('button', { name: 'Start scoring' })).toBeEnabled();
     expect(source.scores.saveGames).toHaveBeenCalledOnce();
   });
 
@@ -136,19 +218,19 @@ describe('public Quick round controller', () => {
     await showGames();
     vi.mocked(source.client.load).mockResolvedValueOnce({ ...source.workspace, etag: 'remote-setup-after-game',
       event: { ...source.workspace.event, name: 'Fictional remote renamed setup' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add game' }));
     fireEvent.change(screen.getByLabelText('Game name'), { target: { value: 'Fictional concurrent game' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save game' }));
     await screen.findByText('Game settings saved.');
     expect(screen.getByRole('alert')).toHaveTextContent('shared setup changed. Your setup draft is retained');
+    fireEvent.click(screen.getByRole('button', { name: 'Back to round setup' }));
     fireEvent.click(screen.getByRole('button', { name: 'Open full setup' }));
-    expect(screen.getByLabelText('Event name')).toHaveValue(source.workspace.event.name);
-    expect(screen.getByRole('button', { name: 'Save round' })).toBeDisabled();
+    expect(screen.getByLabelText('Round / event name')).toHaveValue(source.workspace.event.name);
+    expect(screen.getByRole('button', { name: 'Start scoring' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Start scoring' })).toBeDisabled();
     expect(source.client.save).not.toHaveBeenCalled();
   });
 
-  it('always shows saved games, even when a new-round controller defaults to scores only', async () => {
+  it('shows the saved game count and lets Add games open setup without inventing a scores-only mode', async () => {
     const source = quickSource();
     const initial = await source.scores.load(source.workspace.event.id, source.workspace.rounds[0]?.id ?? '', new AbortController().signal);
     vi.mocked(source.scores.load).mockImplementation((eventId, roundId) => Promise.resolve(gameResult([{
@@ -157,10 +239,12 @@ describe('public Quick round controller', () => {
     }], null, fictionalId(802), { ...initial, eventId, roundId }).round));
     render(<QuickRoundView {...source} />);
     await choose();
-    fireEvent.click(screen.getByRole('button', { name: 'Save round' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Start scoring' }));
+    expect(await screen.findByText('1 saved game')).toBeVisible();
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Start scoring' })).toBeEnabled(); });
+    await showGames();
     expect(await screen.findByRole('button', { name: 'Edit Fictional already saved game' })).toBeVisible();
-    expect(screen.getByLabelText('Scores only')).not.toBeChecked();
-    expect(screen.getByLabelText('Scores only')).toBeDisabled();
+    expect(screen.queryByLabelText('Scores only')).not.toBeInTheDocument();
   });
 
   it('creates exactly one round, splits five golfers into groups, saves starting holes and keeps the full setup draft', async () => {
@@ -168,27 +252,30 @@ describe('public Quick round controller', () => {
     render(<QuickRoundView {...source} />);
     await choose();
     for (let index = 2; index <= 5; index++) fireEvent.click(screen.getByLabelText(`Fictional Player ${String(index)}`, { exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Done choosing golfers' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Group 2' }));
     fireEvent.change(screen.getByLabelText('Group 2 starting hole'), { target: { value: '5' } });
     expect(screen.getByLabelText('No captured Handicap Index')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Open full setup' }));
-    fireEvent.change(screen.getByLabelText('Event name'), { target: { value: 'Fictional quick outing' } });
+    fireEvent.change(screen.getByLabelText('Round / event name'), { target: { value: 'Fictional quick outing' } });
     fireEvent.change(screen.getByLabelText('Tee time'), { target: { value: '09:30' } });
     fireEvent.click(screen.getByLabelText('Personal tees'));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Group 1' }));
     fireEvent.change(screen.getByLabelText('Fictional Player 1 tee'), { target: { value: '905' } });
     fireEvent.click(screen.getByRole('button', { name: 'Compact setup' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Save round' }));
-    expect(await screen.findByLabelText('Scores only')).toBeChecked();
-    await showGames();
+    fireEvent.click(screen.getByRole('button', { name: 'Start scoring' }));
+    await screen.findByText('Round setup saved.');
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Start scoring' })).toBeEnabled(); });
     const call = vi.mocked(source.client.create).mock.calls[0];
     expect(call?.[1]).toMatchObject({ name: 'Fictional quick outing', allowPerGolferTees: true,
-      rounds: [{ teeTime: '09:30', groups: [{ playerIds: [1, 2, 3, 4].map(fictionalId) }, { startingHole: 5, playerIds: [fictionalId(5)] }],
+      rounds: [{ name: 'Fictional quick outing', teeTime: '09:30', groups: [{ playerIds: [1, 2, 3, 4].map(fictionalId) }, { startingHole: 5, playerIds: [fictionalId(5)] }],
         playerTeeSelections: [{ playerId: fictionalId(1), teeProfileId: 905 }] }] });
     expect(call?.[1].rounds).toHaveLength(1);
     expect(source.client.save).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Start scoring' })).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: 'Open full setup' }));
     expect(screen.getByLabelText('Tee time')).toHaveValue('09:30');
-    expect(screen.getByLabelText('Event name')).toHaveValue('Fictional quick outing');
+    expect(screen.getByLabelText('Round / event name')).toHaveValue('Fictional quick outing');
     expect(screen.queryByRole('button', { name: /Archive|Delete|Add round|Purse|Import/ })).not.toBeInTheDocument();
   });
 
@@ -198,13 +285,13 @@ describe('public Quick round controller', () => {
     create.mockRejectedValueOnce(new Error('Fictional network interruption'));
     render(<QuickRoundView {...source} />);
     await choose();
-    fireEvent.click(screen.getByRole('button', { name: 'Save round' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Start scoring' }));
     await screen.findByText(/Save is not confirmed/);
     const first = create.mock.calls[0];
     fireEvent.click(screen.getByRole('button', { name: 'Open full setup' }));
-    expect(screen.getByLabelText('Event name')).toBeDisabled();
+    expect(screen.getByLabelText('Round / event name')).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Start scoring' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Retry same setup save' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Retry Start scoring' }));
     await showGames();
     const retry = create.mock.calls[1];
     expect(retry?.slice(0, 2)).toEqual(first?.slice(0, 2));
@@ -216,14 +303,13 @@ describe('public Quick round controller', () => {
     vi.mocked(source.scores.load).mockRejectedValueOnce(new Error('Fictional games read failed'));
     render(<QuickRoundView {...source} />);
     await choose();
-    fireEvent.click(screen.getByRole('button', { name: 'Save round' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Start scoring' }));
     await screen.findByText(/Setup is saved. Games could not load/);
     expect(screen.getByRole('button', { name: 'Start scoring' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Retry loading games' }));
     await showGames();
-    fireEvent.click(screen.getByRole('button', { name: 'Add game' }));
     expect(screen.getByRole('button', { name: 'Start scoring' })).toBeDisabled();
-    expect(screen.getByLabelText('Scores only')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Back to round setup' })).toBeDisabled();
     fireEvent.change(screen.getByLabelText('Game type'), { target: { value: 'skins' } });
     fireEvent.change(screen.getByLabelText('Game name'), { target: { value: 'Fictional skins' } });
     vi.mocked(source.scores.saveGames).mockRejectedValueOnce(new Error('Fictional game interruption'));
@@ -252,6 +338,7 @@ describe('public Quick round controller', () => {
     await waitFor(() => { expect(finish).toBeDefined(); });
     expect(source.client.players).toHaveBeenLastCalledWith(expect.any(AbortSignal), 'next');
     await act(async () => { finish?.({ items: [{ ...item, id: fictionalId(2), displayName: 'Fictional second page' }] }); await Promise.resolve(); });
+    fireEvent.click(await screen.findByRole('button', { name: 'Add golfers' }));
     expect(await screen.findByLabelText('Find saved golfers')).toBeVisible();
     expect(screen.getByLabelText('Fictional Player 1', { exact: true })).toBeVisible();
     expect(screen.getByLabelText('Fictional second page', { exact: true })).toBeVisible();
@@ -265,9 +352,10 @@ describe('public Quick round controller', () => {
     render(<QuickRoundView {...source} eventId={source.workspace.event.id} />);
     await screen.findByText(/Scoring has started/);
     expect(screen.getByLabelText('Course', { exact: true })).toBeDisabled();
-    expect(screen.getByLabelText('Fictional Player 1', { exact: true })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add golfers' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Open full setup' }));
-    expect(screen.getByLabelText('Round name')).toBeDisabled();
+    expect(screen.queryByLabelText('Round name')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Event name')).toBeEnabled();
     expect(screen.getByLabelText('Tee time')).toBeEnabled();
     expect(screen.getAllByLabelText('Course handicap: 0')).toHaveLength(4);
     expect(source.client.create).not.toHaveBeenCalled();
@@ -278,7 +366,7 @@ describe('public Quick round controller', () => {
     vi.mocked(source.client.create).mockRejectedValueOnce(new EventChangedError('Created, but setup changed before reload.'));
     render(<QuickRoundView {...source} />);
     await choose();
-    fireEvent.click(screen.getByRole('button', { name: 'Save round' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Start scoring' }));
     await screen.findByText(/Created, but setup changed/);
     const created = vi.mocked(source.client.create).mock.calls[0];
     if (!created) throw new Error('Missing fictional creation');
@@ -287,14 +375,14 @@ describe('public Quick round controller', () => {
       .mockResolvedValueOnce({ ...quickWorkspace(id, { ...input, name: 'Fictional newer shared setup' }), etag: 'quick-latest' });
     fireEvent.click(screen.getByRole('button', { name: 'Refresh & review setup' }));
     await screen.findByText(/Fictional review read failed/);
-    expect(screen.getByRole('button', { name: 'Retry same setup save' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Retry Start scoring' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Refresh & review setup' }));
     await screen.findByRole('button', { name: 'Use latest revision for my draft' });
     fireEvent.click(screen.getByRole('button', { name: 'Open full setup' }));
-    expect(screen.getByLabelText('Event name')).toHaveValue(input.name);
+    expect(screen.getByLabelText('Round / event name')).toHaveValue(input.name);
     fireEvent.click(screen.getByRole('button', { name: 'Use latest revision for my draft' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Save round' }));
-    await screen.findByText('Round setup saved. Choose games or start with scores only.');
+    fireEvent.click(screen.getByRole('button', { name: 'Start scoring' }));
+    await screen.findByText('Round setup saved.');
     expect(source.client.create).toHaveBeenCalledOnce();
     expect(source.client.save).toHaveBeenCalledWith(id, 'quick-latest', expect.any(String), input, expect.any(AbortSignal));
   });
@@ -307,12 +395,12 @@ describe('public Quick round controller', () => {
     fireEvent.change(await screen.findByRole('combobox', { name: 'Course' }), { target: { value: fictionalVersion.courseId } });
     await waitFor(() => { expect(finish).toBeDefined(); });
     fireEvent.click(screen.getByRole('button', { name: 'Open full setup' }));
-    fireEvent.change(screen.getByLabelText('Event name'), { target: { value: 'Fictional waiting draft' } });
+    fireEvent.change(screen.getByLabelText('Round / event name'), { target: { value: 'Fictional waiting draft' } });
     fireEvent.click(screen.getByRole('button', { name: 'Compact setup' }));
     await act(async () => { finish?.(fictionalVersion); await Promise.resolve(); });
     expect(screen.getByRole('option', { name: 'Fictional Teal / Fictional A / 9 holes' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Open full setup' }));
-    expect(screen.getByLabelText('Event name')).toHaveValue('Fictional waiting draft');
+    expect(screen.getByLabelText('Round / event name')).toHaveValue('Fictional waiting draft');
     expect(source.client.version).toHaveBeenCalledOnce();
     const signal = vi.mocked(source.client.version).mock.calls[0]?.[2];
     view.unmount();
@@ -327,25 +415,26 @@ describe('public Quick round controller', () => {
     render(<QuickRoundView {...source} eventId={source.workspace.event.id} />);
     await screen.findByLabelText('Course', { exact: true });
     await user.click(screen.getByRole('button', { name: 'Open full setup' }));
-    fireEvent.change(screen.getByLabelText('Event name'), { target: { value: 'Fictional edited outing' } });
-    await waitFor(() => { expect(screen.getByRole('button', { name: 'Save round' })).toBeEnabled(); });
-    await user.click(screen.getByRole('button', { name: 'Save round' }));
+    fireEvent.change(screen.getByLabelText('Round / event name'), { target: { value: 'Fictional edited outing' } });
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Start scoring' })).toBeEnabled(); });
+    await user.click(screen.getByRole('button', { name: 'Start scoring' }));
     await screen.findByText(/Save is not confirmed/);
     const first = vi.mocked(source.client.save).mock.calls[0];
-    await user.click(screen.getByRole('button', { name: 'Retry same setup save' }));
-    await screen.findByText('Round setup saved. Choose games or start with scores only.');
+    await user.click(screen.getByRole('button', { name: 'Retry Start scoring' }));
+    await screen.findByText('Round setup saved.');
+    await waitFor(() => { expect(screen.getByLabelText('Round / event name')).toBeEnabled(); });
     expect(vi.mocked(source.client.save).mock.calls[1]?.slice(0, 4)).toEqual(first?.slice(0, 4));
-    fireEvent.change(screen.getByLabelText('Event name'), { target: { value: 'Fictional conflict draft' } });
+    fireEvent.change(screen.getByLabelText('Round / event name'), { target: { value: 'Fictional conflict draft' } });
     vi.mocked(source.client.save).mockRejectedValueOnce(new EventChangedError('Fictional conflict'));
-    await user.click(screen.getByRole('button', { name: 'Save round' }));
+    await user.click(screen.getByRole('button', { name: 'Start scoring' }));
     await screen.findByText(/Fictional conflict/);
-    expect(screen.getByRole('button', { name: 'Retry same setup save' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Start scoring' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Retry Start scoring' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add games' })).toBeDisabled();
     await user.click(screen.getByRole('button', { name: 'Refresh & review setup' }));
     await screen.findByRole('button', { name: 'Use latest revision for my draft' });
-    expect(screen.getByLabelText('Event name')).toHaveValue('Fictional conflict draft');
+    expect(screen.getByLabelText('Round / event name')).toHaveValue('Fictional conflict draft');
     await user.click(screen.getByRole('button', { name: 'Use latest revision for my draft' }));
-    expect(screen.getByRole('button', { name: 'Save round' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Start scoring' })).toBeEnabled();
   });
 
   it('rejects ordinary events and cross-event creation acknowledgements without throwing away the pending draft', async () => {
@@ -360,9 +449,9 @@ describe('public Quick round controller', () => {
     vi.mocked(source.client.create).mockImplementation((_id, input) => Promise.resolve(quickWorkspace(fictionalId(999), input)));
     render(<QuickRoundView {...source} />);
     await choose();
-    fireEvent.click(screen.getByRole('button', { name: 'Save round' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Start scoring' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Save is not confirmed');
-    expect(screen.getByRole('button', { name: 'Retry same setup save' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Retry Start scoring' })).toBeEnabled();
     expect(screen.getByRole('option', { name: fictionalCourse.name })).toBeInTheDocument();
   });
 });

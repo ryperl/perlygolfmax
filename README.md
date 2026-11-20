@@ -296,9 +296,14 @@ half-index calculation, not half an eighteen-hole Course Handicap. Scoring locks
 the selection; Nassau remains eighteen-hole-only and nine-hole WHS differential
 estimates remain unavailable.
 
-**Quick round** on Events creates one saved round without sign-in. Choose a
-published saved course/version and tees, select saved players and explicitly
-assign them to one or more playing groups of up to four. Each group can have its
+**Quick round** on Events creates one saved round without sign-in. Enter one
+required **Round / event name**, used for both names on a new round. Choose a
+published saved course/version and tees, then tap **Add golfers** to search and
+select saved players. The picker keeps selections through search and closing;
+fifteen golfers fit on one page. Groups fill automatically up to four golfers,
+with additional groups as needed. Compact group rows show names and Course
+Handicaps; **Edit** opens group assignments, starting holes and personal tees
+without changing saved group identities or player order. Each group can have its
 own starting hole. Optional per-golfer tees must use compatible saved layouts.
 The selection directory publishes course names/versions and player names/current
 scalar HI or NH, never private profiles, observation provenance or histories.
@@ -309,9 +314,15 @@ Quick rounds are explicitly collaborative: **any visitor can edit their setup
 and games**. The public directory identifies them for editing; ordinary saved
 events do not acquire this policy. Expanded setup retains the same draft,
 confirmed event and request identities rather than creating another event.
-Save setup before configuring games through the same shared round-game editor
-and authoritative API capabilities used by ordinary rounds. Scores only is
-valid. Stableford, Skins, Ball Drop and enabled Churchie use their existing rules,
+The bottom **Add games** and **Start scoring** actions replace a separate Save
+round button. Each saves the definition first, then waits for acknowledged setup
+and scoring context before continuing. **Add games** opens a new game editor
+directly through the same authoritative capabilities used by ordinary rounds;
+**Start scoring** goes to score entry without creating a game. An uncertain save
+keeps its input and retry identity on setup, and an interrupted confirming read
+can resume without recreating the round. Players can
+return to game setup; existing first-score setup locks still apply.
+Stableford, Skins, Ball Drop and enabled Churchie use their existing rules,
 team validation and settings; new supported game types use the shared path.
 Competition teams are separate from playing groups.
 Reopen **Edit Quick round** from the Events list or the active Quick round's

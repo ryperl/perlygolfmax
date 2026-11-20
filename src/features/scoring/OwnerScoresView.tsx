@@ -507,7 +507,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
         }} onReview={review} onUseSaved={(playerId) => { if (!busy) update(entryKey(playerId, hole.number), null); }}
         onPendingChange={setKpDirty} /></div>}
       <div hidden={screen !== 'games'}>
-        <RoundGamesPanel round={round} busy={busy} onDirtyChange={gameDirtyChanged} presetStore={presetStore}
+        <RoundGamesPanel round={round} defaultGroupNumber={group?.number} busy={busy} onDirtyChange={gameDirtyChanged} presetStore={presetStore}
           onSave={saveGameSettings} onRefresh={refreshSavedRound} />
       </div>
       <div hidden={screen !== 'leaderboard'}>

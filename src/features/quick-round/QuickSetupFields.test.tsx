@@ -16,6 +16,33 @@ function Fixture() {
 }
 
 describe('Quick round setup selections', () => {
+  it('fills one compact group up to four and automatically handles fifteen golfers without reshuffling saved peers on an explicit split', () => {
+    const changed = vi.fn<(value: EventSetupInput) => void>();
+    const players = Array.from({ length: 15 }, (_, index) => ({
+      id: fictionalId(index + 1), displayName: `Fictional golfer ${String(index + 1)}`, handicapIndexValue: '0',
+    }));
+    function Fifteen() {
+      const [draft, setDraft] = useState<EventSetupInput>({ ...fictionalSetup, playerIds: [],
+        rounds: fictionalSetup.rounds.map((round) => ({ ...round, groups: [] })) });
+      return <QuickSetupFields draft={draft} courses={[]} players={players} profiles={[fictionalProfile]}
+        full={false} locked={false} disabled={false} onChange={(value) => { setDraft(value); changed(value); }} />;
+    }
+    render(<Fifteen />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add golfers' }));
+    for (const player of players) fireEvent.click(screen.getByLabelText(player.displayName, { exact: true }));
+    const groups = changed.mock.lastCall?.[0].rounds[0]?.groups;
+    expect(groups?.map((group) => group.playerIds.length)).toEqual([4, 4, 4, 3]);
+    expect(groups?.[0]?.playerIds).toEqual(players.slice(0, 4).map((player) => player.id));
+    expect(screen.queryByLabelText('Fictional golfer 1 group')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Done choosing golfers' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Group 1' }));
+    fireEvent.change(screen.getByLabelText('Fictional golfer 1 group'), { target: { value: '5' } });
+    const split = changed.mock.lastCall?.[0].rounds[0]?.groups;
+    expect(split?.[0]?.playerIds).toEqual(players.slice(1, 4).map((player) => player.id));
+    expect(split?.slice(1, 4)).toEqual(groups?.slice(1, 4));
+    expect(split?.[4]).toMatchObject({ number: 5, playerIds: [fictionalId(1)], startingHole: 1 });
+    expect(changed.mock.lastCall?.[0].playerIds).toEqual(players.map((player) => player.id));
+  });
   it('supports back/front nine in compact setup and restores the complete layout', () => {
     const profile = { ...fictionalProfile, holeCount: 18, holes: [...fictionalProfile.holes,
       ...fictionalProfile.holes.map((hole) => ({ ...hole, number: hole.number + 9, sourceId: hole.sourceId + 9, allocation: hole.allocation + 9 }))] };
@@ -26,6 +53,7 @@ describe('Quick round setup selections', () => {
         full={false} locked={false} disabled={false} onChange={(value) => { setDraft(value); changed(value); }} />;
     }
     render(<NineFixture />);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Group 1' }));
     fireEvent.change(screen.getByLabelText('Round holes'), { target: { value: 'back' } });
     expect(changed.mock.lastCall?.[0].rounds[0]).toMatchObject({ roundSide: 'back', groups: [{ startingHole: 10 }] });
     expect(within(screen.getByLabelText('Group 1 starting hole')).getAllByRole('option')).toHaveLength(9);
@@ -35,23 +63,28 @@ describe('Quick round setup selections', () => {
     expect(within(screen.getByLabelText('Group 1 starting hole')).getAllByRole('option')).toHaveLength(18);
   });
   it('sorts golfer choices by surname before paging without changing assignment identities', () => {
-    const players = Array.from({ length: 13 }, (_, index) => ({
-      id: fictionalId(index + 1), displayName: index === 12 ? 'Zoe Adams' : `Fictional Zulu${String(index).padStart(2, '0')}`,
+    const players = Array.from({ length: 25 }, (_, index) => ({
+      id: fictionalId(index + 1), displayName: index === 24 ? 'Zoe Adams' : `Fictional Zulu${String(index).padStart(2, '0')}`,
       handicapIndexValue: null,
     }));
     const changed = vi.fn();
     render(<QuickSetupFields draft={{ ...fictionalSetup, playerIds: [], rounds: fictionalSetup.rounds.map((round) => ({ ...round, groups: [] })) }}
       courses={[]} players={players} profiles={[fictionalProfile]} full={false} locked={false} disabled={false} onChange={changed} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add golfers' }));
     expect(screen.getAllByRole('checkbox')[0]).toHaveAccessibleName('Zoe Adams');
     fireEvent.click(screen.getByLabelText('Zoe Adams'));
-    expect(changed).toHaveBeenLastCalledWith(expect.objectContaining({ playerIds: [fictionalId(13)] }));
+    expect(changed).toHaveBeenLastCalledWith(expect.objectContaining({ playerIds: [fictionalId(25)] }));
     fireEvent.click(screen.getByRole('button', { name: 'Next golfers' }));
     expect(screen.getAllByRole('checkbox')).toHaveLength(1);
-    expect(screen.getByRole('checkbox')).toHaveAccessibleName('Fictional Zulu11');
+    expect(screen.getByRole('checkbox')).toHaveAccessibleName('Fictional Zulu23');
   });
   it('retains selected golfers through search and refuses overfull groups without losing assignments', () => {
     render(<Fixture />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add golfers' }));
     fireEvent.click(screen.getByLabelText('Fictional fifth golfer', { exact: true }));
+    expect(screen.queryByLabelText('Fictional fifth golfer group')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Group 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Group 2' }));
     fireEvent.change(screen.getByLabelText('Fictional fifth golfer group'), { target: { value: '1' } });
     expect(screen.getByRole('alert')).toHaveTextContent('at most four');
     expect(screen.getByLabelText('Fictional fifth golfer group')).toHaveValue('2');
@@ -67,5 +100,28 @@ describe('Quick round setup selections', () => {
     expect(screen.getByLabelText('No captured Handicap Index')).toHaveTextContent('NH');
     expect(screen.getAllByLabelText('Course handicap unavailable')).toHaveLength(2);
     expect(within(screen.getByLabelText('Fictional Player 1 tee')).queryByRole('option', { name: /incompatible/ })).not.toBeInTheDocument();
+  });
+
+  it('uses one required name in compact setup and writes it to both identities without resetting other fields', () => {
+    const changed = vi.fn();
+    render(<QuickSetupFields draft={fictionalSetup} courses={[]} players={fictionalPlayers} profiles={[fictionalProfile]}
+      full={false} locked={false} disabled={false} onChange={changed} />);
+    const name = screen.getByLabelText('Round / event name');
+    expect(name).toBeRequired();
+    expect(screen.queryByLabelText('Round name')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Event name')).not.toBeInTheDocument();
+    fireEvent.change(name, { target: { value: 'Fictional Friday golf' } });
+    expect(changed).toHaveBeenLastCalledWith({ ...fictionalSetup, name: 'Fictional Friday golf',
+      rounds: fictionalSetup.rounds.map((round) => ({ ...round, name: 'Fictional Friday golf' })) });
+  });
+
+  it('preserves a scored round name when its separate event scheduling name is changed', () => {
+    const changed = vi.fn();
+    render(<QuickSetupFields draft={fictionalSetup} courses={[]} players={fictionalPlayers} profiles={[fictionalProfile]}
+      full locked disabled={false} onChange={changed} />);
+    fireEvent.change(screen.getByLabelText('Event name'), { target: { value: 'Fictional renamed event' } });
+    expect(changed.mock.lastCall?.[0]).toMatchObject({ name: 'Fictional renamed event', rounds: [{ name: fictionalSetup.rounds[0]?.name }] });
+    expect(screen.getByRole('button', { name: 'Add golfers' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Edit Group 1' })).toBeDisabled();
   });
 });

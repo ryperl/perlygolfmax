@@ -4,6 +4,9 @@
   min-width: 0;
 }
 
+.quick-setup-content { display: grid; gap: 1rem; min-width: 0; }
+.quick-round [hidden] { display: none; }
+.quick-setup-content:focus-visible, .quick-games-content:focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
 .quick-round fieldset,
 .quick-group,
 .quick-player,
@@ -12,6 +15,23 @@
   gap: .75rem;
   min-width: 0;
 }
+
+.quick-section-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; }
+.quick-section-heading h3, .quick-section-heading h4 { margin: 0; }
+.quick-section-heading h3 span, .quick-section-heading small, .quick-picker-count { color: var(--cp-text-muted); font-size: .8rem; font-weight: 400; }
+.quick-section-heading button { margin: 0; min-height: 44px; }
+.quick-player-choices { display: grid; gap: .5rem; }
+.quick-player-picker { display: grid; gap: .75rem; }
+.quick-golfer-options { grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); max-height: 22rem; overflow-y: auto; overscroll-behavior: contain; }
+.quick-golfer-options label { padding: .5rem .75rem; border: 1px solid var(--cp-border); border-radius: .625rem; background: var(--cp-surface); cursor: pointer; }
+.quick-golfer-options label:has(input:checked) { border-color: var(--cp-round-line); background: var(--cp-round-surface); }
+.quick-group-summary { list-style: none; display: flex; flex-wrap: wrap; gap: .5rem 1rem; padding: 0; margin: 0; }
+.quick-group-summary li { display: flex; align-items: baseline; gap: .4rem; min-width: 0; overflow-wrap: anywhere; }
+.quick-next { display: grid; gap: .75rem; padding: 1rem; background: var(--cp-round-surface); border: 1px solid var(--cp-border); border-radius: .625rem; }
+.quick-next p { margin: 0; }
+.quick-next-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+.quick-next-actions button { min-height: 48px; margin: 0; padding: .75rem; }
+.quick-next-actions button:last-child { background: var(--cp-accent); color: var(--cp-accent-fg); border-color: var(--cp-accent); }
 
 .quick-round label {
   display: grid;

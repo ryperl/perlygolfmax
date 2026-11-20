@@ -8,7 +8,7 @@ import { fictionalCapturedRound, fictionalGamesRound } from './games-fixture-dat
 import '../../src/app/styles.css';
 import { roundTee } from '../../src/domain/round-tee';
 
-const players = Array.from({ length: 5 }, (_, index) => ({
+const players = Array.from({ length: 15 }, (_, index) => ({
   id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
   displayName: `Fictional golfer ${String(index + 1)}`, handicapIndexValue: index === 4 ? null : '0',
 }));
@@ -54,7 +54,7 @@ const scores: ScoresClient = {
   load: (eventId, roundId) => Promise.resolve({ ...fictionalGamesRound, eventId, roundId, quickRound: true, churchyEnabled: true,
     layout: workspace?.rounds[0]?.teeProfile.holes ?? fictionalGamesRound.layout,
     teeRatings: workspace?.rounds[0]?.teeProfile.ratings ?? fictionalCapturedRound.teeProfile.ratings,
-    churchyRulesVersions: [1, 2, 3],
+    churchyRulesVersions: [1, 2, 3], churchyCustomNames: true,
     eventName: setupInput?.name ?? 'Fictional Quick round', groups: setupInput?.rounds[0]?.groups ?? [],
     cards: players.filter((player) => setupInput?.playerIds.includes(player.id)).map((player) => ({ playerId: player.id, displayName: player.displayName, etag: null, updatedAt: null,
       holes: (workspace?.rounds[0]?.teeProfile.holes ?? fictionalCapturedRound.teeProfile.holes).map((hole) => ({ number: hole.number, score: { kind: 'unplayed' } })) })),

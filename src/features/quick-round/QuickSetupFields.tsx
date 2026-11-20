@@ -5,9 +5,9 @@ import type { EventSetupInput, RoundSetupInput } from '../../domain/setup';
 import type { PlayerCourseHandicap } from '../../domain/scoring';
 import { compatibleTeeLayouts } from '../../domain/tees';
 import { calculateCourseHandicap } from '../../domain/stableford';
-import { comparePlayerNames } from '../../domain/player-order';
 import { CourseHandicap } from '../scoring';
 import { roundTee } from '../../domain/round-tee';
+import { QuickPlayerPicker } from './QuickPlayerPicker';
 
 export function QuickSetupFields({ draft, courses, players, profiles, courseHandicaps, locked, disabled, full, onChange }: {
   readonly draft: EventSetupInput;
@@ -21,8 +21,7 @@ export function QuickSetupFields({ draft, courses, players, profiles, courseHand
   readonly onChange: (value: EventSetupInput) => void;
 }) {
   const [courseQuery, setCourseQuery] = useState('');
-  const [playerQuery, setPlayerQuery] = useState('');
-  const [page, setPage] = useState(0);
+  const [editingGroups, setEditingGroups] = useState<readonly number[]>([]);
   const [error, setError] = useState('');
   const round = draft.rounds[0];
   if (!round) return null;
@@ -33,10 +32,6 @@ export function QuickSetupFields({ draft, courses, players, profiles, courseHand
   });
   const common = playingProfiles.find((profile) => profile.id === round.teeProfileId);
   const compatible = common ? playingProfiles.filter((profile) => compatibleTeeLayouts(common, profile)) : [];
-  const matches = players.filter((player) => player.displayName.toLowerCase().includes(playerQuery.trim().toLowerCase())).sort(comparePlayerNames);
-  const last = Math.max(0, Math.ceil(matches.length / 12) - 1);
-  const visible = matches.slice(Math.min(page, last) * 12, (Math.min(page, last) + 1) * 12);
-  const selected = draft.playerIds.map((id) => players.find((player) => player.id === id));
   function changeRound(value: RoundSetupInput) { onChange({ ...draft, rounds: [value] }); }
   function togglePlayer(playerId: string) {
     if (!round) return;
@@ -57,6 +52,7 @@ export function QuickSetupFields({ draft, courses, players, profiles, courseHand
   }
   function assign(playerId: string, number: number) {
     if (!round) return;
+    if (round.groups.find((group) => group.number === number)?.playerIds.includes(playerId)) return;
     if ((round.groups.find((group) => group.number === number)?.playerIds.length ?? 0) >= 4) {
       setError('Each playing group holds at most four golfers. Choose another group.'); return;
     }
@@ -68,21 +64,35 @@ export function QuickSetupFields({ draft, courses, players, profiles, courseHand
       : [...groups, { number, playerIds: [playerId], ...(common?.holes[0] ? { startingHole: common.holes[0].number } : {}) }])
       .filter((group) => group.playerIds.length).sort((a, b) => a.number - b.number) });
   }
+  function handicapFor(id: string): PlayerCourseHandicap | undefined {
+    const player = players.find((entry) => entry.id === id);
+    const tee = playingProfiles.find((profile) => profile.id === round?.playerTeeSelections?.find((entry) => entry.playerId === id)?.teeProfileId) ?? common;
+    const handicap = player?.handicapIndexValue === undefined ? 'uncaptured-handicap-index'
+      : player.handicapIndexValue === null ? 'missing-handicap-index'
+        : !tee ? 'missing-tee-ratings' : calculateCourseHandicap(player.handicapIndexValue, tee);
+    return locked && courseHandicaps !== undefined ? courseHandicaps.find((entry) => entry.playerId === id)
+      : typeof handicap === 'number' ? { playerId: id, courseHandicap: handicap }
+        : { playerId: id, courseHandicap: null, unavailableReason: handicap };
+  }
   const nextGroup = Math.max(0, ...round.groups.map((group) => group.number)) + 1;
   return <>
-    {full && <fieldset disabled={disabled}>
+    <fieldset disabled={disabled}>
       <legend>Round details</legend>
-      <label>Event name<input maxLength={100} value={draft.name} onChange={(event) => { onChange({ ...draft, name: event.target.value }); }} /></label>
-      <label>Round name<input maxLength={100} value={round.name} disabled={locked} onChange={(event) => { changeRound({ ...round, name: event.target.value }); }} /></label>
+      <label>{locked ? 'Event name' : 'Round / event name'}<input required maxLength={100} value={draft.name} onChange={(event) => {
+        onChange({ ...draft, name: event.target.value, rounds: [{ ...round, name: locked ? round.name : event.target.value }] });
+      }} /></label>
+      {round.name !== draft.name && <p className="quick-picker-count">Saved round name: {round.name}{locked ? ' · Locked after scoring' : ''}</p>}
+      {full && <>
       <label>Location<input maxLength={200} value={draft.location} onChange={(event) => { onChange({ ...draft, location: event.target.value }); }} /></label>
       <label>Round date<input type="date" value={round.startDate ?? ''} onChange={(event) => {
         onChange({ ...draft, startDate: event.target.value, rounds: [{ ...round, startDate: event.target.value }] });
       }} /></label>
       <label>Tee time<input type="time" value={round.teeTime ?? ''} onChange={(event) => { changeRound({ ...round, teeTime: event.target.value }); }} /></label>
-    </fieldset>}
+      </>}
+    </fieldset>
     {locked && <p>Scoring has started. Course, tees, golfers and groups are locked.</p>}
     <fieldset disabled={disabled || locked}>
-      <legend>Course and golfers</legend>
+      <legend>Course</legend>
       <label>Find saved courses<input type="search" value={courseQuery} onChange={(event) => { setCourseQuery(event.target.value); }} /></label>
       <label>Course<select value={round.courseId} onChange={(event) => {
         const course = courses.find((entry) => entry.id === event.target.value);
@@ -118,25 +128,25 @@ export function QuickSetupFields({ draft, courses, players, profiles, courseHand
         </>}
       </select></label>
       {common && <p>{common.holeCount} holes · Par {common.totalPar} · {common.totalYardage.toLocaleString('en-US')} yards</p>}
-      <label>Find saved golfers<input type="search" value={playerQuery} onChange={(event) => { setPlayerQuery(event.target.value); setPage(0); }} /></label>
-      <div className="quick-golfer-options">{visible.map((player) => <label key={player.id}>
-        <input type="checkbox" checked={draft.playerIds.includes(player.id)} onChange={() => { togglePlayer(player.id); }} />
-        {player.displayName}
-      </label>)}</div>
-      {matches.length > 12 && <div className="quick-actions">
-        <button type="button" disabled={page === 0} onClick={() => { setPage((value) => value - 1); }}>Previous golfers</button>
-        <span>Page {Math.min(page, last) + 1} of {last + 1}</span>
-        <button type="button" disabled={page >= last} onClick={() => { setPage((value) => value + 1); }}>Next golfers</button>
-      </div>}
-      {matches.length === 0 && <p>No saved golfers match.</p>}
+      <QuickPlayerPicker players={players} selectedIds={draft.playerIds} disabled={disabled || locked} onToggle={togglePlayer} />
       {full && <label><input type="checkbox" checked={draft.allowPerGolferTees ?? false} onChange={(event) => {
         onChange({ ...draft, allowPerGolferTees: event.target.checked,
           rounds: [{ ...round, playerTeeSelections: event.target.checked ? round.playerTeeSelections ?? [] : [] }] });
       }} />Personal tees</label>}
       {error && <p role="alert">{error}</p>}
-      {selected.length > 0 && <h3>Playing groups</h3>}
+      {draft.playerIds.length > 0 && <h3>Playing groups</h3>}
       {round.groups.map((group) => <section key={group.number} className="quick-group" aria-label={`Group ${String(group.number)}`}>
-        <h4>Group {group.number}</h4>
+        <div className="quick-section-heading"><div><h4>Group {group.number}</h4>
+          <small>Starts hole {group.startingHole ?? common?.holes[0]?.number ?? 1}</small></div>
+          <button type="button" aria-expanded={editingGroups.includes(group.number)} aria-label={`${editingGroups.includes(group.number) ? 'Done editing' : 'Edit'} Group ${String(group.number)}`}
+            onClick={() => { setEditingGroups((values) => values.includes(group.number) ? values.filter((number) => number !== group.number) : [...values, group.number]); }}>
+            {editingGroups.includes(group.number) ? 'Done' : 'Edit'}
+          </button>
+        </div>
+        {!editingGroups.includes(group.number) ? <ul className="quick-group-summary">{group.playerIds.map((id) => <li key={id}>
+          <span>{players.find((player) => player.id === id)?.displayName ?? 'Saved golfer'}</span>
+          <CourseHandicap className="quick-handicap" value={handicapFor(id)} />
+        </li>)}</ul> : <>
         <label>Group {group.number} starting hole<select value={group.startingHole ?? common?.holes[0]?.number ?? 1}
           onChange={(event) => { changeRound({ ...round, groups: round.groups.map((entry) => entry.number === group.number
             ? { ...entry, startingHole: Number(event.target.value) } : entry) }); }}>
@@ -145,14 +155,9 @@ export function QuickSetupFields({ draft, courses, players, profiles, courseHand
         {group.playerIds.map((id) => {
           const player = players.find((entry) => entry.id === id);
           const tee = playingProfiles.find((profile) => profile.id === round.playerTeeSelections?.find((entry) => entry.playerId === id)?.teeProfileId) ?? common;
-          const handicap = player?.handicapIndexValue === undefined ? 'uncaptured-handicap-index'
-            : player.handicapIndexValue === null ? 'missing-handicap-index'
-            : !tee ? 'missing-tee-ratings' : calculateCourseHandicap(player.handicapIndexValue, tee);
           return <div key={id} className="quick-player">
             <p>{player?.displayName ?? 'Saved golfer'} · <CourseHandicap className="quick-handicap"
-              value={locked && courseHandicaps !== undefined ? courseHandicaps.find((entry) => entry.playerId === id)
-                : typeof handicap === 'number' ? { playerId: id, courseHandicap: handicap }
-                : { playerId: id, courseHandicap: null, unavailableReason: handicap }} /></p>
+              value={handicapFor(id)} /></p>
             <label>{player?.displayName ?? 'Saved golfer'} group<select value={group.number} onChange={(event) => { assign(id, Number(event.target.value)); }}>
               {round.groups.map((entry) => <option key={entry.number} value={entry.number}>Group {entry.number}</option>)}
               <option value={nextGroup}>New group {nextGroup}</option>
@@ -164,6 +169,7 @@ export function QuickSetupFields({ draft, courses, players, profiles, courseHand
             <button type="button" onClick={() => { togglePlayer(id); }}>Remove {player?.displayName ?? 'saved golfer'}</button>
           </div>;
         })}
+        </>}
       </section>)}
     </fieldset>
   </>;

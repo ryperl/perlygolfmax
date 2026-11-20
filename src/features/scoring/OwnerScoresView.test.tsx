@@ -39,6 +39,29 @@ async function loaded(user = userEvent.setup()) {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); document.documentElement.scrollTop = 0; });
 
 describe('hole-first owner scoring', () => {
+  it('defaults a new group-scoped game to the saved group currently selected for the round', async () => {
+    const cards = Array.from({ length: 8 }, (_, index) => {
+      const card = fictionalRoundScores.cards[index % 4];
+      if (!card) throw new Error('Missing fictional card');
+      return { ...card, playerId: fictionalId(index + 1), displayName: `Fictional Player ${String(index + 1)}` };
+    });
+    const groups = [{ number: 1, playerIds: cards.slice(0, 4).map((card) => card.playerId) },
+      { number: 2, playerIds: cards.slice(4).map((card) => card.playerId) }];
+    const store = memoryScores({ ...fictionalRoundScores, cards, groups, supportedGameKinds: ['stableford', 'dots'],
+      internalGamesSupported: true, dotsRulesVersions: [1, 2],
+      permissions: { role: 'owner', canManageGames: true, writePlayerIds: cards.map((card) => card.playerId) } });
+    mount(store);
+    const user = userEvent.setup();
+    await loaded(user);
+    await user.selectOptions(screen.getByLabelText('View group'), '2');
+    await user.click(screen.getByRole('button', { name: 'Games' }));
+    await user.click(screen.getByRole('button', { name: 'Add game' }));
+    await user.selectOptions(screen.getByLabelText('Game type'), 'dots');
+    expect(screen.getByLabelText('Dots playing group')).toHaveValue('2');
+    expect(screen.getByLabelText('Game name')).toHaveValue('Dots');
+    expect(store.client.saveGames).not.toHaveBeenCalled();
+  });
+
   it.each(['String', 'Category Sweep'] as const)('identifies an older %s API and retains the current hole and draft when an app update is required', async (rule) => {
     const initial: RoundScores = { ...fictionalRoundScores, games: {
       configuration: { eventId: fictionalRoundScores.eventId, roundId: fictionalRoundScores.roundId,
