@@ -198,7 +198,7 @@ describe('Dots network contracts', () => {
     expect(isDotsHoleRecord({ ...record, contests: [{ kind, status: 'awarded', winnerId: A, secondId: A }] })).toBe(false);
   });
 
-  it.each(['birdie', 'eagle', 'string', 'birdy-string', 'king-of-the-hill', 'assassin', 'sweep', 'kp', 'blue-plate', 'long-drive', 'paree', 'murphy', 'pully-murphy', 'thief'])(
+  it.each(['birdie', 'eagle', 'string', 'birdy-string', 'king-of-the-hill', 'assassin', 'kp', 'blue-plate', 'long-drive', 'paree', 'murphy', 'pully-murphy', 'thief'])(
     'rejects automatic/contest/call kind %s in ordinary manual counts', (kind) => {
       expect(isDotsHoleRecord({ ...record, players: [{ playerId: A, counts: { [kind]: 1 }, calls: [] }] })).toBe(false);
     },

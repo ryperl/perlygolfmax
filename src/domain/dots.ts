@@ -47,6 +47,7 @@ interface CommonDotsDefinition {
   readonly id: string; readonly name: string; readonly kind: 'dots';
   readonly groupNumber: number; readonly playerIds: readonly string[];
   readonly specials: readonly DotsSpecialSelection[];
+  readonly sweepRule?: 'manual-v1';
   readonly basis?: never;
   readonly format?: never; readonly teams?: never; readonly preset?: never; readonly points?: never;
   readonly handicapAllowancePercent?: never;
@@ -220,6 +221,9 @@ export function dotsAutomaticWriteConflicts(
 export const dotsManualKinds: readonly DotsSpecialKind[] = [
   'hogan', 'seve', 'sandy', 'pully', 'dime', 'super-dime', 'haz-par', 'gorilla', 'walk', 'chippy', 'pickup', 'other',
 ];
+export function dotsManualKindsFor(game: Pick<DotsGameDefinition, 'sweepRule'>): readonly DotsSpecialKind[] {
+  return game.sweepRule === 'manual-v1' ? [...dotsManualKinds, 'sweep'] : dotsManualKinds;
+}
 const categories: readonly DotsContest['kind'][] = ['kp', 'blue-plate', 'long-drive'];
 const parQualified: readonly DotsSpecialKind[] = ['hogan', 'seve', 'sandy', 'haz-par', 'chippy'];
 const exact = (value: bigint): number | null => value >= 0n && value <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(value) : null;
@@ -296,7 +300,7 @@ export function dotsRecordsMatchGame(
       const par = personal.find((entry) => entry.number === record.number)?.par;
       const score = round.cards.find((card) => card.playerId === player.playerId)?.holes.find((entry) => entry.number === record.number)?.score;
       for (const [kind, count] of Object.entries(player.counts)) {
-        if (!dotsManualKinds.some((manual) => manual === kind) || !game.specials.some((entry) => entry.kind === kind)
+        if (!dotsManualKindsFor(game).some((manual) => manual === kind) || !game.specials.some((entry) => entry.kind === kind)
           || !Number.isSafeInteger(count) || count < 0) return false;
         if (!count) continue;
         if (kind === 'gorilla' && par !== 5) return false;
@@ -346,10 +350,11 @@ export function calculateDots(
   else if (!recordsValid) issues.push('invalid-dots-records');
   const units = new Map(game.specials.map((special) => [special.kind, special.units]));
   const configValid = unique(game.specials.map((special) => special.kind))
+    && (game.sweepRule === undefined || profile === 'dots' && units.has('sweep'))
     && game.specials.every((special) => positive(special.units) && dotsSpecialCatalog.some((entry) => entry.kind === special.kind));
   if (!configValid) issues.push('invalid-dots-configuration');
   const supportedMode = !(game.mode === 'individual' && units.has('assassin'))
-    && !(game.mode !== 'linked' && units.has('sweep'));
+    && !(game.mode !== 'linked' && units.has('sweep') && game.sweepRule !== 'manual-v1');
   if (!supportedMode) issues.push('unsupported-dots-special-mode');
   const group = round.groups.find((entry) => entry.number === game.groupNumber);
   const start = round.layout.findIndex((hole) => hole.number === (group?.startingHole ?? round.layout[0]?.number));
@@ -406,7 +411,7 @@ export function calculateDots(
       else if (pending) mark(hole, 'pending', 'missing-score-data');
       const strokes = numeric ? score.strokes : null;
       const declaration = record?.players.find((entry) => entry.playerId === playerId);
-      for (const kind of dotsManualKinds) {
+      for (const kind of dotsManualKindsFor(game)) {
         const count = declaration?.counts[kind] ?? 0;
         if (!count || !units.has(kind)) continue;
         if (kind === 'dime' && (declaration?.counts['super-dime'] ?? 0) > 0) continue;
@@ -414,7 +419,8 @@ export function calculateDots(
         if (parQualified.includes(kind) && (strokes === null || par === undefined || strokes > par)
           || kind === 'pully' && !pullyScore(strokes, par) || kind === 'gorilla' && par !== 5) continue;
         add(kind, playerId, kind === 'walk' || kind === 'pickup' ? opponents(playerId) : own(playerId),
-          count, 'manual', [hole.number], `Declared ${String(count)} ${kind}; qualifying gross facts are honor-system claims.`);
+          count, 'manual', [hole.number], kind === 'sweep' ? `Manually awarded ${String(count)} Sweep.`
+            : `Declared ${String(count)} ${kind}; qualifying gross facts are honor-system claims.`);
       }
       for (const call of declaration?.calls ?? []) {
         const result = dotsCallResult(call, score, par);
@@ -476,7 +482,7 @@ export function calculateDots(
           'The same golfer won Long Drive and Blue Plate on this hole.', '', 1);
       }
     }
-    if (units.has('sweep') && game.mode === 'linked' && context.status === 'ready'
+    if (units.has('sweep') && game.sweepRule !== 'manual-v1' && game.mode === 'linked' && context.status === 'ready'
       && context.sides.length === 2 && context.sides.every((side) => side.length === 2)) {
       if (context.highWinnerIds === undefined || context.lowWinnerIds === undefined) {
         mark(hole, 'pending', 'missing-sweep-outcome');

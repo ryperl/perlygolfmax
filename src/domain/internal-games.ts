@@ -9,6 +9,11 @@ import type { InternalGameSettlement } from './dot-settlement.js';
 import type { DotPrefixPoints } from './dot-context.js';
 import { groupStartingHole } from './round-navigation.js';
 
+export function hasConflictingSweep(games: readonly RoundGameDefinition[], wolfId: string): boolean {
+  return games.some((game) => game.kind === 'wolf' && game.id === wolfId && game.highLowSweep === true)
+    && games.some((game) => game.kind === 'dots' && game.mode === 'linked' && game.linkedGameId === wolfId
+      && game.sweepRule === undefined && game.specials.some((special) => special.kind === 'sweep'));
+}
 function prefixPoints(game: DotsGameDefinition, result: DotsResults, context: RoundGameScoringContext): readonly DotPrefixPoints[] {
   const layout = [...context.layout].sort((a, b) => a.number - b.number);
   const start = groupStartingHole(context.groups.find((group) => group.number === game.groupNumber), layout);
@@ -38,6 +43,14 @@ export function calculateInternalGameResults(
       candidate.kind === 'dots' && candidate.mode === 'linked' && candidate.linkedGameId === game.id);
     const input = wolfInputFromScores(context);
     const records = wolfRecordsFor(game, context.groups, context.cards);
+    if (hasConflictingSweep(games, game.id)) {
+      const unavailable = calculateWolf(game, { ...input, groups: [] }, context.cards, records);
+      const reason = 'conflicting-sweep-configuration' as const;
+      const wolf = { ...unavailable, reason, holes: unavailable.holes.map((hole) => ({ ...hole, reason })),
+        ...(unavailable.comeback ? { comeback: { ...unavailable.comeback, reason } } : {}) };
+      output.set(game.id, { gameId: game.id, kind: 'wolf', version: game.version, wolf, players: wolfResultPlayers(wolf) });
+      continue;
+    }
     let wolf = calculateWolf(game, { ...input, ...(linked.length ? { comebackRequired: true } : {}) }, context.cards, records);
     const dots = linked[0];
     if (game.version === 2 && dots && linked.length === 1 && dots.groupNumber === game.groupNumber
@@ -53,7 +66,7 @@ export function calculateInternalGameResults(
     const compatible = linked?.kind === 'wolf' && linked.version === 2 && linked.groupNumber === game.groupNumber
       && linked.playerIds.length === game.playerIds.length && linked.playerIds.every((id) => game.playerIds.includes(id))
       && games.filter((candidate) => candidate.kind === 'dots' && candidate.mode === 'linked'
-        && candidate.linkedGameId === linked.id).length === 1;
+        && candidate.linkedGameId === linked.id).length === 1 && !hasConflictingSweep(games, linked.id);
     const contexts = game.mode !== 'linked' ? undefined : compatible ? output.get(linked.id)?.wolf?.contexts
       : context.layout.map((hole) => ({ number: hole.number, status: 'unavailable' as const, sides: [],
         multiplier: 1 as const, reason: 'Linked game is missing, incompatible or duplicated.' }));

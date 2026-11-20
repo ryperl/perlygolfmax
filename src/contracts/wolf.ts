@@ -19,7 +19,8 @@ const reasons = ['missing-handicap-index', 'uncaptured-handicap-index', 'invalid
 
 export function isWolfDefinition(value: unknown): value is WolfGameDefinition {
   return isRecord(value) && keys(value, ['id', 'name', 'kind', 'version', 'basis', 'groupNumber', 'playerIds', 'allowPig',
-    ...(value.version === 2 ? ['stakeMinor'] : [])])
+    ...(value.version === 2 ? ['stakeMinor'] : [])], value.version === 2 ? ['highLowSweep'] : [])
+    && (!Object.hasOwn(value, 'highLowSweep') || value.highLowSweep === true)
     && isUuid(value.id) && boundedText(value.name) && value.kind === 'wolf'
     && (value.version === 1 || value.version === 2 && (value.stakeMinor === null || nonnegative(value.stakeMinor)))
     && (value.basis === 'gross' || value.basis === 'net') && nonnegative(value.groupNumber) && value.groupNumber > 0

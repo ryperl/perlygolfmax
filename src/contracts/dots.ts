@@ -19,14 +19,16 @@ const members = (value: unknown, individual = false): value is string[] => Array
 
 export function isDotsDefinition(value: unknown): value is DotsGameDefinition {
   if (!isRecord(value) || !keys(value, ['id', 'name', 'kind', 'version', 'groupNumber', 'playerIds', 'specials', 'mode'],
-    ['stakeMinor', 'partnerIds', 'linkedGameId', 'rotationHoles']) || !isUuid(value.id) || !text(value.name)
+    ['stakeMinor', 'partnerIds', 'linkedGameId', 'rotationHoles', 'sweepRule']) || !isUuid(value.id) || !text(value.name)
     || value.kind !== 'dots' || value.version !== 1 && value.version !== 2 || !positive(value.groupNumber)
     || !members(value.playerIds, value.version === 1 && value.mode === 'individual')
     || !Array.isArray(value.specials) || !value.specials.every((entry: unknown) =>
       isRecord(entry) && keys(entry, ['kind', 'units']) && special(entry.kind) && positive(entry.units))
     || !distinct(value.specials.map((entry: { readonly kind: DotsSpecialKind }) => entry.kind))) return false;
   const kinds = value.specials.map((entry: { readonly kind: DotsSpecialKind }) => entry.kind);
-  if (value.mode === 'individual' && kinds.includes('assassin') || value.mode !== 'linked' && kinds.includes('sweep')) return false;
+  if (Object.hasOwn(value, 'sweepRule') && (value.sweepRule !== 'manual-v1' || !kinds.includes('sweep'))) return false;
+  if (value.mode === 'individual' && kinds.includes('assassin')
+    || value.mode !== 'linked' && kinds.includes('sweep') && value.sweepRule !== 'manual-v1') return false;
   if (value.version === 2) return value.mode === 'rotating' && (value.rotationHoles === 3 || value.rotationHoles === 6)
     && Object.hasOwn(value, 'stakeMinor') && (value.stakeMinor === null || integer(value.stakeMinor))
     && !Object.hasOwn(value, 'partnerIds') && !Object.hasOwn(value, 'linkedGameId');
@@ -48,14 +50,14 @@ export function isDotsRotationStart(value: unknown): value is DotsRotationStart 
 }
 
 export function isDotsHoleRecord(value: unknown): value is DotsHoleRecord {
-  return validateDotsHoleRecord(value);
+  return validateDotsHoleRecord(value, true);
 }
 
 export function isChurchyV3HoleRecord(value: unknown): value is DotsHoleRecord {
   return validateDotsHoleRecord(value);
 }
 
-function validateDotsHoleRecord(value: unknown): value is DotsHoleRecord {
+function validateDotsHoleRecord(value: unknown, manualSweep = false): value is DotsHoleRecord {
   if (!isRecord(value) || !keys(value, ['number', 'gameId', 'gameEtag', 'players', 'contests'], ['rotation'])
     || !positive(value.number) || value.number > 18 || !isUuid(value.gameId) || !isEventRevision(value.gameEtag)
     || !Array.isArray(value.players) || !Array.isArray(value.contests)
@@ -66,7 +68,7 @@ function validateDotsHoleRecord(value: unknown): value is DotsHoleRecord {
       || !isRecord(player.counts) || !Array.isArray(player.calls)) return false;
     playerIds.push(player.playerId);
     for (const [kind, count] of Object.entries(player.counts)) {
-      if (!dotsManualKinds.some((manual) => manual === kind) || !integer(count)) return false;
+      if (!(dotsManualKinds.some((manual) => manual === kind) || manualSweep && kind === 'sweep') || !integer(count)) return false;
     }
     if (Number(player.counts.dime ?? 0) > 0 && Number(player.counts['super-dime'] ?? 0) > 0) return false;
     for (const call of player.calls) {

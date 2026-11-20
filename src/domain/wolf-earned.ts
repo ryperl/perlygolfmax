@@ -129,12 +129,15 @@ export function calculateEarnedWolf(
     const winners = new Set(contests.flatMap((contest) => contest.winner ? [contest.winner] : []));
     const winner = winners.size === 1 ? contests.find((contest) => contest.winner)?.winner ?? null : null;
     const low = contests.find((contest) => contest.kind === 'low');
+    const swept = game.highLowSweep === true && choice.mode === 'partner'
+      && contests.every((contest) => contest.status === 'won' && contest.winner === winner);
     return { ...base, contests, status: unavailable ? 'unavailable' : winners.size === 1 ? 'won' : 'tied',
       ...(unavailable ? { reason: 'missing-numeric-ball' as const } : {}), winner,
       wolfScore: low?.wolfScore ?? null, opponentScore: low?.opponentScore ?? null,
       transfers: contests.some((contest) => contest.status !== 'unavailable')
         ? game.playerIds.map((playerId) => ({ playerId, dots: contests.reduce((sum, contest) => sum
-          + (contest.winner && (contest.winner === 'wolf' ? wolfSide : opponents).includes(playerId) ? stake : 0), 0) })) : [] };
+          + (contest.winner && (contest.winner === 'wolf' ? wolfSide : opponents).includes(playerId) ? stake : 0), 0)
+          + (swept && (winner === 'wolf' ? wolfSide : opponents).includes(playerId) ? 1 : 0) })) : [] };
   }
 
   const first = prefix.map((number) => holeResult(number, wolfForHole(game, round, number)));
@@ -160,7 +163,8 @@ export function calculateEarnedWolf(
       const wolfId = order.find((id) => known.some((entry) => entry.playerId === id && entry.dots === minimum));
       if (wolfId) {
         const proof = JSON.stringify({
-          game: { id: game.id, version: game.version, basis: game.basis, playerIds: game.playerIds, groupNumber: game.groupNumber, allowPig: game.allowPig },
+          game: { id: game.id, version: game.version, basis: game.basis, playerIds: game.playerIds, groupNumber: game.groupNumber, allowPig: game.allowPig,
+            ...(game.highLowSweep ? { highLowSweep: true } : {}) },
           group: group ? { number: group.number, playerIds: group.playerIds, startingHole: groupStartingHole(group, layout) } : null,
           circuit: circuit.map((hole) => ({ number: hole.number, par: hole.par, allocation: hole.allocation })),
           players: players.map((player) => ({ playerId: player.playerId, handicap: player.handicap,
@@ -206,7 +210,7 @@ export function calculateEarnedWolf(
       ? [[contest.kind === 'high' ? 'highWinnerIds' : 'lowWinnerIds',
         contest.winner === 'wolf' ? hole.wolfSide : contest.winner === 'opponents' ? hole.opponents : []]] : [])),
   }));
-  const awards: readonly DotAward[] = holes.flatMap((hole) => (hole.contests ?? []).flatMap((contest) => {
+  const awards: DotAward[] = holes.flatMap((hole) => (hole.contests ?? []).flatMap((contest) => {
     if (!contest.winner) return [];
     return [{ id: `${game.id}:${String(hole.number)}:${contest.kind}`, number: hole.number, kind: `wolf-${contest.kind}`,
       source: 'derived' as const, earnedBy: null, recipientIds: contest.winner === 'wolf' ? hole.wolfSide : hole.opponents,
@@ -217,6 +221,16 @@ export function calculateEarnedWolf(
           par: player.layout.find((entry) => entry.number === hole.number)?.par ?? 0 };
       }), reason: `${contest.kind === 'high' ? 'High' : 'Low'} Wolf contest won.` }];
   }));
+  if (game.highLowSweep) for (const hole of holes) {
+    const contests = hole.contests ?? [];
+    if (hole.mode !== 'partner' || contests.length !== 2 || !hole.winner
+      || !contests.every((contest) => contest.status === 'won' && contest.winner === hole.winner)) continue;
+    const evidence = awards.find((award) => award.number === hole.number)?.scores ?? [];
+    awards.push({ id: `${game.id}:${String(hole.number)}:sweep`, number: hole.number, kind: 'wolf-sweep',
+      source: 'derived', earnedBy: null, recipientIds: hole.winner === 'wolf' ? hole.wolfSide : hole.opponents,
+      units: 1, count: 1, multiplier: 1, dots: 1, sourceHoles: [hole.number], scores: evidence,
+      reason: 'The same partnered side won High and Low.' });
+  }
   return { rulesVersion: 2, status, holes, contexts, awards, comeback,
     players: players.map((player) => {
       const entries = holes.flatMap((hole) => hole.transfers.filter((entry) => entry.playerId === player.playerId));

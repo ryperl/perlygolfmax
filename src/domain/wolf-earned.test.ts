@@ -32,6 +32,47 @@ function fixture(count: 9 | 18 = 9, startingHole = 1) {
 
 describe('version 2 Wolf earned dots', () => {
   it.each([
+    [[3, 4, 5, 6], [3, 3, 0, 0]],
+    [[5, 6, 3, 4], [0, 0, 3, 3]],
+    [[3, 6, 4, 5], [1, 1, 1, 1]],
+    [[3, 5, 3, 6], [1, 1, 0, 0]],
+    [[4, 4, 4, 4], [0, 0, 0, 0]],
+  ] as const)('adds one optional Sweep per partnered winner only when both actual contests win: %j', (scores, balances) => {
+    const f = fixture(), game = { ...f.game, highLowSweep: true as const }, cards = f.strokes(scores), records = [f.choice()];
+    const result = calculateWolf(game, f.round, cards, records);
+    expect(result.players.map((player) => player.balance)).toEqual(balances);
+    expect(result.holes[0]?.contests).toEqual(calculateWolf(f.game, f.round, cards, records).holes[0]?.contests);
+    for (const player of result.players) {
+      expect(result.awards?.reduce((sum, award) => sum + (award.recipientIds.includes(player.playerId) ? award.dots : 0), 0))
+        .toBe(player.balance);
+    }
+    expect(isWolfResults(result, game, { round: f.round, cards, records })).toBe(true);
+    for (const mode of ['blind', 'pig'] as const) {
+      expect(calculateWolf(game, f.round, cards, [f.choice(1, mode)]))
+        .toEqual(calculateWolf(f.game, f.round, cards, [f.choice(1, mode)]));
+    }
+  });
+
+  it('includes the optional bonus in comeback totals/proof but preserves the saved final choice after corrections', () => {
+    const f = fixture(), game = { ...f.game, highLowSweep: true as const };
+    const cards = f.cards([{ kind: 'unplayed' }]).map((card, index) => ({ ...card,
+      holes: card.holes.map((hole) => ({ ...hole, score: { kind: 'strokes' as const, strokes: index < 2 ? 3 : 5 } })) }));
+    const candidate = calculateWolf(game, f.round, cards, f.prefixRecords).comeback?.receipt;
+    if (!candidate) throw new Error('Missing fictional sweep comeback receipt');
+    expect(JSON.parse(candidate.proof)).toMatchObject({ game: { highLowSweep: true } });
+    expect(candidate.totals.map((entry) => entry.dots)).not.toEqual(
+      calculateWolf(f.game, f.round, cards, f.prefixRecords).comeback?.receipt?.totals.map((entry) => entry.dots));
+    const final = { ...f.choice(8), choice: { gameId: game.id, gameEtag: 'fictional-v2',
+      mode: 'partner' as const, partnerId: f.game.playerIds.find((id) => id !== candidate.wolfId) ?? '' }, comeback: candidate };
+    const changed = cards.map((card) => ({ ...card, holes: card.holes.map((hole) => ({
+      ...hole, score: { kind: 'strokes' as const, strokes: 4 },
+    })) }));
+    const corrected = calculateWolf(game, f.round, changed, [...f.prefixRecords, final]);
+    expect(corrected.comeback).toMatchObject({ status: 'saved', receipt: candidate, changed: true });
+    expect(corrected.holes.slice(-2).map((hole) => hole.wolfId)).toEqual([candidate.wolfId, candidate.wolfId]);
+  });
+
+  it.each([
     [[3, 6, 4, 5], [1, 1, 1, 1], ['opponents', 'wolf']],
     [[3, 4, 5, 6], [2, 2, 0, 0], ['wolf', 'wolf']],
     [[5, 6, 3, 4], [0, 0, 2, 2], ['opponents', 'opponents']],

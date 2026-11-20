@@ -18,6 +18,7 @@ export interface WolfGameDefinition {
   readonly groupNumber: number;
   readonly playerIds: readonly string[];
   readonly allowPig: boolean;
+  readonly highLowSweep?: true;
   readonly format?: never;
   readonly teams?: never;
   readonly preset?: never;
@@ -61,7 +62,8 @@ export interface WolfContestResult {
   readonly opponentScore: number | null;
 }
 export type WolfUnavailableReason = GameUnavailableReason | 'uncaptured-handicap-index'
-  | 'invalid-wolf-group' | 'invalid-wolf-choice' | 'arithmetic-range' | 'missing-numeric-ball' | 'invalid-stroke-score';
+  | 'invalid-wolf-group' | 'invalid-wolf-choice' | 'arithmetic-range' | 'missing-numeric-ball' | 'invalid-stroke-score'
+  | 'conflicting-sweep-configuration';
 export interface WolfPlayerInput {
   readonly playerId: string;
   readonly displayName: string;

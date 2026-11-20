@@ -5,6 +5,7 @@ import { DotsCallsClientUpdateRequired, murphyRoundScores, murphyScoreChange } f
 import { stringRoundScores, StringRulesClientUpdateRequired } from '../../../src/contracts/string-rules.js';
 import { categorySweepRoundScores, CategorySweepsClientUpdateRequired } from '../../../src/contracts/category-sweeps.js';
 import { ChurchyNamesClientUpdateRequired, churchyNamesRoundScores, requireChurchyNamesInValue } from '../../../src/contracts/churchy-names.js';
+import { SweepRulesClientUpdateRequired, sweepRulesRoundScores, requireSweepRulesInValue } from '../../../src/contracts/sweep-rules.js';
 
 export const supportsMurphyTargets = (request: HttpRequest): boolean => request.query.get('murphy') === 'score-v1';
 export const supportsPareeTargets = (request: HttpRequest): boolean => request.query.get('paree') === 'score-v1';
@@ -35,18 +36,26 @@ export function supportsChurchyNames(request: HttpRequest): boolean {
   return true;
 }
 
-/** Also covers nested leaderboard/source wrappers without assuming that every response is a bare round. */
-export function murphyTransport(value: unknown, negotiated: boolean, pareeTargets = false, stringRules = false, dotsCalls = false, categorySweeps = false, churchyNames = false): unknown {
-  if (!churchyNames) requireChurchyNamesInValue(value);
-  return projectTransport(value, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames);
+export function supportsSweepRules(request: HttpRequest): boolean {
+  const versions = request.query.getAll('sweepRules');
+  if (versions.length === 0) return false;
+  if (versions.length !== 1 || versions[0] !== '2') throw new SweepRulesClientUpdateRequired();
+  return true;
 }
 
-function projectTransport(value: unknown, negotiated: boolean, pareeTargets: boolean, stringRules: boolean, dotsCalls: boolean, categorySweeps: boolean, churchyNames: boolean): unknown {
-  if (Array.isArray(value)) return value.map((entry: unknown) => projectTransport(entry, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames));
+/** Also covers nested leaderboard/source wrappers without assuming that every response is a bare round. */
+export function murphyTransport(value: unknown, negotiated: boolean, pareeTargets = false, stringRules = false, dotsCalls = false, categorySweeps = false, churchyNames = false, sweepRules = false): unknown {
+  if (!sweepRules) requireSweepRulesInValue(value);
+  if (!churchyNames) requireChurchyNamesInValue(value);
+  return projectTransport(value, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules);
+}
+
+function projectTransport(value: unknown, negotiated: boolean, pareeTargets: boolean, stringRules: boolean, dotsCalls: boolean, categorySweeps: boolean, churchyNames: boolean, sweepRules: boolean): unknown {
+  if (Array.isArray(value)) return value.map((entry: unknown) => projectTransport(entry, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules));
   if (!isRecord(value)) return value;
-  if (isRoundScores(value)) return churchyNamesRoundScores(categorySweepRoundScores(stringRoundScores(murphyRoundScores(value, negotiated, pareeTargets, dotsCalls), stringRules), categorySweeps), churchyNames);
+  if (isRoundScores(value)) return sweepRulesRoundScores(churchyNamesRoundScores(categorySweepRoundScores(stringRoundScores(murphyRoundScores(value, negotiated, pareeTargets, dotsCalls), stringRules), categorySweeps), churchyNames), sweepRules);
   if (isRecord(value.round) && isRoundScores(value.round)) return {
-    ...value, round: churchyNamesRoundScores(categorySweepRoundScores(stringRoundScores(murphyRoundScores(value.round, negotiated, pareeTargets, dotsCalls), stringRules), categorySweeps), churchyNames),
+    ...value, round: sweepRulesRoundScores(churchyNamesRoundScores(categorySweepRoundScores(stringRoundScores(murphyRoundScores(value.round, negotiated, pareeTargets, dotsCalls), stringRules), categorySweeps), churchyNames), sweepRules),
     ...(isScoreChange(value.change) ? { change: murphyScoreChange(value.change, negotiated, value.round, pareeTargets, dotsCalls) } : {}),
   };
   if (isScoreChange(value)) {
@@ -58,5 +67,5 @@ function projectTransport(value: unknown, negotiated: boolean, pareeTargets: boo
     }
     return murphyScoreChange(value, negotiated, undefined, pareeTargets, dotsCalls);
   }
-  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, projectTransport(entry, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames)]));
+  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, projectTransport(entry, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules)]));
 }

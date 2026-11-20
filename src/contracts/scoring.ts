@@ -167,6 +167,9 @@ function validateRoundScores(value: unknown, lean = false): value is RoundScores
   if (isRecord(value) && value.gameInputContext !== undefined && (!isRecord(value.gameInputContext)
     || Object.keys(value.gameInputContext).length !== 2 || !isVersionId(value.gameInputContext.courseVersionId)
     || !positiveInteger(value.gameInputContext.teeProfileId))) return false;
+  if (isRecord(value) && (value.dotsManualSweep !== undefined && value.dotsManualSweep !== true
+    || value.wolfHighLowSweep !== undefined && value.wolfHighLowSweep !== true
+    || value.sweepRulesVersion !== undefined && value.sweepRulesVersion !== 2)) return false;
   if (isRecord(value) && value.quickRound !== undefined && value.quickRound !== true) return false;
   if (isRecord(value) && (value.kpEnabled !== undefined && typeof value.kpEnabled !== 'boolean'
     || value.kpCaptureIdentity !== undefined && (typeof value.kpCaptureIdentity !== 'string' || value.kpCaptureIdentity.length === 0)
@@ -341,6 +344,8 @@ function validateRoundScores(value: unknown, lean = false): value is RoundScores
           || !player.holes.every((hole) => card.holes.some((entry) => entry.number === hole.number));
       }))) return false;
     if (value.churchyCustomNames !== true && value.games.configuration.games.some(hasCustomChurchyName)) return false;
+    if (value.games.configuration.games.some((game) => game.kind === 'dots' && game.sweepRule !== undefined
+      || game.kind === 'wolf' && game.highLowSweep !== undefined) && value.sweepRulesVersion !== 2) return false;
     for (const card of cards) {
       for (const hole of card.holes) {
         const extras = hole.score.churchy;

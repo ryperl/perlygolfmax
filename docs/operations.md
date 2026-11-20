@@ -301,6 +301,37 @@ values. Public projections publish only the allowlisted derived result, never
 raw Handicap Index observation metadata. This uses already-loaded round data,
 with no external request, new secret, GHIN endpoint or infrastructure setting.
 
+## Independent Dots and Wolf Sweep rules
+
+New manual Dots Sweep uses the existing `sweep` selection and per-golfer
+`counts.sweep`, with an explicit `sweepRule: 'manual-v1'` definition. Counts are
+nonnegative safe integers and use configured whole units, current teammates
+and the ordinary context multiplier. No gross/par or High/Low qualification is
+inferred. Solo play remains points-only. Absent `sweepRule` preserves saved
+legacy linked automatic Sweep; manual counts remain invalid for those games
+and for Churchie.
+
+Wolf v2 optionally enables `highLowSweep: true`, off by omission. When the same
+partnered side wins both actual High and Low contests, each winning teammate
+earns one additional dot, without carry, unit or stake multipliers. Blind/PIG
+are ineligible. The bonus contributes to prefix comeback totals and their
+proof, while saved final-hole receipts and choices stay immutable on corrections.
+Reject a new/changed configuration combining this option with linked legacy
+automatic Dots Sweep; invalid stored combinations are unavailable, never doubled.
+Linked manual Sweep is independent and allowed. Churchie Sweep and the separate
+automatic one-dot Long Drive/Blue Plate category bonus are unchanged.
+
+New clients require `dotsManualSweep: true` / `wolfHighLowSweep: true` capability
+and negotiate `sweepRules=2`. Affected round responses and immutable private
+award snapshots carry `sweepRulesVersion: 2`. Old full/lean, aggregate, purse and
+history transports return HTTP 426 `SWEEP_RULES_CLIENT_UPDATE_REQUIRED` rather
+than alternative totals or rewritten configuration. Score/game/KP/purse writes
+guard before mutation/publication, including staged commits and retries.
+Duplicate or invalid query values are rejected. Existing unmarked definitions,
+calculation context and immutable audits remain readable. Tester projections,
+setup permissions, scoring locks, quotas and payload ceilings do not change;
+publish the compatible API before the frontend.
+
 ## Churchie versions, capability rollout and kill switch
 
 The user-facing name is Churchie; internal `churchy` data and the existing

@@ -31,6 +31,27 @@ function fixture() {
 }
 
 describe('optional independent Dots/Wolf composition', () => {
+  it('refuses duplicated automatic High/Low sweeps on reads/money, while allowing a separately declared linked manual Sweep', () => {
+    const f = fixture(), wolf = { ...f.wolf, highLowSweep: true as const };
+    const legacy = { ...f.dots, specials: [{ kind: 'sweep' as const, units: 1 }] };
+    const games = [wolf, legacy], context = f.round(f.cards, games);
+    const result = calculateInternalGameResults(games, context);
+    expect(result.get(wolf.id)?.wolf?.reason).toBe('conflicting-sweep-configuration');
+    expect(result.get(legacy.id)?.dots?.status).toBe('unavailable');
+    expect(calculateInternalSettlements(games, [...result.values()], context)[0]?.status).toBe('unavailable');
+    const manual = { ...legacy, sweepRule: 'manual-v1' as const };
+    const cards = f.cards.map((card): Scorecard => ({ ...card, holes: card.holes.map((hole) => ({
+      ...hole, score: { ...hole.score, dots: card.playerId === f.anchor && hole.number === 1 ? [{
+        number: 1, gameId: manual.id, gameEtag: 'fictional-game-revision', contests: [],
+        players: [{ playerId: f.anchor, counts: { sweep: 2 }, calls: [] }],
+      }] : [] },
+    })) }));
+    const current = calculateInternalGameResults([wolf, manual], f.round(cards, [wolf, manual]));
+    expect(current.get(wolf.id)?.wolf?.reason).toBeUndefined();
+    expect(current.get(manual.id)?.dots?.players.slice(0, 2).map((player) => player.totalPoints)).toEqual([2, 2]);
+    expect(current.get(wolf.id)?.wolf?.comeback?.status).toBe('available');
+  });
+
   it('adds category sweeps to current linked prefix results without replacing a saved legacy final-hole Wolf receipt', () => {
     const f = fixture();
     const dots: DotsGameDefinition = { ...f.dots, specials: [{ kind: 'long-drive', units: 1 }, { kind: 'blue-plate', units: 1 }] };

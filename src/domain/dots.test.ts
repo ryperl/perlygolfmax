@@ -39,6 +39,36 @@ function context(number = 1, multiplier: 1 | 2 | 3 = 1, sides: readonly (readonl
 }
 
 describe('source-only Dots declaration review', () => {
+  it('awards opt-in manual Sweep counts with actual teammates in every mode, without High/Low or gross qualifications', () => {
+    const f = fixture([4, 4, 4, 4], ['sweep']);
+    const rotating: DotsGameDefinition = { id: f.game.id, name: f.game.name, kind: 'dots', version: 2,
+      groupNumber: 1, playerIds: ids, mode: 'rotating', rotationHoles: 3, stakeMinor: null, specials: f.game.specials };
+    for (const base of [f.game, fixed(f.game), rotating, linked(f.game)]) {
+      const game = { ...base, sweepRule: 'manual-v1' as const, specials: [{ kind: 'sweep' as const, units: 2 }] };
+      const records = [record(4, [declaration('A', { sweep: 3 })]),
+        ...(game.version === 2 ? [{ ...record(), rotation: { playerIds: ids } }] : [])];
+      const round = setScores(f.round, 'A', f.round.layout.map(() => ({ kind: 'picked-up', reportedStrokes: 7 })));
+      const result = calculateDots(game, round, records, f.round.layout.map((hole) => context(hole.number, 3)));
+      expect(result.status).toBe('complete');
+      expect(result.awards).toEqual([expect.objectContaining({ kind: 'sweep', source: 'manual', earnedBy: 'A',
+        count: 3, units: 2, dots: game.mode === 'linked' ? 18 : 6,
+        recipientIds: game.mode === 'individual' ? ['A'] : game.mode === 'rotating' ? ['A', 'C'] : ['A', 'B'] })]);
+      expect(calculateDots(game, round, [], f.round.layout.map((hole) => ({
+        ...context(hole.number), highWinnerIds: ['A', 'B'], lowWinnerIds: ['A', 'B'],
+      }))).awards).toEqual([]);
+      expect(dotsRecordsMatchGame([record(4, [declaration('A', { sweep: -1 })])], game, round)).toBe(false);
+      expect(dotsRecordsMatchGame(records, base, round)).toBe(false);
+      expect(calculateDots(game, round, records, [], 'churcie-v3').status).toBe('unavailable');
+    }
+    const solo = { ...f.game, sweepRule: 'manual-v1' as const, playerIds: ['A'] };
+    const round = { ...f.round, groups: [{ number: 1, playerIds: ['A'] }], cards: f.round.cards.slice(0, 1) };
+    expect(totals(calculateDots(solo, round, [record(1, [declaration('A', { sweep: 2 })])]))).toEqual([2]);
+    const pending = calculateDots({ ...linked(f.game), sweepRule: 'manual-v1' }, f.round,
+      [record(1, [declaration('A', { sweep: 1 })])]);
+    expect(pending.status).toBe('in-progress');
+    expect(pending.awards).toEqual([]);
+  });
+
   it('awards one automatic same-golfer category sweep in individual, fixed, rotating and linked modes, never Churchie', () => {
     const f = fixture([5], ['long-drive', 'blue-plate']);
     const records = [record(1, [], [

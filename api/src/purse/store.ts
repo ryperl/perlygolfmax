@@ -12,6 +12,7 @@ import { isPrivateUpload, maximumPrivateWriteBytes } from '../../../src/contract
 import { stringRoundScores } from '../../../src/contracts/string-rules.js';
 import { categorySweepRoundScores } from '../../../src/contracts/category-sweeps.js';
 import { requireChurchyNames } from '../../../src/contracts/churchy-names.js';
+import { requireSweepRules } from '../../../src/contracts/sweep-rules.js';
 import { murphyRoundScores } from '../../../src/domain/murphy-transport.js';
 import { canonical, decode, isConflict, optionalRow, revision } from '../catalog/entities.js';
 import { ApiError } from '../errors.js';
@@ -96,15 +97,16 @@ export class TablePurseStore {
   }
 
   async receive(identity: AccountIdentity, eventId: string, expected: string | null, requestId: string, body: unknown,
-    stringRules = true, dotsCalls = true, chargeRead: (units: number) => Promise<void> = () => Promise.resolve(), categorySweeps = true, churchyNames = true) {
+    stringRules = true, dotsCalls = true, chargeRead: (units: number) => Promise<void> = () => Promise.resolve(), categorySweeps = true, churchyNames = true, sweepRules = true) {
     const access = await this.access(identity, eventId, true);
     if (access.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
-    if (!dotsCalls || !stringRules || !categorySweeps || !churchyNames) {
+    if (!dotsCalls || !stringRules || !categorySweeps || !churchyNames || !sweepRules) {
       const state = await this.source(identity, eventId, chargeRead);
       for (const round of state.roundScores) {
         stringRoundScores(round, stringRules);
         categorySweepRoundScores(round, categorySweeps);
         requireChurchyNames(round.games?.configuration.games ?? [], churchyNames);
+        requireSweepRules(round.games?.configuration.games ?? [], sweepRules);
         if (!dotsCalls) murphyRoundScores(round, true, true, false);
       }
     }
@@ -131,7 +133,7 @@ export class TablePurseStore {
 
   async save(identity: AccountIdentity, eventId: string, plan: PursePlan, resolutions: readonly PurseTieResolution[],
     expected: string | null, requestId: string, chargeRead: (units: number) => Promise<void>,
-    publication?: StagedPublication, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true): Promise<PurseWriteResult> {
+    publication?: StagedPublication, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true, sweepRules = true): Promise<PurseWriteResult> {
     if (!isUuid(requestId) || expected !== null && !isEventRevision(expected)) throw new ApiError(400, 'INVALID_PURSE_SETUP');
     if (Buffer.byteLength(JSON.stringify({ plan, resolutions }), 'utf8') > maximumPrivateWriteBytes) throw new ApiError(413, 'REQUEST_TOO_LARGE');
     const access = await this.access(identity, eventId, true);
@@ -141,6 +143,7 @@ export class TablePurseStore {
     for (const round of state.roundScores) stringRoundScores(round, stringRules);
     for (const round of state.roundScores) categorySweepRoundScores(round, categorySweeps);
     for (const round of state.roundScores) requireChurchyNames(round.games?.configuration.games ?? [], churchyNames);
+    for (const round of state.roundScores) requireSweepRules(round.games?.configuration.games ?? [], sweepRules);
     const previousReceipt = await this.receipt(eventId, requestId);
     if (previousReceipt) {
       this.assertReplay(previousReceipt, identity, plan, resolutions, expected);

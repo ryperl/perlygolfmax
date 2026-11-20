@@ -6,6 +6,7 @@ import type { DotRoundInput } from '../../../src/domain/dot-context.js';
 import { dotsDefinitionMatchesRound } from '../../../src/contracts/dots.js';
 import { ApiError } from '../errors.js';
 import { isPublicInternalGameDefinition, preservesProtectedGameDefinitions } from '../../../src/domain/internal-game-management.js';
+import { hasConflictingSweep } from '../../../src/domain/internal-games.js';
 
 export function isPublicInternalGame(game: RoundGameDefinition): boolean {
   return isPublicInternalGameDefinition(game);
@@ -72,6 +73,9 @@ export function validateInternalGameChanges(
     const peers = after.filter((game) => (game.kind === 'dots' || game.kind === 'wolf' || game.kind === 'churchy')
       && game.groupNumber === groupNumber);
     const bases = peers.filter((game) => game.kind === 'wolf' || game.kind === 'churchy');
+    if (bases.some((game) => game.kind === 'wolf' && hasConflictingSweep(after, game.id))) {
+      throw new ApiError(400, 'INCOMPATIBLE_SWEEP_RULES');
+    }
     if (bases.length > 1 || peers.some((game) => game.kind === 'churchy')
       && peers.some((game) => game.kind === 'dots')) throw new ApiError(400, 'INCOMPATIBLE_INTERNAL_GAMES');
     for (const game of peers) {
