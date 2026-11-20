@@ -50,7 +50,7 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
     | 'string-rules' | 'called-targets' | 'category-sweeps' | 'manual-sweep' | 'setup-sweep' | 'coexistence' = 'setup') {
   const server = await createServer({ configFile: false, cacheDir: testInfo.outputPath('vite-cache'),
     server: { host: '127.0.0.1', port: 0, hmr: false }, esbuild: { jsx: 'automatic' },
-    optimizeDeps: { noDiscovery: true, include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'] },
+    optimizeDeps: { noDiscovery: true, include: ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'] },
     logLevel: 'error' });
   const playerCount = scenario.startsWith('individual-') ? Number(scenario.slice(-1)) : 4;
   const categorySweeps = scenario === 'category-sweeps';

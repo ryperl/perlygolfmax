@@ -8,7 +8,7 @@ for (const workflow of ['courses', 'create player', 'edit player'] as const) {
 test(`compact catalog ${workflow} workflow preserves complete search and focused editing at narrow widths`, async ({ page }, testInfo) => {
   const server = await createServer({ configFile: false, cacheDir: testInfo.outputPath('vite-cache'),
     server: { host: '127.0.0.1', port: 0, hmr: false }, esbuild: { jsx: 'automatic' },
-    optimizeDeps: { noDiscovery: true, include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'] }, logLevel: 'error' });
+    optimizeDeps: { noDiscovery: true, include: ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'] }, logLevel: 'error' });
   const errors: string[] = [];
   page.on('pageerror', (error) => { errors.push(error.message); });
   try {

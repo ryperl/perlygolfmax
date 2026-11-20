@@ -1,6 +1,6 @@
 import { scoreEntryText } from '../../contracts/scoring';
 import type { CourseHole } from '../../domain/catalog';
-import type { HoleScore, PlayerCourseHandicap, Scorecard } from '../../domain/scoring';
+import type { HoleScore, PlayerCourseHandicap, RoundScores, Scorecard } from '../../domain/scoring';
 import type { PlayerTeeProfile } from '../../domain/tees';
 import { ballDropContribution, ballDropScoreText, cardTotalText, pointsTotalText, scorecardBallDropTeams, scorecardGamePlayer, scorecardHandicapStrokes } from './scorecard-presentation';
 import type { ScorecardGame } from './scorecard-presentation';
@@ -8,6 +8,7 @@ import { gameDisplayName, gameUnavailableMessage } from '../games';
 import { gameResultTotal, gameResultUnit } from '../../domain/games';
 import { CourseHandicap } from './CourseHandicap';
 import { MatchPlayRows } from './MatchPlayScorecard';
+import { DotPointsCell } from './DotPointsCell';
 import './scorecard-recap.css';
 
 function scoreMark(score: HoleScore | undefined, par: number) {
@@ -45,7 +46,7 @@ function CourseRows({ layout, fullLayout, showTotal, prefix = '' }: {
   </>;
 }
 
-export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game, onPlayerSelect, playerTees, defaultTeeLabel, courseHandicaps, teeStrokeAllocation, matchPlayers = cards }: {
+export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game, onPlayerSelect, playerTees, defaultTeeLabel, courseHandicaps, teeStrokeAllocation, matchPlayers = cards, round }: {
   readonly label: string;
   readonly subtotal: 'Out' | 'In';
   readonly layout: readonly CourseHole[];
@@ -58,6 +59,7 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
   readonly courseHandicaps?: readonly PlayerCourseHandicap[];
   readonly teeStrokeAllocation?: boolean | undefined;
   readonly matchPlayers?: readonly Pick<Scorecard, 'playerId' | 'displayName'>[];
+  readonly round?: RoundScores | undefined;
 }) {
   const showTotal = subtotal === 'In' || fullLayout.length === layout.length;
   const mixed = (playerTees?.length ?? 0) > 0;
@@ -132,7 +134,10 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
                 const points = holePoints.get(hole.number);
                 const description = !available ? 'unavailable' : typeof points === 'number' ? String(points) : 'pending';
                 return <td key={hole.number} aria-label={`${card.displayName}, hole ${String(hole.number)} game ${unit}: ${description}`}>
-                  {available ? points ?? '—' : '—'}
+                  {game.definition.kind === 'dots' || game.definition.kind === 'wolf' || game.definition.kind === 'churchy'
+                    ? <DotPointsCell key={`${game.definition.id}:${card.playerId}:${String(hole.number)}`} game={game} card={card}
+                      number={hole.number} text={available ? points ?? '—' : '—'} players={matchPlayers} round={round} />
+                    : available ? points ?? '—' : '—'}
                 </td>;
               })}
               <td className="recap-subtotal">{pointsTotalText(!available ? null : player.strokeGame

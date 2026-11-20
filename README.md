@@ -667,6 +667,15 @@ missing or unavailable earlier results never produce invented later positions.
 Each three-way pairing remains separate. These are main-match positions, not
 press totals, individual game points or money; presses stay in Games.
 
+For games with dots, tap an existing per-hole dot cell to see a small saved
+breakdown of base dots, specials and total, with named source golfers for shared
+awards. The scorecard layout stays unchanged; close the popover or tap elsewhere
+to dismiss it. Dots-only games have zero base; explicitly Wolf-linked Dots may
+show the linked combined breakdown, clearly distinguished from the cell's
+special-only value. Legacy Wolf retains signed transfer balances. Pending or
+unavailable inputs never become invented zero/final totals. No private audit
+history or extra network read is required.
+
 **Nassau** is match play over an 18-hole captured layout, with independent front
 1-9, back 10-18 and overall matches. Choose singles 1v1, three-way individuals
 (three separate pairwise Nassaus), 1v2 best ball, or 2v2 best ball/aggregate.

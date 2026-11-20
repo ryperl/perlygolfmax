@@ -46,9 +46,11 @@ export function PlayerScorecardRecap({ round, card, gameId }: {
     <div className="recap-sections">
       {front.length > 0 && <ScorecardNine label="Front nine" subtotal="Out" layout={front} fullLayout={layout} cards={[card]} game={game}
         matchPlayers={round.cards}
+        round={round}
         courseHandicaps={round.courseHandicaps ?? []} teeStrokeAllocation={tee?.strokeAllocation ?? round.teeStrokeAllocation} />}
       {back.length > 0 && <ScorecardNine label="Back nine" subtotal="In" layout={back} fullLayout={layout} cards={[card]} game={game}
         matchPlayers={round.cards}
+        round={round}
         courseHandicaps={round.courseHandicaps ?? []} teeStrokeAllocation={tee?.strokeAllocation ?? round.teeStrokeAllocation} />}
     </div>
     {game?.definition.kind === 'match-play' && <p className="scorecard-match-key">UP / DN: running match position · AS: all square · —: pending or unavailable. Main match only; presses are in Games.</p>}

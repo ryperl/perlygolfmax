@@ -91,11 +91,13 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
       <div className="recap-sections">
         {front.length > 0 && (nine !== 'back' || back.length === 0) && <ScorecardNine label="Front nine" subtotal="Out" layout={front} fullLayout={layout} cards={cards} game={game}
           matchPlayers={round.cards}
+          round={round}
           courseHandicaps={round.courseHandicaps ?? []}
           teeStrokeAllocation={round.teeStrokeAllocation}
           playerTees={round.playerTees} defaultTeeLabel={`${round.teeName} / ${round.teeCategory}`} onPlayerSelect={setPlayerId} />}
         {back.length > 0 && (nine !== 'front' || front.length === 0) && <ScorecardNine label="Back nine" subtotal="In" layout={back} fullLayout={layout} cards={cards} game={game}
           matchPlayers={round.cards}
+          round={round}
           courseHandicaps={round.courseHandicaps ?? []}
           teeStrokeAllocation={round.teeStrokeAllocation}
           playerTees={round.playerTees} defaultTeeLabel={`${round.teeName} / ${round.teeCategory}`} onPlayerSelect={setPlayerId} />}
