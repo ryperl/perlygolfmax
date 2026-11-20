@@ -31,7 +31,7 @@ export function isChurchyDefinition(value: unknown): value is ChurchyGameDefinit
     const { basis, currency, amountPerDotMinor, orderMode } = value;
     return keys(value, ['id', 'name', 'kind', 'version', 'basis', 'currency', 'groupNumber',
       'amountPerDotMinor', 'playerIds', 'orderMode', 'specials'])
-      && (value.name === 'Churchie' || value.name === 'Churcie') && basis === 'net' && currency === 'USD' && exact(amountPerDotMinor)
+      && boundedText(value.name) && basis === 'net' && currency === 'USD' && exact(amountPerDotMinor)
       && (orderMode === 'tee' || orderMode === 'approach')
       && isUuid(value.id) && value.kind === 'churchy' && exact(value.groupNumber) && value.groupNumber > 0
       && Array.isArray(value.playerIds) && value.playerIds.length === 4 && value.playerIds.every(isUuid)
@@ -43,7 +43,7 @@ export function isChurchyDefinition(value: unknown): value is ChurchyGameDefinit
   return isRecord(value) && keys(value, value.version === 2
     ? ['id', 'name', 'kind', 'version', 'basis', 'currency', 'groupNumber', 'amountPerDotMinor', 'playerIds', 'enabledSpecials']
     : ['id', 'name', 'kind', 'version', 'basis', 'currency', 'groupNumber', 'amountPerDotMinor', 'playerIds'])
-    && isUuid(value.id) && value.name === 'Churchy Game' && value.kind === 'churchy'
+    && isUuid(value.id) && boundedText(value.name) && value.kind === 'churchy'
     && (value.version === 1 || value.version === 2 && Array.isArray(value.enabledSpecials)
       && value.enabledSpecials.every((key: unknown) => defaultChurchySpecials.some((special) => special === key))
       && new Set(value.enabledSpecials).size === value.enabledSpecials.length)

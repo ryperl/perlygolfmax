@@ -38,6 +38,37 @@ async function fixture() {
 }
 
 describe('separate tester HTTP credential boundary', () => {
+  it.each([1, 3] as const)('negotiates names only when the tester projection exposes custom version-%i Churchie', async (version) => {
+    const f = await fixture();
+    const common = { id: identifier(3290), name: 'Fictional custom Churchie', kind: 'churchy' as const,
+      basis: 'net' as const, groupNumber: 1, playerIds: f.input.playerIds.slice(0, 4), currency: 'USD' as const,
+      amountPerDotMinor: 50 };
+    const game = version === 1 ? { ...common, version } : { ...common, version, orderMode: 'tee' as const, specials: [] };
+    await f.scores.saveGames(creator, event.id, f.roundId, [game], null, identifier(3291));
+    const old = await f.invoke('scores');
+    expect(old.status).toBe(version === 1 ? 426 : 200);
+    const modern = await createTesterHandler(() => f.api, 'scores')(
+      f.request('scores', undefined, {}, {}, '?churchyNames=1'), f.context);
+    expect(modern.status).toBe(200);
+    expect(isRoundScores(modern.jsonBody)).toBe(true);
+    const rows = new Map(f.rows);
+    const request = f.request('score-hole', { score: { kind: 'strokes', strokes: 4 } },
+      { 'Idempotency-Key': identifier(3292) });
+    request.headers.delete('If-Match');
+    request.headers.set('If-None-Match', '*');
+    const writer = createTesterHandler(() => f.api, 'score-hole');
+    expect((await writer(request, f.context)).status).toBe(version === 1 ? 426 : 200);
+    if (version === 1) expect(f.rows).toEqual(rows);
+    const negotiated = f.request('score-hole', { score: { kind: 'strokes', strokes: 4 } },
+      { 'Idempotency-Key': identifier(3292) }, {}, '?churchyNames=1');
+    negotiated.headers.delete('If-Match');
+    negotiated.headers.set('If-None-Match', '*');
+    const result = await writer(negotiated, f.context);
+    expect(result.status).toBe(200);
+    expect(isScoreWriteResult(result.jsonBody)).toBe(true);
+    expect(result.jsonBody).toMatchObject({ round: { permissions: { role: 'tester', canManageGames: false } } });
+  });
+
   it('renews only through the owner POST with exact revisions and no caller-chosen expiry', async () => {
     const f = await fixture();
     const current = await f.testers.list(creator, event.id);

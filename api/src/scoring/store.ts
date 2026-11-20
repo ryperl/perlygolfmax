@@ -46,6 +46,7 @@ import { buildDotAwardAudit } from './dot-audit.js';
 import { requireStringRules } from './string-rules.js';
 import { requireCategorySweeps } from './category-sweeps.js';
 import { hasCategorySweeps } from '../../../src/contracts/category-sweeps.js';
+import { hasCustomChurchyName, requireChurchyNames } from '../../../src/contracts/churchy-names.js';
 import { DotsCallsClientUpdateRequired, murphyRoundScores, requireLegacyDotsCalls } from '../../../src/domain/murphy-transport.js';
 import { groupStartingHole } from '../../../src/domain/round-navigation.js';
 import { calculateInternalSettlements } from '../../../src/domain/internal-games.js';
@@ -112,22 +113,24 @@ private async kpProjection(eventId: string, roundId: string, configured: unknown
   return row ? { kp: { ...decode(await privateContent(this.table, eventId, `round-kp:${roundId}`, row.content), isKpSelection), etag: revision(row) } } : {};
 }
 
-async receiveKp(identity: AccountIdentity, eventId: string, roundId: string, body: unknown, expected: string | null, requestId: string, stringRules = true, dotsCalls = true, categorySweeps = true) {
+async receiveKp(identity: AccountIdentity, eventId: string, roundId: string, body: unknown, expected: string | null, requestId: string, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true) {
   const state = await this.snapshot(identity, eventId, roundId, true);
   if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
   requireStringRules(state.games?.games ?? [], stringRules);
   requireCategorySweeps(state.games?.games ?? [], categorySweeps);
+  requireChurchyNames(state.games?.games ?? [], churchyNames);
   await this.requireDotsCalls(eventId, state, dotsCalls);
   return receivePrivateWrite(this.table, identity, eventId, `round-kp:${roundId}`, expected, requestId, body);
 }
 
 async saveKp(identity: AccountIdentity, eventId: string, roundId: string, selection: KpSelection,
-  expectedEtag: string | null, requestId: string, stringRules = true, dotsCalls = true, categorySweeps = true): Promise<KpWriteResult> {
+  expectedEtag: string | null, requestId: string, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true): Promise<KpWriteResult> {
   if (!isUuid(requestId) || !isKpSelection(selection)
     || expectedEtag !== null && !isEventRevision(expectedEtag)) throw new ApiError(400, 'INVALID_KP_SETUP');
   const state = await this.snapshot(identity, eventId, roundId, true);
   requireStringRules(state.games?.games ?? [], stringRules);
   requireCategorySweeps(state.games?.games ?? [], categorySweeps);
+  requireChurchyNames(state.games?.games ?? [], churchyNames);
   await this.requireDotsCalls(eventId, state, dotsCalls);
   const grant = this.writer(state);
   if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
@@ -284,6 +287,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       game.kind !== 'wolf' && game.kind !== 'nassau' && game.kind !== 'match-play' && game.kind !== 'dots'
       && !(game.kind === 'churchy' && game.version !== 1)) : games?.games;
     const projection: RoundScores = {
+      ...(visibleGames?.some(hasCustomChurchyName) ? { churchyCustomNames: true as const } : {}),
       stringRulesVersion: 2,
       ...(hasCategorySweeps(visibleGames ?? []) ? { dotsCategorySweepsVersion: 1 as const } : {}),
       ...(access.event.quickRound === true ? { quickRound: true as const } : {}),
@@ -417,7 +421,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
   }
 
   async saveGames(identity: AccountIdentity | PublicScoreIdentity, eventId: string, roundId: string, games: readonly RoundGameDefinition[],
-    expectedEtag: string | null, requestId: string, stringRules = true, dotsCalls = true, categorySweeps = true): Promise<GameWriteResult> {
+    expectedEtag: string | null, requestId: string, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true): Promise<GameWriteResult> {
     if (!isUuid(requestId) || !isRoundGameDefinitions(games) || games.length === 0
       || expectedEtag !== null && !isEventRevision(expectedEtag)) throw new ApiError(400, 'INVALID_GAME_SETUP');
     if (Buffer.byteLength(JSON.stringify({ games }), 'utf8') > maximumPrivateWriteBytes) {
@@ -426,6 +430,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     const state = await this.snapshot(identity, eventId, roundId);
     requireStringRules([...state.games?.games ?? [], ...games], stringRules);
     requireCategorySweeps([...state.games?.games ?? [], ...games], categorySweeps);
+    requireChurchyNames([...state.games?.games ?? [], ...games], churchyNames);
     await this.requireDotsCalls(eventId, state, dotsCalls);
     if (state.summary.role !== 'owner' && !state.publicAccess) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
     if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
@@ -468,7 +473,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
         if (!previous || !sameGameDefinitions([game], [previous])) throw new ApiError(400, 'INVALID_CHURCHY_GROUP');
       }
       if (state.round.scoringStarted && previous
-        && (previous.groupNumber !== game.groupNumber || previous.playerIds.some((id, index) => id !== game.playerIds[index])
+        && (previous.name !== game.name || previous.groupNumber !== game.groupNumber || previous.playerIds.some((id, index) => id !== game.playerIds[index])
           || previous.version === 2 && game.version === 2
             && canonical(previous.enabledSpecials) !== canonical(game.enabledSpecials))) {
         throw new ApiError(409, 'CHURCHY_SETUP_LOCKED');
@@ -529,7 +534,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
   }
 
   async receiveGames(identity: AccountIdentity | PublicScoreIdentity,
-    eventId: string, roundId: string, body: unknown, expected: string | null, requestId: string, stringRules = true, dotsCalls = true, categorySweeps = true) {
+    eventId: string, roundId: string, body: unknown, expected: string | null, requestId: string, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true) {
     if (!isUuid(roundId) || !isUuid(requestId)) throw new ApiError(400, 'INVALID_REQUEST_ID');
     const state = await this.access(identity, eventId);
     if (state.summary.role !== 'owner' && !state.publicAccess) throw new ApiError(403, 'SCORES_OWNER_REQUIRED');
@@ -545,12 +550,14 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     // Parts are inactive. Check the head revision without repeatedly decoding a large configuration.
     // The final save validates the complete captured workspace and games again.
     const head = await optionalRow(this.table, eventId, gameConfigurationKey(roundId));
-    if ((!stringRules || !categorySweeps) && head) {
+    if ((!stringRules || !categorySweeps || !churchyNames) && head) {
       const current = await readGameConfiguration(this.table, eventId, roundId,
         configuredGameRounds(state.event.gameRoundIds), { row: head });
       requireStringRules(current?.games ?? [], stringRules);
       requireCategorySweeps(current?.games ?? [], categorySweeps);
+      requireChurchyNames(current?.games ?? [], churchyNames);
     }
+    if (isRecord(body) && isRoundGameDefinitions(body.games)) requireChurchyNames(body.games, churchyNames);
     if ((head ? revision(head) : null) !== expected) {
       const receipt = await this.gameReceipt(eventId, roundId, requestId);
       if (!receipt || receipt.expectedEtag !== expected || !sameScoreActor(receipt.recordedBy, identity)) throw new ApiError(409, 'GAMES_CHANGED');
@@ -603,7 +610,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
   }
 
   async write(identity: ScoreActor, eventId: string, roundId: string, playerId: string, holeNumber: number,
-    score: HoleScore, expectedEtag: string | null, requestId: string, inputRevision?: string | null, stringRules = true, dotsCalls = true, categorySweeps = true): Promise<ScoreWriteResult> {
+    score: HoleScore, expectedEtag: string | null, requestId: string, inputRevision?: string | null, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true): Promise<ScoreWriteResult> {
     if (!isUuid(requestId) || !isUuid(playerId) || !isHoleScore(score) || !Number.isSafeInteger(holeNumber)
       || expectedEtag !== null && !isEventRevision(expectedEtag)
       || inputRevision !== undefined && inputRevision !== null && !isUuid(inputRevision)) throw new ApiError(400, 'INVALID_SCORE_WRITE');
@@ -611,6 +618,8 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     requireStringRules(state.games?.games ?? [], stringRules);
     requireCategorySweeps(state.games?.games ?? [], categorySweeps);
+    requireChurchyNames((state.games?.games ?? []).filter((game) =>
+      !state.testerLink || game.kind === 'churchy' && game.version === 1), churchyNames);
     if (!dotsCalls) requireLegacyDotsCalls([score]);
     await this.requireDotsCalls(eventId, state, dotsCalls);
     if (!state.round.teeProfile.holes.some((hole) => hole.number === holeNumber)) throw new ApiError(400, 'ROUND_HOLE_NOT_FOUND');
@@ -913,13 +922,14 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
   }
 
   async receiveGameScore(identity: ScoreActor, eventId: string, roundId: string, playerId: string, holeNumber: number,
-    body: unknown, expected: string | null, requestId: string, stringRules = true, dotsCalls = true, categorySweeps = true) {
+    body: unknown, expected: string | null, requestId: string, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true) {
     if (!isUuid(requestId) || !isUuid(playerId) || !Number.isInteger(holeNumber)
       || expected !== null && !isEventRevision(expected)) throw new ApiError(400, 'INVALID_SCORE_WRITE');
     const state = await this.snapshot(identity, eventId, roundId);
     if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     requireStringRules(state.games?.games ?? [], stringRules);
     requireCategorySweeps(state.games?.games ?? [], categorySweeps);
+    requireChurchyNames(state.games?.games ?? [], churchyNames);
     await this.requireDotsCalls(eventId, state, dotsCalls);
     if (!dotsCalls) {
       if (isRecord(body) && isHoleScore(body.score)) requireLegacyDotsCalls([body.score]);

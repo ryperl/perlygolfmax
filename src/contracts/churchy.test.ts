@@ -50,12 +50,12 @@ describe('Churchy wire contracts', () => {
     expect(isRoundScores({ ...round, games: { ...round.games, results: [altered, ...round.games.results.slice(1)] } })).toBe(false);
     expect(isChurchyResult({ ...result, players: [{ playerId: f.game.playerIds[0] }] }, f.game)).toBe(false);
   });
-  it('validates foursome, version, fixed game name, money arithmetic inputs and only one Churchy game', () => {
+  it('validates foursome, version, bounded game name, money arithmetic inputs and only one Churchy game', () => {
     const f = churchyFixture();
     expect(isChurchyDefinition(f.game)).toBe(true);
     for (const invalid of [{ ...f.game, version: 2 }, { ...f.game, playerIds: f.game.playerIds.slice(1) },
       { ...f.game, playerIds: f.game.playerIds.map(() => f.game.playerIds[0]) }, { ...f.game, amountPerDotMinor: -1 },
-      { ...f.game, amountPerDotMinor: 0.1 }, { ...f.game, name: 'Other' }, { ...f.game, points: {} },
+      { ...f.game, amountPerDotMinor: 0.1 }, { ...f.game, name: '' }, { ...f.game, points: {} },
       { ...f.game, awards: [] }, { ...f.game, currency: 'EUR' }]) expect(isChurchyDefinition(invalid)).toBe(false);
     expect(isRoundGameDefinitions([f.game, { ...f.game, id: f.skins.id }])).toBe(false);
   });

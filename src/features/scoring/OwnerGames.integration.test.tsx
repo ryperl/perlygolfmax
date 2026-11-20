@@ -131,7 +131,7 @@ describe('games integrated with owner stroke entry', () => {
     await user.click(panel.getByRole('button', { name: 'Cancel editing' }));
     expect(panel.getByText('Closing editing does not undo an earlier save. Refresh to see the saved settings.')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Refresh saved round' }));
-    expect(await panel.findByRole('heading', { name: 'Standard Stableford' })).toBeVisible();
+    expect(await panel.findByRole('heading', { name: 'Stableford' })).toBeVisible();
     expect(store.client.saveGames).toHaveBeenCalledOnce();
     expect(store.read().games?.configuration.games).toHaveLength(1);
   });

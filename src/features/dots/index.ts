@@ -1,4 +1,4 @@
-export { DotsSettings } from './DotsSettings';
+export { DotsSettings, DotsPlayingGroupSelect } from './DotsSettings';
 export { DotSpecialsSettings } from './DotSpecialsSettings';
 export type { DotSpecialsSettingsProps } from './DotSpecialsSettings';
 export { DotsHoleControls } from './DotsHoleControls';

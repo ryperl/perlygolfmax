@@ -67,6 +67,7 @@ export interface PlayerCourseHandicap {
 }
 
 export interface RoundScores {
+  readonly churchyCustomNames?: true;
   readonly stringRulesVersion?: 2;
   readonly dotsCategorySweepsVersion?: 1;
   readonly churchyMurphyTargets?: true;

@@ -1,6 +1,7 @@
 import type { ChurchyGameDefinition } from '../../domain/churchy';
 import type { RoundGameResult } from '../../domain/games';
 import { InternalSettlement } from '../dots';
+import { gameDisplayName } from '../games';
 import './churchy.css';
 
 export function ChurchyResults({ game, result }: {
@@ -8,6 +9,7 @@ export function ChurchyResults({ game, result }: {
   readonly result: RoundGameResult | undefined;
 }) {
   const receipt = result?.churchy;
+  const name = gameDisplayName(game);
   if (!receipt) return <p>Churchie results unavailable. Refresh saved scores.</p>;
   const names = (ids: readonly string[]) => ids.map((id) => result.players.find((player) => player.playerId === id)?.displayName ?? 'Golfer unavailable').join(' + ');
   const ranked = result.players.filter((player) => player.status !== 'unavailable' && player.totalPoints !== null)
@@ -15,8 +17,8 @@ export function ChurchyResults({ game, result }: {
   function money(minor: number | null) {
     return minor === null ? 'Unavailable' : `$${String(Math.floor(minor / 100))}.${String(minor % 100).padStart(2, '0')}`;
   }
-  return <section className="churchy-results" aria-label={`Churchie · Group ${String(game.groupNumber)} results`}>
-    <h3>Churchie · Group {game.groupNumber}</h3>
+  return <section className="churchy-results" aria-label={`${name} · Group ${String(game.groupNumber)} results`}>
+    <h3>{name} · Group {game.groupNumber}</h3>
     <p>{receipt.status === 'complete' ? 'Saved earned dots'
       : receipt.status === 'unavailable' ? 'Unavailable comparisons: no final total or settlement.' : 'Provisional: pending holes are not ties.'}</p>
     {game.version === 3 && game.orderMode === 'approach' && !receipt.order && <p className="game-hint">
@@ -34,7 +36,7 @@ export function ChurchyResults({ game, result }: {
       {player.displayName}: {player.status === 'unavailable' ? 'unavailable' : 'awaiting saved results'} · Churchie relative handicap {player.playingHandicap ?? 'unavailable'}
     </p>)}
     {game.version !== 1 ? receipt.internalSettlement && result.version === game.version
-      ? <InternalSettlement settlement={receipt.internalSettlement} gameNames={['Churchie']} ranked
+      ? <InternalSettlement settlement={receipt.internalSettlement} gameNames={[name]} ranked
         provisional={receipt.status !== 'complete'}
         progress={result.players.map((player) => ({ playerId: player.playerId,
           label: `${String(player.holesScored)}/${String(player.totalHoles)} holes · CH ${String(player.playingHandicap ?? 'unavailable')}`,

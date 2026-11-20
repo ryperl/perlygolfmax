@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { GameSettings } from './GameSettings';
-import { newGameDraft, setFormat } from './game-draft';
+import { newGameDraft, setFormat, setGameKind } from './game-draft';
 import { draftFromGame } from './game-draft';
 import { teamLeaderboardGame, teamLeaderboardRound } from '../../client/leaderboard.test-support';
 import { fictionalId } from '../../client/catalog.test-support';
@@ -18,6 +18,72 @@ function SettingsHarness({ team = false }: { readonly team?: boolean }) {
 }
 
 describe('GameSettings', () => {
+  it.each(['wolf', 'nassau', 'match-play', 'dots', 'churchy'] as const)(
+    'places the %s playing group immediately after Type and Name', (kind) => {
+      const f = churchyFixture();
+      const { container } = render(<GameSettings draft={setGameKind(newGameDraft(), kind, f.cards.length)}
+        onChange={vi.fn()} onSave={vi.fn()} onCancel={vi.fn()} disabled={false} saveDisabled={false}
+        cancelDisabled={false} retry={false} roster={f.cards} groups={f.snapshot.groups}
+        supportedGameKinds={['wolf', 'nassau', 'match-play', 'dots', 'churchy']} churchyEnabled
+        churchyV3Supported churchyCustomNamesSupported />);
+      const fields = [...container.querySelectorAll('input,select')];
+      expect(fields.slice(0, 3)).toEqual([
+        screen.getByLabelText('Game type'), screen.getByLabelText('Game name'),
+        screen.getByLabelText(kind === 'churchy' ? 'Churchie playing group' : kind === 'dots' ? 'Dots playing group' : 'Playing group'),
+      ]);
+    });
+
+  it.each([1, 2, 3] as const)('edits the actual version-%i Churchie name only with capability, without changing its rules', (version) => {
+    const f = churchyFixture();
+    const game = version === 1 ? f.game : version === 2 ? { ...f.game, version, enabledSpecials: defaultChurchySpecials }
+      : { ...f.game, version, name: 'Churchie', orderMode: 'approach' as const, specials: [] };
+    const draft = draftFromGame(game);
+    const onChange = vi.fn();
+    const props = { draft, disabled: false, saveDisabled: false, cancelDisabled: false, retry: false,
+      onChange, onSave: vi.fn(), onCancel: vi.fn(), churchyEnabled: true, churchyV2Supported: true, churchyV3Supported: true };
+    const view = render(<GameSettings {...props} />);
+    expect(screen.getByLabelText('Game name')).toHaveValue(game.name);
+    expect(screen.getByLabelText('Game name')).toBeDisabled();
+    expect(screen.getByText(/names are read-only until this API/)).toBeVisible();
+    view.rerender(<GameSettings {...props} churchyCustomNamesSupported />);
+    expect(screen.getByLabelText('Game name')).toBeEnabled();
+    fireEvent.change(screen.getByLabelText('Game name'), { target: { value: 'Fictional evening game' } });
+    expect(onChange).toHaveBeenLastCalledWith({ ...draft, name: 'Fictional evening game', preserveName: true });
+    expect(screen.getByLabelText('Game type')).toHaveValue('churchy');
+    expect(screen.getByLabelText('Game type')).toBeDisabled();
+    view.rerender(<GameSettings {...props} churchyCustomNamesSupported setupLocked />);
+    expect(screen.getByLabelText('Game name')).toBeDisabled();
+  });
+
+  it('defaults group-scoped kinds from saved round groups and keeps custom names and manual group choices', () => {
+    const f = churchyFixture();
+    const groups = [...f.snapshot.groups].reverse();
+    const first = groups[0], second = groups[1];
+    if (!first || !second) throw new Error('Missing fictional groups.');
+    const defaultGroupNumber = second.number;
+    function Fixture() {
+      const [draft, setDraft] = useState(newGameDraft);
+      return <GameSettings draft={draft} onChange={setDraft} onSave={vi.fn()} onCancel={vi.fn()}
+        roster={f.cards} groups={groups} disabled={false} saveDisabled={false} cancelDisabled={false} retry={false}
+        supportedGameKinds={['dots', 'wolf', 'nassau', 'match-play']} wolfV2Supported
+        churchyEnabled churchyV3Supported allowChurchyCreation defaultGroupNumber={defaultGroupNumber} />;
+    }
+    render(<Fixture />);
+    fireEvent.change(screen.getByLabelText('Game type'), { target: { value: 'dots' } });
+    expect(screen.getByLabelText('Game name')).toHaveValue('Dots');
+    expect(screen.getByLabelText('Dots playing group')).toHaveValue(String(second.number));
+    fireEvent.change(screen.getByLabelText('Dots playing group'), { target: { value: String(first.number) } });
+    fireEvent.change(screen.getByLabelText('Game name'), { target: { value: 'Fictional group game' } });
+    fireEvent.change(screen.getByLabelText('Game type'), { target: { value: 'wolf' } });
+    expect(screen.getByLabelText('Playing group')).toHaveValue(String(first.number));
+    expect(screen.getByLabelText('Wolf P1')).toHaveValue(first.playerIds[0]);
+    expect(screen.getByLabelText('Game name')).toHaveValue('Fictional group game');
+    fireEvent.change(screen.getByLabelText('Game type'), { target: { value: 'match-play' } });
+    expect(screen.getByLabelText('Playing group')).toHaveValue(String(first.number));
+    expect(screen.getByLabelText('Side A golfer 1')).toHaveValue('');
+    expect(screen.getByLabelText('Side B golfer 1')).toHaveValue('');
+  });
+
   it('uses fixed named v2 toggles and locks group, order and specials after scoring while retaining stake editing', () => {
     const f = churchyFixture();
     const draft = draftFromGame({ ...f.game, version: 2 as const, enabledSpecials: defaultChurchySpecials });
@@ -96,9 +162,9 @@ describe('GameSettings', () => {
     const view = render(<GameSettings draft={newGameDraft()} onChange={vi.fn()} onSave={vi.fn()} onCancel={onCancel}
       disabled={false} saveDisabled={false} cancelDisabled={false} retry={false} />);
     await user.tab();
-    expect(screen.getByLabelText('Game name')).toHaveFocus();
-    await user.tab();
     expect(screen.getByLabelText('Game type')).toHaveFocus();
+    await user.tab();
+    expect(screen.getByLabelText('Game name')).toHaveFocus();
     await user.tab();
     expect(screen.getByLabelText('Points preset')).toHaveFocus();
     await user.tab();

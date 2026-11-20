@@ -19,8 +19,32 @@ export interface DotsSetupDraft {
   readonly stake?: string;
 }
 
+interface DotsPlayingGroupProps {
+  readonly draft: DotsSetupDraft;
+  readonly groups: readonly RoundGroup[];
+  readonly onChange: (patch: DotsSetupDraft) => void;
+  readonly individualPlayerCounts?: readonly number[];
+}
+
+function supportsGroup(mode: DotsGameDefinition['mode'], size: number, individualPlayerCounts: readonly number[]) {
+  return mode === 'individual' ? size >= 1 && size <= 4 && individualPlayerCounts.includes(size) : size === 4;
+}
+
+export function DotsPlayingGroupSelect({ draft, groups, onChange, individualPlayerCounts = [4] }: DotsPlayingGroupProps) {
+  const eligible = (size: number) => supportsGroup(draft.dotsMode ?? 'individual', size, individualPlayerCounts);
+  return <label>Dots playing group<select value={draft.groupNumber ?? ''} onChange={(event) => {
+    const selected = groups.find((entry) => entry.number === Number(event.target.value));
+    if (selected && eligible(selected.playerIds.length)) onChange({ groupNumber: selected.number,
+      dotsPlayers: selected.playerIds, dotsPlayerIds: selected.playerIds, linkedGameId: '',
+      ...(selected.playerIds.length === 1 ? { stake: '' } : {}) });
+  }}><option value="">Choose saved playing group</option>{groups.filter((entry) =>
+    eligible(entry.playerIds.length) || entry.number === draft.groupNumber).map((entry) =>
+    <option key={entry.number} value={entry.number} disabled={!eligible(entry.playerIds.length)}>
+      Group {entry.number}{entry.playerIds.length === 4 ? '' : ` · ${String(entry.playerIds.length)} ${entry.playerIds.length === 1 ? 'player' : 'players'}`}</option>)}</select></label>;
+}
+
 export function DotsSettings({ draft, groups, players, wolves, onChange, v2Supported = false, individualPlayerCounts = [4],
-  supportedKinds, presetStore }: {
+  supportedKinds, presetStore, hidePlayingGroup = false }: {
   readonly draft: DotsSetupDraft;
   readonly groups: readonly RoundGroup[];
   readonly players: readonly { readonly playerId: string; readonly displayName: string }[];
@@ -30,6 +54,7 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
   readonly individualPlayerCounts?: readonly number[];
   readonly supportedKinds?: readonly DotsSpecialKind[];
   readonly presetStore?: DotPresetStore;
+  readonly hidePlayingGroup?: boolean;
 }) {
   const group = groups.find((entry) => entry.number === draft.groupNumber);
   const linked = wolves.find((game) => game.id === draft.linkedGameId);
@@ -37,20 +62,10 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
   const mode = draft.dotsMode ?? 'individual';
   const solo = mode === 'individual' && group?.playerIds.length === 1;
   const smallGroup = group !== undefined && group.playerIds.length !== 4;
-  const supportsGroup = (size: number) => mode === 'individual'
-    ? size >= 1 && size <= 4 && individualPlayerCounts.includes(size) : size === 4;
   const compatible = dotSpecialModeCompatible;
   return <section className="dots-settings" aria-label="Dots setup">
     <div className="dots-setup-fields">
-    <label>Dots playing group<select value={draft.groupNumber ?? ''} onChange={(event) => {
-      const selected = groups.find((entry) => entry.number === Number(event.target.value));
-      if (selected && supportsGroup(selected.playerIds.length)) onChange({ groupNumber: selected.number,
-        dotsPlayers: selected.playerIds, dotsPlayerIds: selected.playerIds, linkedGameId: '',
-        ...(selected.playerIds.length === 1 ? { stake: '' } : {}) });
-    }}><option value="">Choose saved playing group</option>{groups.filter((entry) =>
-      supportsGroup(entry.playerIds.length) || entry.number === draft.groupNumber).map((entry) =>
-      <option key={entry.number} value={entry.number} disabled={!supportsGroup(entry.playerIds.length)}>
-        Group {entry.number}{entry.playerIds.length === 4 ? '' : ` · ${String(entry.playerIds.length)} ${entry.playerIds.length === 1 ? 'player' : 'players'}`}</option>)}</select></label>
+    {!hidePlayingGroup && <DotsPlayingGroupSelect draft={draft} groups={groups} onChange={onChange} individualPlayerCounts={individualPlayerCounts} />}
     <label>Dots mode<select value={mode === 'rotating' ? `rotating-${String(draft.dotsRotationHoles ?? 3)}` : mode} onChange={(event) => {
       const selectedMode = event.target.value;
       if (smallGroup && selectedMode !== 'individual') return;
@@ -68,7 +83,7 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
       <option value="individual" disabled={draft.dotsVersion === 2}>Individual</option><option value="fixed" disabled={smallGroup || draft.dotsVersion === 2}>Fixed partners</option>
       <option value="linked" disabled={smallGroup || draft.dotsVersion === 2}>Link to earned Wolf</option></select></label>
     </div>
-    {mode === 'individual' && smallGroup && !supportsGroup(group.playerIds.length)
+    {mode === 'individual' && smallGroup && !supportsGroup(mode, group.playerIds.length, individualPlayerCounts)
       && <p role="alert">This API does not support individual Dots for this group size. Refresh after an API upgrade; your draft is retained.</p>}
     {smallGroup && <small>Partner modes require four players.</small>}
     {mode === 'rotating' && <p>Choose P1–P4 on your first played hole in score entry. Partners rotate in your playing circuit; only specials are shared, with no base match points.</p>}

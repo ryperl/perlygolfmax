@@ -6,6 +6,38 @@ import { leanRoundScores, leanScoreWriteResult } from '../contracts/lean-round-s
 import { strokeGameId } from '../domain/stroke-games.test-support.js';
 
 describe('Churchie v3 declaration client transport', () => {
+  it('negotiates custom names across reads, game saves, score saves and history while accepting an unchanged old API', async () => {
+    const f = churchyV3Fixture(9);
+    const base = f.round();
+    if (!base.games) throw new Error('Missing fictional games.');
+    const game = { ...f.game, name: 'Fictional evening challenge' };
+    const round = { ...base, churchyCustomNames: true as const, games: { ...base.games,
+      configuration: { ...base.games.configuration, games: [game] } } };
+    const change = { ...fictionalChange, eventId: round.eventId, roundId: round.roundId,
+      playerId: f.ids[0] ?? '', after: round.cards[0]?.holes[0]?.score ?? { kind: 'unplayed' as const } };
+    const send = vi.fn<typeof fetch>();
+    const client = createScoresClient('https://fictional.example.test/api', () => Promise.resolve('fictional-token'), send, 'None');
+    const signal = new AbortController().signal;
+    for (const wire of [round, leanRoundScores(round, false, false, false, false, false, true), base]) {
+      send.mockResolvedValueOnce(new Response(JSON.stringify(wire)));
+      expect(await client.load(round.eventId, round.roundId, signal)).toEqual(wire === base ? base : round);
+    }
+    const gameChange = { id: strokeGameId(992), eventId: round.eventId, roundId: round.roundId,
+      expectedEtag: base.games.configuration.etag, before: [f.game], after: [game],
+      recordedAt: fictionalChange.recordedAt, recordedBy: fictionalChange.recordedBy };
+    send.mockResolvedValueOnce(new Response(JSON.stringify({ round, change: gameChange })));
+    expect(await client.saveGames(round.eventId, round.roundId, [game], gameChange.expectedEtag, gameChange.id, signal))
+      .toEqual({ round, change: gameChange });
+    send.mockResolvedValueOnce(new Response(JSON.stringify(leanScoreWriteResult({ round, change }, false, false, false, false, false, true))));
+    expect(await client.save(round.eventId, round.roundId, change.playerId, change.holeNumber,
+      change.after, change.expectedEtag, change.id, signal)).toEqual({ round, change });
+    send.mockResolvedValueOnce(new Response(JSON.stringify({ changes: [change] })));
+    expect(await client.history(round.eventId, round.roundId, change.playerId, signal)).toEqual({ changes: [change] });
+    for (const [url] of send.mock.calls) {
+      expect(typeof url === 'string' ? url : url instanceof URL ? url.href : url.url).toContain('churchyNames=1');
+    }
+  });
+
   it('negotiates Paree alongside Murphy and retains a pending canonical target through full/lean reads and retry acknowledgements', async () => {
     const f = churchyV3Fixture(9);
     const churchy = { ...f.declaration(1, f.ids), players: [{ playerId: f.ids[1] ?? '', counts: {},

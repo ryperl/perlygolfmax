@@ -18,7 +18,8 @@ import type { TableQuickRoundStore } from '../quick-round/store.js';
 import { maximumGameConfigurationBytes } from '../../../src/domain/games.js';
 import { isRoundGameDefinitions } from '../../../src/contracts/games.js';
 import { leanRoundScores, leanScoreWriteResult } from '../../../src/contracts/lean-round-scores.js';
-import { murphyTransport, supportsMurphyTargets, supportsPareeTargets, supportsStringRules, supportsDotsCalls, supportsCategorySweeps } from '../scoring/murphy-transport.js';
+import { murphyTransport, supportsMurphyTargets, supportsPareeTargets, supportsStringRules, supportsDotsCalls, supportsCategorySweeps, supportsChurchyNames } from '../scoring/murphy-transport.js';
+import { ChurchyNamesClientUpdateRequired } from '../../../src/contracts/churchy-names.js';
 import { CategorySweepsClientUpdateRequired } from '../../../src/contracts/category-sweeps.js';
 import { StringRulesClientUpdateRequired } from '../../../src/contracts/string-rules.js';
 import { DotsCallsClientUpdateRequired } from '../../../src/domain/murphy-transport.js';
@@ -68,8 +69,9 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
       const stringRules = supportsStringRules(request);
       const dotsCalls = supportsDotsCalls(request);
       const categorySweeps = supportsCategorySweeps(request);
-      const send = (value: unknown) => response(200, murphyTransport(value, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps));
-      const read = (value: unknown) => privateReadResponse(request, murphyTransport(value, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps));
+      const churchyNames = supportsChurchyNames(request);
+      const send = (value: unknown) => response(200, murphyTransport(value, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames));
+      const read = (value: unknown) => privateReadResponse(request, murphyTransport(value, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames));
       const api = resolveApi();
       if (request.method !== (action === 'score-hole' || action === 'score-game-hole' || action === 'games' ? 'PUT' : 'GET')) return response(405, { code: 'METHOD_NOT_ALLOWED' });
       if (action === 'events') {
@@ -109,18 +111,18 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
       const lean = request.query.get('format') === 'lean';
       if (action === 'scores') {
         const round = await api.scores.get(identity, eventId, roundId);
-        return response(200, lean ? privateReadResponse(request, leanRoundScores(round, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps)) : read(round));
+        return response(200, lean ? privateReadResponse(request, leanRoundScores(round, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames)) : read(round));
       }
       if (action === 'games') {
         const requestId = uuid(request.headers.get('Idempotency-Key'));
         const etag = scoreRevision(request);
         const body = await readJson(request, maximumGameConfigurationBytes);
-        const received = await api.scores.receiveGames(identity, eventId, roundId, body, etag, requestId, stringRules, dotsCalls, categorySweeps);
+        const received = await api.scores.receiveGames(identity, eventId, roundId, body, etag, requestId, stringRules, dotsCalls, categorySweeps, churchyNames);
         if (received.kind === 'part') return response(200, { privateStaged: { id: received.id, index: received.index } });
         if (!isRecord(received.value) || Object.keys(received.value).length !== 1
           || !isRoundGameDefinitions(received.value.games)) throw new ApiError(400, 'INVALID_GAME_SETUP');
-        const result = await api.scores.saveGames(identity, eventId, roundId, received.value.games, etag, requestId, stringRules, dotsCalls, categorySweeps);
-        return lean ? response(200, { ...result, round: leanRoundScores(result.round, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps) }) : send(result);
+        const result = await api.scores.saveGames(identity, eventId, roundId, received.value.games, etag, requestId, stringRules, dotsCalls, categorySweeps, churchyNames);
+        return lean ? response(200, { ...result, round: leanRoundScores(result.round, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames) }) : send(result);
       }
       const playerId = uuid(request.params.playerId);
       const requestId = uuid(request.headers.get('Idempotency-Key'));
@@ -129,18 +131,18 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
       if (typeof hole !== 'string' || !/^(?:[1-9]|1[0-8])$/.test(hole)) throw new ApiError(400, 'INVALID_HOLE_NUMBER');
       let raw = await readJson(request, action === 'score-game-hole' ? maximumGameConfigurationBytes : undefined);
       if (action === 'score-game-hole') {
-        const received = await api.scores.receiveGameScore(identity, eventId, roundId, playerId, Number(hole), raw, etag, requestId, stringRules, dotsCalls, categorySweeps);
+        const received = await api.scores.receiveGameScore(identity, eventId, roundId, playerId, Number(hole), raw, etag, requestId, stringRules, dotsCalls, categorySweeps, churchyNames);
         if (received.kind === 'part') return response(200, { privateStaged: { id: received.id, index: received.index } });
         raw = received.value;
       }
       const body = parseScoreWriteBody(raw);
       if (action === 'score-game-hole' && !body.score.nassau?.length && !body.score.wolf?.length
         && !body.score.dots?.length && body.score.churchy?.version !== 3) throw new ApiError(400, 'INVALID_GAME_SCORE');
-      const result = await api.scores.write(identity, eventId, roundId, playerId, Number(hole), body.score, etag, requestId, body.inputRevision, stringRules, dotsCalls, categorySweeps);
-      return lean ? response(200, leanScoreWriteResult(result, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps)) : send(result);
+      const result = await api.scores.write(identity, eventId, roundId, playerId, Number(hole), body.score, etag, requestId, body.inputRevision, stringRules, dotsCalls, categorySweeps, churchyNames);
+      return lean ? response(200, leanScoreWriteResult(result, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames)) : send(result);
     } catch (error) {
-      const status = error instanceof ApiError || error instanceof StringRulesClientUpdateRequired || error instanceof DotsCallsClientUpdateRequired || error instanceof CategorySweepsClientUpdateRequired ? error.status : 503;
-      const code = error instanceof ApiError || error instanceof StringRulesClientUpdateRequired || error instanceof DotsCallsClientUpdateRequired || error instanceof CategorySweepsClientUpdateRequired ? error.code : 'SERVICE_UNAVAILABLE';
+      const status = error instanceof ApiError || error instanceof StringRulesClientUpdateRequired || error instanceof DotsCallsClientUpdateRequired || error instanceof CategorySweepsClientUpdateRequired || error instanceof ChurchyNamesClientUpdateRequired ? error.status : 503;
+      const code = error instanceof ApiError || error instanceof StringRulesClientUpdateRequired || error instanceof DotsCallsClientUpdateRequired || error instanceof CategorySweepsClientUpdateRequired || error instanceof ChurchyNamesClientUpdateRequired ? error.code : 'SERVICE_UNAVAILABLE';
       if (status >= 500) context.error('Public API failed', { code, invocationId: context.invocationId });
       else context.warn('Public API rejected', { code, status, invocationId: context.invocationId });
       return response(status, { code });

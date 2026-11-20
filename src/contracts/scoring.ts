@@ -29,6 +29,7 @@ import { calculateChurchyResults, churchySpecialsMatchGame } from '../domain/chu
 import { isKpConfiguration, isKpEntry } from './kp.js';
 import { purseCurrencies } from '../domain/purse.js';
 import { restoreLeanRoundGames } from './lean-round-scores.js';
+import { hasCustomChurchyName } from './churchy-names.js';
 
 export function isScoreActor(value: unknown): value is ScoreActor {
   return isPublicScoreIdentity(value) || isEventTesterIdentity(value) || isRecord(value) && !Object.hasOwn(value, 'kind')
@@ -128,6 +129,7 @@ export function decodeRoundScores(value: unknown): RoundScores | null {
 }
 
 function validateRoundScores(value: unknown, lean = false): value is RoundScores {
+  if (isRecord(value) && value.churchyCustomNames !== undefined && value.churchyCustomNames !== true) return false;
   if (isRecord(value) && value.dotsCallTargets !== undefined
     && (value.dotsCallTargets !== true || value.internalGamesSupported !== true
       || !Array.isArray(value.supportedGameKinds) || !value.supportedGameKinds.includes('dots')
@@ -338,6 +340,7 @@ function validateRoundScores(value: unknown, lean = false): value is RoundScores
         return !card || card.displayName !== player.displayName || player.totalHoles !== count
           || !player.holes.every((hole) => card.holes.some((entry) => entry.number === hole.number));
       }))) return false;
+    if (value.churchyCustomNames !== true && value.games.configuration.games.some(hasCustomChurchyName)) return false;
     for (const card of cards) {
       for (const hole of card.holes) {
         const extras = hole.score.churchy;

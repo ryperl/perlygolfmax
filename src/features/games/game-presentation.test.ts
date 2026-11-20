@@ -1,9 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { gameScoringLabel, gameUnavailableMessage } from './game-presentation';
+import { gameDisplayName, gameScoringLabel, gameUnavailableMessage } from './game-presentation';
+import { churchyFixture } from '../../domain/churchy.test-support';
 import type { RoundGameDefinition } from '../../domain/games';
 import { stablefordPoints } from '../../domain/stableford';
 
 describe('shared game availability copy', () => {
+  it('shows custom Churchie names while normalizing only historical default spellings', () => {
+    const game = churchyFixture().game;
+    for (const name of ['Churchie', 'Churchy Game']) {
+      expect(gameDisplayName({ ...game, name })).toBe('Churchie');
+    }
+    expect(gameDisplayName({ ...game, version: 3, name: 'Churcie', orderMode: 'tee', specials: [] })).toBe('Churchie');
+    expect(gameDisplayName({ ...game, version: 3, name: 'Churchy Game', orderMode: 'tee', specials: [] })).toBe('Churchy Game');
+    expect(gameDisplayName({ ...game, name: 'Churcie' })).toBe('Churcie');
+    expect(gameDisplayName({ ...game, name: 'Fictional evening game' })).toBe('Fictional evening game');
+  });
+
   it('distinguishes missing handicap inputs from pending or zero points', () => {
     expect(gameUnavailableMessage('missing-handicap-index')).toBe('No captured Handicap Index is available.');
     expect(gameUnavailableMessage('missing-tee-ratings')).toBe('Tee ratings are unavailable.');

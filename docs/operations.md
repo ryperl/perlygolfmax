@@ -312,6 +312,29 @@ multiply their configured units, while Sweep uses units times current stake.
 Ordinary Dots independently supports explicit Murphy total-stakes 1×/2×/3×;
 these multiply configured units, never Churchie's hole stake.
 
+Game names are editable labels, including Churchie, without changing internal
+`churchy` identity or saved rules versions. New game drafts use the game type's
+human-facing name; explicit custom names and all saved names survive other edits.
+Group-scoped drafts use the first eligible saved round group (or an already
+selected eligible group), preserving its identity and player order. Round-wide
+games and competition-team assignments do not acquire playing-group scope.
+`RoundGamesPanel` accepts an optional `defaultGroupNumber` from the caller's
+selected saved group and `initialAdd` to open a local draft once on mount.
+Neither option saves a game or replaces saved/manual selections on refresh.
+
+Custom Churchie names require `churchyNames=1` negotiation and the response
+capability `churchyCustomNames: true`. Without that capability, the name control
+is read-only and explains the required API update. Preserve historical literal
+names (`Churchy Game` for v1/v2, `Churchie` or `Churcie` for v3) and immutable
+receipts; an explicit unstarted upgrade does not rename the saved game.
+Affected old full/lean reads, private history and writes return HTTP 426
+`CHURCHY_NAMES_CLIENT_UPDATE_REQUIRED`, never substituted names. Score, game,
+KP and purse writes check compatibility before mutations/publication; inactive
+game upload parts remain subject to complete-configuration checks at commit.
+Unaffected old flows retain their existing contract. Publish the compatible API
+before the frontend; this does not change scoring locks, permissions or setup
+rules.
+
 String calculations use `stringRules=2` and a received `stringRulesVersion: 2`
 marker. Gross par-or-better sustains String; birdie-or-better sustains BirdyString.
 Both start on the third qualifying hole and award on each later qualifier.

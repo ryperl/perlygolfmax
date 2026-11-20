@@ -7,6 +7,16 @@ import { calculateGameResults } from '../../domain/stableford';
 import { defaultChurchySpecials } from '../../domain/churchy';
 
 describe('Churchy saved receipts and separate settlement', () => {
+  it('uses the saved custom game name for results and settlement without changing Churchie rules copy', () => {
+    const f = churchyFixture(9);
+    const game = { ...f.game, name: 'Fictional evening game', version: 2 as const, enabledSpecials: defaultChurchySpecials };
+    const result = calculateGameResults([game], f.snapshot, f.cards)[0];
+    render(<ChurchyResults game={game} result={result} />);
+    expect(screen.getByRole('heading', { name: 'Fictional evening game · Group 1' })).toBeVisible();
+    expect(screen.getByRole('region', { name: 'Fictional evening game · Group 1 results' })).toBeVisible();
+    expect(screen.getByRole('region', { name: 'Group 1 Fictional evening game internal settlement' })).toBeVisible();
+  });
+
   it('uses the server-produced v2 per-opponent summary and labels group identity without a second legacy settlement', () => {
     const f = churchyFixture(9);
     const game = { ...f.game, version: 2 as const, enabledSpecials: defaultChurchySpecials };

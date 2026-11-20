@@ -108,7 +108,7 @@ describe('Churchie v3 strict definitions, receipts and coherent lean round trans
     expect(isChurchyDefinition({ ...f.game, name: 'Churcie' })).toBe(true);
     expect(isChurchyDefinition({ ...f.game, orderMode: 'tee' })).toBe(true);
     expect(isRoundGameDefinitions([f.game])).toBe(true);
-    for (const edit of [{ orderMode: undefined }, { orderMode: 'gps' }, { name: 'Churchy Game' },
+    for (const edit of [{ orderMode: undefined }, { orderMode: 'gps' }, { name: '' },
       { specials: [{ kind: 'sticky', units: 1 }] }, { specials: [{ kind: 'other', units: -1 }] },
       { specials: [{ kind: 'dime', units: 1 }, { kind: 'dime', units: 2 }] }, { enabledSpecials: [] }]) {
       expect(isChurchyDefinition({ ...f.game, ...edit })).toBe(false);

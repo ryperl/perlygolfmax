@@ -10,7 +10,8 @@ import type { TableWorkspaceStore } from '../setup/store.js';
 import type { TableScoreStore } from '../scoring/store.js';
 import type { TableTesterAccessStore } from './store.js';
 import { parseScoreWriteBody } from '../scoring/handlers.js';
-import { murphyTransport, supportsMurphyTargets, supportsPareeTargets, supportsStringRules, supportsDotsCalls, supportsCategorySweeps } from '../scoring/murphy-transport.js';
+import { murphyTransport, supportsMurphyTargets, supportsPareeTargets, supportsStringRules, supportsDotsCalls, supportsCategorySweeps, supportsChurchyNames } from '../scoring/murphy-transport.js';
+import { ChurchyNamesClientUpdateRequired } from '../../../src/contracts/churchy-names.js';
 import { CategorySweepsClientUpdateRequired } from '../../../src/contracts/category-sweeps.js';
 import { StringRulesClientUpdateRequired } from '../../../src/contracts/string-rules.js';
 import { DotsCallsClientUpdateRequired } from '../../../src/domain/murphy-transport.js';
@@ -45,6 +46,7 @@ export function createTesterHandler(resolveApi: () => TesterApi, action: TesterA
       const stringRules = supportsStringRules(request);
       const dotsCalls = supportsDotsCalls(request);
       const categorySweeps = supportsCategorySweeps(request);
+      const churchyNames = supportsChurchyNames(request);
       const api = resolveApi();
       const guest = action === 'workspace' || action === 'scores' || action === 'score-hole';
       if (guest) {
@@ -56,7 +58,7 @@ export function createTesterHandler(resolveApi: () => TesterApi, action: TesterA
         if (request.method !== (action === 'score-hole' ? 'PUT' : 'GET')) return response(405, { code: 'METHOD_NOT_ALLOWED' });
         if (action === 'workspace') return response(200, privateReadResponse(request, await api.workspace.get(identity, eventId)));
         const roundId = uuid(request.params.roundId);
-        if (action === 'scores') return response(200, privateReadResponse(request, murphyTransport(await api.scores.get(identity, eventId, roundId), negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps)));
+        if (action === 'scores') return response(200, privateReadResponse(request, murphyTransport(await api.scores.get(identity, eventId, roundId), negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames)));
         const playerId = uuid(request.params.playerId);
         const requestId = uuid(request.headers.get('Idempotency-Key'));
         const etag = scoreRevision(request);
@@ -64,7 +66,7 @@ export function createTesterHandler(resolveApi: () => TesterApi, action: TesterA
         if (typeof hole !== 'string' || !/^(?:[1-9]|1[0-8])$/.test(hole)) throw new ApiError(400, 'INVALID_HOLE_NUMBER');
         const parsed = parseScoreWriteBody(await readJson(request));
         return response(200, murphyTransport(await api.scores.write(identity, eventId, roundId, playerId, Number(hole),
-          parsed.score, etag, requestId, parsed.inputRevision, stringRules, dotsCalls, categorySweeps), negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps));
+          parsed.score, etag, requestId, parsed.inputRevision, stringRules, dotsCalls, categorySweeps, churchyNames), negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames));
       }
       const identity = await api.verify(request.headers.get('authorization'));
       await api.limiter.check(identity, action === 'list' ? 'events-read' : 'events-manage');
@@ -87,8 +89,8 @@ export function createTesterHandler(resolveApi: () => TesterApi, action: TesterA
       if (!isRevokeTesterLink(body)) throw new ApiError(400, 'INVALID_TESTER_REVOCATION');
       return response(200, await api.testers.revoke(identity, eventId, body, etag, requestId));
     } catch (error) {
-      const status = error instanceof ApiError || error instanceof StringRulesClientUpdateRequired || error instanceof DotsCallsClientUpdateRequired || error instanceof CategorySweepsClientUpdateRequired ? error.status : 503;
-      const code = error instanceof ApiError || error instanceof StringRulesClientUpdateRequired || error instanceof DotsCallsClientUpdateRequired || error instanceof CategorySweepsClientUpdateRequired ? error.code : 'SERVICE_UNAVAILABLE';
+      const status = error instanceof ApiError || error instanceof StringRulesClientUpdateRequired || error instanceof DotsCallsClientUpdateRequired || error instanceof CategorySweepsClientUpdateRequired || error instanceof ChurchyNamesClientUpdateRequired ? error.status : 503;
+      const code = error instanceof ApiError || error instanceof StringRulesClientUpdateRequired || error instanceof DotsCallsClientUpdateRequired || error instanceof CategorySweepsClientUpdateRequired || error instanceof ChurchyNamesClientUpdateRequired ? error.code : 'SERVICE_UNAVAILABLE';
       // Only fixed classifications are logged, never headers, bodies, secrets, or raw provider errors.
       if (status >= 500) context.error('Tester API failed', { code, invocationId: context.invocationId });
       else context.warn('Tester API rejected', { code, status, invocationId: context.invocationId });

@@ -20,13 +20,14 @@ const peer: RoundGameDefinition = {
   preset: 'modified', points: stablefordPoints('modified'),
 };
 
-function setup(round: RoundScores = fictionalRoundScores) {
+function setup(round: RoundScores = fictionalRoundScores, initialAdd?: boolean, defaultGroupNumber?: number) {
   const onSave = vi.fn<RoundGamesPanelProps['onSave']>().mockImplementation(
     (games, etag, id) => Promise.resolve(gameResult(games, etag, id, round)),
   );
   const onRefresh = vi.fn<RoundGamesPanelProps['onRefresh']>().mockResolvedValue(round);
   const onDirtyChange = vi.fn<RoundGamesPanelProps['onDirtyChange']>();
-  const props = { round, busy: false, onSave, onRefresh, onDirtyChange };
+  const props = { round, busy: false, onSave, onRefresh, onDirtyChange, ...(initialAdd === undefined ? {} : { initialAdd }),
+    ...(defaultGroupNumber === undefined ? {} : { defaultGroupNumber }) };
   return { ...render(<RoundGamesPanel {...props} />), props, onSave, onRefresh, onDirtyChange };
 }
 
@@ -41,6 +42,134 @@ async function saved() {
 }
 
 describe('RoundGamesPanel', () => {
+  it.each([[9, 9], [99, 4]])('prefers saved group %i when eligible, otherwise uses group %i without resetting drafts on rerenders', (preferred, expected) => {
+    const round: RoundScores = { ...fictionalRoundScores, internalGamesSupported: true, supportedGameKinds: ['dots'],
+      dotsIndividualPlayerCounts: [1, 2, 3, 4],
+      groups: [{ number: 4, playerIds: fictionalRoundScores.cards.slice(0, 2).map((card) => card.playerId) },
+        { number: 9, playerIds: fictionalRoundScores.cards.slice(2).map((card) => card.playerId) }],
+      permissions: { role: 'public', writePlayerIds: fictionalRoundScores.cards.map((card) => card.playerId),
+        canManageGames: false, canManageInternalGames: true } };
+    const view = setup(round, true, preferred);
+    expect(screen.getByLabelText('Dots playing group')).toHaveValue(String(expected));
+    const manual = expected === 9 ? 4 : 9;
+    field('Dots playing group', String(manual));
+    view.rerender(<RoundGamesPanel {...view.props} defaultGroupNumber={expected} round={{ ...round }} />);
+    expect(screen.getByLabelText('Dots playing group')).toHaveValue(String(manual));
+    expect(view.onSave).not.toHaveBeenCalled();
+  });
+
+  it('does not apply the caller default to an existing saved game', () => {
+    const ids = fictionalRoundScores.cards.map((card) => card.playerId);
+    const game: RoundGameDefinition = { id: fictionalId(2200), name: 'Fictional saved group game',
+      kind: 'dots', version: 1, mode: 'individual', groupNumber: 9, playerIds: ids.slice(2).reverse(), stakeMinor: null, specials: [] };
+    const round: RoundScores = { ...withGameResults(fictionalRoundScores, [game], 'saved-dots'),
+      supportedGameKinds: ['dots'], dotsIndividualPlayerCounts: [1, 2, 3, 4],
+      groups: [{ number: 4, playerIds: ids.slice(0, 2) }, { number: 9, playerIds: ids.slice(2) }] };
+    const view = setup(round, undefined, 4);
+    click(`Edit ${game.name}`);
+    expect(screen.getByLabelText('Dots playing group')).toHaveValue('9');
+    expect(screen.getByLabelText('Game name')).toHaveValue(game.name);
+    view.rerender(<RoundGamesPanel {...view.props} defaultGroupNumber={4} />);
+    expect(screen.getByLabelText('Dots playing group')).toHaveValue('9');
+    expect(view.onSave).not.toHaveBeenCalled();
+  });
+
+  it('initially opens only the permitted internal draft with its eligible saved group for ordinary public setup', () => {
+    const round: RoundScores = { ...fictionalRoundScores, internalGamesSupported: true, supportedGameKinds: ['dots'],
+      permissions: { role: 'public', writePlayerIds: fictionalRoundScores.cards.map((card) => card.playerId),
+        canManageGames: false, canManageInternalGames: true } };
+    const view = setup(round, true);
+    expect(screen.getByLabelText('Game type')).toHaveValue('dots');
+    expect(screen.getByLabelText('Game name')).toHaveValue('Dots');
+    expect(screen.getByLabelText('Dots playing group')).toHaveValue(String(round.groups[0]?.number));
+    expect(screen.queryByRole('option', { name: 'Stableford' })).not.toBeInTheDocument();
+    expect(view.onSave).not.toHaveBeenCalled();
+  });
+
+  it('saves an editable named Churchie using its saved round group and retains draft/retry identity on failure or capability loss', async () => {
+    const round: RoundScores = { ...fictionalRoundScores, churchyEnabled: true,
+      churchyRulesVersions: [1, 2, 3], churchyCustomNames: true };
+    const view = setup(round, true);
+    view.onSave.mockResolvedValue(null);
+    field('Game type', 'churchy');
+    expect(screen.getByLabelText('Churchie playing group')).toHaveValue(String(round.groups[0]?.number));
+    field('Game name', 'Fictional mobile Churchie');
+    click('Save game');
+    await screen.findByText(/Save is not confirmed/);
+    const first = view.onSave.mock.calls[0];
+    expect(first?.[0][0]).toMatchObject({ kind: 'churchy', version: 3, name: 'Fictional mobile Churchie',
+      groupNumber: round.groups[0]?.number, playerIds: round.groups[0]?.playerIds });
+    click('Retry save');
+    await waitFor(() => { expect(view.onSave).toHaveBeenCalledTimes(2); });
+    expect(view.onSave.mock.calls[1]).toEqual(first);
+    const legacy = { ...round };
+    delete legacy.churchyCustomNames;
+    view.rerender(<RoundGamesPanel {...view.props} round={legacy} />);
+    expect(screen.getByLabelText('Game name')).toHaveValue('Fictional mobile Churchie');
+    expect(screen.getByLabelText('Game name')).toBeDisabled();
+    click('Retry save');
+    expect(view.onSave).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('Custom Churchie names require API support. Your draft is retained; refresh after an API update.')).toBeVisible();
+  });
+
+  it('opens one unsaved initial draft, retains edits across refresh props and does not reopen after cancel or save', async () => {
+    const view = setup(configured, true);
+    expect(screen.getByLabelText('Game name')).toHaveValue('Stableford');
+    expect(view.onDirtyChange).toHaveBeenLastCalledWith(true);
+    expect(view.onSave).not.toHaveBeenCalled();
+    field('Game name', 'Fictional mobile draft');
+    view.rerender(<RoundGamesPanel {...view.props} round={{ ...configured }} />);
+    expect(screen.getByLabelText('Game name')).toHaveValue('Fictional mobile draft');
+    click('Cancel editing');
+    view.rerender(<RoundGamesPanel {...view.props} round={{ ...configured }} />);
+    expect(screen.queryByRole('form')).not.toBeInTheDocument();
+    click('Add game');
+    click('Save game');
+    await saved();
+    view.rerender(<RoundGamesPanel {...view.props} round={{ ...configured }} />);
+    expect(screen.queryByRole('form')).not.toBeInTheDocument();
+    expect(view.onSave.mock.calls[0]?.[0]).toHaveLength(2);
+    expect(view.onSave.mock.calls[0]?.[0][0]).toEqual(original);
+  });
+
+  it.each(['unauthorized', 'archived', 'limit', 'busy', 'locked-public'] as const)(
+    'does not initially open a draft when %s', (condition) => {
+      const round: RoundScores = condition === 'unauthorized' ? { ...configured,
+        permissions: { role: 'public', writePlayerIds: [], canManageGames: false } }
+        : condition === 'archived' ? { ...configured, eventStatus: 'archived' }
+          : condition === 'locked-public' ? { ...configured, setupLocked: true, internalGamesSupported: true,
+            permissions: { role: 'public', writePlayerIds: [], canManageGames: false, canManageInternalGames: true } }
+            : condition === 'limit' ? withGameResults(fictionalRoundScores,
+              Array.from({ length: 16 }, (_, index) => ({ ...original, id: fictionalId(2000 + index) })), 'full')
+              : configured;
+      const props = { round, initialAdd: true, busy: condition === 'busy', onDirtyChange: vi.fn(),
+        onSave: vi.fn(), onRefresh: vi.fn() };
+      render(<RoundGamesPanel {...props} />);
+      expect(screen.queryByRole('form')).not.toBeInTheDocument();
+      expect(props.onSave).not.toHaveBeenCalled();
+      expect(props.onDirtyChange).not.toHaveBeenCalledWith(true);
+    });
+
+  it('does not open a draft when initialAdd changes after the first mount', () => {
+    const view = setup();
+    view.rerender(<RoundGamesPanel {...view.props} initialAdd />);
+    expect(screen.queryByRole('form')).not.toBeInTheDocument();
+    expect(view.onSave).not.toHaveBeenCalled();
+  });
+
+  it('does not reopen the initial draft after authority is lost and regained', () => {
+    const view = setup(configured, true);
+    field('Game name', 'Fictional interrupted draft');
+    view.rerender(<RoundGamesPanel {...view.props} round={{ ...configured,
+      permissions: { role: 'public', writePlayerIds: [], canManageGames: false } }} />);
+    expect(screen.queryByRole('form')).not.toBeInTheDocument();
+    view.rerender(<RoundGamesPanel {...view.props} />);
+    expect(screen.queryByRole('form')).not.toBeInTheDocument();
+    expect(view.onSave).not.toHaveBeenCalled();
+    click('Add game');
+    expect(screen.getByLabelText('Game name')).toHaveValue('Stableford');
+  });
+
   it('uses explicit public Quick capability without elevating public or player roles to owner', () => {
     const round: RoundScores = { ...fictionalRoundScores, quickRound: true,
       permissions: { role: 'public', writePlayerIds: [], canManageGames: true } };
@@ -282,7 +411,7 @@ describe('RoundGamesPanel', () => {
     click('Add game');
     click('Save game');
     await screen.findByText(/Save is not confirmed/);
-    expect(screen.getByLabelText('Game name')).toHaveValue('Standard Stableford');
+    expect(screen.getByLabelText('Game name')).toHaveValue('Stableford');
     expect(onDirtyChange).toHaveBeenLastCalledWith(true);
     expect(screen.queryByText('Game settings saved.')).not.toBeInTheDocument();
     click('Retry save');

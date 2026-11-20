@@ -3,11 +3,11 @@ import { useId, useState } from 'react';
 import { maximumPointsRows, teamSize } from '../../domain/games';
 import type { RoundGameKind } from '../../domain/games';
 import type { GameDraft } from './game-draft';
-import { addBand, buildGame, resetTeamAssignments, setFormat, setGameKind, setNassauVariant, setPreset, teamDraftFeedback, upgradeChurchyDraft } from './game-draft';
+import { addBand, buildGame, defaultGameGroup, resetTeamAssignments, setFormat, setGameKind, setNassauVariant, setPreset, teamDraftFeedback, upgradeChurchyDraft } from './game-draft';
 import type { RoundGroup } from '../../domain/setup';
 import { churchyPairs, defaultChurchySpecials } from '../../domain/churchy';
 import type { RoundGameDefinition } from '../../domain/games';
-import { DotsSettings, DotSpecialsSettings } from '../dots';
+import { DotsPlayingGroupSelect, DotsSettings, DotSpecialsSettings } from '../dots';
 import type { DotPresetStore } from '../../client/dot-presets';
 import type { DotsSpecialKind } from '../../domain/dots';
 import { dotsSpecialCatalog } from '../../domain/dots';
@@ -25,6 +25,7 @@ interface GameSettingsProps {
   readonly roster?: readonly { readonly playerId: string; readonly displayName: string }[];
   readonly churchyEnabled?: boolean;
   readonly groups?: readonly RoundGroup[];
+  readonly defaultGroupNumber?: number | undefined;
   readonly setupLocked?: boolean;
   readonly allowChurchyCreation?: boolean;
   readonly supportedGameKinds?: readonly RoundGameKind[] | undefined;
@@ -33,6 +34,7 @@ interface GameSettingsProps {
   readonly wolfV2Supported?: boolean;
   readonly churchyV2Supported?: boolean;
   readonly churchyV3Supported?: boolean;
+  readonly churchyCustomNamesSupported?: boolean;
   readonly holeNumbers?: readonly number[];
   readonly dotsV2Supported?: boolean;
   readonly dotsIndividualPlayerCounts?: readonly number[];
@@ -55,7 +57,8 @@ export function GameSettings({
   draft, disabled, saveDisabled, cancelDisabled, retry, onChange, onSave, onCancel, roster = [],
   churchyEnabled = false, groups = [], setupLocked = false, allowChurchyCreation = false, supportedGameKinds,
   games = [], internalOnly = false, wolfV2Supported = false, churchyV2Supported = false, dotsV2Supported = false,
-  dotsIndividualPlayerCounts = [4], dotsSpecialKinds, presetStore, existing = false, churchyV3Supported = false, holeNumbers = [],
+  dotsIndividualPlayerCounts = [4], dotsSpecialKinds, presetStore, existing = false, churchyV3Supported = false,
+  churchyCustomNamesSupported = false, holeNumbers = [], defaultGroupNumber,
 }: GameSettingsProps) {
   const allowanceHint = useId();
   const stableford = draft.kind === undefined || draft.kind === 'stableford';
@@ -87,9 +90,6 @@ export function GameSettings({
       <fieldset disabled={disabled || matchLocked || draft.kind === 'churchy'
         && (draft.churchyVersion === 2 && !churchyV2Supported || draft.churchyVersion === 3 && !churchyV3Supported)}>
         <legend>Edit game</legend>
-        <label>Game name
-          <input value={draft.kind === 'churchy' ? 'Churchie' : draft.name} disabled={draft.kind === 'churchy'} maxLength={100} onChange={(event) => { onChange({ ...draft, name: event.target.value }); }} />
-        </label>
         <label>Game type<select value={draft.kind ?? 'stableford'}
           disabled={draft.kind === 'churchy' || existing && (internalOnly || draft.kind === 'match-play' || draft.kind === 'wolf' && draft.wolfVersion !== 2)} onChange={(event) => {
           const kind = event.target.value;
@@ -97,7 +97,10 @@ export function GameSettings({
             || (kind === 'wolf' && (existing || wolfV2Supported)
               || !internalOnly && (kind === 'stroke-play' || kind === 'nassau' || kind === 'match-play' && !existing)) && supportedGameKinds?.includes(kind)
             || kind === 'dots' && supportedGameKinds?.includes('dots')
-            || kind === 'churchy' && churchyEnabled && churchyV3Supported && allowChurchyCreation && !setupLocked) onChange(setGameKind(draft, kind, roster.length));
+            || kind === 'churchy' && churchyEnabled && churchyV3Supported && allowChurchyCreation && !setupLocked) {
+            onChange(defaultGameGroup(setGameKind(draft, kind, roster.length), groups, dotsIndividualPlayerCounts,
+              (draft.kind === 'churchy' ? draft.churchyGroup : draft.groupNumber) ?? defaultGroupNumber));
+          }
         }}>
           {!internalOnly && <><option value="stableford">Stableford</option><option value="ball-drop">Ball Drop</option><option value="skins">Skins</option>
           <option value="stroke-play" disabled={!supportedGameKinds?.includes('stroke-play')}>Stroke Play</option>
@@ -107,6 +110,32 @@ export function GameSettings({
           <option value="dots" disabled={setupLocked || !supportedGameKinds?.includes('dots')}>Dots · Separate specials</option>
           {churchyEnabled && (draft.kind === 'churchy' || churchyV3Supported && allowChurchyCreation && !churchyLocked) && <option value="churchy">Churchie</option>}
         </select></label>
+        <label>Game name
+          <input value={draft.name} disabled={draft.kind === 'churchy' && (churchyLocked || !churchyCustomNamesSupported)} maxLength={100} onChange={(event) => {
+            onChange({ ...draft, name: event.target.value, preserveName: true });
+          }} />
+        </label>
+        {matchGame && <label>Playing group<select value={draft.groupNumber ?? ''} onChange={(event) => {
+          const group = groups.find((entry) => entry.number === Number(event.target.value));
+          if (group) onChange({ ...draft, groupNumber: group.number,
+            ...(draft.kind === 'wolf' ? { wolfPlayers: group.playerIds } : {
+              nassauSides: (draft.nassauSides ?? []).map((side) => ({ ...side, playerIds: side.playerIds.map(() => '') })),
+            }) });
+        }}><option value="">Choose saved playing group</option>
+          {groups.filter((group) => draft.kind !== 'wolf' || group.playerIds.length === 4).map((group) =>
+            <option key={group.number} value={group.number}>Group {group.number}</option>)}
+        </select></label>}
+        {draft.kind === 'dots' && <DotsPlayingGroupSelect draft={draft} groups={groups}
+          individualPlayerCounts={dotsIndividualPlayerCounts} onChange={(patch) => { onChange({ ...draft, ...patch }); }} />}
+        {draft.kind === 'churchy' && <label>Churchie playing group<select value={draft.churchyGroup ?? ''} disabled={churchyLocked} onChange={(event) => {
+          const group = groups.find((entry) => entry.number === Number(event.target.value));
+          if (group?.playerIds.length === 4) onChange({ ...draft, churchyGroup: group.number, churchyPlayers: group.playerIds });
+        }}>
+          <option value="">Choose saved foursome</option>
+          {groups.filter((entry) => entry.playerIds.length === 4).map((group) => <option key={group.number} value={group.number}>Group {group.number}</option>)}
+        </select></label>}
+        {draft.kind === 'churchy' && !churchyCustomNamesSupported
+          && <small>Churchie names are read-only until this API advertises custom-name support. Refresh after an API update.</small>}
         {stableford && <label>Points preset
           <select value={draft.preset} onChange={(event) => {
             if (event.target.value === 'standard' || event.target.value === 'modified') {
@@ -147,16 +176,6 @@ export function GameSettings({
         {matchGame && <section aria-label={`${draft.kind === 'wolf' ? 'Wolf' : draft.kind === 'match-play' ? 'Match Play' : 'Nassau'} setup`}>
           <p>Configure before this round&apos;s first saved score. Setup and participant order lock once scoring starts.
             Net uses 100% captured Course Handicap off the lowest {draft.kind === 'nassau' || draft.kind === 'match-play' ? 'within each match' : 'of the four golfers'}.</p>
-          <label>Playing group<select value={draft.groupNumber ?? ''} onChange={(event) => {
-            const group = groups.find((entry) => entry.number === Number(event.target.value));
-            if (group) onChange({ ...draft, groupNumber: group.number,
-              ...(draft.kind === 'wolf' ? { wolfPlayers: group.playerIds } : {
-                nassauSides: (draft.nassauSides ?? []).map((side) => ({ ...side, playerIds: side.playerIds.map(() => '') })),
-              }) });
-          }}><option value="">Choose saved playing group</option>
-            {groups.filter((group) => draft.kind !== 'wolf' || group.playerIds.length === 4).map((group) =>
-              <option key={group.number} value={group.number}>Group {group.number}</option>)}
-          </select></label>
           {draft.kind === 'wolf' ? <>
             <details><summary>Wolf rules</summary><p>Wolf tees last; choose a partner immediately after their drive, before the next drive, or pass all.
               Blind Wolf passes all after seeing drives (double); PIG is declared before any tee shots (triple).
@@ -212,7 +231,7 @@ export function GameSettings({
             <p>Manual presses are available from saved results. Each bet may automatically press once; nested presses may do the same, starting next hole.</p>
           </>}
         </section>}
-        {draft.kind === 'dots' && <DotsSettings draft={draft} groups={groups} players={roster}
+        {draft.kind === 'dots' && <DotsSettings draft={draft} groups={groups} players={roster} hidePlayingGroup
           v2Supported={dotsV2Supported}
           individualPlayerCounts={dotsIndividualPlayerCounts}
           {...(dotsSpecialKinds ? { supportedKinds: dotsSpecialKinds } : {})}
@@ -220,13 +239,6 @@ export function GameSettings({
           wolves={games.filter((game) => game.kind === 'wolf')} onChange={(patch) => { onChange({ ...draft, ...patch }); }} />}
         {draft.kind === 'churchy' && <section aria-label="Churchie setup">
           {draft.churchyGroup && <h3>Group {draft.churchyGroup} · Churchie</h3>}
-          <label>Churchie playing group<select value={draft.churchyGroup ?? ''} disabled={churchyLocked} onChange={(event) => {
-            const group = groups.find((entry) => entry.number === Number(event.target.value));
-            if (group?.playerIds.length === 4) onChange({ ...draft, churchyGroup: group.number, churchyPlayers: group.playerIds });
-          }}>
-            <option value="">Choose saved foursome</option>
-            {groups.filter((entry) => entry.playerIds.length === 4).map((group) => <option key={group.number} value={group.number}>Group {group.number}</option>)}
-          </select></label>
           {draft.churchyVersion === 3 && <>
             <label>Choose Churchie partners<select value={draft.churchyOrderMode ?? 'approach'} disabled={churchyLocked}
               onChange={(event) => {

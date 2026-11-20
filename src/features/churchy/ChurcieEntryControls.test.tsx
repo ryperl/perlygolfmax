@@ -16,6 +16,17 @@ afterAll(() => {
 });
 
 describe('Churchie default named category controls', () => {
+  it('identifies the custom named game in its scorer controls without changing the saved declaration identity', () => {
+    const f = churchyV3Fixture(9, 1, 'tee');
+    const onChange = vi.fn();
+    const game = { ...f.game, name: 'Fictional evening challenge' };
+    render(<ChurcieEntryControls round={f.round()} game={game} holeNumber={1} saved={undefined} draft={undefined}
+      disabled={false} playerId={f.ids[0]} onChange={onChange} />);
+    fireEvent.click(screen.getByRole('button', { name: /Dots for .*Fictional evening challenge/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Increase Sandy/ }));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ gameId: game.id, version: 3 }));
+  });
+
   it('shows only the current saved teams and follows the actual playing circuit across the turn', () => {
     const f = churchyV3Fixture(18, 10, 'tee'), round = f.round(), onChange = vi.fn();
     const [p1, p2, p3, p4] = f.ids.map((id) => round.cards.find((card) => card.playerId === id)?.displayName);

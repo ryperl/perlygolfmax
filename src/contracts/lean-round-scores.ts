@@ -10,6 +10,7 @@ import { sameJsonValue } from './round-context.js';
 import { murphyRoundScores, murphyScoreChange } from '../domain/murphy-transport.js';
 import { stringRoundScores } from './string-rules.js';
 import { categorySweepRoundScores } from './category-sweeps.js';
+import { churchyNamesRoundScores } from './churchy-names.js';
 
 function without(value: object, ...keys: readonly string[]): Record<string, unknown> {
   return Object.fromEntries(Object.entries(value).filter(([name]) => !keys.includes(name)));
@@ -26,8 +27,8 @@ function leanWolf(value: WolfResults, game: WolfGameDefinition | undefined, roun
 }
 
 /** Omit evidence and duplicate derived views, never captured inputs or canonical write receipts. */
-export function leanRoundScores(input: RoundScores, murphyTargets = false, pareeTargets = false, stringRules = false, dotsCalls = false, categorySweeps = false) {
-  const round = categorySweepRoundScores(stringRoundScores(murphyRoundScores(input, murphyTargets, pareeTargets, dotsCalls), stringRules), categorySweeps);
+export function leanRoundScores(input: RoundScores, murphyTargets = false, pareeTargets = false, stringRules = false, dotsCalls = false, categorySweeps = false, churchyNames = false) {
+  const round = churchyNamesRoundScores(categorySweepRoundScores(stringRoundScores(murphyRoundScores(input, murphyTargets, pareeTargets, dotsCalls), stringRules), categorySweeps), churchyNames);
   const games = round.games;
   return {
     version: 1, kind: 'round-scores-lean', round: {
@@ -48,8 +49,8 @@ export function leanRoundScores(input: RoundScores, murphyTargets = false, paree
   };
 }
 
-export function leanScoreWriteResult(value: ScoreWriteResult, murphyTargets = false, pareeTargets = false, stringRules = false, dotsCalls = false, categorySweeps = false) {
-  return { round: leanRoundScores(value.round, murphyTargets, pareeTargets, stringRules, dotsCalls, categorySweeps),
+export function leanScoreWriteResult(value: ScoreWriteResult, murphyTargets = false, pareeTargets = false, stringRules = false, dotsCalls = false, categorySweeps = false, churchyNames = false) {
+  return { round: leanRoundScores(value.round, murphyTargets, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames),
     change: without(murphyScoreChange(value.change, murphyTargets, value.round, pareeTargets, dotsCalls), 'dotAwardAudit') };
 }
 

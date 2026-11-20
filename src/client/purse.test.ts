@@ -13,7 +13,7 @@ describe('typed private purse client', () => {
     const signal = new AbortController().signal;
     expect(await client.load(value.workspace.event.id, signal)).toEqual(value);
     expect(send.mock.calls[0]).toEqual([
-      `https://fictional.example.test/api/events/${value.workspace.event.id}/purse?murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1`,
+      `https://fictional.example.test/api/events/${value.workspace.event.id}/purse?murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1&churchyNames=1`,
       expect.objectContaining({ signal, cache: 'no-store', credentials: 'omit', headers: { Authorization: 'Bearer fictional-token' } }),
     ]);
   });

@@ -10,6 +10,7 @@ import { isDotsDefinition } from '../../contracts/dots';
 import { moneyText, parseMoney } from '../../domain/money';
 import type { ChurchySpecialKey } from '../../domain/churchy';
 import { defaultChurchySpecials, defaultChurchySpecialSelections } from '../../domain/churchy';
+import type { RoundGroup } from '../../domain/setup';
 
 export interface GameDraft {
   readonly kind?: 'stableford' | 'ball-drop' | 'skins' | 'churchy' | 'stroke-play' | 'wolf' | 'nassau' | 'match-play' | 'dots';
@@ -39,6 +40,7 @@ export interface GameDraft {
   readonly carryovers?: boolean;
   readonly id: string;
   readonly name: string;
+  readonly preserveName?: boolean;
   readonly preset: StablefordPreset;
   readonly basis: 'gross' | 'net';
   readonly allowance: string;
@@ -52,6 +54,10 @@ export interface GameDraft {
 }
 
 export function draftFromGame(game: RoundGameDefinition): GameDraft {
+  return { ...draftFromDefinition(game), preserveName: true };
+}
+
+function draftFromDefinition(game: RoundGameDefinition): GameDraft {
   if (game.kind === 'dots') return { ...newGameDraft(), id: game.id, name: game.name, kind: 'dots',
     dotsVersion: game.version, ...(game.version === 2 ? { dotsRotationHoles: game.rotationHoles } : {}),
     groupNumber: game.groupNumber, dotsMode: game.mode, dotsPlayers: game.mode === 'fixed' ? game.partnerIds : game.playerIds, dotsPlayerIds: game.playerIds,
@@ -85,9 +91,9 @@ export function draftFromGame(game: RoundGameDefinition): GameDraft {
 
 export function newGameDraft(): GameDraft {
   return { ...draftFromGame({
-    id: crypto.randomUUID(), name: 'Standard Stableford', preset: 'standard', basis: 'gross',
+    id: crypto.randomUUID(), name: 'Stableford', preset: 'standard', basis: 'gross',
     handicapAllowancePercent: defaultHandicapAllowancePercent, points: stablefordPoints('standard'),
-  }), allowanceConfigured: false };
+  }), allowanceConfigured: false, preserveName: false };
 }
 
 function emptyTeams(format: CompetitionTeamFormat, rosterCount: number): readonly GameTeam[] {
@@ -121,20 +127,41 @@ export function setFormat(draft: GameDraft, format: CompetitionTeamFormat | unde
 
 export function setGameKind(draft: GameDraft, kind: NonNullable<GameDraft['kind']>, rosterCount: number): GameDraft {
   if ((draft.kind ?? 'stableford') === kind) return draft;
-  const reset = setFormat(draft, undefined, rosterCount);
-  if (kind === 'wolf') return { ...reset, kind, name: 'Wolf', basis: 'net', wolfPlayers: [], allowPig: false, wolfVersion: 2, stake: '' };
-  if (kind === 'dots') return { ...reset, kind, name: 'Dots', dotsMode: 'individual', dotsPlayers: [], dotsSpecials: [], stake: '' };
-  if (kind === 'nassau') return setNassauVariant({ ...reset, kind, name: 'Nassau', basis: 'net',
+  const names = { stableford: 'Stableford', 'ball-drop': 'Ball Drop', skins: 'Skins', 'stroke-play': 'Stroke Play',
+    wolf: 'Wolf', dots: 'Dots', nassau: 'Nassau', 'match-play': 'Match Play', churchy: 'Churchie' };
+  const name = draft.preserveName || draft.name !== names[draft.kind ?? 'stableford'] ? draft.name : names[kind];
+  const reset = { ...setFormat(draft, undefined, rosterCount), name };
+  if (kind === 'wolf') return { ...reset, kind, basis: 'net', wolfPlayers: [], allowPig: false, wolfVersion: 2, stake: '' };
+  if (kind === 'dots') return { ...reset, kind, dotsMode: 'individual', dotsPlayers: [], dotsSpecials: [], stake: '' };
+  if (kind === 'nassau') return setNassauVariant({ ...reset, kind, basis: 'net',
     nassauStakes: ['', '', ''], automaticPresses: false }, 'singles');
-  if (kind === 'match-play') return setNassauVariant({ ...reset, kind, name: 'Match Play', basis: 'net',
+  if (kind === 'match-play') return setNassauVariant({ ...reset, kind, basis: 'net',
     nassauStakes: ['0', '0', ''], automaticPresses: false }, 'singles');
-  if (kind === 'churchy') return { ...reset, kind, name: 'Churchie', basis: 'net', amountPerDotMinor: '',
+  if (kind === 'churchy') return { ...reset, kind, basis: 'net', amountPerDotMinor: '',
     churchyPlayers: [], churchyVersion: 3, churchyOrderMode: 'approach',
     churchySpecialSelections: defaultChurchySpecialSelections.map((special) => ({ ...special })) };
   return kind === 'ball-drop'
-    ? { ...setFormat(reset, 'ball-drop-net-gross', rosterCount), kind, name: 'Ball Drop', allowance: '100' }
-    : { ...reset, kind, name: kind === 'skins' ? 'Skins' : kind === 'stroke-play' ? 'Stroke Play' : 'Standard Stableford',
+    ? { ...setFormat(reset, 'ball-drop-net-gross', rosterCount), kind, allowance: '100' }
+    : { ...reset, kind,
       ...(kind === 'skins' ? { carryovers: false, allowance: '100' } : {}) };
+}
+
+export function defaultGameGroup(
+  draft: GameDraft, groups: readonly RoundGroup[], dotsPlayerCounts: readonly number[] = [4],
+  preferredGroupNumber = draft.kind === 'churchy' ? draft.churchyGroup ?? draft.groupNumber : draft.groupNumber ?? draft.churchyGroup,
+): GameDraft {
+  if (draft.kind !== 'churchy' && draft.kind !== 'wolf' && draft.kind !== 'dots'
+    && draft.kind !== 'nassau' && draft.kind !== 'match-play') return draft;
+  const eligible = groups.filter((group) => draft.kind === 'churchy' || draft.kind === 'wolf'
+    ? group.playerIds.length === 4 : draft.kind === 'dots'
+      ? group.playerIds.length >= 1 && group.playerIds.length <= 4 && dotsPlayerCounts.includes(group.playerIds.length)
+      : group.playerIds.length >= 2);
+  const group = eligible.find((group) => group.number === preferredGroupNumber) ?? eligible[0];
+  if (!group) return draft;
+  if (draft.kind === 'churchy') return { ...draft, churchyGroup: group.number, churchyPlayers: group.playerIds };
+  if (draft.kind === 'wolf') return { ...draft, groupNumber: group.number, wolfPlayers: group.playerIds };
+  if (draft.kind === 'dots') return { ...draft, groupNumber: group.number, dotsPlayers: group.playerIds, dotsPlayerIds: group.playerIds };
+  return { ...draft, groupNumber: group.number };
 }
 
 export function upgradeChurchyDraft(draft: GameDraft, startingHole = 1): GameDraft {
@@ -145,7 +172,7 @@ export function upgradeChurchyDraft(draft: GameDraft, startingHole = 1): GameDra
   const block = Math.floor((startingHole - 1) / 3) % 3;
   const order = a && b && c && d ? block === 0 ? [a, d, c, b] : block === 1 ? [a, b, d, c] : [a, c, b, d]
     : draft.churchyPlayers ?? [];
-  return { ...draft, name: 'Churchie', churchyVersion: 3, churchyOrderMode: 'tee',
+  return { ...draft, churchyVersion: 3, churchyOrderMode: 'tee',
     churchyPlayers: order,
     churchySpecialSelections: defaultChurchySpecialSelections.filter((special) => special.kind === 'other'
       || enabled.has(special.kind)).map((special) => ({ ...special })) };
@@ -178,8 +205,6 @@ export function setPreset(draft: GameDraft, preset: StablefordPreset): GameDraft
   const points = stablefordPoints(preset);
   return {
     ...draft, preset,
-    name: ['Standard Stableford', 'Modified Stableford'].includes(draft.name)
-      ? preset === 'standard' ? 'Standard Stableford' : 'Modified Stableford' : draft.name,
     rows: points.rows.map((row) => ({ ...row, points: String(row.points) })),
     better: String(points.betterScorePoints), worse: String(points.worseScorePoints),
   };
@@ -224,7 +249,7 @@ export function buildGame(draft: GameDraft, playerIds: readonly string[] = []): 
     return isRoundGameDefinition(game) ? game : null;
   }
   if (draft.kind === 'churchy') {
-    const game = { id: draft.id, name: draft.churchyVersion === 3 ? draft.name : 'Churchy Game', kind: 'churchy', version: draft.churchyVersion ?? 1, basis: 'net',
+    const game = { id: draft.id, name: draft.name.trim(), kind: 'churchy', version: draft.churchyVersion ?? 1, basis: 'net',
       groupNumber: draft.churchyGroup, playerIds: draft.churchyPlayers, currency: 'USD',
       amountPerDotMinor: draft.churchyVersion === 3 && !draft.amountPerDotMinor?.trim() ? 0 : parseMoney(draft.amountPerDotMinor ?? ''),
       ...(draft.churchyVersion === 2 ? { enabledSpecials: draft.churchySpecials ?? defaultChurchySpecials }

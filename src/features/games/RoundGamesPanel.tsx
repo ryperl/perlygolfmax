@@ -6,13 +6,14 @@ import { maximumGamesPerRound, sameGameDefinitions, visibleGames } from '../../d
 import type { GameWriteResult, RoundScores } from '../../domain/scoring';
 import { scorePermissions, supportsDotsSpecials, supportsIndividualDotsPlayerCount, supportsRoundGame } from '../../domain/scoring';
 import type { GameDraft } from './game-draft';
-import { buildGame, draftFromGame, newGameDraft, replaceGame, setGameKind } from './game-draft';
+import { buildGame, defaultGameGroup, draftFromGame, newGameDraft, replaceGame, setGameKind } from './game-draft';
 import { GameResults } from './GameResults';
 import { GameSettings } from './GameSettings';
 import { canManageAllRoundGames, canManageGame, canManageRoundGames } from './game-permissions';
 import { InternalSettlement } from '../dots';
 import { gameDisplayName } from './game-presentation';
 import { dotsSpecialCatalog } from '../../domain/dots';
+import { hasCustomChurchyName } from '../../contracts/churchy-names';
 import './games.css';
 
 export interface RoundGamesPanelProps {
@@ -22,6 +23,8 @@ export interface RoundGamesPanelProps {
   readonly onSave: (games: readonly RoundGameDefinition[], etag: string | null, requestId: string) => Promise<GameWriteResult | null>;
   readonly onRefresh: () => Promise<RoundScores | null>;
   readonly presetStore?: DotPresetStore | undefined;
+  readonly initialAdd?: boolean;
+  readonly defaultGroupNumber?: number | undefined;
 }
 
 interface Attempt {
@@ -41,18 +44,35 @@ interface Editor {
   readonly context: RoundScores;
 }
 
-export function RoundGamesPanel({ round, busy, onDirtyChange, onSave, onRefresh, presetStore }: RoundGamesPanelProps) {
-  if (round.eventStatus === 'archived' && scorePermissions(round).role !== 'owner') return <p role="alert">Archived game results are available to the event owner only.</p>;
-  return <RoundGamesController key={JSON.stringify([scorePermissions(round), round.quickRound === true])} round={round} busy={busy}
-    onDirtyChange={onDirtyChange} onSave={onSave} onRefresh={onRefresh} presetStore={presetStore} />;
+function createEditor(round: RoundScores, game?: RoundGameDefinition, defaultGroupNumber?: number): Editor {
+  const draft = game ? draftFromGame(game) : canManageAllRoundGames(round) ? newGameDraft()
+    : defaultGameGroup(setGameKind(newGameDraft(), 'dots', round.cards.length), round.groups,
+      [1, 2, 3, 4].filter((count) => supportsIndividualDotsPlayerCount(round, count)), defaultGroupNumber);
+  return {
+    draft, base: round.games?.configuration.games ?? [], etag: round.games?.configuration.etag ?? null,
+    attempt: null, conflict: false, latest: null, roster: round.cards, context: round,
+  };
 }
 
-function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, presetStore }: RoundGamesPanelProps) {
-  const [editor, setEditor] = useState<Editor | null>(null);
+export function RoundGamesPanel({ round, busy, onDirtyChange, onSave, onRefresh, presetStore, initialAdd, defaultGroupNumber }: RoundGamesPanelProps) {
+  const accessKey = JSON.stringify([scorePermissions(round), round.quickRound === true]);
+  const [initial, setInitial] = useState(() => ({ accessKey, add: initialAdd === true }));
+  if (initial.accessKey !== accessKey) setInitial({ accessKey, add: false });
+  if (round.eventStatus === 'archived' && scorePermissions(round).role !== 'owner') return <p role="alert">Archived game results are available to the event owner only.</p>;
+  return <RoundGamesController key={accessKey} round={round} busy={busy}
+    onDirtyChange={onDirtyChange} onSave={onSave} onRefresh={onRefresh} presetStore={presetStore}
+    initialAdd={initial.accessKey === accessKey && initial.add} defaultGroupNumber={defaultGroupNumber} />;
+}
+
+function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, presetStore, initialAdd = false, defaultGroupNumber }: RoundGamesPanelProps) {
+  const [editor, setEditor] = useState<Editor | null>(() =>
+    initialAdd && !busy && round.eventStatus !== 'archived' && canManageRoundGames(round)
+      && (round.games?.configuration.games.length ?? 0) < maximumGamesPerRound ? createEditor(round, undefined, defaultGroupNumber) : null);
   const [message, setMessage] = useState('');
   const [working, setWorking] = useState(false);
   const inFlight = useRef(false);
   const dirtyCallback = useRef(onDirtyChange);
+  const initiallyEditing = useRef(editor !== null);
   const games = round.games?.configuration.games ?? [];
   const archived = round.eventStatus === 'archived';
   const editingRound = editor?.latest ?? editor?.context ?? round;
@@ -60,21 +80,19 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
   const disabled = busy || working || archived || !canManage;
 
   useEffect(() => { dirtyCallback.current = onDirtyChange; }, [onDirtyChange]);
-  useEffect(() => () => { dirtyCallback.current(false); }, []);
+  useEffect(() => {
+    if (initiallyEditing.current) dirtyCallback.current(true);
+    return () => { dirtyCallback.current(false); };
+  }, []);
 
   function open(game?: RoundGameDefinition) {
-    if (disabled || editor) return;
+    if (disabled || editor || !game && games.length >= maximumGamesPerRound) return;
     if (game && !canManageGame(round, game)) return;
     if (game && !supportsRoundGame(round, game.kind ?? 'stableford')) return;
     if (game?.kind === 'churchy' && round.churchyEnabled !== true) return;
-    const draft = game ? draftFromGame(game) : canManageAllRoundGames(round) ? newGameDraft()
-      : setGameKind(newGameDraft(), 'dots', round.cards.length);
     onDirtyChange(true);
     setMessage('');
-    setEditor({
-      draft, base: games, etag: round.games?.configuration.etag ?? null,
-      attempt: null, conflict: false, latest: null, roster: round.cards, context: round,
-    });
+    setEditor(createEditor(round, game, defaultGroupNumber));
   }
 
   function change(draft: GameDraft) {
@@ -99,6 +117,11 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
     }
     const game = buildGame(editor.draft, editor.roster.map((card) => card.playerId));
     const previousGame = editor.base.find((entry) => entry.id === editor.draft.id);
+    if ([...(previousGame ? [previousGame] : []), ...(game ? [game] : [])].some(hasCustomChurchyName)
+      && (round.churchyCustomNames !== true || editingRound.churchyCustomNames !== true)) {
+      setMessage('Custom Churchie names require API support. Your draft is retained; refresh after an API update.');
+      return;
+    }
     if (game?.kind === 'dots' && game.mode === 'individual'
       && (!supportsIndividualDotsPlayerCount(round, game.playerIds.length)
         || !supportsIndividualDotsPlayerCount(editingRound, game.playerIds.length))) {
@@ -307,6 +330,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
           presetStore={presetStore}
           roster={editor.roster}
           churchyEnabled={round.churchyEnabled === true} groups={editingRound.groups}
+          defaultGroupNumber={defaultGroupNumber}
           supportedGameKinds={round.supportedGameKinds?.filter((kind) => supportsRoundGame(editingRound, kind))}
           games={editor.base} internalOnly={!canManageAllRoundGames(editingRound)}
           existing={editor.base.some((game) => game.id === editor.draft.id)}
@@ -318,6 +342,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
             supportsIndividualDotsPlayerCount(round, count) && supportsIndividualDotsPlayerCount(editingRound, count))}
           churchyV2Supported={round.churchyRulesVersions?.includes(2) === true && editingRound.churchyRulesVersions?.includes(2) === true}
           churchyV3Supported={round.churchyRulesVersions?.includes(3) === true && editingRound.churchyRulesVersions?.includes(3) === true}
+          churchyCustomNamesSupported={round.churchyCustomNames === true && editingRound.churchyCustomNames === true}
           holeNumbers={editingRound.layout.map((hole) => hole.number)}
           setupLocked={round.setupLocked || editingRound.setupLocked}
           allowChurchyCreation={!editor.base.some((game) => game.id === editor.draft.id)}

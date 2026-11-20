@@ -3,6 +3,7 @@ import { churchyDotsDefinition, churchyV3Context, churchyV3Records } from '../..
 import type { HoleScore, RoundScores } from '../../domain/scoring';
 import { DotsEntryButton, DotsHoleControls } from '../dots';
 import { ChurcieOrderControls } from './ChurcieOrderControls';
+import { gameDisplayName } from '../games';
 
 export function ChurcieEntryControls({ round, game, holeNumber, saved, draft, disabled, playerId, playerScore, orderOnly = false, onChange }: {
   readonly round: RoundScores;
@@ -58,7 +59,8 @@ export function ChurcieEntryControls({ round, game, holeNumber, saved, draft, di
       || Object.values(player.counts).some((count) => count !== 0));
     if (!contests && !selected) return null;
   }
-  const controls = <DotsHoleControls game={churchyDotsDefinition({ ...game, name: 'Churchie' })} holeNumber={holeNumber}
+  const gameName = gameDisplayName(game);
+  const controls = <DotsHoleControls game={churchyDotsDefinition({ ...game, name: gameName })} holeNumber={holeNumber}
     par={round.layout.find((hole) => hole.number === holeNumber)?.par ?? 0}
     playerPars={game.playerIds.map((id) => ({ playerId: id,
       par: round.playerTees?.find((entry) => entry.playerId === id)?.profile.holes.find((hole) => hole.number === holeNumber)?.par
@@ -75,6 +77,6 @@ export function ChurcieEntryControls({ round, game, holeNumber, saved, draft, di
     playerId={playerId} groupOnly={playerId === undefined} disabled={locked}
     onChange={(record) => { onChange({ ...record, version: 3 }); }} />;
   return playerId ? <DotsEntryButton name={players.find((player) => player.playerId === playerId)?.displayName ?? 'Golfer unavailable'}
-    gameName="Churchie" holeNumber={holeNumber} disabled={locked}
+    gameName={gameName} holeNumber={holeNumber} disabled={locked}
     staged={draft?.players.some((player) => player.playerId === playerId) === true}>{controls}</DotsEntryButton> : controls;
 }

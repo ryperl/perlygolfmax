@@ -2,11 +2,79 @@ import { describe, expect, it } from 'vitest';
 import { fictionalId } from '../../client/catalog.test-support';
 import { maximumExactGamePoints, teamSize } from '../../domain/games';
 import { teamLeaderboardGame, teamLeaderboardRound } from '../../client/leaderboard.test-support';
-import { addBand, buildGame, draftFromGame, newGameDraft, replaceGame, resetTeamAssignments, setFormat, setGameKind, setPreset, teamDraftFeedback, upgradeChurchyDraft } from './game-draft';
+import { addBand, buildGame, defaultGameGroup, draftFromGame, newGameDraft, replaceGame, resetTeamAssignments, setFormat, setGameKind, setPreset, teamDraftFeedback, upgradeChurchyDraft } from './game-draft';
 import { churchyFixture } from '../../domain/churchy.test-support';
 import { churchyPairs, defaultChurchySpecials, defaultChurchySpecialSelections } from '../../domain/churchy';
 
 describe('game drafts', () => {
+  it('round-trips custom Churchie names without changing any saved version, and retains them on explicit upgrades', () => {
+    const f = churchyFixture();
+    const v2 = { ...f.game, version: 2 as const, enabledSpecials: defaultChurchySpecials };
+    const v3 = buildGame({ ...setGameKind(newGameDraft(), 'churchy', 4),
+      churchyGroup: f.game.groupNumber, churchyPlayers: f.game.playerIds }, f.game.playerIds);
+    if (v3?.kind !== 'churchy') throw new Error('Missing fictional game.');
+    for (const game of [f.game, v2, v3]) {
+      const custom = { ...game, name: 'Fictional group game' };
+      expect(buildGame(draftFromGame(custom), f.game.playerIds)).toEqual(custom);
+    }
+    expect(upgradeChurchyDraft(draftFromGame({ ...v2, name: 'Fictional legacy challenge' })).name).toBe('Fictional legacy challenge');
+  });
+
+  it('defaults names to game types while retaining typed and saved names across kind and preset changes', () => {
+    const seed = newGameDraft();
+    expect(seed.name).toBe('Stableford');
+    let draft = seed;
+    for (const [kind, name] of [['wolf', 'Wolf'], ['dots', 'Dots'], ['match-play', 'Match Play'],
+      ['nassau', 'Nassau'], ['ball-drop', 'Ball Drop'], ['skins', 'Skins'], ['stroke-play', 'Stroke Play'],
+      ['stableford', 'Stableford'], ['churchy', 'Churchie']] as const) {
+      draft = setGameKind(draft, kind, 4);
+      expect(draft.name).toBe(name);
+      expect(draft.id).toBe(seed.id);
+      expect(setGameKind({ ...seed, name: 'Fictional custom game' }, kind, 4).name).toBe('Fictional custom game');
+    }
+    expect(setPreset(seed, 'modified').name).toBe('Stableford');
+    expect(setGameKind({ ...seed, preserveName: true }, 'skins', 4).name).toBe('Stableford');
+    const game = buildGame(seed);
+    if (!game) throw new Error('Missing fictional game.');
+    for (const name of ['Stableford', 'Standard Stableford', 'Modified Stableford', 'Fictional saved name']) {
+      const saved = draftFromGame({ ...game, name });
+      expect(setGameKind(saved, 'skins', 4).name).toBe(name);
+      expect(setPreset(saved, 'modified').name).toBe(name);
+    }
+  });
+
+  it('uses first eligible saved group identity and order without assigning match sides or round-wide teams', () => {
+    const ids = Array.from({ length: 8 }, (_, index) => fictionalId(index + 1));
+    const groups = [{ number: 9, playerIds: ids.slice(0, 1) },
+      { number: 7, playerIds: ids.slice(4).reverse() }, { number: 2, playerIds: ids.slice(0, 4) }];
+    const seed = newGameDraft();
+    for (const kind of ['wolf', 'churchy'] as const) {
+      const draft = defaultGameGroup(setGameKind(seed, kind, 8), groups);
+      expect(kind === 'wolf' ? draft.groupNumber : draft.churchyGroup).toBe(7);
+      expect(kind === 'wolf' ? draft.wolfPlayers : draft.churchyPlayers).toEqual(groups[1]?.playerIds);
+    }
+    const dots = setGameKind(seed, 'dots', 8);
+    expect(defaultGameGroup(dots, groups)).toMatchObject({ groupNumber: 7, dotsPlayerIds: groups[1]?.playerIds });
+    expect(defaultGameGroup(dots, groups, [1, 2, 3, 4])).toMatchObject({ groupNumber: 9, dotsPlayerIds: groups[0]?.playerIds });
+    expect(defaultGameGroup({ ...dots, groupNumber: 2 }, groups).dotsPlayerIds).toEqual(groups[2]?.playerIds);
+    expect(defaultGameGroup(dots, groups, [])).toBe(dots);
+    for (const kind of ['nassau', 'match-play'] as const) {
+      const draft = defaultGameGroup(setGameKind(seed, kind, 8), groups);
+      expect(draft.groupNumber).toBe(7);
+      expect(draft.nassauSides?.map((side) => side.playerIds)).toEqual([[''], ['']]);
+    }
+    for (const kind of ['stableford', 'skins', 'stroke-play', 'ball-drop'] as const) {
+      const draft = setGameKind(seed, kind, 8);
+      expect(defaultGameGroup(draft, groups)).toBe(draft);
+      expect(draft).not.toHaveProperty('groupNumber');
+      expect(draft.teams?.flatMap((team) => team.playerIds).every((id) => id === '') ?? true).toBe(true);
+    }
+    const wolf = setGameKind(seed, 'wolf', 1);
+    expect(defaultGameGroup(wolf, groups.slice(0, 1))).toBe(wolf);
+    expect(defaultGameGroup(wolf, groups, [1, 2, 3, 4], 9).groupNumber).toBe(7);
+    expect(defaultGameGroup(wolf, groups, [4], 2)).toMatchObject({ groupNumber: 2, wolfPlayers: groups[2]?.playerIds });
+  });
+
   it.each([1, 4, 7, 10, 13, 16])('explicitly upgrades an unstarted legacy order while preserving its first partnership at hole %i', (startingHole) => {
     const f = churchyFixture();
     const legacy = { ...f.game, version: 2 as const, enabledSpecials: defaultChurchySpecials };
@@ -39,7 +107,7 @@ describe('game drafts', () => {
     const v2 = { ...f.game, version: 2 as const, enabledSpecials: defaultChurchySpecials };
     expect(buildGame(draftFromGame(v2), f.game.playerIds)).toEqual(v2);
     const upgraded = buildGame(upgradeChurchyDraft(draftFromGame(v2)), f.game.playerIds);
-    expect(upgraded).toMatchObject({ version: 3, name: 'Churchie', orderMode: 'tee',
+    expect(upgraded).toMatchObject({ version: 3, name: v2.name, orderMode: 'tee',
       specials: defaultChurchySpecialSelections.filter((special) => special.kind !== 'kp' && special.kind !== 'blue-plate') });
     expect(upgraded?.kind === 'churchy' && upgraded.playerIds).toEqual([
       f.game.playerIds[0], f.game.playerIds[3], f.game.playerIds[2], f.game.playerIds[1],
@@ -87,7 +155,7 @@ describe('game drafts', () => {
       betterScorePoints: 12, worseScorePoints: -7,
       rows: [{ scoreToPar: -4, points: 12 }, ...buildGame(modified)?.points?.rows ?? [], { scoreToPar: 3, points: -7 }],
     });
-    expect(draftFromGame(buildGame(extended) ?? failGame())).toEqual({ ...extended, allowanceConfigured: true });
+    expect(draftFromGame(buildGame(extended) ?? failGame())).toEqual({ ...extended, allowanceConfigured: true, preserveName: true });
   });
 
   it.each(['', ' ', '1.2', '1e2', 'Infinity', 'NaN', '9007199254740992', String(maximumExactGamePoints + 1)])(
