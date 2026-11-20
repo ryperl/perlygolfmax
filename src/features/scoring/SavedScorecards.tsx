@@ -10,6 +10,7 @@ import { PlayerScorecardRecap } from './PlayerScorecardRecap';
 import { ScorecardNine } from './ScorecardNine';
 import { cardFor } from './entry-state';
 import { scorecardGame, scorecardGameWarnings, summarizeCard } from './scorecard-presentation';
+import { MatchPlaySummary } from './MatchPlayScorecard';
 
 export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnterScores }: {
   readonly round: RoundScores;
@@ -25,7 +26,8 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
   if (!group) throw new Error('Saved round has no groups.');
   const game = scorecardGame(round, gameId, group.playerIds);
   const games = visibleGames(round.games?.configuration.games ?? [], round.churchyEnabled).filter((game) =>
-    game.kind !== 'nassau' && game.kind !== 'match-play' && ((game.kind !== 'churchy' && game.kind !== 'wolf' && game.kind !== 'dots') || group.playerIds.every((id) => game.playerIds.includes(id))));
+    game.kind !== 'nassau' && (game.kind === 'match-play' ? game.groupNumber === group.number
+      : (game.kind !== 'churchy' && game.kind !== 'wolf' && game.kind !== 'dots') || group.playerIds.every((id) => game.playerIds.includes(id))));
   const cards = group.playerIds.map((id) => cardFor(round, id));
   const player = cards.find((card) => card.playerId === playerId);
   const layout = [...round.layout].sort((left, right) => left.number - right.number);
@@ -49,8 +51,6 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
     </details>}
     {round.games?.configuration.games.some((game) => game.kind === 'nassau' && game.groupNumber === group.number)
       && <p>Nassau match bets and presses are in Games and Leaderboard, not individual scorecard points.</p>}
-    {round.games?.configuration.games.some((game) => game.kind === 'match-play' && game.groupNumber === group.number)
-      && <p>Match Play bets and presses are in Games and Leaderboard, not individual scorecard points.</p>}
     {games.length > 0 && <section className="scorecard-game-summary" aria-label="Round games">
       <h3>Round games</h3>
       <ul role="list">{games.map((entry) => <li key={entry.id}>
@@ -71,6 +71,7 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
         {games.map((entry) => <option value={entry.id} key={entry.id}>{gameDisplayName(entry)} · {gameScoringLabel(entry)}</option>)}
       </select></label>}
     </div>
+    {!player && <MatchPlaySummary game={game} players={round.cards} />}
     {game?.definition.kind === 'ball-drop' && <p className="scorecard-game-context">
       Counting balls: {game.definition.format === 'ball-drop-two-net' ? 'N net'
         : game.definition.format === 'ball-drop-two-gross' ? 'G gross' : 'N net · G gross'}
@@ -82,21 +83,24 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
       {cards.some((card) => (round.courseHandicaps?.find((entry) => entry.playerId === card.playerId)?.courseHandicap ?? 0) > 0)
         && <p className="scorecard-stroke-key">Stroke dots: tee Course Handicap.</p>}
       {scorecardGameWarnings(game, cards).map((warning) => <p className="scorecard-game-unavailable" key={warning}>{warning}</p>)}
-      {back.length > 0 && <div className="scorecard-nine-picker" role="group" aria-label="Holes to display">
+      {front.length > 0 && back.length > 0 && <div className="scorecard-nine-picker" role="group" aria-label="Holes to display">
         <button type="button" aria-pressed={nine === 'front'} onClick={() => { setNine('front'); }}>Front 9</button>
         <button type="button" aria-pressed={nine === 'back'} onClick={() => { setNine('back'); }}>Back 9</button>
         <button type="button" aria-pressed={nine === 'full'} onClick={() => { setNine('full'); }}>Full card</button>
       </div>}
       <div className="recap-sections">
-        {(nine !== 'back' || back.length === 0) && <ScorecardNine label="Front nine" subtotal="Out" layout={front} fullLayout={layout} cards={cards} game={game}
+        {front.length > 0 && (nine !== 'back' || back.length === 0) && <ScorecardNine label="Front nine" subtotal="Out" layout={front} fullLayout={layout} cards={cards} game={game}
+          matchPlayers={round.cards}
           courseHandicaps={round.courseHandicaps ?? []}
           teeStrokeAllocation={round.teeStrokeAllocation}
           playerTees={round.playerTees} defaultTeeLabel={`${round.teeName} / ${round.teeCategory}`} onPlayerSelect={setPlayerId} />}
-        {nine !== 'front' && back.length > 0 && <ScorecardNine label="Back nine" subtotal="In" layout={back} fullLayout={layout} cards={cards} game={game}
+        {back.length > 0 && (nine !== 'front' || front.length === 0) && <ScorecardNine label="Back nine" subtotal="In" layout={back} fullLayout={layout} cards={cards} game={game}
+          matchPlayers={round.cards}
           courseHandicaps={round.courseHandicaps ?? []}
           teeStrokeAllocation={round.teeStrokeAllocation}
           playerTees={round.playerTees} defaultTeeLabel={`${round.teeName} / ${round.teeCategory}`} onPlayerSelect={setPlayerId} />}
       </div>
+      {game?.definition.kind === 'match-play' && <p className="scorecard-match-key">UP / DN: running match position · AS: all square · —: pending or unavailable. Main match only; presses are in Games.</p>}
       {(cards.some((card) => !summarizeCard(card, layout).complete) ||
         game?.result?.players.some((player) => group.playerIds.includes(player.playerId) && player.status === 'in-progress' && player.totalPoints !== null)) &&
         <p className="scorecard-incomplete">{game ? '* Incomplete total.' : '* Incomplete recorded total.'}</p>}

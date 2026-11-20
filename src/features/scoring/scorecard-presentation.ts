@@ -44,8 +44,10 @@ export interface ScorecardGame {
 export function scorecardGame(round: RoundScores, gameId?: string | null, playerIds?: readonly string[]): ScorecardGame | undefined {
   if (gameId === null) return undefined;
   const games = visibleGames(round.games?.configuration.games ?? [], round.churchyEnabled).filter((game) =>
-    game.kind !== 'nassau' && game.kind !== 'match-play' && ((game.kind !== 'churchy' && game.kind !== 'wolf' && game.kind !== 'dots') || playerIds === undefined
-      || playerIds.length > 0 && playerIds.every((id) => game.playerIds.includes(id))));
+    game.kind !== 'nassau' && (game.kind === 'match-play' ? playerIds === undefined
+      || playerIds.some((id) => game.sides.some((side) => side.playerIds.includes(id)))
+      : (game.kind !== 'churchy' && game.kind !== 'wolf' && game.kind !== 'dots') || playerIds === undefined
+        || playerIds.length > 0 && playerIds.every((id) => game.playerIds.includes(id))));
   const definition = games.find((game) => game.id === gameId) ?? games[0];
   return definition ? { definition, result: round.games?.results.find((result) => result.gameId === definition.id) } : undefined;
 }
@@ -88,7 +90,7 @@ export function ballDropScoreText(value: number | null | undefined, complete = t
 
 export function scorecardGameWarnings(game: ScorecardGame | undefined, cards: readonly Scorecard[]): readonly string[] {
   const unavailable = new Map<string, string[]>();
-  if (game) for (const card of cards) {
+  if (game && game.definition.kind !== 'match-play') for (const card of cards) {
     const player = scorecardGamePlayer(game, card.playerId);
     if (!player || player.status === 'unavailable') {
       const reason = game.result?.teamSetupRequired ? 'Update team assignments before relying on team scores.'

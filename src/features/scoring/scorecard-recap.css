@@ -27,6 +27,16 @@
 .recap-counting-marker { display: inline-block; margin-left: 3px; color: var(--cp-accent); font-size: .65rem; font-weight: 750; vertical-align: super; }
 .scorecard-game-context { color: var(--cp-accent); font-size: .9rem; }
 .scorecard-game-unavailable { color: var(--cp-text-muted); font-size: .85rem; }
+.scorecard-match-summaries { display: grid; gap: 12px; min-width: 0; }
+.scorecard-match-summary { padding: 12px 16px; border: 1px solid var(--cp-border); border-inline-start: 4px solid var(--cp-round-line, var(--cp-accent)); border-radius: .625rem; background: var(--cp-surface); }
+.scorecard-match-summary > div { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+.scorecard-match-summary h3 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
+.scorecard-match-summary strong { color: var(--cp-round-ink, var(--cp-accent)); font-size: 1.25rem; }
+.scorecard-match-summary p, .scorecard-match-key { margin: 4px 0 0; color: var(--cp-text-muted); font-size: .8rem; }
+.recap-table .recap-match-row th, .recap-table .recap-match-row td { padding-block: 4px 12px; font-size: .75rem; white-space: nowrap; }
+.recap-match-row th { color: var(--cp-text-muted); font-weight: 500; }
+.recap-match-row th small { display: block; font-size: .65rem; white-space: normal; }
+.recap-match-up { color: var(--cp-round-ink, var(--cp-accent)); font-weight: 750; }
 .recap-subtotal { background: var(--cp-round-surface, var(--cp-accent-soft)); color: var(--cp-round-ink, var(--cp-accent)); font-weight: 700; }
 .score-mark { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; }
 .scorecard-hole-score { position: relative; display: inline-flex; vertical-align: middle; padding-block-start: 1rem; }

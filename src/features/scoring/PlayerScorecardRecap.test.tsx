@@ -30,14 +30,16 @@ function fixture() {
 }
 
 describe('individual traditional scorecard recap', () => {
-  it('keeps independent Match Play bets out of individual scorecard metrics', () => {
+  it('shows Match Play positions without turning independent bets into scorecard points or money', () => {
     const f = matchGamesFixture();
     const game = { ...f.nassau, kind: 'match-play' as const, name: 'Fictional Match Play',
       stakes: { ...f.nassau.stakes, frontMinor: 0, backMinor: 0 } };
     const card = f.cards[0];
     if (!card) throw new Error('Missing fictional card');
     render(<PlayerScorecardRecap round={f.round(f.cards, [game])} card={card} gameId={game.id} />);
-    expect(screen.getByText('Match Play bets and presses are in Games and Leaderboard.')).toBeVisible();
+    expect(screen.getAllByRole('row', { name: /match position vs/ })).toHaveLength(2);
+    expect(screen.getByText(/Main match only; presses are in Games/)).toBeVisible();
+    expect(screen.queryByRole('row', { name: /Match Play points/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/Nassau match bets/)).not.toBeInTheDocument();
     expect(screen.queryByText('Planned net settlement · USD')).not.toBeInTheDocument();
   });

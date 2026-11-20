@@ -144,6 +144,29 @@ for (const count of [9, 18] as const) {
       await expect(page.getByRole('button', { name: 'Edit Match Play', exact: true })).toBeDisabled();
       expect(fixture.counters().configWrites).toBe(1);
       expect(fixture.counters().targets.filter((path) => path.endsWith('/games'))).toHaveLength(3);
+      const savedReads = fixture.counters().reads;
+      await page.getByRole('button', { name: 'Scorecards', exact: true }).click();
+      await page.setViewportSize({ width: 320, height: 900 });
+      await page.evaluate((theme) => {
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.fontSize = '125%';
+      }, count === 9 ? 'dark' : 'light');
+      const positions = page.getByRole('region', { name: 'Match Play match positions', exact: true });
+      await expect(positions.getByText('Fictional golfer 1 2 UP', { exact: true })).toBeVisible();
+      await expect(positions.getByText(`Thru 3 · ${String(count - 3)} holes to play`, { exact: true })).toBeVisible();
+      await expect(page.getByRole('cell', { name: `Fictional golfer 1, after hole ${String(start)} match position vs Fictional golfer 2: 1 up`, exact: true })).toHaveText('1 UP');
+      await expect(page.getByRole('cell', { name: `Fictional golfer 2, after hole ${String(next)} match position vs Fictional golfer 1: 2 down`, exact: true })).toHaveText('2 DN');
+      await expect(page.getByRole('cell', { name: `Fictional golfer 1, after hole ${String(next + 1)} match position vs Fictional golfer 2: pending`, exact: true })).toHaveText('—');
+      const table = page.getByRole('table', { name: count === 9 ? 'Back nine scorecard' : 'Front nine scorecard', exact: true });
+      if (count === 9) await expect(page.getByRole('table', { name: 'Front nine scorecard' })).toHaveCount(0);
+      await table.getByRole('button', { name: 'Open scorecard for Fictional golfer 2', exact: true }).click();
+      await expect(positions.getByText('2 DN', { exact: true })).toBeVisible();
+      await expect(page.getByRole('row', { name: /Fictional golfer 1 · Match Play match position/ })).toHaveCount(0);
+      expect(fixture.counters().reads).toBe(savedReads);
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath('match-play-scorecard.png'), fullPage: true });
+      await page.getByRole('combobox', { name: 'Game', exact: true }).selectOption('');
+      await expect(positions).toHaveCount(0);
       await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     } finally { await fixture.close(); }
   });

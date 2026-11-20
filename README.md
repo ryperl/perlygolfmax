@@ -648,6 +648,13 @@ wraps; presses follow that order, not a fabricated next printed hole.
 Setup requires an explicit `match-play` API capability. Ordinary event owners
 and collaborative Quick-round setup retain their existing management scope;
 public scoring does not grant ordinary-event Match Play setup authority.
+Group and individual scorecards can select Match Play to show cumulative
+`UP` / `AS` / `DN` positions beneath each participating golfer's saved strokes,
+plus the current match position above the card. Positions use saved server
+hole outcomes in actual playing order, including wrapped nine-hole circuits;
+missing or unavailable earlier results never produce invented later positions.
+Each three-way pairing remains separate. These are main-match positions, not
+press totals, individual game points or money; presses stay in Games.
 
 **Nassau** is match play over an 18-hole captured layout, with independent front
 1-9, back 10-18 and overall matches. Choose singles 1v1, three-way individuals

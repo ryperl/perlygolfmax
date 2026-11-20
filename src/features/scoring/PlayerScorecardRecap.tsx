@@ -5,6 +5,7 @@ import { scorecardGame, scorecardGameWarnings, summarizeCard } from './scorecard
 import './scorecard-recap.css';
 import { gameDisplayName, gameScoringLabel } from '../games';
 import { PlayerDifferential } from '../differentials';
+import { MatchPlaySummary } from './MatchPlayScorecard';
 
 export function PlayerScorecardRecap({ round, card, gameId }: {
   readonly round: RoundScores;
@@ -24,7 +25,7 @@ export function PlayerScorecardRecap({ round, card, gameId }: {
       <div><h3>{card.displayName}</h3><p>{round.roundName} — {round.courseName}</p>
         <p>{tee?.name ?? round.teeName} / {tee?.category ?? round.teeCategory}{totalRating ? ` · Course rating ${String(totalRating.course)} · Slope ${String(totalRating.slope)}` : ''}
           {(round.playerTees?.length ?? 0) > 0 ? tee ? ' · personal tee' : ' · default tee' : ''}</p>
-        {game && <p className="scorecard-game-context">{gameDisplayName(game.definition)} · {game.definition.kind === 'ball-drop' || game.definition.kind === 'skins' || game.definition.kind === 'churchy' || game.definition.kind === 'stroke-play' || game.definition.kind === 'wolf' || game.definition.kind === 'dots'
+        {game && <p className="scorecard-game-context">{gameDisplayName(game.definition)} · {game.definition.kind === 'ball-drop' || game.definition.kind === 'skins' || game.definition.kind === 'churchy' || game.definition.kind === 'stroke-play' || game.definition.kind === 'wolf' || game.definition.kind === 'dots' || game.definition.kind === 'match-play'
           ? gameScoringLabel(game.definition) : `${game.definition.basis === 'net' ? 'Net' : 'Gross'} points`}</p>}
       </div>
       <p className="recap-total">{summary.complete ? 'Gross total' : 'Recorded total'}:
@@ -38,17 +39,19 @@ export function PlayerScorecardRecap({ round, card, gameId }: {
     </details>}
     {round.games?.configuration.games.some((entry) => entry.kind === 'nassau' && entry.sides.some((side) => side.playerIds.includes(card.playerId)))
       && <p>Nassau match bets and presses are in Games and Leaderboard.</p>}
-    {round.games?.configuration.games.some((entry) => entry.kind === 'match-play' && entry.sides.some((side) => side.playerIds.includes(card.playerId)))
-      && <p>Match Play bets and presses are in Games and Leaderboard.</p>}
+    <MatchPlaySummary game={game} players={round.cards} playerId={card.playerId} />
     {scorecardGameWarnings(game, [card]).map((warning) => <p className="scorecard-game-unavailable" key={warning}>{warning}</p>)}
     {(round.courseHandicaps?.find((entry) => entry.playerId === card.playerId)?.courseHandicap ?? 0) > 0
       && <p className="scorecard-stroke-key">Stroke dots: tee Course Handicap.</p>}
     <div className="recap-sections">
-      <ScorecardNine label="Front nine" subtotal="Out" layout={front} fullLayout={layout} cards={[card]} game={game}
-        courseHandicaps={round.courseHandicaps ?? []} teeStrokeAllocation={tee?.strokeAllocation ?? round.teeStrokeAllocation} />
+      {front.length > 0 && <ScorecardNine label="Front nine" subtotal="Out" layout={front} fullLayout={layout} cards={[card]} game={game}
+        matchPlayers={round.cards}
+        courseHandicaps={round.courseHandicaps ?? []} teeStrokeAllocation={tee?.strokeAllocation ?? round.teeStrokeAllocation} />}
       {back.length > 0 && <ScorecardNine label="Back nine" subtotal="In" layout={back} fullLayout={layout} cards={[card]} game={game}
+        matchPlayers={round.cards}
         courseHandicaps={round.courseHandicaps ?? []} teeStrokeAllocation={tee?.strokeAllocation ?? round.teeStrokeAllocation} />}
     </div>
+    {game?.definition.kind === 'match-play' && <p className="scorecard-match-key">UP / DN: running match position · AS: all square · —: pending or unavailable. Main match only; presses are in Games.</p>}
     {(!summary.complete || game?.result?.players.some((player) => player.playerId === card.playerId && player.status === 'in-progress' && player.totalPoints !== null)) &&
       <p className="scorecard-incomplete">{game ? '* Incomplete total.' : '* Incomplete recorded total.'}</p>}
     {summary.missing && <p role="alert">Some saved hole data is unavailable. Refresh before relying on this scorecard.</p>}

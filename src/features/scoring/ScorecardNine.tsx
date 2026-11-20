@@ -7,6 +7,7 @@ import type { ScorecardGame } from './scorecard-presentation';
 import { gameDisplayName, gameUnavailableMessage } from '../games';
 import { gameResultTotal, gameResultUnit } from '../../domain/games';
 import { CourseHandicap } from './CourseHandicap';
+import { MatchPlayRows } from './MatchPlayScorecard';
 import './scorecard-recap.css';
 
 function scoreMark(score: HoleScore | undefined, par: number) {
@@ -44,7 +45,7 @@ function CourseRows({ layout, fullLayout, showTotal, prefix = '' }: {
   </>;
 }
 
-export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game, onPlayerSelect, playerTees, defaultTeeLabel, courseHandicaps, teeStrokeAllocation }: {
+export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game, onPlayerSelect, playerTees, defaultTeeLabel, courseHandicaps, teeStrokeAllocation, matchPlayers = cards }: {
   readonly label: string;
   readonly subtotal: 'Out' | 'In';
   readonly layout: readonly CourseHole[];
@@ -56,11 +57,13 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
   readonly defaultTeeLabel?: string;
   readonly courseHandicaps?: readonly PlayerCourseHandicap[];
   readonly teeStrokeAllocation?: boolean | undefined;
+  readonly matchPlayers?: readonly Pick<Scorecard, 'playerId' | 'displayName'>[];
 }) {
   const showTotal = subtotal === 'In' || fullLayout.length === layout.length;
   const mixed = (playerTees?.length ?? 0) > 0;
   const unit = game?.definition.kind === 'dots' ? 'dots' : game ? gameResultUnit(game.definition) : 'points';
   const ballDrop = game?.definition.kind === 'ball-drop';
+  const matchPlay = game?.definition.kind === 'match-play';
   const teams = scorecardBallDropTeams(game, cards);
   return <section className="recap-nine">
     <h4>{label}</h4>
@@ -78,17 +81,19 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
             const courseHandicap = courseHandicaps?.find((entry) => entry.playerId === card.playerId);
             const strokeCounts = scorecardHandicapStrokes(courseHandicap?.courseHandicap, playerFullLayout, tee?.strokeAllocation ?? teeStrokeAllocation);
             const saved = new Map(card.holes.map((hole) => [hole.number, hole.score]));
-            const player = ballDrop ? undefined : scorecardGamePlayer(game, card.playerId);
+            const player = ballDrop || matchPlay ? undefined : scorecardGamePlayer(game, card.playerId);
             const holePoints = new Map(player?.strokeGame ? player.strokeGame.holes.map((hole) => [hole.number, hole.value])
               : player?.holes.map((hole) => [hole.number, hole.points]));
             const available = player !== undefined && player.status !== 'unavailable';
             const completeNine = layout.every((hole) => typeof holePoints.get(hole.number) === 'number');
+            const hasMatch = game?.definition.kind === 'match-play'
+              && game.definition.sides.some((side) => side.playerIds.includes(card.playerId));
             return <Fragment key={card.playerId}>
               {mixed && <tr><th colSpan={layout.length + (showTotal ? 3 : 2)} scope="rowgroup">
                 {card.displayName} · {tee ? `${tee.name} / ${tee.category} · personal tee` : `${defaultTeeLabel ?? 'Common tee'} · default tee`}
               </th></tr>}
               {mixed && <CourseRows layout={playerLayout} fullLayout={playerFullLayout} showTotal={showTotal} prefix={`${card.displayName} · `} />}
-              <tr className={`recap-score-row${game && !ballDrop ? ' recap-has-game' : ''}`}>
+              <tr className={`recap-score-row${game && !ballDrop && (!matchPlay || hasMatch) ? ' recap-has-game' : ''}`}>
               <th scope="row">{onPlayerSelect ? <button type="button" className="scorecard-player-link"
                 aria-label={`Open scorecard for ${card.displayName}`} onClick={() => { onPlayerSelect(card.playerId); }}>{card.displayName}</button> : card.displayName}
                 {courseHandicaps && <> <CourseHandicap className="scorecard-handicap"
@@ -114,7 +119,8 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
               })}
               <td className="recap-subtotal">{cardTotalText(card, layout)}</td>{showTotal && <td className="recap-subtotal">{cardTotalText(card, fullLayout)}</td>}
             </tr>
-            {game && !ballDrop && <tr className="recap-game-row" aria-label={`${card.displayName} · ${gameDisplayName(game.definition)} ${unit}`}>
+            {game && matchPlay && <MatchPlayRows game={game} card={card} players={matchPlayers} layout={layout} showTotal={showTotal} />}
+            {game && !ballDrop && !matchPlay && <tr className="recap-game-row" aria-label={`${card.displayName} · ${gameDisplayName(game.definition)} ${unit}`}>
               <th scope="row" aria-label={`${card.displayName} game ${unit}`}
                 title={!available ? gameUnavailableMessage(player?.strokeGame?.unavailableReason ?? player?.unavailableReason) : undefined}>
                 {game.definition.kind === 'wolf' && game.definition.version === 1 ? 'DOT BALANCE' : unit === 'dots' ? 'Earned dots' : unit === 'points' ? 'Points' : unit === 'strokes' ? `${game.definition.basis === 'net' ? 'Net' : 'Gross'} strokes` : unit === 'skins' ? 'Skins' : 'Team to par'}

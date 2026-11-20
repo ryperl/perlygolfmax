@@ -75,7 +75,7 @@ describe('shared match game setup and presentation', () => {
     expect(buildGame({ ...draftFromGame(game), nassauStakes: ['1', '0', '1'] }, round.cards.map((card) => card.playerId))).toBeNull();
   });
 
-  it('renders Match Play as a matchboard, never ranked points or a golfer scorecard metric', () => {
+  it('renders Match Play as a matchboard and scorecard positions, never ranked points or scorecard money', () => {
     const { round, nassau, wolf, f } = fixture();
     const game: MatchPlayGameDefinition = { ...nassau, kind: 'match-play', name: 'Fictional Match Play',
       stakes: { ...nassau.stakes, frontMinor: 0, backMinor: 0 } };
@@ -87,8 +87,10 @@ describe('shared match game setup and presentation', () => {
     expect(screen.getByRole('region', { name: 'Fictional Match Play matchboard' })).toBeVisible();
     expect(screen.queryByRole('list', { name: 'Standings' })).not.toBeInTheDocument();
     view.rerender(<SavedScorecards round={updated} groupNumber={1} busy={false} onGroupChange={vi.fn()} onEnterScores={vi.fn()} />);
-    expect(within(screen.getByLabelText('Game')).queryByRole('option', { name: /Match Play/ })).not.toBeInTheDocument();
-    expect(screen.getByText('Match Play bets and presses are in Games and Leaderboard, not individual scorecard points.')).toBeVisible();
+    expect(within(screen.getByLabelText('Game')).getByRole('option', { name: /Match Play/ })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Fictional Match Play match positions' })).toBeVisible();
+    expect(screen.queryByRole('row', { name: /Match Play points/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Planned net settlement · USD')).not.toBeInTheDocument();
   });
 
   it('retains explicit Wolf order, capability checks, peer definitions and stable save identity on unconfirmed retries', async () => {
