@@ -11,6 +11,38 @@ import { ballDropFormat, strokeGameCards, strokeGameFixture, strokeGamesRound } 
 const card = fictionalRoundScores.cards[0];
 if (!card) throw new Error('Missing fictional card.');
 describe('traditional scorecard nine', () => {
+  it.each([9, 18] as const)('uses complete saved-group SO [8,1,5,0] on the %i-hole card without halving CH again or changing gross marks', (count) => {
+    const f = strokeGameFixture(count);
+    const cards = strokeGameCards(f.cards, 1, [{ kind: 'strokes', strokes: 5 }]);
+    const courseHandicaps = cards.map((card, index) => ({ playerId: card.playerId,
+      courseHandicap: [11, 4, 8, 3][index] ?? null }));
+    const game = { definition: { ...f.ballDrop, handicapRule: 'group-low-v1' as const }, result: undefined };
+    const props = { label: 'Front nine', subtotal: 'Out' as const, fullLayout: f.snapshot.teeProfile.holes,
+      layout: f.snapshot.teeProfile.holes.slice(0, 9), cards, courseHandicaps, groups: f.snapshot.groups,
+      teeStrokeAllocation: true, game };
+    const view = render(<ScorecardNine {...props} />);
+    for (const [index, expected] of [8, 1, 5, 0].entries()) {
+      const card = cards[index];
+      if (!card) throw new Error('Missing fictional group card');
+      const row = screen.getByRole('rowheader', { name: new RegExp(`^${card.displayName} Course handicap`) }).closest('tr');
+      if (!row) throw new Error('Missing SO score row');
+      expect(within(row).getByLabelText(`Strokes off the low player: ${String(expected)}`)).toHaveTextContent(`SO ${String(expected)}`);
+      expect(within(row).queryAllByRole('img')).toHaveLength(expected);
+    }
+    expect(screen.getByLabelText('Hole 1: 5, bogey')).toHaveClass('score-bogey');
+    const first = cards[0];
+    if (!first) throw new Error('Missing fictional individual card');
+    view.rerender(<ScorecardNine {...props} cards={[first]} />);
+    expect(screen.getAllByRole('img')).toHaveLength(8);
+    view.rerender(<ScorecardNine {...props} cards={[first]} courseHandicaps={courseHandicaps.slice(0, 3)} />);
+    expect(screen.getByLabelText('Strokes off the low player unavailable')).toHaveTextContent('SO —');
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    view.rerender(<ScorecardNine {...props} cards={[first]} game={{
+      definition: { ...f.ballDrop, handicapRule: 'full-course-v1' }, result: undefined,
+    }} />);
+    expect(screen.queryByLabelText(/Strokes off the low/)).not.toBeInTheDocument();
+    expect(screen.getByRole('img', { name: new RegExp(`^Hole 1: ${count === 9 ? '2' : '1'} handicap`) })).toBeVisible();
+  });
   it('marks tee CH strokes before play and keeps them independent of selected net-game allowances', () => {
     const { round, games } = scorecardGamesFixture();
     const first = round.cards[0], net = games.find((game) => game.basis === 'net');

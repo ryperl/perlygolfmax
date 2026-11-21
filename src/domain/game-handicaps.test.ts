@@ -11,6 +11,8 @@ import { matchGamesFixture } from './match-games.test-support.js';
 import { churchyV3Fixture } from './churchy-v3.test-support.js';
 import { playingCircuit, skinsCarryCircuit } from './round-navigation.js';
 import { nassauRecordsFor } from './game-declarations.js';
+import { ballDropFormat, strokeGameCards } from './stroke-games.test-support.js';
+import type { NassauVariant } from './nassau.js';
 
 function indexedRound(count: 9 | 18 = 18, values: readonly (string | null)[] = ['11', '4', '8', '3']): RoundSnapshot {
   const f = strokeGameFixture(count);
@@ -25,6 +27,67 @@ function inputs(round: RoundSnapshot) {
 }
 
 describe('explicit captured game handicaps', () => {
+  it.each(['two-net-better-ball', 'two-net-aggregate', 'four-two-net'] as const)('checks independent team Stableford totals under full/SO for %s', (format) => {
+    const f = strokeGameFixture(18), round = indexedRound();
+    const cards = strokeGameCards(f.cards, 8, [5, 4, 4, 5].map((strokes) => ({ kind: 'strokes', strokes })));
+    const teams = format === 'four-two-net' ? f.ballDrop.teams : [[0, 2], [1, 3]].map((indexes, index) => ({
+      id: strokeGameId(970 + index), name: `Fictional pair ${String(index + 1)}`,
+      playerIds: indexes.flatMap((index) => f.cards[index] ? [f.cards[index].playerId] : []),
+    }));
+    for (const handicapRule of ['full-course-v1', 'group-low-v1'] as const) {
+      const game = { id: strokeGameId(960), name: 'Fictional team points', preset: 'standard' as const, basis: 'net' as const,
+        handicapAllowancePercent: 100, points: stablefordPoints('standard'), format, teams, handicapRule };
+      const result = calculateGameResults([game], round, cards)[0];
+      const expected = handicapRule === 'full-course-v1'
+        ? format === 'four-two-net' ? [5] : format === 'two-net-aggregate' ? [5, 3] : [3, 2]
+        : format === 'four-two-net' ? [4] : format === 'two-net-aggregate' ? [4, 3] : [2, 2];
+      expect(result?.teams?.map((team) => team.holes.find((hole) => hole.number === 8)?.points)).toEqual(expected);
+    }
+  });
+
+  it.each(['ball-drop-net-gross', 'ball-drop-two-net', 'ball-drop-two-gross'] as const)('checks independent counted-ball totals under full/SO for %s', (format) => {
+    const f = strokeGameFixture(18), round = indexedRound();
+    const cards = strokeGameCards(f.cards, 8, [7, 7, 4, 5].map((strokes) => ({ kind: 'strokes', strokes })));
+    for (const requested of ['full-course-v1', 'group-low-v1'] as const) {
+      const game = { ...ballDropFormat(f.ballDrop, format), handicapRule: format === 'ball-drop-two-gross' ? 'full-course-v1' as const : requested };
+      const hole = calculateGameResults([game], round, cards)[0]?.teams?.[0]?.strokeGame?.holes.find((hole) => hole.number === 8);
+      expect(hole?.value).toBe(format === 'ball-drop-two-gross' || requested === 'group-low-v1' ? 1 : 0);
+      expect(new Set(hole?.countingPlayerIds)).toEqual(new Set([f.cards[2]?.playerId, f.cards[3]?.playerId]));
+    }
+  });
+
+  it.each([
+    ['singles', [[0], [2]]], ['three-way', [[0], [2], [3]]], ['one-v-two', [[0], [2, 3]]],
+    ['two-v-two-best-ball', [[0, 1], [2, 3]]], ['two-v-two-aggregate', [[0, 1], [2, 3]]],
+  ] satisfies readonly (readonly [NassauVariant, readonly (readonly number[])[]])[])('checks both match games in full, whole-group SO and legacy %s configurations', (variant, selections) => {
+    const f = strokeGameFixture(18), m = matchGamesFixture(), round = indexedRound();
+    const raw = [7, 7, 4, 5], ch = [11, 4, 8, 3];
+    const cards = strokeGameCards(f.cards, 8, raw.map((strokes) => ({ kind: 'strokes', strokes })));
+    const sides = selections.map((indexes, index) => ({ id: strokeGameId(975 + index), name: `Fictional side ${String(index + 1)}`,
+      playerIds: indexes.flatMap((index) => f.cards[index] ? [f.cards[index].playerId] : []) }));
+    for (const kind of ['nassau', 'match-play'] as const) for (const rule of [undefined, 'full-course-v1', 'group-low-v1'] as const) {
+      const game = { ...m.nassau, kind, sides, variant, basis: 'net' as const,
+        ...(rule ? { handicapRule: rule } : {}),
+        stakes: kind === 'match-play' ? { ...m.nassau.stakes, frontMinor: 0, backMinor: 0 } : m.nassau.stakes };
+      const matches = calculateGameResults([game], round, cards)[0]?.nassau?.matches;
+      if (!matches) throw new Error('Missing fictional match matrix results');
+      expect(matches).toHaveLength(variant === 'three-way' ? 3 : 1);
+      for (const match of matches) {
+        const participants = [...match.sideA.playerIds, ...match.sideB.playerIds].map((id) => f.cards.findIndex((card) => card.playerId === id));
+        const minimum = rule === 'group-low-v1' ? 3 : rule === undefined ? Math.min(...participants.map((index) => ch[index] ?? 0)) : 0;
+        const score = (ids: readonly string[]) => {
+          const values = ids.map((id) => {
+            const index = f.cards.findIndex((card) => card.playerId === id);
+            return (raw[index] ?? 0) - ((ch[index] ?? 0) - minimum >= 8 ? 1 : 0);
+          });
+          return variant === 'two-v-two-aggregate' ? values.reduce((a, b) => a + b, 0) : Math.min(...values);
+        };
+        expect(match.holes.find((hole) => hole.number === 8)).toMatchObject({
+          sideAScore: score(match.sideA.playerIds), sideBScore: score(match.sideB.playerIds),
+        });
+      }
+    }
+  });
   it('uses the entire saved group for the 11/4/8/3 example, never the match or competition team', () => {
     const round = indexedRound();
     expect(round.players.map((player) => gameHandicap('group-low-v1', player.playerId, inputs(round), round.groups)))

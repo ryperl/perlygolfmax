@@ -54,7 +54,7 @@ describe('saved event skins board', () => {
     const f = fixture();
     const value = f.value();
     const view = render(<EventSkinsBoard value={{ ...value, workspace: withoutEventSkins(value.workspace) }} />);
-    expect(screen.getByText(/not supported by this API/)).toBeVisible();
+    expect(screen.getByText(/temporarily unavailable in this app version/)).toBeVisible();
     view.rerender(<EventSkinsBoard value={{ ...value, workspace: { ...withoutEventSkins(value.workspace), eventSkinsSupported: true } }} />);
     expect(screen.getByText('Event skins is not configured.')).toBeVisible();
     const { eventSkins, ...missing } = value;

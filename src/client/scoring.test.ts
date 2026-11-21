@@ -46,7 +46,7 @@ describe('owner scoring transport', () => {
     expect(await client.load(round.eventId, round.roundId, signal)).toEqual(round);
     expect(send.mock.calls.length).toBeGreaterThan(1);
     corrupt = true;
-    await expect(client.load(round.eventId, round.roundId, signal)).rejects.toThrow('page');
+    await expect(client.load(round.eventId, round.roundId, signal)).rejects.toThrow('Refresh to try again');
   });
 
   it('opts into lean reads and score/game acknowledgements while preserving all authoritative fields and retry identities', async () => {
@@ -63,7 +63,7 @@ describe('owner scoring transport', () => {
         change.after, change.expectedEtag, change.id, saved.signal)).toEqual({ round, change });
     }
     expect(saved.send.mock.calls[0]).toEqual(saved.send.mock.calls[1]);
-    expect(saved.send.mock.calls[0]?.[0]).toContain('/holes/1?format=lean&murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1&churchyNames=1&sweepRules=2&dotCoexistence=2&gameHandicaps=1');
+    expect(saved.send.mock.calls[0]?.[0]).toContain('/holes/1?format=lean&murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1&churchyNames=1&sweepRules=2&dotCoexistence=2&gameHandicaps=1&gameCalculations=2');
     const games = round.games?.configuration.games ?? [];
     const result = { round, change: { id, eventId: round.eventId, roundId: round.roundId,
       expectedEtag: null, before: [], after: games, recordedAt: fictionalChange.recordedAt,
@@ -83,7 +83,7 @@ describe('owner scoring transport', () => {
     const { client, send, signal } = fixture(result);
     expect(await client.saveGames(eventId, roundId, [game], etag, id, signal)).toEqual(result);
     const init = send.mock.calls[0]?.[1];
-    expect(send.mock.calls[0]?.[0]).toBe(`https://fictional.example.test/api/events/${eventId}/rounds/${roundId}/games?format=lean&murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1&churchyNames=1&sweepRules=2&dotCoexistence=2&gameHandicaps=1`);
+    expect(send.mock.calls[0]?.[0]).toBe(`https://fictional.example.test/api/events/${eventId}/rounds/${roundId}/games?format=lean&murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1&churchyNames=1&sweepRules=2&dotCoexistence=2&gameHandicaps=1&gameCalculations=2`);
     expect(init).toMatchObject({ method: 'PUT', cache: 'no-store', credentials: 'omit', body: JSON.stringify({ games: [game] }) });
     const headers = new Headers(init?.headers);
     expect(headers.get('Idempotency-Key')).toBe(id);
@@ -156,7 +156,7 @@ describe('owner scoring transport', () => {
     });
     await expect(client.saveGames(eventId, roundId, oversized, null, id, signal)).resolves.toEqual(result);
     expect(send.mock.calls.length).toBeGreaterThan(2);
-    expect(send.mock.calls.every((call) => typeof call[0] === 'string' && call[0].endsWith('/games?format=lean&murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1&churchyNames=1&sweepRules=2&dotCoexistence=2&gameHandicaps=1'))).toBe(true);
+    expect(send.mock.calls.every((call) => typeof call[0] === 'string' && call[0].endsWith('/games?format=lean&murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1&churchyNames=1&sweepRules=2&dotCoexistence=2&gameHandicaps=1&gameCalculations=2'))).toBe(true);
     expect(send.mock.calls.every((call) => typeof call[1]?.body === 'string'
       && new TextEncoder().encode(call[1].body).length <= maximumGameConfigurationBytes)).toBe(true);
   });
@@ -175,7 +175,7 @@ describe('owner scoring transport', () => {
     const { client, send, token, signal } = fixture();
     expect(await client.load(eventId, roundId, signal)).toEqual(fictionalRoundScores);
     expect(token).toHaveBeenCalledOnce();
-    expect(send).toHaveBeenCalledWith(`https://fictional.example.test/api/events/${eventId}/rounds/${roundId}/scores?format=lean&murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1&churchyNames=1&sweepRules=2&dotCoexistence=2&gameHandicaps=1`, expect.objectContaining({
+    expect(send).toHaveBeenCalledWith(`https://fictional.example.test/api/events/${eventId}/rounds/${roundId}/scores?format=lean&murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1&churchyNames=1&sweepRules=2&dotCoexistence=2&gameHandicaps=1&gameCalculations=2`, expect.objectContaining({
       signal, cache: 'no-store', credentials: 'omit', headers: { Authorization: 'Bearer fictional-token' },
     }));
   });
@@ -240,14 +240,14 @@ describe('owner scoring transport', () => {
   it('encodes a paged history cursor and checks every change scope', async () => {
     const { client, signal, send } = fixture({ changes: [fictionalChange], continuationToken: 'next' });
     await client.history(eventId, roundId, playerId, signal, 'cursor/+=');
-    expect(send.mock.calls[0]?.[0]).toContain('/score-history?murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1&churchyNames=1&sweepRules=2&dotCoexistence=2&gameHandicaps=1&cursor=cursor%2F%2B%3D');
+    expect(send.mock.calls[0]?.[0]).toContain('/score-history?murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1&churchyNames=1&sweepRules=2&dotCoexistence=2&gameHandicaps=1&gameCalculations=2&cursor=cursor%2F%2B%3D');
     const other = fixture({ changes: [{ ...fictionalChange, playerId: fictionalId(2) }] });
     await expect(other.client.history(eventId, roundId, playerId, other.signal)).rejects.toThrow('history response');
     await expect(client.history(eventId, roundId, playerId, signal, 'x'.repeat(2049))).rejects.toThrow('request');
   });
   it.each([
     [401, SessionExpiredError, /Sign in again/], [409, EventChangedError, /Refresh/],
-    [403, Error, /permission/], [429, Error, /Too many requests/], [503, Error, /503/],
+    [403, Error, /permission/], [429, Error, /Too many requests/], [503, Error, /could not load/],
   ] as const)('surfaces status %s without fixture fallback', async (status, errorClass, message) => {
     const { client, signal } = fixture({}, status);
     const result = client.load(eventId, roundId, signal);

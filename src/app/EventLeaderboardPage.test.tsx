@@ -41,7 +41,7 @@ describe('overall result request lifecycle', () => {
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     const unsupported = { ...result, workspace: withoutEventSkins(result.workspace), roundScores: [] };
     view.rerender(<EventLeaderboardPage {...props} client={{ load: async () => Promise.resolve(unsupported) }} />);
-    expect(await screen.findByText(/not supported by this API/)).toBeVisible();
+    expect(await screen.findByText(/temporarily unavailable in this app version/)).toBeVisible();
   });
   it('makes one aggregate request, handles disabled routes, and refreshes manually without stale success', async () => {
     const client = { load: vi.fn().mockResolvedValue(value) };

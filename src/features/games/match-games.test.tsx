@@ -34,6 +34,27 @@ function fixture() {
 }
 
 describe('shared match game setup and presentation', () => {
+  it('keeps an unavailable game draft and lets the user refresh/review after support arrives, without developer instructions', async () => {
+    const f = fixture();
+    const game = { ...f.wolf, version: 2 as const, stakeMinor: 100, handicapRule: 'full-course-v1' as const };
+    const round: RoundScores = { ...f.round, gameHandicapRules: 1, wolfRulesVersions: [1, 2],
+      games: { configuration: { eventId: f.round.eventId, roundId: f.round.roundId, etag: 'same-games', games: [game] }, results: [] } };
+    const latest: RoundScores = { ...round, gameCalculationsVersion: 2 };
+    const onSave = vi.fn().mockResolvedValue(null), onRefresh = vi.fn().mockResolvedValue(latest);
+    render(<RoundGamesPanel round={round} busy={false} onDirtyChange={vi.fn()} onSave={onSave} onRefresh={onRefresh} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Fictional Wolf' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save game' }));
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.getByRole('status')).toHaveTextContent('Your changes are kept');
+    expect(screen.getByRole('status')).not.toHaveTextContent(/API|calculation support/);
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh latest settings' }));
+    await waitFor(() => { expect(onRefresh).toHaveBeenCalledTimes(1); });
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Review my game against latest settings' })).toBeEnabled(); });
+    fireEvent.click(screen.getByRole('button', { name: 'Review my game against latest settings' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save game' }));
+    await waitFor(() => { expect(onSave).toHaveBeenCalledTimes(1); });
+    expect(onSave.mock.calls[0]?.[0]).toEqual([game]);
+  });
   it.each([9, 18] as const)('configures a separate %i-hole Match Play with one explicit stake and no Nassau conversion', async (count) => {
     const f = strokeGameFixture(count);
     const base = strokeGamesRound(f);
@@ -48,8 +69,10 @@ describe('shared match game setup and presentation', () => {
     expect(screen.queryByLabelText('Front stake per side · USD $')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Back stake per side · USD $')).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Playing group'), { target: { value: '1' } });
-    fireEvent.change(screen.getByLabelText('Side A golfer 1'), { target: { value: f.cards[0]?.playerId } });
-    fireEvent.change(screen.getByLabelText('Side B golfer 1'), { target: { value: f.cards[1]?.playerId } });
+    fireEvent.change(screen.getByLabelText('Golfer'), { target: { value: f.cards[0]?.playerId } });
+    fireEvent.change(screen.getByLabelText('Opponent'), { target: { value: f.cards[1]?.playerId } });
+    expect(screen.getByText('Fictional golfer 1 vs Fictional golfer 2', { exact: true })).toBeVisible();
+    expect(screen.queryByLabelText(/Side .* name/)).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Match stake per side · USD $'), { target: { value: '1.01' } });
     fireEvent.click(screen.getByLabelText('Automatic two-down presses'));
     fireEvent.click(screen.getByRole('button', { name: 'Save game' }));
@@ -141,8 +164,8 @@ describe('shared match game setup and presentation', () => {
     expect(screen.queryByLabelText('Game format')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Handicap allowance (%)')).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Playing group'), { target: { value: '1' } });
-    fireEvent.change(screen.getByLabelText('Side A golfer 1'), { target: { value: f.cards[0]?.playerId } });
-    fireEvent.change(screen.getByLabelText('Side B golfer 1'), { target: { value: f.cards[1]?.playerId } });
+    fireEvent.change(screen.getByLabelText('Golfer'), { target: { value: f.cards[0]?.playerId } });
+    fireEvent.change(screen.getByLabelText('Opponent'), { target: { value: f.cards[1]?.playerId } });
     fireEvent.click(screen.getByRole('button', { name: 'No planned money' }));
     fireEvent.click(screen.getByLabelText('Automatic two-down presses'));
     fireEvent.click(screen.getByRole('button', { name: 'Save game' }));
@@ -177,13 +200,16 @@ describe('shared match game setup and presentation', () => {
     const view = render(<RoundLeaderboard round={round} busy={false} onManageGames={vi.fn()} />);
     expect(screen.getByRole('region', { name: 'Fictional Nassau matchboard' })).toBeVisible();
     expect(screen.queryByRole('list', { name: 'Standings' })).not.toBeInTheDocument();
-    expect(screen.getByText('Fictional Red vs Fictional Blue')).toBeVisible();
+    expect(screen.getByRole('heading', { name: /Fictional Red.*Fictional Blue/ })).toBeVisible();
     view.rerender(<SavedScorecards round={round} groupNumber={1} busy={false} onGroupChange={vi.fn()} onEnterScores={vi.fn()} />);
-    expect(within(screen.getByLabelText('Game')).queryByRole('option', { name: /Nassau/ })).not.toBeInTheDocument();
+    expect(within(screen.getByLabelText('Game')).getByRole('option', { name: /Nassau/ })).toBeInTheDocument();
     expect(screen.getByText(/Nassau match bets and presses are in Games/)).toBeVisible();
     expect(screen.getByLabelText('Game')).toHaveValue(strokeGameId(950));
     expect(screen.getAllByText('DOT BALANCE')).toHaveLength(8);
     expect(screen.queryByText('Earned dots')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Game'), { target: { value: round.games?.configuration.games[0]?.id } });
+    expect(screen.queryByRole('row', { name: /Nassau points/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('DOT BALANCE')).not.toBeInTheDocument();
   });
 
   it('stages Wolf edits on canonical saved input without mutating other game drafts or issuing a write', () => {

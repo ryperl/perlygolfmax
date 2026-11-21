@@ -22,7 +22,7 @@ export function createEventLeaderboardClient(apiUrl: string, getToken: () => Pro
     async details(eventId, signal) {
       if (!isUuid(eventId)) throw new Error('Invalid event identifier.');
       const value = await readPrivateValue(request, `events/${eventId}/leaderboard?view=event-skins-details`, signal);
-      if (!isEventSkinsDetails(value) || value.eventId !== eventId) throw new Error('Skins details are unavailable from this API. Refresh to retry.');
+      if (!isEventSkinsDetails(value) || value.eventId !== eventId) throw new Error('Skins details are unavailable right now. Refresh to retry.');
       return value;
     },
     async configureEventSkins(eventId, configuration, etag, requestId, signal) {
@@ -34,7 +34,7 @@ export function createEventLeaderboardClient(apiUrl: string, getToken: () => Pro
         { method: 'PUT', body: { configuration }, etag, requestId });
       if (!isEventSkinsChange(value) || value.eventId !== eventId || value.id !== requestId
         || value.expectedEtag !== etag || !sameJsonValue(value.after, configuration)) {
-        throw new Error('Event skins save is not confirmed. Retain the same request and refresh before retrying.');
+        throw new Error('Event skins save is not confirmed. Refresh saved data before retrying.');
       }
       return value;
     },

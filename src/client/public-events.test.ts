@@ -66,9 +66,9 @@ describe('unsigned public event transport', () => {
     expect(p.send.mock.calls[0]?.[1]).toMatchObject({ signal, credentials: 'omit', cache: 'no-store' });
     expect(new Headers(p.send.mock.calls[0]?.[1]?.headers).get('authorization')).toBeNull();
     const old = fixture(full);
-    await expect(old.services.leaderboard.details?.(details.eventId, signal)).rejects.toThrow('unavailable from this API');
+    await expect(old.services.leaderboard.details?.(details.eventId, signal)).rejects.toThrow('unavailable right now');
     await expect(fixture({ ...breakdown, history: [] }).services.purse.player?.(purse.workspace.event.id, playerId, signal))
-      .rejects.toThrow('unavailable from this API');
+      .rejects.toThrow('unavailable right now');
   });
   it.each(['overall', 'event-skins'] as const)('requests only %s display data and remains compatible with an old full-response API', async (kind) => {
     const full = publicLeaderboardFixture();

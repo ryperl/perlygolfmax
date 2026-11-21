@@ -398,8 +398,8 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     <h1>Round scores</h1>
     {roundPicker && <RoundAccent className="score-round-picker" tone={roundTone}>{roundPicker}</RoundAccent>}
     {tools}
-    {legacyStringRules && <p role="note">This API uses previous String calculations. Updated par-or-better rules require the newer API.</p>}
-    {legacyCategorySweeps && <p role="note">Automatic Long Drive + Blue Plate category sweeps require the newer API.</p>}
+    {legacyStringRules && <p role="note">This round uses previous String calculations. Updated rules are not available in this app version.</p>}
+    {legacyCategorySweeps && <p role="note">Automatic Long Drive + Blue Plate category sweeps are not available in this app version.</p>}
     {accessChanged && <p role="alert">Score permissions or playing groups changed. Your drafts are retained for review only. Discard them before starting new entries.</p>}
     {screen !== 'entry' && connection}
     {error && <p role="alert">{error} {round ? 'Unconfirmed entries are kept on this page.' : 'Private score data is not displayed.'}</p>}

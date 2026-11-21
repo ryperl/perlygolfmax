@@ -31,6 +31,22 @@ function fixture(count: 9 | 18 = 9, startingHole = 1) {
 }
 
 describe('version 2 Wolf earned dots', () => {
+  it.each([9, 18] as const)('gives a full plus CH stroke back on the personal allocation %i rather than inventing a solo win', (count) => {
+    const f = fixture(count);
+    const game = { ...f.game, basis: 'net' as const, handicapRule: 'full-course-v1' as const, stakeMinor: 100 };
+    const round = { ...f.round, players: f.round.players.map((player, index) => ({
+      ...player, handicap: index === 0 ? -1 : 0,
+      layout: index === 0 ? player.layout.map((hole) => ({ ...hole, allocation: count + 1 - hole.allocation })) : player.layout,
+    })) };
+    const cards = f.strokes([3, 4, 4, 4]), records = [f.choice(1, 'blind')];
+    const result = calculateWolf(game, round, cards, records);
+    expect(result.holes[0]).toMatchObject({ status: 'tied', contests: [{
+      kind: 'low', status: 'tied', winner: null, wolfScore: 4, opponentScore: 4,
+    }] });
+    expect(result.players.map((player) => player.balance)).toEqual([0, 0, 0, 0]);
+    expect(result.awards).toEqual([]);
+    expect(isWolfResults(result, game, { round, cards, records })).toBe(true);
+  });
   it.each([
     [[3, 4, 5, 6], [3, 3, 0, 0]],
     [[5, 6, 3, 4], [0, 0, 3, 3]],

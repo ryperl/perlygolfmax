@@ -10,6 +10,10 @@ import { TableScoreStore } from '../scoring/store.js';
 import { TablePurseStore } from '../purse/store.js';
 import { TablePublicEventStore } from '../public-access/store.js';
 import { createPublicHandler } from '../public-access/handlers.js';
+import { publicFixture } from '../public-access/test-support.js';
+import { privateContent } from '../private-values.js';
+import { decode } from '../catalog/entities.js';
+import { isRecord } from '../../../src/contracts/events.js';
 
 const alternateTee = {
   ...tee,
@@ -17,10 +21,12 @@ const alternateTee = {
   name: 'Fictional White',
 };
 
-async function correctionFixture() {
+async function correctionFixture(personalTee = false) {
   const f = catalogFixture();
   f.seedEvent();
-  const version = await f.publish(identifier(100), { ...manifest, teeProfileIds: [tee.id, alternateTee.id] }, [tee, alternateTee]);
+  const alternate = personalTee ? { ...alternateTee, totalPar: alternateTee.totalPar + 1,
+    holes: alternateTee.holes.map((hole) => hole.number === 1 ? { ...hole, par: 5 } : hole) } : alternateTee;
+  const version = await f.publish(identifier(100), { ...manifest, teeProfileIds: [tee.id, alternate.id] }, [tee, alternate]);
   const players = await Promise.all([200, 201, 202, 203].map((id) =>
     f.players.create(creator, identifier(id), `Fictional Player ${String(id)}`)));
   const first = players[0];
@@ -36,12 +42,14 @@ async function correctionFixture() {
     name: 'Fictional Correction Event',
     location: 'Fictional location',
     playerIds: ids,
+    ...(personalTee ? { allowPerGolferTees: true } : {}),
     rounds: [{
       id: roundId,
       name: 'Fictional Round One',
       courseId: version.courseId,
       courseVersionId: version.id,
       teeProfileId: tee.id,
+      ...(personalTee ? { playerTeeSelections: [{ playerId: first.id, teeProfileId: alternate.id }] } : {}),
       groups: [{ number: 1, playerIds: ids }],
     }],
   };
@@ -70,6 +78,83 @@ async function correctionFixture() {
 }
 
 describe('organizer round corrections', () => {
+  it('loads standalone Churchie-v3 cards for an immutable correction award delta without altering captures or raw scores', async () => {
+    const f = await publicFixture();
+    for (const [index, id] of f.input.playerIds.entries()) {
+      const player = await f.players.get(creator, id);
+      await f.players.observe(creator, id, identifier(32100 + index), {
+        value: '0', effectiveDate: '2026-01-01', source: 'Fictional audit input',
+      }, player.etag);
+    }
+    const ids = f.input.rounds[0]?.groups[0]?.playerIds;
+    if (!ids) throw new Error('Missing fictional Churchie group');
+    const game = { id: identifier(32120), name: 'Fictional Churchie audit', kind: 'churchy' as const, version: 3 as const,
+      groupNumber: 1, playerIds: ids, basis: 'net' as const, handicapRule: 'group-low-v1' as const, orderMode: 'tee' as const,
+      currency: 'USD' as const, amountPerDotMinor: 100, specials: [{ kind: 'sandy' as const, units: 1 }] };
+    const setup = await f.scores.saveGames(creator, event.id, f.roundId, [game], null, identifier(32121));
+    const etag = setup.round.games?.configuration.etag;
+    if (!etag) throw new Error('Missing fictional Churchie revision');
+    for (const [index, playerId] of ids.entries()) {
+      await f.scores.write(creator, event.id, f.roundId, playerId, 1, { kind: 'strokes', strokes: 4,
+        ...(index === 0 ? { churchy: { version: 3 as const, gameId: game.id, gameEtag: etag, number: 1, contests: [],
+          players: [{ playerId, counts: { sandy: 1 }, calls: [] }] } } : {}) },
+      null, identifier(32130 + index));
+    }
+    const before = await f.scores.get(creator, event.id, f.roundId);
+    const capture = structuredClone(f.rows.get(`${event.id}|index-capture:${f.roundId}`));
+    const model = await f.workspace.correctionModel(creator, event.id, f.roundId);
+    const requestId = identifier(32140);
+    await f.workspace.correctRound(creator, event.id, f.roundId, requestId, {
+      expected: { eventEtag: model.eventEtag, roundEtag: model.roundEtag, gamesEtag: model.gamesEtag ?? null,
+        inputRevision: model.inputRevision ?? null }, reason: 'Fictional index correction.',
+      correction: { teeProfileId: model.teeProfileId, groups: model.groups,
+        players: model.players.map((player) => ({ playerId: player.playerId,
+          handicapIndexValue: player.playerId === ids[0] ? '4' : player.handicapIndex?.value ?? null })) },
+    });
+    const key = `round-correction:${f.roundId}:${requestId}`;
+    const row = f.rows.get(`${event.id}|${key}`);
+    if (!row) throw new Error('Missing fictional correction receipt');
+    const stored = decode(await privateContent(f.table, event.id, key, row.content), isRecord);
+    if (!isRecord(stored.receipt)) throw new Error('Invalid fictional correction receipt');
+    if (!Array.isArray(stored.receipt.dotAwardAudit)) throw new Error('Missing fictional award audit');
+    const audit: unknown = stored.receipt.dotAwardAudit[0];
+    if (!isRecord(audit)) throw new Error('Invalid fictional award audit');
+    expect(stored.receipt.dotAwardAudit).toEqual([expect.objectContaining({
+      kind: 'churchy', version: 3, gameId: game.id,
+      before: [expect.objectContaining({ kind: 'sandy' })],
+    })]);
+    expect(audit.after).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'sandy' }), expect.objectContaining({ kind: 'low' })]));
+    expect((await f.scores.get(creator, event.id, f.roundId)).cards).toEqual(before.cards);
+    expect(f.rows.get(`${event.id}|index-capture:${f.roundId}`)).toEqual(capture);
+  });
+  it.each(['empty', 'default'] as const)('clears the last personal tee with an explicit %s selection and preserves omission, scores and captures', async (mode) => {
+    const f = await correctionFixture(true);
+    const model = await f.workspace.correctionModel(creator, event.id, f.roundId);
+    const before = await f.scores.get(creator, event.id, f.roundId);
+    const capture = structuredClone(f.rows.get(`${event.id}|index-capture:${f.roundId}`));
+    const correction = { teeProfileId: tee.id, groups: model.groups,
+      players: model.players.map((player) => ({ playerId: player.playerId, handicapIndexValue: player.handicapIndex?.value ?? null })) };
+    const expected = { eventEtag: model.eventEtag, roundEtag: model.roundEtag, gamesEtag: model.gamesEtag ?? null, inputRevision: model.inputRevision ?? null };
+    expect(before.playerTees?.[0]?.profile.holes[0]?.par).toBe(5);
+    expect(before.games?.results[0]?.players[0]?.holes[0]?.points).toBe(3);
+    const omitted = await f.workspace.correctRound(creator, event.id, f.roundId, identifier(920), {
+      expected, correction, reason: 'Fictional omitted tee selection.',
+    });
+    expect(omitted.applied).toBe(false);
+    expect((await f.scores.get(creator, event.id, f.roundId)).playerTees).toEqual(before.playerTees);
+    const body = { expected, reason: 'Fictional personal tee reset.', correction: { ...correction,
+      playerTeeSelections: mode === 'empty' ? [] : [{ playerId: f.ids[0] ?? '', teeProfileId: tee.id }] } };
+    const result = await f.workspace.correctRound(creator, event.id, f.roundId, identifier(921), body);
+    expect(result.applied).toBe(true);
+    const after = await f.scores.get(creator, event.id, f.roundId);
+    expect(after.playerTees ?? []).toEqual([]);
+    expect(after.games?.results[0]?.players[0]?.holes[0]?.points).toBe(2);
+    expect(after.cards).toEqual(before.cards);
+    expect(f.rows.get(`${event.id}|index-capture:${f.roundId}`)).toEqual(capture);
+    expect(await f.workspace.correctRound(creator, event.id, f.roundId, identifier(921), body)).toEqual({
+      ...result, applied: false,
+    });
+  });
   it('applies HI/tee/group/team correction, keeps score cards unchanged and emits review warnings', async () => {
     const f = await correctionFixture();
     const before = await f.workspace.correctionModel(creator, event.id, f.roundId);

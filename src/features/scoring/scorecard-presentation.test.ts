@@ -1,12 +1,30 @@
 import { describe, expect, it } from 'vitest';
 import { fictionalRoundScores } from '../../client/scoring.test-support';
-import { ballDropContribution, ballDropScoreText, cardTotalText, pointsTotalText, scorecardBallDropTeams, scorecardGame, scorecardGameWarnings, scorecardHandicapStrokes, summarizeCard } from './scorecard-presentation';
+import { ballDropContribution, ballDropScoreText, cardTotalText, pointsTotalText, scorecardBallDropTeams, scorecardGame, scorecardGameWarnings, scorecardHandicapStrokes, scorecardStrokeHandicap, summarizeCard } from './scorecard-presentation';
 import { scorecardGamesFixture } from './scorecard-games.test-support';
 import { ballDropFormat, strokeGameFixture, strokeGamesRound } from '../../domain/stroke-games.test-support';
 
 const card = fictionalRoundScores.cards[0];
 if (!card) throw new Error('Missing fictional card.');
 describe('scorecard displayed totals', () => {
+  it.each([1, 2] as const)('uses only an explicit compatible Wolf-v%i link for Dots stroke marks and retains the complete group low', (version) => {
+    const f = strokeGameFixture(18), base = strokeGamesRound(f), ids = f.cards.map((card) => card.playerId);
+    const wolf = { id: '00000000-0000-4000-8000-000000000980', name: 'Fictional Wolf',
+      kind: 'wolf' as const, version, basis: 'net' as const, handicapRule: 'group-low-v1' as const,
+      groupNumber: 1, playerIds: ids, allowPig: true, ...(version === 2 ? { stakeMinor: 100 } : {}) };
+    const dots = { id: '00000000-0000-4000-8000-000000000981', name: 'Fictional linked Dots',
+      kind: 'dots' as const, version: 1 as const, mode: 'linked' as const, groupNumber: 1, playerIds: ids,
+      linkedGameId: wolf.id, specials: [] };
+    const round = { ...base, courseHandicaps: ids.map((playerId, index) => ({
+      playerId, courseHandicap: [11, 4, 8, 3][index] ?? null,
+    })), games: { configuration: { eventId: base.eventId, roundId: base.roundId, etag: 'fictional', games: [wolf, dots] }, results: [] } };
+    expect(scorecardStrokeHandicap(scorecardGame(round, dots.id), ids[0] ?? '', round.courseHandicaps, round.groups))
+      .toEqual({ basis: 'SO', value: 8 });
+    const unrelated = { ...round, games: { ...round.games, configuration: { ...round.games.configuration,
+      games: [wolf, { ...dots, linkedGameId: '00000000-0000-4000-8000-000000000999' }] } } };
+    expect(scorecardStrokeHandicap(scorecardGame(unrelated, dots.id), ids[0] ?? '', unrelated.courseHandicaps, unrelated.groups))
+      .toEqual({ basis: 'CH', value: 11 });
+  });
   describe('tee Course Handicap stroke allocation', () => {
     const layout = Array.from({ length: 18 }, (_, index) => ({
       number: index + 1, sourceId: index + 1, length: 350, par: 4, allocation: (index + 8) % 18 + 1,

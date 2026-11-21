@@ -69,16 +69,20 @@ export interface DotsCall {
   readonly murphyPresses?: 0 | 1 | 2;
   readonly murphyTarget?: 'par' | 'birdie';
   readonly pareeTarget?: 'par';
+  readonly pullyMurphyTarget?: 'par';
 }
 
 export function dotsCallResult(call: DotsCall, score: HoleScore | undefined, par: number | undefined): DotsCall['result'] {
   if (!(call.kind === 'murphy' && call.murphyTarget !== undefined)
-    && !(call.kind === 'paree' && call.pareeTarget === 'par')) return call.result;
+    && !(call.kind === 'paree' && call.pareeTarget === 'par')
+    && !(call.kind === 'pully-murphy' && call.pullyMurphyTarget === 'par')) return call.result;
   if (!score || score.kind === 'unplayed') return 'pending';
-  if (call.pareeTarget !== undefined && (par === undefined || !Number.isSafeInteger(par) || par < 1)) return 'pending';
+  if ((call.pareeTarget !== undefined || call.pullyMurphyTarget !== undefined)
+    && (par === undefined || !Number.isSafeInteger(par) || par < 1)) return 'pending';
   if (score.kind !== 'strokes') return 'failure';
   if (par === undefined || !Number.isSafeInteger(par) || par < 1) return 'pending';
-  return score.strokes <= par - (call.murphyTarget === 'birdie' ? 1 : 0) ? 'success' : 'failure';
+  return (call.pullyMurphyTarget === 'par' ? score.strokes === par
+    : score.strokes <= par - (call.murphyTarget === 'birdie' ? 1 : 0)) ? 'success' : 'failure';
 }
 export interface DotsPlayerDeclaration {
   readonly playerId: string; readonly counts: Readonly<Partial<Record<DotsSpecialKind, number>>>;
@@ -103,6 +107,14 @@ export interface DotsResults {
   readonly unawarded: readonly { readonly kind: DotsSpecialKind; readonly sourceHoles: readonly number[]; readonly units: number }[];
   readonly issues: readonly string[];
   readonly rotation?: DotsRotationContext;
+  readonly reviewRequired?: readonly DotSpecialReview[];
+}
+
+export interface DotSpecialReview {
+  readonly number: number;
+  readonly kind: DotsSpecialKind;
+  readonly playerId?: string;
+  readonly reason: 'score-qualification' | 'category-hole';
 }
 
 export interface DotsDeclarationIssue {
@@ -115,7 +127,7 @@ export function sameDotsPlayerDeclaration(left: DotsPlayerDeclaration | undefine
   const key = (player: DotsPlayerDeclaration | undefined) => player && JSON.stringify({
     playerId: player.playerId, counts: Object.entries(player.counts).sort(([a], [b]) => a.localeCompare(b)),
     calls: player.calls.map((call) => [call.id, call.kind, call.result, call.murphyPresses ?? null,
-      call.murphyTarget ?? null, call.pareeTarget ?? null]),
+      call.murphyTarget ?? null, call.pareeTarget ?? null, call.pullyMurphyTarget ?? null]),
   });
   return key(left) === key(right);
 }
@@ -365,6 +377,7 @@ export function dotsRecordsMatchGame(
   records: readonly DotsHoleRecord[], game: DotsGameDefinition, round: DotRoundInput,
   contexts: readonly DotHoleContext[] = [],
   previous?: { readonly records: readonly DotsHoleRecord[]; readonly round: DotRoundInput },
+  qualification: 'strict' | 'review' = 'strict',
 ): boolean {
   if (!dotsDefinitionMatchesRound(game, round) || !unique(records.map((record) => record.number))) return false;
   const rotations = records.filter((record) => record.rotation !== undefined);
@@ -396,10 +409,10 @@ export function dotsRecordsMatchGame(
         if (!dotsManualKindsFor(game).some((manual) => manual === kind) || !game.specials.some((entry) => entry.kind === kind)
           || !Number.isSafeInteger(count) || count < 0) return false;
         if (!count) continue;
-        if (kind === 'gorilla' && par !== 5) return false;
-        if (!historical(kind) && score?.kind === 'strokes' && (parQualified.some((entry) => entry === kind) && (par === undefined || score.strokes > par)
+        if (qualification === 'strict' && kind === 'gorilla' && par !== 5) return false;
+        if (qualification === 'strict' && !historical(kind) && score?.kind === 'strokes' && (parQualified.some((entry) => entry === kind) && (par === undefined || score.strokes > par)
           || kind === 'pully' && !pullyScore(score.strokes, par))) return false;
-        if (!historical(kind) && score && score.kind !== 'unplayed' && score.kind !== 'strokes'
+        if (qualification === 'strict' && !historical(kind) && score && score.kind !== 'unplayed' && score.kind !== 'strokes'
           && (parQualified.some((entry) => entry === kind) || kind === 'pully')) return false;
       }
       if ((player.counts.dime ?? 0) > 0 && (player.counts['super-dime'] ?? 0) > 0 && !unchanged) return false;
@@ -411,14 +424,17 @@ export function dotsRecordsMatchGame(
           || !['par', 'birdie'].includes(call.murphyTarget) || call.result !== 'pending')) return false;
         if (call.pareeTarget !== undefined && (call.kind !== 'paree'
           || call.result !== 'pending')) return false;
-        if (!historical(call.kind) && call.result === 'success' && score && score.kind !== 'unplayed'
+        if (call.pullyMurphyTarget !== undefined && (call.kind !== 'pully-murphy'
+          || call.result !== 'pending')) return false;
+        if (qualification === 'strict' && !historical(call.kind) && call.result === 'success' && score && score.kind !== 'unplayed'
           && (score.kind !== 'strokes' || par === undefined
             || (call.kind === 'pully-murphy' ? score.strokes !== par : score.strokes > par))) return false;
       }
     }
     for (const contest of record.contests) {
       const neededForAssassin = enabled.has('assassin') && contest.kind !== 'long-drive';
-      if (!enabled.has(contest.kind) && !neededForAssassin || hole.par !== (contest.kind === 'kp' ? 3 : 5)) return false;
+      if (!enabled.has(contest.kind) && !neededForAssassin
+        || qualification === 'strict' && hole.par !== (contest.kind === 'kp' ? 3 : 5)) return false;
       if (contest.status === 'awarded') {
         if (!contest.winnerId || !game.playerIds.includes(contest.winnerId)
           || contest.secondId !== undefined && (!game.playerIds.includes(contest.secondId)
@@ -438,7 +454,8 @@ export function calculateDots(
   const rotation = game.version === 2 ? dotsRotationContext(game, round, records) : undefined;
   const effectiveContexts = rotation?.contexts ?? contexts;
   const valid = dotsDefinitionMatchesRound(game, round);
-  const recordsValid = valid && dotsRecordsMatchGame(records, game, round);
+  const recordsValid = valid && dotsRecordsMatchGame(records, game, round, [], undefined, 'review');
+  const reviewRequired: DotSpecialReview[] = [];
   if (!valid) issues.push('invalid-dots-group');
   else if (!recordsValid) issues.push('invalid-dots-records');
   const units = new Map(game.specials.map((special) => [special.kind, special.units]));
@@ -465,11 +482,24 @@ export function calculateDots(
   const mark = (hole: WorkingHole, status: 'pending' | 'unavailable', reason: string) => {
     if (hole.status !== 'unavailable') { hole.status = status; hole.reason = reason; }
   };
+  const review = (hole: WorkingHole, kind: DotsSpecialKind, reason: DotSpecialReview['reason'], playerId?: string) => {
+    if (!reviewRequired.some((entry) => entry.number === hole.number && entry.kind === kind && entry.playerId === playerId)) {
+      reviewRequired.push({ number: hole.number, kind, reason, ...(playerId === undefined ? {} : { playerId }) });
+    }
+    mark(hole, 'pending', 'special-review-required');
+  };
   for (const hole of holes) {
     if (!valid || !recordsValid || !configValid || !supportedMode) { mark(hole, 'unavailable', issues[0] ?? 'invalid-dots-input'); continue; }
     const context = contextFor(game, hole.number, effectiveContexts);
     const record = records.find((entry) => entry.number === hole.number);
     const defaultPar = round.layout.find((entry) => entry.number === hole.number)?.par;
+    for (const contest of record?.contests ?? []) {
+      if (defaultPar !== (contest.kind === 'kp' ? 3 : 5)) {
+        review(hole, contest.kind, 'category-hole', contest.winnerId);
+        const carry = carries.get(contest.kind);
+        if (carry) carry.blocked = 'pending';
+      }
+    }
     if (context.status !== 'ready') mark(hole, context.status, context.reason ?? 'linked-context-not-ready');
     const evidence = (sourceHoles: readonly number[]) => game.playerIds.flatMap((playerId) => sourceHoles.flatMap((number) => {
       const layout = round.playerLayouts?.find((entry) => entry.playerId === playerId)?.layout ?? round.layout;
@@ -510,7 +540,9 @@ export function calculateDots(
         if (kind === 'dime' && (declaration?.counts['super-dime'] ?? 0) > 0) continue;
         if ((parQualified.includes(kind) || kind === 'pully') && pending) { mark(hole, 'pending', 'special-needs-score'); continue; }
         if (parQualified.includes(kind) && (strokes === null || par === undefined || strokes > par)
-          || kind === 'pully' && !pullyScore(strokes, par) || kind === 'gorilla' && par !== 5) continue;
+          || kind === 'pully' && !pullyScore(strokes, par) || kind === 'gorilla' && par !== 5) {
+          review(hole, kind, 'score-qualification', playerId); continue;
+        }
         add(kind, playerId, kind === 'walk' || kind === 'pickup' ? opponents(playerId) : own(playerId),
           count, 'manual', [hole.number], kind === 'sweep' ? `Manually awarded ${String(count)} Sweep.`
             : `Declared ${String(count)} ${kind}; qualifying gross facts are honor-system claims.`);
@@ -519,9 +551,14 @@ export function calculateDots(
         const result = dotsCallResult(call, score, par);
         if (result === 'pending') { mark(hole, 'pending', 'unresolved-call'); continue; }
         if (result === 'success' && pending) { mark(hole, 'pending', 'call-needs-score'); continue; }
+        if (result === 'success' && (strokes === null || par === undefined
+          || (call.kind === 'pully-murphy' ? strokes !== par : strokes > par))) {
+          review(hole, call.kind, 'score-qualification', playerId); continue;
+        }
         add(call.kind, playerId, result === 'failure' ? opponents(playerId) : own(playerId),
           1 + (call.murphyPresses ?? 0), 'manual', [hole.number], `${dotsSpecialCatalog.find((entry) => entry.kind === call.kind)?.label ?? call.kind} call: ${result}.`, call.id,
-          call.murphyTarget !== undefined || call.pareeTarget !== undefined || call.murphyPresses !== undefined ? 1 : context.multiplier);
+          call.murphyTarget !== undefined || call.pareeTarget !== undefined
+            || call.murphyPresses !== undefined ? 1 : context.multiplier);
       }
       if (strokes !== null && par !== undefined) {
         if (strokes === par - 1) add('birdie', playerId, own(playerId), 1, 'automatic', [hole.number], 'Exactly one under personal gross par.');
@@ -637,5 +674,5 @@ export function calculateDots(
   return { status: issues.length ? 'unavailable' : status,
     players: issues.length ? players.map((player) => ({ ...player, status: 'unavailable' })) : players,
     holes: resultHoles, awards, unawarded, issues: [...new Set(issues)],
-    ...(rotation ? { rotation } : {}) };
+    ...(rotation ? { rotation } : {}), ...(reviewRequired.length ? { reviewRequired } : {}) };
 }

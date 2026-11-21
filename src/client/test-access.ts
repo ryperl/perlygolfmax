@@ -100,7 +100,7 @@ export function createTesterAccessClient(apiUrl: string, getToken: () => Promise
           const value = await scores.save(eventId, roundId, playerId, holeNumber, score, etag, requestId, signal);
           if (value.round.permissions?.role !== 'tester' || !isEventTesterIdentity(value.change.recordedBy)
             || value.change.recordedBy.eventId !== access.eventId || value.change.recordedBy.linkId !== access.linkId) {
-            throw new Error('Invalid tester save acknowledgement. The outcome is uncertain; retain this draft and request ID and refresh to review.');
+            throw new Error('Invalid tester save acknowledgement. The outcome is uncertain; keep your changes and refresh saved data before retrying.');
           }
           return value;
         },

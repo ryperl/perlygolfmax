@@ -57,13 +57,14 @@ function dotRecords(records: readonly ChurchySpecialsV3[]): readonly DotsHoleRec
 }
 
 export function churchyV3RecordsMatchGame(records: readonly ChurchySpecialsV3[], game: ChurchyGameDefinitionV3,
-  round: DotRoundInput, previous?: { readonly records: readonly ChurchySpecialsV3[]; readonly round: DotRoundInput }): boolean {
+  round: DotRoundInput, previous?: { readonly records: readonly ChurchySpecialsV3[]; readonly round: DotRoundInput },
+  qualification: 'strict' | 'review' = 'strict'): boolean {
   return !churchyV3Context(game, round, records).contexts.some((entry) => entry.status === 'unavailable')
     && records.every((record) => record.players.every((player) => dotsDeclarationIssues(player).conflicts.length === 0
       || previous?.records.some((entry) => entry.number === record.number && entry.players.some((prior) =>
         sameDotsPlayerDeclaration(player, prior)))))
     && dotsRecordsMatchGame(dotRecords(records), churchyDotsDefinition(game), round, [],
-      previous ? { records: dotRecords(previous.records), round: previous.round } : undefined);
+      previous ? { records: dotRecords(previous.records), round: previous.round } : undefined, qualification);
 }
 
 const sum = (values: readonly number[]) => {
@@ -78,7 +79,7 @@ export function calculateChurchyV3Results(game: ChurchyGameDefinitionV3, inputs:
     playerLayouts: inputs.map((input) => ({ playerId: input.playerId, layout: input.layout })) };
   const records = churchyV3Records(game, groups, cards);
   const rotation = churchyV3Context(game, round, records);
-  const validRecords = churchyV3RecordsMatchGame(records, game, round);
+  const validRecords = churchyV3RecordsMatchGame(records, game, round, undefined, 'review');
   const selected = game.playerIds.map((id) => inputs.find((entry) => entry.playerId === id));
   const handicaps = selected.flatMap((input) => input && typeof input.handicap === 'number' && Number.isSafeInteger(input.handicap)
     && input.layout.length === round.layout.length && new Set(input.layout.map((hole) => hole.allocation)).size === round.layout.length
@@ -199,6 +200,7 @@ export function calculateChurchyV3Results(game: ChurchyGameDefinitionV3, inputs:
   }
   return { gameId: game.id, kind: 'churchy', version: 3, players: output, churchy: {
     holes, status, unawardedHigh: highCarry, unawardedLow: lowCarry, internalSettlement, awards: [...baseAwards, ...dots.awards],
+    ...(dots.reviewRequired ? { reviewRequired: dots.reviewRequired } : {}),
     ...(rotation.rotation ? { order: rotation.rotation } : {}),
     settlement: internalSettlement.players.map((player) => ({ playerId: player.playerId,
       paysMinor: player.netMinor === null ? null : Math.max(0, -player.netMinor),

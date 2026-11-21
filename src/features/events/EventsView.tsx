@@ -28,7 +28,7 @@ export function EventsView({ state, busy, notice, view, onReload, onRestart, onC
     <p className="eyebrow">Organizer workspace</p>
     <h1>Events</h1>
     <p className="page-description">Sign in here for course, player and event management. Golfers use the public scoreboard without an account. Organizer settings stay protected.</p>
-    {state.kind === 'unconfigured' && <div className="panel"><h2>Event services are not configured</h2><p>{state.message}</p><p>No sign-in or saved-event connection is active. Fictional content is available separately under Preview.</p></div>}
+    {state.kind === 'unconfigured' && <div className="panel"><h2>Organizer services are unavailable</h2><p>{state.message}</p><p>No sign-in or saved-event connection is active. Fictional content is available separately under Preview.</p></div>}
     {state.kind === 'signed-out' && <div className="panel"><h2>Sign in with an email code</h2><p>Use Sign in above. No Microsoft account is needed. Signing in does not grant event access.</p>{state.message && <p role="status">{state.message}</p>}</div>}
     {state.kind === 'loading' && <p role="status">Loading your events... All pages must load before date order is available.</p>}
     {state.kind === 'error' && <div className="panel"><p role="alert">{state.message}</p><button disabled={busy} onClick={onReload}>Try again</button>

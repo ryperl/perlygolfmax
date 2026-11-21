@@ -2,6 +2,7 @@ import type { HttpRequest, HttpResponseInit, InvocationContext } from '@azure/fu
 import { isEventRevision, isRecord, isUuid } from '../../../src/contracts/events.js';
 import { maximumEventSetupBytes } from '../../../src/domain/setup.js';
 import { ApiError } from '../errors.js';
+import { failureDiagnostics } from '../diagnostics.js';
 import { readCursor, readJson, response } from '../http.js';
 import { privateReadResponse } from '../private-transport.js';
 import type { RequestLimiter } from '../limits.js';
@@ -49,8 +50,8 @@ export function createQuickRoundHandler(resolve: () => QuickRoundApi, action: Qu
     } catch (error) {
       const status = error instanceof ApiError ? error.status : 503;
       const code = error instanceof ApiError ? error.code : 'SERVICE_UNAVAILABLE';
-      if (status >= 500) context.error('Quick round API failed', { code, invocationId: context.invocationId });
-      else context.warn('Quick round API rejected', { code, status, invocationId: context.invocationId });
+      if (status >= 500) context.error('Quick round API failed', { code, action, status, invocationId: context.invocationId, ...failureDiagnostics(error) });
+      else context.warn('Quick round API rejected', { code, action, status, invocationId: context.invocationId });
       return response(status, { code });
     }
   };

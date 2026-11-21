@@ -16,7 +16,7 @@ let round: RoundScores = {
   eventId: strokeGameId(900), eventName: 'Fictional handicap rules', eventStatus: 'active', roundId: snapshot.id,
   roundName: snapshot.name, courseName: snapshot.course.name, teeName: snapshot.teeProfile.name,
   teeCategory: snapshot.teeProfile.category, layout: snapshot.teeProfile.holes, groups: snapshot.groups,
-  courseHandicaps: publishedCourseHandicaps(snapshot), teeStrokeAllocation: true, gameHandicapRules: 1,
+  courseHandicaps: publishedCourseHandicaps(snapshot), teeStrokeAllocation: true, gameHandicapRules: 1, gameCalculationsVersion: 2,
   cards: f.cards.map((card) => ({ ...card, etag: null, updatedAt: null,
     holes: card.holes.map((hole) => ({ ...hole, score: { kind: 'unplayed' } })) })),
   setupLocked: false, lastUpdatedAt: null, supportedGameKinds: ['stableford', 'ball-drop', 'skins', 'stroke-play'],

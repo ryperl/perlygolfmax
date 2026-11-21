@@ -9,7 +9,7 @@ import { gameDisplayName, gameScoringLabel } from '../games';
 import { PlayerScorecardRecap } from './PlayerScorecardRecap';
 import { ScorecardNine } from './ScorecardNine';
 import { cardFor } from './entry-state';
-import { scorecardGame, scorecardGameWarnings, summarizeCard } from './scorecard-presentation';
+import { scorecardGame, scorecardGameWarnings, scorecardUsesStrokesOff, summarizeCard } from './scorecard-presentation';
 import { MatchPlaySummary } from './MatchPlayScorecard';
 
 export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnterScores }: {
@@ -26,7 +26,7 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
   if (!group) throw new Error('Saved round has no groups.');
   const game = scorecardGame(round, gameId, group.playerIds);
   const games = visibleGames(round.games?.configuration.games ?? [], round.churchyEnabled).filter((game) =>
-    game.kind !== 'nassau' && (game.kind === 'match-play' ? game.groupNumber === group.number
+    (game.kind === 'nassau' || game.kind === 'match-play' ? game.groupNumber === group.number
       : (game.kind !== 'churchy' && game.kind !== 'wolf' && game.kind !== 'dots') || group.playerIds.every((id) => game.playerIds.includes(id))));
   const cards = group.playerIds.map((id) => cardFor(round, id));
   const player = cards.find((card) => card.playerId === playerId);
@@ -80,8 +80,8 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
       <button type="button" className="scorecard-back" onClick={() => { setPlayerId(null); }}>Back to group scorecard</button>
       <PlayerScorecardRecap round={round} card={player} gameId={game?.definition.id ?? null} />
     </> : <>
-      {cards.some((card) => (round.courseHandicaps?.find((entry) => entry.playerId === card.playerId)?.courseHandicap ?? 0) > 0)
-        && <p className="scorecard-stroke-key">Stroke dots: tee Course Handicap.</p>}
+      {(scorecardUsesStrokesOff(game) || cards.some((card) => (round.courseHandicaps?.find((entry) => entry.playerId === card.playerId)?.courseHandicap ?? 0) > 0))
+        && <p className="scorecard-stroke-key">Stroke dots: {scorecardUsesStrokesOff(game) ? 'SO' : 'tee Course Handicap'}.</p>}
       {scorecardGameWarnings(game, cards).map((warning) => <p className="scorecard-game-unavailable" key={warning}>{warning}</p>)}
       {front.length > 0 && back.length > 0 && <div className="scorecard-nine-picker" role="group" aria-label="Holes to display">
         <button type="button" aria-pressed={nine === 'front'} onClick={() => { setNine('front'); }}>Front 9</button>
@@ -91,11 +91,13 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
       <div className="recap-sections">
         {front.length > 0 && (nine !== 'back' || back.length === 0) && <ScorecardNine label="Front nine" subtotal="Out" layout={front} fullLayout={layout} cards={cards} game={game}
           matchPlayers={round.cards}
+          groups={round.groups}
           courseHandicaps={round.courseHandicaps ?? []}
           teeStrokeAllocation={round.teeStrokeAllocation}
           playerTees={round.playerTees} defaultTeeLabel={`${round.teeName} / ${round.teeCategory}`} onPlayerSelect={setPlayerId} />}
         {back.length > 0 && (nine !== 'front' || front.length === 0) && <ScorecardNine label="Back nine" subtotal="In" layout={back} fullLayout={layout} cards={cards} game={game}
           matchPlayers={round.cards}
+          groups={round.groups}
           courseHandicaps={round.courseHandicaps ?? []}
           teeStrokeAllocation={round.teeStrokeAllocation}
           playerTees={round.playerTees} defaultTeeLabel={`${round.teeName} / ${round.teeCategory}`} onPlayerSelect={setPlayerId} />}

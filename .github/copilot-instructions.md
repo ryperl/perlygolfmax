@@ -48,6 +48,10 @@
 - Keep public views compact and informative: remove redundant metrics and
   routine explanatory text. Prefer small inline SVGs for familiar meaning,
   retaining accessible labels and essential state/error explanations.
+- Keep recovery actionable for the user's role; never ask players to update
+  APIs, repair deployment settings or manage retry IDs. Preserve drafts and
+  distinguish unconfirmed writes. Log safe operation/error/correlation fields
+  through existing developer telemetry, never scores, identities or secrets.
 - Shape network reads for their display purpose. Use explicit allowlisted
   summary contracts instead of sending full scorecards, captures or editing
   context to simple public views. Preserve server authority, exact money,
@@ -429,7 +433,8 @@
 - Scoring names show server-derived Course Handicap from captured HI and each
   golfer's captured tee, without game allowance or a stroke-allocation requirement.
   Keep scratch/plus values distinct from NH and other unavailable inputs.
-  Scorecard stroke dots use full server Course Handicap and the captured
+  Scorecard stroke dots use applicable selected-game SO, otherwise full server
+  Course Handicap, and the captured
   personal/default tee's complete stroke allocation, never game allowances,
   current catalog HI or Churchie earned dots. Use shared allocation math;
   never halve an already-calculated nine-hole CH again. Bound visual counts,

@@ -4,7 +4,7 @@ import type { Scorecard } from './scoring.js';
 import { handicapStrokesForHole } from './stableford.js';
 import { calculateDotSettlement } from './dot-settlement.js';
 import type { InternalGameSettlement } from './dot-settlement.js';
-import type { DotsHoleRecord, DotsSpecialSelection, DotsRotationStart } from './dots.js';
+import type { DotSpecialReview, DotsHoleRecord, DotsSpecialSelection, DotsRotationStart } from './dots.js';
 import type { DotAward } from './dot-context.js';
 import type { RoundGroup } from './setup.js';
 import { calculateChurchyV3Results } from './churchy-v3.js';
@@ -135,6 +135,7 @@ export interface ChurchyHoleReceipt {
   readonly awards: readonly { readonly playerId: string; readonly dots: number | null }[];
 }
 export interface ChurchyResults {
+  readonly reviewRequired?: readonly DotSpecialReview[];
   readonly awards?: readonly DotAward[];
   readonly order?: DotsRotationStart;
   readonly internalSettlement?: InternalGameSettlement;

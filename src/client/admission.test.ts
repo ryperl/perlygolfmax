@@ -83,7 +83,7 @@ describe('private admissions client', () => {
     const signal = new AbortController().signal;
     await expect(client.claim(eventId, { inviteId, token }, requestId, signal)).rejects.toBeInstanceOf(SessionExpiredError);
     await expect(client.claim(eventId, { inviteId, token }, requestId, signal)).rejects.toBeInstanceOf(EventChangedError);
-    await expect(client.claim(eventId, { inviteId, token }, requestId, signal)).rejects.toThrow('503');
+    await expect(client.claim(eventId, { inviteId, token }, requestId, signal)).rejects.toMatchObject({ status: 503 });
     await expect(client.invite(eventId, { inviteId, playerId: eventId, tokenHash: 'a'.repeat(64) }, '*', requestId, signal)).rejects.toThrow('Invalid');
     const controller = new AbortController();
     controller.abort();

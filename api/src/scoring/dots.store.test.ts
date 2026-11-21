@@ -18,6 +18,7 @@ import { parseScoreWriteBody } from './handlers.js';
 import { TableScoreStore } from './store.js';
 import { coexistenceRoundScores } from '../../../src/contracts/dot-coexistence.js';
 import { gameHandicapRoundScores } from '../../../src/contracts/game-handicaps.js';
+import { gameCalculationRoundScores } from '../../../src/contracts/game-calculations.js';
 
 function dots(ids: readonly string[], id = 19000): Extract<DotsGameDefinition, { readonly mode: 'individual' }> {
   return { id: identifier(id), name: 'Fictional Dots', kind: 'dots', version: 1, groupNumber: 1,
@@ -83,7 +84,7 @@ describe('persisted independent Dots and earned Wolf authority', () => {
     expect(round.dotsIndividualPlayerCounts).toEqual([1, 2, 3, 4]);
     expect((await f.scores.get(creator, event.id, f.roundId)).dotsIndividualPlayerCounts).toEqual([1, 2, 3, 4]);
     expect(isRoundScores(round)).toBe(true);
-    expect(decodeRoundScores(leanRoundScores(round, false, false, true))).toEqual(gameHandicapRoundScores(coexistenceRoundScores(round)));
+    expect(decodeRoundScores(leanRoundScores(round, false, false, true))).toEqual(gameCalculationRoundScores(gameHandicapRoundScores(coexistenceRoundScores(round))));
     const special: DotsHoleRecord = { number: 1, gameId: game.id, gameEtag: round.games?.configuration.etag ?? '',
       players: [{ playerId: f.playerId, counts: { sandy: 2, walk: 1, pickup: 1 }, calls: [] }], contests: [] };
     const score = { kind: 'strokes' as const, strokes: 4, dots: [special] };
@@ -116,7 +117,7 @@ describe('persisted independent Dots and earned Wolf authority', () => {
     }
     const reloaded = await f.scores.get(actor, event.id, f.roundId);
     expect(isRoundScores(reloaded)).toBe(true);
-    expect(decodeRoundScores(leanRoundScores(reloaded, false, false, true))).toEqual(gameHandicapRoundScores(coexistenceRoundScores(reloaded)));
+    expect(decodeRoundScores(leanRoundScores(reloaded, false, false, true))).toEqual(gameCalculationRoundScores(gameHandicapRoundScores(coexistenceRoundScores(reloaded))));
     expect(reloaded.games?.results[0]?.players.map((player) => player.totalPoints)).toEqual([
       2, ...f.input.playerIds.slice(1).map(() => 3),
     ]);

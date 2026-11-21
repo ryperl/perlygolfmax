@@ -89,11 +89,11 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
       <option value="linked" disabled={smallGroup || draft.dotsVersion === 2}>Link to earned Wolf</option></select></label>
     </div>
     {mode === 'individual' && smallGroup && !supportsGroup(mode, group.playerIds.length, individualPlayerCounts)
-      && <p role="alert">This API does not support individual Dots for this group size. Refresh after an API upgrade; your draft is retained.</p>}
+      && <p role="alert">Individual Dots for this group size is temporarily unavailable in this app version. Your draft is retained.</p>}
     {smallGroup && <small>Partner modes require four players.</small>}
     {mode === 'rotating' && <p>Choose P1–P4 on your first played hole in score entry. Partners rotate in your playing circuit; only specials are shared, with no base match points.</p>}
     {draft.dotsVersion === 1 && <small>Saved version-1 rules stay unchanged. Create a separate rotating Dots game before scoring to use Modified Sixes or Sixes.</small>}
-    {!v2Supported && <small>Rotating Dots requires advertised API version-2 support.</small>}
+    {!v2Supported && <small>Rotating Dots is temporarily unavailable in this app version.</small>}
     <small>Changing mode clears incompatible specials.</small>
     {draft.dotsMode === 'linked' ? <>
       <label>Linked game<select value={draft.linkedGameId ?? ''} onChange={(event) => { onChange({ linkedGameId: event.target.value }); }}>
@@ -106,7 +106,7 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
       {draft.stake?.trim() && Number(draft.stake) !== 0 && <button type="button" onClick={() => { onChange({ stake: '' }); }}>Clear planned rate for solo play</button>}
     </> : <>
       {draft.dotsMode === 'fixed' && (draft.dotsPlayers ?? []).map((id, index) => <label key={index}>
-        Side {index < 2 ? 'A' : 'B'} golfer {index % 2 + 1}<select value={id} onChange={(event) => {
+        Team {index < 2 ? '1' : '2'} golfer {index % 2 + 1}<select value={id} onChange={(event) => {
           const ids = [...(draft.dotsPlayers ?? [])], other = ids.indexOf(event.target.value);
           if (other >= 0) { ids[other] = id; ids[index] = event.target.value; onChange({ dotsPlayers: ids }); }
         }}>{group?.playerIds.map((playerId) => <option key={playerId} value={playerId}>
@@ -119,7 +119,7 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
     {legacySweep && manualSweepSupported && <button type="button" onClick={() => {
       onChange({ dotsSweepRule: 'manual-v1', dotsLegacySweep: false });
     }}>Use manual Sweep</button>}
-    {!manualSweepSupported && <small>Manual Sweep requires advertised API support.</small>}
+    {!manualSweepSupported && <small>Manual Sweep is temporarily unavailable in this app version.</small>}
     <DotSpecialsSettings specials={specials} mode={mode} manualSweep={manualSweep}
       {...(supportedKinds === undefined ? {} : { supportedKinds })}
       {...(presetStore === undefined ? {} : { presetStore })}

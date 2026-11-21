@@ -153,8 +153,8 @@ export function createCatalogHandler(resolveApi: () => CatalogSetupApi, action: 
     } catch (error) {
       const status = error instanceof ApiError ? error.status : 503;
       const code = error instanceof ApiError ? error.code : 'SERVICE_UNAVAILABLE';
-      if (status >= 500) context.error('Catalog/setup API request failed', { code, invocationId: context.invocationId, ...failureDiagnostics(error) });
-      else context.warn('Catalog/setup API request rejected', { code, status, invocationId: context.invocationId });
+      if (status >= 500) context.error('Catalog/setup API request failed', { code, action, status, invocationId: context.invocationId, ...failureDiagnostics(error) });
+      else context.warn('Catalog/setup API request rejected', { code, action, status, invocationId: context.invocationId });
       return response(status, { code });
     }
   };

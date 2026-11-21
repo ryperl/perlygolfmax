@@ -48,8 +48,8 @@ export function PublicEventsPage({ services: override }: { readonly services?: P
       ? clearScoreLocation() : saved.error;
     setUnavailable({ route: current, message: warning ? `${message} ${warning}` : message });
   }, [current]);
-  if (!services) return <section><h1>Events</h1><h2>Event services are not configured</h2>
-    <p>{configured.error ?? 'Public scoring is not connected in this build. The fictional Preview remains separate.'}</p></section>;
+  if (!services) return <section><h1>Events</h1><h2>Event services are temporarily unavailable</h2>
+    <p>Public scoring is not available in this build. Please try again later. The fictional Preview remains separate.</p></section>;
   if (unavailable?.route === current) return <section><p role="alert">{unavailable.message}</p><a href="#events?choose=1">Choose an active event</a></section>;
   const [kind, eventId, roundId] = current.split(':');
   if (kind === 'quick') return services.quickRounds

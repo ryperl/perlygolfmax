@@ -6,6 +6,28 @@ import { preserveScoreExtras, supportsDotsSpecials } from './scoring.js';
 import { strokeGameCards, strokeGameId } from './stroke-games.test-support.js';
 
 describe('Churchie v3 actual playing circuit and canonical shared specials', () => {
+  it('preserves unrelated High/Low and known Other awards while a corrected gross special needs review', () => {
+    const f = churchyV3Fixture(18, 1, 'tee');
+    const game = { ...f.game, specials: [{ kind: 'sandy' as const, units: 1 }, { kind: 'other' as const, units: 2 }] };
+    const cards = f.cards.map((card, index) => index ? card : { ...card, holes: card.holes.map((hole) => ({
+      ...hole, score: { ...hole.score, ...(hole.number <= 2 ? { churchy: { ...f.declaration(hole.number),
+        players: [{ playerId: f.ids[0] ?? '', counts: hole.number === 1 ? { sandy: 1 } : { other: 2 }, calls: [] }],
+      } } : {}) },
+    })) });
+    const snapshot = { ...f.snapshot, playerTees: [{ playerId: f.ids[0] ?? '', profile: {
+      ...f.snapshot.teeProfile, id: 301,
+      holes: f.snapshot.teeProfile.holes.map((hole) => hole.number === 1 ? { ...hole, par: 3 } : hole),
+    } }] };
+    const plain = calculateGameResults([{ ...game, specials: [] }], snapshot, f.cards)[0]?.churchy;
+    const after = calculateGameResults([game], snapshot, cards)[0]?.churchy;
+    expect(after?.status).toBe('in-progress');
+    expect(after?.reviewRequired).toEqual([{ number: 1, playerId: f.ids[0], kind: 'sandy', reason: 'score-qualification' }]);
+    expect(after?.holes.map((hole) => [hole.high, hole.low])).toEqual(plain?.holes.map((hole) => [hole.high, hole.low]));
+    expect(after?.awards?.filter((award) => award.kind === 'other')).toEqual([
+      expect.objectContaining({ earnedBy: f.ids[0], number: 2, dots: 4 }),
+    ]);
+    expect(after?.internalSettlement?.status).not.toBe('complete');
+  });
   it('shares corrected String once per source and keeps the ordinary run alive after a Birdie String', () => {
     const f = churchyV3Fixture(9, 8, 'tee');
     const game = { ...f.game, specials: [{ kind: 'string' as const, units: 2 }, { kind: 'birdy-string' as const, units: 3 }] };
@@ -77,7 +99,10 @@ describe('Churchie v3 actual playing circuit and canonical shared specials', () 
   it.each([[3, 'kp'], [5, 'blue-plate'], [5, 'long-drive']] as const)(
     'does not let the first golfer’s personal par %i open %s on a default par-4 hole', (par, category) => {
       const f = churchyV3CategoryFixture(4, par, category);
-      expect(f.view.games?.results[0]?.churchy?.status).toBe('unavailable');
+      expect(f.view.games?.results[0]?.churchy?.status).toBe('in-progress');
+      expect(f.view.games?.results[0]?.churchy?.reviewRequired).toContainEqual({
+        number: 1, kind: category, playerId: f.game.playerIds[0], reason: 'category-hole',
+      });
       expect(f.view.games?.results[0]?.churchy?.awards?.some((award) => award.kind === category)).toBe(false);
     });
 

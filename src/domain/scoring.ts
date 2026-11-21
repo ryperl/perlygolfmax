@@ -77,6 +77,8 @@ export interface RoundScores {
   readonly dotsCategorySweepsVersion?: 1;
   readonly churchyMurphyTargets?: true;
   readonly churchyPareeTargets?: true;
+  readonly pullyMurphyTargets?: true;
+  readonly gameCalculationsVersion?: 2;
   readonly dotsCallTargets?: true;
   readonly roundDifferentials?: readonly RoundDifferential[];
   readonly internalGamesSupported?: boolean;

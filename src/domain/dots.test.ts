@@ -39,6 +39,27 @@ function context(number = 1, multiplier: 1 | 2 | 3 = 1, sides: readonly (readonl
 }
 
 describe('source-only Dots declaration review', () => {
+  it('flags only invalid gross claims after personal-par correction and retains unrelated Other and valid called awards', () => {
+    const f = fixture([4, 4], ['sandy', 'other', 'paree']);
+    const records = [record(1, [declaration('A', { sandy: 1 }, [{ id: 'call-a', kind: 'paree', result: 'success' }])]),
+      record(2, [declaration('B', { other: 2 })])];
+    const before = calculateDots(f.game, f.round, records);
+    expect(totals(before)).toEqual([2, 2, 0, 0]);
+    const round = { ...f.round, playerLayouts: [{ playerId: 'A', layout: f.round.layout.map((hole) =>
+      hole.number === 1 ? { ...hole, par: 3 } : hole) }] };
+    expect(dotsRecordsMatchGame(records, f.game, round)).toBe(false);
+    const after = calculateDots(f.game, round, records);
+    expect(after.status).toBe('in-progress');
+    expect(after.issues).toEqual([]);
+    expect(after.reviewRequired).toEqual([
+      { number: 1, playerId: 'A', kind: 'sandy', reason: 'score-qualification' },
+      { number: 1, playerId: 'A', kind: 'paree', reason: 'score-qualification' },
+    ]);
+    expect(totals(after)).toEqual([0, 2, 0, 0]);
+    expect(after.awards.map((award) => [award.kind, award.earnedBy, award.dots])).toEqual([['other', 'B', 2]]);
+    expect(records[0]?.players[0]?.counts.sandy).toBe(1);
+    expect(records[0]?.players[0]?.calls[0]?.result).toBe('success');
+  });
   it('enforces Chippy/Pully per source in every individual size, fixed, rotating, linked and Churchie v3 mode', () => {
     const f = fixture([4], ['chippy', 'pully']);
     const rotating: DotsGameDefinition = { id: f.game.id, name: f.game.name, kind: 'dots', version: 2,
@@ -606,7 +627,10 @@ describe('independent Dots earning and declarations', () => {
       { id: 'call-A', kind: 'murphy', result: 'success' }, { id: 'call-B', kind: 'pully-murphy', result: 'success' },
     ])])];
     expect(totals(calculateDots(game, round, records))).toEqual([3, 0, 0, 0]);
-    expect(calculateDots(game, setScores(round, 'A', [{ kind: 'strokes', strokes: 3 }]), records).status).toBe('unavailable');
+    const corrected = calculateDots(game, setScores(round, 'A', [{ kind: 'strokes', strokes: 3 }]), records);
+    expect(corrected.status).toBe('in-progress');
+    expect(corrected.reviewRequired).toEqual([{ number: 1, playerId: 'A', kind: 'pully-murphy', reason: 'score-qualification' }]);
+    expect(totals(corrected)).toEqual([2, null, null, null]);
     const pending = [record(1, [declaration('A', {}, [{ id: 'call-A', kind: 'murphy', result: 'pending' }])])];
     expect(calculateDots(game, round, pending)).toMatchObject({ status: 'in-progress', awards: [] });
   });

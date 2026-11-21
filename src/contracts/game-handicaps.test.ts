@@ -31,7 +31,7 @@ function fixture(handicapRule: 'full-course-v1' | 'group-low-v1' = 'group-low-v1
   ];
   const peers = games.filter((game) => game.kind !== 'churchy');
   const round: RoundScores = { ...strokeGamesRound({ ...f, snapshot }),
-    gameHandicapRules: 1, courseHandicaps: publishedCourseHandicaps(snapshot), teeStrokeAllocation: true,
+    gameHandicapRules: 1, gameCalculationsVersion: 2, courseHandicaps: publishedCourseHandicaps(snapshot), teeStrokeAllocation: true,
     stringRulesVersion: 2, churchyCustomNames: true, churchyMurphyTargets: true, churchyPareeTargets: true,
     churchyEnabled: true, churchyRulesVersions: [1, 2, 3], wolfRulesVersions: [1, 2], internalGamesSupported: true,
     gameInputContext: { courseVersionId: snapshot.courseVersionId, teeProfileId: snapshot.teeProfile.id },
@@ -45,16 +45,16 @@ describe('explicit game handicap and circuit contracts', () => {
     const { round, games, snapshot, cards } = fixture(rule);
     expect(games.every(isRoundGameDefinition)).toBe(true);
     expect(isRoundScores(round)).toBe(true);
-    const wire = leanRoundScores(round, true, true, true, true, true, true, true, true, true);
+    const wire = leanRoundScores(round, true, true, true, true, true, true, true, true, true, true);
     expect(decodeRoundScores(JSON.parse(JSON.stringify(wire)))).toEqual(round);
     expect(gameHandicapRoundScores(round, true)).toBe(round);
     expect(() => gameHandicapRoundScores(round)).toThrow(GameHandicapClientUpdateRequired);
-    expect(() => leanRoundScores(round, true, true, true, true, true, true, true, true)).toThrow(GameHandicapClientUpdateRequired);
+    expect(() => leanRoundScores(round, true, true, true, true, true, true, true, true, false, true)).toThrow(GameHandicapClientUpdateRequired);
     for (const game of games) {
       const single = { ...round, games: { configuration: { eventId: round.eventId, roundId: round.roundId,
         etag: 'fictional-games', games: [game] }, results: calculateGameResults([game], snapshot, cards) } };
       expect(isRoundScores(single), game.kind ?? 'stableford').toBe(true);
-      expect(decodeRoundScores(leanRoundScores(single, true, true, true, true, true, true, true, true, true))).toEqual(single);
+      expect(decodeRoundScores(leanRoundScores(single, true, true, true, true, true, true, true, true, true, true))).toEqual(single);
     }
   });
 

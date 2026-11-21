@@ -134,7 +134,7 @@ describe('large private browser values', () => {
     await expect(writePrivateValue(request, path, signal(), { method: 'PUT', body: { fictional: 'F'.repeat(maximumPrivateWriteBytes) } }, 12288))
       .rejects.toThrow('byte budget');
     expect(token).not.toHaveBeenCalled();
-    await expect(writePrivateValue(request, path, signal(), { method: 'PUT', body: { fictional: 'F'.repeat(20_000) } }, 12288)).rejects.toThrow('503');
+    await expect(writePrivateValue(request, path, signal(), { method: 'PUT', body: { fictional: 'F'.repeat(20_000) } }, 12288)).rejects.toMatchObject({ status: 503 });
     expect(send).toHaveBeenCalledOnce();
     expect(bodyText(send.mock.calls[0]?.[1]?.body)).toContain('privateUpload');
     const controller = new AbortController();

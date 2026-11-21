@@ -57,7 +57,7 @@ describe('Dots special mode compatibility', () => {
     render(<DotsSettings draft={{ dotsMode: 'individual', groupNumber: 1, dotsPlayerIds: ids, stake: '.50' }}
       groups={[{ number: 1, playerIds: ids }]} players={f.round.cards} wolves={[]} onChange={onChange} />);
     expect(screen.getByRole('option', { name: 'Group 1 · 2 players' })).toBeDisabled();
-    expect(screen.getByRole('alert')).toHaveTextContent('This API does not support individual Dots for this group size');
+    expect(screen.getByRole('alert')).toHaveTextContent('Individual Dots for this group size is temporarily unavailable in this app version');
     expect(screen.getByLabelText('USD per dot difference')).toHaveValue('.50');
     fireEvent.change(screen.getByLabelText('Dots playing group'), { target: { value: '1' } });
     expect(onChange).not.toHaveBeenCalled();

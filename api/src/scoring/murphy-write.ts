@@ -21,21 +21,24 @@ function retainRecord(extras: DotsHoleRecord, previous: DotsHoleRecord, round: D
     calls: player.calls.map((call) => {
       const priorPlayer = previous.players.find((entry) => entry.calls.some((entry) => entry.id === call.id));
       const prior = priorPlayer?.calls.find((entry) => entry.id === call.id);
-      if (prior?.murphyTarget === undefined && prior?.pareeTarget === undefined
+      if (prior?.murphyTarget === undefined && prior?.pareeTarget === undefined && prior?.pullyMurphyTarget === undefined
         && !(dots && prior?.murphyPresses !== undefined)) return call;
       const paree = prior.pareeTarget !== undefined;
-      if (paree ? call.pareeTarget !== undefined : call.murphyTarget !== undefined) return call;
+      const pullyMurphy = prior.pullyMurphyTarget !== undefined;
+      if (priorPlayer?.playerId !== player.playerId || call.kind !== prior.kind) throw new ApiError(409, 'DOTS_CALL_REFRESH_REQUIRED');
+      if (paree ? call.pareeTarget !== undefined : pullyMurphy ? call.pullyMurphyTarget !== undefined : call.murphyTarget !== undefined) return call;
       const raw = round.cards.find((card) => card.playerId === player.playerId)?.holes.find((hole) => hole.number === extras.number)?.score;
       const par = (round.playerLayouts?.find((entry) => entry.playerId === player.playerId)?.layout ?? round.layout)
         .find((hole) => hole.number === extras.number)?.par;
-      if (priorPlayer?.playerId !== player.playerId || call.kind !== prior.kind || call.result !== dotsCallResult(prior, raw, par)
+      if (call.result !== dotsCallResult(prior, raw, par)
         || dots && call.murphyPresses !== undefined && call.murphyPresses !== (prior.murphyPresses ?? 0)) {
         throw new ApiError(409, dots ? 'DOTS_CALL_REFRESH_REQUIRED'
           : paree ? 'CHURCHY_PAREE_REFRESH_REQUIRED' : 'CHURCHY_MURPHY_REFRESH_REQUIRED');
       }
-      return { ...call, result: prior.murphyTarget !== undefined || prior.pareeTarget !== undefined ? 'pending' as const : call.result,
+      return { ...call, result: prior.murphyTarget !== undefined || prior.pareeTarget !== undefined || pullyMurphy ? 'pending' as const : call.result,
         ...(dots && prior.murphyPresses !== undefined ? { murphyPresses: prior.murphyPresses } : {}),
         ...(prior.pareeTarget !== undefined ? { pareeTarget: prior.pareeTarget } : {}),
+        ...(prior.pullyMurphyTarget !== undefined ? { pullyMurphyTarget: prior.pullyMurphyTarget } : {}),
         ...(prior.murphyTarget !== undefined ? { murphyTarget: prior.murphyTarget } : {}) };
     }),
   })) };

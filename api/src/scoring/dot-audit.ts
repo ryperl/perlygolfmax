@@ -43,17 +43,19 @@ export async function correctionAuditCards(
   return cards;
 }
 
+export function supportsDotAwardAudit(game: RoundGameDefinition): game is Extract<RoundGameDefinition, { readonly kind: 'dots' | 'wolf' | 'churchy' }> {
+  return game.kind === 'dots' || game.kind === 'wolf' && game.version === 2 || game.kind === 'churchy' && game.version === 3;
+}
+
 export function buildDotAwardAudit(
   games: readonly RoundGameDefinition[], beforeRound: RoundSnapshot, afterRound: RoundSnapshot,
   beforeCards: readonly Scorecard[], afterCards: readonly Scorecard[], gameEtag: string | null,
 ): readonly DotAwardAudit[] {
-  if (!games.some((game) => game.kind === 'dots' || game.kind === 'wolf' && game.version === 2
-    || game.kind === 'churchy' && game.version === 3)) return [];
+  if (!games.some(supportsDotAwardAudit)) return [];
   const before = calculateGameResults(games, beforeRound, beforeCards);
   const after = calculateGameResults(games, afterRound, afterCards);
   return games.flatMap((game): readonly DotAwardAudit[] => {
-    if (game.kind !== 'dots' && !(game.kind === 'wolf' && game.version === 2)
-      && !(game.kind === 'churchy' && game.version === 3)) return [];
+    if (!supportsDotAwardAudit(game)) return [];
     const previous = before.find((result) => result.gameId === game.id);
     const next = after.find((result) => result.gameId === game.id);
     const previousAwards = previous?.dots?.awards ?? previous?.wolf?.awards ?? previous?.churchy?.awards ?? [];

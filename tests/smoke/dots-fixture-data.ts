@@ -47,7 +47,7 @@ function workspace(round: RoundScores, snapshot = dotsFixture.snapshot): EventWo
 
 export async function openDotsFixture(page: Page, testInfo: TestInfo,
   scenario: 'setup' | 'linked' | 'old-api' | 'rotating-3' | 'rotating-6' | 'individual-1' | 'individual-2' | 'individual-3'
-    | 'string-rules' | 'called-targets' | 'category-sweeps' | 'manual-sweep' | 'setup-sweep' | 'coexistence' = 'setup') {
+    | 'string-rules' | 'called-targets' | 'pully-targets' | 'category-sweeps' | 'manual-sweep' | 'setup-sweep' | 'coexistence' = 'setup') {
   const server = await createServer({ configFile: false, cacheDir: testInfo.outputPath('vite-cache'),
     server: { host: '127.0.0.1', port: 0, hmr: false }, esbuild: { jsx: 'automatic' },
     optimizeDeps: { noDiscovery: true, include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'] },
@@ -55,8 +55,9 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
   const playerCount = scenario.startsWith('individual-') ? Number(scenario.slice(-1)) : 4;
   const categorySweeps = scenario === 'category-sweeps';
   const coexistence = scenario === 'coexistence';
+  const pullyTargets = scenario === 'pully-targets';
   const sweepRules = scenario === 'manual-sweep' || scenario === 'setup-sweep';
-  const modernRules = scenario === 'string-rules' || scenario === 'called-targets' || categorySweeps || scenario === 'manual-sweep' || coexistence;
+  const modernRules = scenario === 'string-rules' || scenario === 'called-targets' || pullyTargets || categorySweeps || scenario === 'manual-sweep' || coexistence;
   const snapshot = scenario === 'string-rules' ? { ...dotsFixture.snapshot, teeProfile: { ...dotsFixture.snapshot.teeProfile,
     holes: dotsFixture.snapshot.teeProfile.holes.map((hole) => ({ ...hole, par: hole.number === 2 ? 5 : hole.number === 3 ? 3 : hole.par })) } }
     : categorySweeps || coexistence ? { ...dotsFixture.snapshot, teeProfile: { ...dotsFixture.snapshot.teeProfile,
@@ -74,7 +75,8 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
     ...(sweepRules ? { dotsManualSweep: true as const, wolfHighLowSweep: true as const, sweepRulesVersion: 2 as const,
       dotsCategorySweepsVersion: 1 as const,
       dotsSpecialKinds: dotsSpecialCatalog.map((special) => special.kind) } : {}),
-    ...(scenario === 'called-targets' ? { dotsCallTargets: true as const } : {}),
+    ...(scenario === 'called-targets' || pullyTargets ? { dotsCallTargets: true as const } : {}),
+    ...(pullyTargets ? { pullyMurphyTargets: true as const, gameCalculationsVersion: 2 as const } : {}),
     groups: [{ ...base.groups[0], number: 1, playerIds: ids }],
     cards: base.cards.slice(0, playerCount).map((card, index) => ({ ...card,
       etag: seeded ? `fictional-string-card-${String(index)}` : null, updatedAt: seeded ? '2026-01-01T00:00:00Z' : null,
@@ -102,7 +104,8 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
     ...(categorySweeps ? { mode: 'fixed', partnerIds: dotsPlayers } : { mode: 'individual' }),
     groupNumber: 1, playerIds: dotsPlayers, stakeMinor: null,
     ...(scenario === 'manual-sweep' ? { sweepRule: 'manual-v1' as const } : {}),
-    specials: coexistence ? (['hogan', 'seve', 'chippy', 'pully', 'sandy', 'gorilla', 'kp', 'blue-plate', 'long-drive'] as const)
+    specials: pullyTargets ? [{ kind: 'pully-murphy', units: 1 }]
+      : coexistence ? (['hogan', 'seve', 'chippy', 'pully', 'sandy', 'gorilla', 'kp', 'blue-plate', 'long-drive'] as const)
       .map((kind) => ({ kind, units: 1 }))
       : scenario === 'manual-sweep' ? [{ kind: 'sweep', units: 2 }]
       : categorySweeps ? [{ kind: 'long-drive', units: 1 }, { kind: 'blue-plate', units: 1 }]
@@ -112,9 +115,11 @@ export async function openDotsFixture(page: Page, testInfo: TestInfo,
   let stored = project(initial, modernRules ? [modern] : scenario.startsWith('rotating') ? [dotsFixture.skins, rotating]
     : scenario === 'setup' || scenario === 'setup-sweep' || scenario.startsWith('individual-') ? [dotsFixture.skins] : [dotsFixture.skins, wolf, dots], snapshot);
   const wireRound = (round: RoundScores) => leanRoundScores(round, sweepRules, sweepRules, modernRules || sweepRules,
-    scenario === 'called-targets' || sweepRules, categorySweeps || sweepRules, sweepRules, sweepRules);
+    scenario === 'called-targets' || pullyTargets || sweepRules, categorySweeps || sweepRules, sweepRules, sweepRules,
+    false, false, pullyTargets);
   const wireWrite = (result: ScoreWriteResult) => leanScoreWriteResult(result, sweepRules, sweepRules, modernRules || sweepRules,
-    scenario === 'called-targets' || sweepRules, categorySweeps || sweepRules, sweepRules, sweepRules);
+    scenario === 'called-targets' || pullyTargets || sweepRules, categorySweeps || sweepRules, sweepRules, sweepRules,
+    false, false, pullyTargets);
   let writes = 0, configWrites = 0, failPaused = false, roundReads = 0;
   const roundReadFormats: string[] = [];
   let releaseFailure: (() => void) | null = null;

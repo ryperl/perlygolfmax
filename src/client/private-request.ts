@@ -40,12 +40,13 @@ export function createPrivateRequest(apiUrl: string, getToken: () => Promise<str
     signal.throwIfAborted();
     const body = write ? JSON.stringify(write.body) : undefined;
     if (body !== undefined && new TextEncoder().encode(body).byteLength > maximumBytes) {
-      throw new Error(`Request exceeds the ${String(maximumBytes)}-byte UTF-8 service limit. Nothing was sent or confirmed saved.`);
+      throw new PrivateRequestError(413, 'These changes are too large for one save. Your draft is kept. Reduce the changes and retry.');
     }
 
     const token = authorization === 'None' ? undefined : await getToken();
     signal.throwIfAborted();
-    const response = await send(`${apiUrl}/${path}`, {
+    let response: Response;
+    try { response = await send(`${apiUrl}/${path}`, {
       signal, cache: 'no-store', credentials: 'omit',
       ...(write ? { method: write.method } : {}),
       ...(body !== undefined ? { body } : {}),
@@ -56,7 +57,12 @@ export function createPrivateRequest(apiUrl: string, getToken: () => Promise<str
         ...(write?.createOnly ? { 'If-None-Match': '*' } : {}),
         ...(write?.requestId ? { 'Idempotency-Key': write.requestId } : {}),
       },
-    });
+    }); } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      throw new PrivateRequestError(503, write
+        ? 'The connection was interrupted and saving was not confirmed. Your changes are kept. Refresh saved data before retrying.'
+        : 'We could not connect. Check your connection and try again.');
+    }
     signal.throwIfAborted();
     if (authorization === 'Tester' && [401, 403, 404].includes(response.status)) {
       throw new SessionExpiredError('This tester link is unavailable, expired or revoked. Ask the organizer for a new link.');
@@ -65,8 +71,9 @@ export function createPrivateRequest(apiUrl: string, getToken: () => Promise<str
       throw new SessionExpiredError('This event or round is no longer available publicly. Choose an active event.');
     }
     if (response.status === 401) throw new SessionExpiredError('Your session expired. Sign in again.');
-    if (response.status === 426) throw new PrivateRequestError(426,
-      'This scoring view needs an app update. Copy any unsaved scores, then refresh the page. Nothing was confirmed saved.');
+    if (response.status === 426) throw new PrivateRequestError(426, write
+      ? 'Saving is temporarily unavailable in this app version. Your changes are kept. Try again after the app update is available.'
+      : 'This view is temporarily unavailable in this app version. Try again after the app update is available.');
     if (response.status === 400 && response.headers.get('content-type')?.startsWith('application/json')) {
       const failure: unknown = await response.json();
       if (isRecord(failure) && failure.code === 'SKINS_FOURSOME_REQUIRED') throw new PrivateRequestError(400,
@@ -76,8 +83,16 @@ export function createPrivateRequest(apiUrl: string, getToken: () => Promise<str
     if (!response.ok) throw new PrivateRequestError(response.status, response.status === 403
       ? 'You do not have permission for this operation. Nothing was confirmed saved.'
       : response.status === 429 ? 'Too many requests. Wait before retrying. Nothing was confirmed saved.'
-        : `Service request failed (${String(response.status)}). Nothing was confirmed saved.`, retryAfterSeconds(response.headers.get('Retry-After')));
-    const value: unknown = await response.json();
+        : write ? 'Saving could not be confirmed. Your changes are kept. Refresh saved data before retrying.'
+          : 'We could not load this data. Please try again later.', retryAfterSeconds(response.headers.get('Retry-After')));
+    let value: unknown;
+    try { value = await response.json(); }
+    catch (error) {
+      if (!(error instanceof SyntaxError) && !(error instanceof TypeError)) throw error;
+      throw new PrivateRequestError(502, write
+        ? 'The save confirmation could not be read. Your changes are kept. Refresh saved data before retrying.'
+        : 'We could not read this data. Please try again later.');
+    }
     signal.throwIfAborted();
     return value;
   };
@@ -121,13 +136,13 @@ async function transferRequest(request: PrivateRequest, path: string, signal: Ab
 export async function readPrivateValue(request: PrivateRequest, path: string, signal: AbortSignal): Promise<unknown> {
   const initial = await request(path, signal);
   if (!isRecord(initial) || !Object.hasOwn(initial, 'privateRead')) return initial;
-  if (!isPrivateReadPart(initial) || initial.privateRead.index !== 0) throw new Error('Invalid private response page. Nothing was loaded.');
+  if (!isPrivateReadPart(initial) || initial.privateRead.index !== 0) throw new Error('We could not load the latest data. Refresh to try again.');
   const first = initial.privateRead;
   const content = [first.content];
   for (let index = 1; index < first.parts; index++) {
     const page = await transferRequest(request, `${path}${path.includes('?') ? '&' : '?'}privatePart=${String(index)}&privateHash=${first.sha256}`, signal);
     if (!isPrivateReadPart(page) || page.privateRead.index !== index || page.privateRead.sha256 !== first.sha256
-      || page.privateRead.parts !== first.parts || page.privateRead.bytes !== first.bytes) throw new Error('Invalid private response page. Nothing was loaded.');
+      || page.privateRead.parts !== first.parts || page.privateRead.bytes !== first.bytes) throw new Error('We could not load the latest data. Refresh to try again.');
     content.push(page.privateRead.content);
   }
   const text = content.join('');

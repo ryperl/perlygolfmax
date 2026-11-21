@@ -70,7 +70,7 @@ describe('separate internal game setup and capability boundaries', () => {
     expect(screen.getByRole('button', { name: 'Save game' })).toBeDisabled();
     fireEvent.submit(screen.getByRole('form', { name: 'Game settings' }));
     expect(props.onSave).not.toHaveBeenCalled();
-    expect(screen.getByText('This API does not support individual Dots for this group size. Your draft is retained.')).toBeVisible();
+    expect(screen.getByRole('status')).toHaveTextContent('Individual Dots for this group size is temporarily unavailable in this app version. Your draft is retained.');
   });
 
   it.each([1, 2, 3])('gates %i-player individual declaration and setup controls on explicit API support', (count) => {

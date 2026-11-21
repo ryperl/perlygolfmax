@@ -5,6 +5,7 @@ import type { CorrectionsApi } from './handlers.js';
 import { identifier } from '../../test/catalog-fixtures.js';
 import { creator, event } from '../../test/fixtures.js';
 import { ApiError } from '../errors.js';
+import { catalogFixture } from '../../test/catalog-fixtures.js';
 
 const roundId = identifier(500);
 
@@ -23,6 +24,28 @@ function request(method: 'GET' | 'PUT', body?: unknown, headers: Record<string, 
 }
 
 describe('round corrections HTTP handlers', () => {
+  it('records actionable safe system diagnostics without leaking messages, bodies or credentials', async () => {
+    const f = catalogFixture();
+    const failure = Object.assign(new Error('fixture-private-system-detail'), {
+      name: 'RestError', code: 'AuthorizationPermissionMismatch', statusCode: 403,
+      requestId: identifier(555), token: 'fixture-private-token',
+    });
+    vi.spyOn(f.workspace, 'correctionModel').mockRejectedValue(failure);
+    const api: CorrectionsApi = { verify: vi.fn().mockResolvedValue(creator),
+      limiter: { check: vi.fn().mockResolvedValue(undefined) }, workspace: f.workspace };
+    const context = new InvocationContext({ invocationId: 'fictional-diagnostic', logHandler: () => undefined });
+    const logged = vi.spyOn(context, 'error');
+    expect(await createCorrectionsHandler(() => api, 'model')(request('GET'), context)).toMatchObject({
+      status: 503, jsonBody: { code: 'SERVICE_UNAVAILABLE' },
+    });
+    expect(logged).toHaveBeenCalledWith('Corrections API request failed', {
+      code: 'SERVICE_UNAVAILABLE', action: 'model', status: 503, invocationId: 'fictional-diagnostic',
+      failureType: 'RestError', failureCode: 'AuthorizationPermissionMismatch', failureStatus: 403,
+      failureRequestId: identifier(555),
+    });
+    expect(JSON.stringify(logged.mock.calls)).not.toContain('fixture-private');
+    expect(JSON.stringify(logged.mock.calls)).not.toContain('Bearer');
+  });
   it('serves owner correction model and correction write result', async () => {
     const correctionModel = vi.fn().mockResolvedValue({
       eventId: event.id,
@@ -107,6 +130,7 @@ describe('round corrections HTTP handlers', () => {
       roundId,
       identifier(900),
       expect.objectContaining({ reason: 'Fictional correction reason.' }),
+      false,
     );
     expect(check).toHaveBeenCalledWith(creator, 'setup-write');
   });

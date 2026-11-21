@@ -22,5 +22,8 @@ export function failureDiagnostics(error: unknown): Readonly<Record<string, stri
     const causeCode = classification(error.cause.code);
     if (causeCode) result.causeCode = causeCode;
   }
+  if (typeof error.requestId === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(error.requestId)) {
+    result.failureRequestId = error.requestId;
+  }
   return result;
 }

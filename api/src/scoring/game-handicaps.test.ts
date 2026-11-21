@@ -38,6 +38,99 @@ async function fixture() {
 }
 
 describe('explicit handicap protocol and conditional score transactions', () => {
+  it('fences old full-plus Wolf readers and writers before mutation and publishes strict calculation-v2 full/lean results', async () => {
+    const f = await fixture();
+    const player = await f.players.get(creator, f.playerId);
+    await f.players.observe(creator, player.id, identifier(31700), {
+      value: '+1.0', effectiveDate: '2026-01-01', source: 'Fictional plus input',
+    }, player.etag);
+    const ids = f.input.rounds[0]?.groups[0]?.playerIds;
+    if (!ids) throw new Error('Missing fictional playing group');
+    const game = { id: identifier(31701), name: 'Fictional full-plus Wolf', kind: 'wolf' as const, version: 2 as const,
+      basis: 'net' as const, handicapRule: 'full-course-v1' as const, groupNumber: 1, playerIds: ids, allowPig: true, stakeMinor: 100 };
+    await f.scores.saveGames(creator, event.id, f.roundId, [game], null, identifier(31702));
+    const get = createScoringHandler(() => f.ownerApi, 'scores'), write = createScoringHandler(() => f.ownerApi, 'score-hole');
+    const old = negotiated, current = `${old}&gameCalculations=2`;
+    for (const format of ['', '&format=lean']) {
+      expect(await get(f.request('GET', undefined, `${old}${format}`), f.context)).toMatchObject({ status: 426 });
+      const result = await get(f.request('GET', undefined, `${current}${format}`), f.context);
+      expect(result.status).toBe(200);
+      expect(decodeRoundScores(result.jsonBody)?.gameCalculationsVersion).toBe(2);
+    }
+    const rows = new Map(f.rows);
+    f.submit.mockClear();
+    expect(await write(f.request('PUT', { score: { kind: 'strokes', strokes: 4 } }, old, null, 31703), f.context))
+      .toMatchObject({ status: 426, jsonBody: { code: 'GAME_CALCULATIONS_CLIENT_UPDATE_REQUIRED' } });
+    expect(f.rows).toEqual(rows);
+    expect(f.submit).not.toHaveBeenCalled();
+    expect(await write(f.request('PUT', { score: { kind: 'strokes', strokes: 4 } }, current, null, 31703), f.context))
+      .toMatchObject({ status: 200 });
+  });
+
+  it('saves a real wrapped Nassau press through dedicated HTTP ingress while keeping raw scores and press identity', async () => {
+    const f = await fixture();
+    await f.workspace.save(creator, event.id, { ...f.input, rounds: f.input.rounds.map((round) => ({
+      ...round, groups: round.groups.map((group) => ({ ...group, startingHole: 5 })),
+    })) }, (await f.workspace.get(creator, event.id)).etag);
+    const ids = f.input.rounds[0]?.groups[0]?.playerIds;
+    if (!ids?.[0] || !ids[1]) throw new Error('Missing fictional match participants');
+    const game = { id: identifier(31800), name: 'Fictional wrapped Nassau', kind: 'nassau' as const, version: 1 as const,
+      basis: 'gross' as const, playOrder: 'shared-group-v1' as const, groupNumber: 1, variant: 'singles' as const,
+      sides: ids.slice(0, 2).map((playerId, index) => ({ id: identifier(31801 + index), name: `Fictional side ${String(index + 1)}`, playerIds: [playerId] })),
+      automaticPresses: false, stakes: { currency: 'USD' as const, frontMinor: 100, backMinor: 0, overallMinor: 100 } };
+    await f.scores.saveGames(creator, event.id, f.roundId, [game], null, identifier(31803));
+    let sequence = 31810;
+    for (const hole of [5, 6, 7, 8, 9]) for (const [index, playerId] of ids.entries()) {
+      const before = await f.scores.get(creator, event.id, f.roundId);
+      await f.scores.write(creator, event.id, f.roundId, playerId, hole, { kind: 'strokes', strokes: index === 0 ? 3 : 4 },
+        before.cards.find((card) => card.playerId === playerId)?.etag ?? null, identifier(sequence++));
+    }
+    const round = await f.scores.get(creator, event.id, f.roundId);
+    const option = round.games?.results[0]?.nassau?.pressOptions.find((option) => option.startHole === 1);
+    if (!option || !round.games?.configuration.etag) throw new Error('Missing fictional wrapped Front press');
+    const press = { ...option, id: identifier(31850) };
+    const record = { number: 1, gameId: game.id, gameEtag: round.games.configuration.etag, outcomes: [], presses: [press] };
+    const handler = createScoringHandler(() => f.ownerApi, 'score-game-hole');
+    const etag = round.cards.find((card) => card.playerId === f.playerId)?.etag ?? null;
+    const body = { score: { kind: 'strokes', strokes: 4, nassau: [record] } };
+    const rows = new Map(f.rows);
+    expect(await handler(f.request('PUT', body, negotiated, etag, 31851), f.context)).toMatchObject({ status: 426 });
+    expect(f.rows).toEqual(rows);
+    const saved = await handler(f.request('PUT', body, `${negotiated}&gameCalculations=2&format=lean`, etag, 31851), f.context);
+    expect(saved.status).toBe(200);
+    const envelope: unknown = saved.jsonBody;
+    if (!envelope || typeof envelope !== 'object' || !('round' in envelope)) throw new Error('Missing fictional score acknowledgement');
+    const published = decodeRoundScores(envelope.round);
+    expect(published?.cards.find((card) => card.playerId === f.playerId)?.holes[0]?.score)
+      .toMatchObject({ kind: 'strokes', strokes: 4, nassau: [{ presses: [{ id: press.id, declaredAfterHole: 9, startHole: 1 }] }] });
+    expect(published?.games?.results[0]?.nassau?.stalePresses).toEqual([]);
+  });
+
+  it('retains score-derived Pully Murphy through raw-only saves and rejects old-client echoes before mutation', async () => {
+    const f = await fixture();
+    const ids = f.input.rounds[0]?.groups[0]?.playerIds;
+    if (!ids) throw new Error('Missing fictional Dots group');
+    const game = { id: identifier(31900), name: 'Fictional Pully Dots', kind: 'dots' as const, version: 1 as const,
+      groupNumber: 1, playerIds: ids, mode: 'individual' as const, stakeMinor: 100,
+      specials: [{ kind: 'pully-murphy' as const, units: 1 }] };
+    const setup = await f.scores.saveGames(creator, event.id, f.roundId, [game], null, identifier(31901));
+    const call = { id: identifier(31902), kind: 'pully-murphy' as const, result: 'pending' as const, pullyMurphyTarget: 'par' as const };
+    const handler = createScoringHandler(() => f.ownerApi, 'score-hole');
+    const query = `${negotiated}&dotsCalls=score-v1&gameCalculations=2`;
+    const body = { score: { kind: 'strokes', strokes: 5, dots: [{ number: 1, gameId: game.id,
+      gameEtag: setup.round.games?.configuration.etag, contests: [], players: [{ playerId: f.playerId, counts: {}, calls: [call] }] }] } };
+    expect(await handler(f.request('PUT', body, query, null, 31903), f.context)).toMatchObject({ status: 200 });
+    const before = await f.scores.get(creator, event.id, f.roundId);
+    const etag = before.cards.find((card) => card.playerId === f.playerId)?.etag ?? null;
+    const rows = new Map(f.rows);
+    expect(await handler(f.request('PUT', { score: { kind: 'strokes', strokes: 6 } }, negotiated, etag, 31904), f.context))
+      .toMatchObject({ status: 426 });
+    expect(f.rows).toEqual(rows);
+    expect(await handler(f.request('PUT', { score: { kind: 'strokes', strokes: 6 } }, query, etag, 31904), f.context))
+      .toMatchObject({ status: 200 });
+    const after = await f.scores.get(creator, event.id, f.roundId);
+    expect(after.cards.find((card) => card.playerId === f.playerId)?.holes[0]?.score.dots?.[0]?.players[0]?.calls).toEqual([call]);
+  });
   it('fences legacy tester writes before scoring, instead of rejecting only their post-mutation response', async () => {
     const f = await testerFixture();
     const game: StrokePlayGameDefinition = { id: identifier(31200), name: 'Fictional marked tester Stroke',

@@ -5,6 +5,7 @@ import { eventTabHref, isOrganizerRoute, navigation, readEventRoute, readPage, r
 import type { PublicServices } from '../client/public-events';
 import { isUuid } from '../contracts/events';
 import { loadScoreLocation, scoreLocationHref } from './score-resume';
+import { BuildVersion } from './BuildVersion';
 // Shared scoring styles must load before either lazy public or organizer route.
 import '../features/scoring/scoring.css';
 const EventsPage = lazy(async () => {
@@ -122,7 +123,7 @@ export function App({ publicServices }: { readonly publicServices?: PublicServic
           {previewTab === 'group' && <GroupView golfers={demoTrip.golfers} />}
         </>}
       </main>
-      <footer className="site-footer"><span>PERLY GOLF MAX</span><p>Built for the trip. Still finding its swing.</p><a href="#preview">Preview</a></footer>
+      <footer className="site-footer"><span>PERLY GOLF MAX</span><p>Built for the trip. Still finding its swing. <BuildVersion /></p><a href="#preview">Preview</a></footer>
     </div>
   );
 }

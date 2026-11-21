@@ -4,6 +4,7 @@ import { isEventRevision, isEventStatus, isRecord, isUuid } from '../../../src/c
 import type { VerifyIdentity } from '../identity.js';
 import type { RequestLimiter } from '../limits.js';
 import { ApiError } from '../errors.js';
+import { failureDiagnostics } from '../diagnostics.js';
 import { readJson, response } from '../http.js';
 import type { TableEventAdministration } from './store.js';
 
@@ -53,8 +54,8 @@ export function createEventAdministrationHandler(resolve: () => EventAdministrat
     } catch (error) {
       const status = error instanceof ApiError ? error.status : 503;
       const code = error instanceof ApiError ? error.code : 'SERVICE_UNAVAILABLE';
-      if (status >= 500) context.error('Event administration failed', { code, invocationId: context.invocationId });
-      else context.warn('Event administration rejected', { code, status, invocationId: context.invocationId });
+      if (status >= 500) context.error('Event administration failed', { code, action, status, invocationId: context.invocationId, ...failureDiagnostics(error) });
+      else context.warn('Event administration rejected', { code, action, status, invocationId: context.invocationId });
       return response(status, { code });
     }
   };

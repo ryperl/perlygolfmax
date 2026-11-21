@@ -80,7 +80,7 @@ describe('independent Sweep setup and manual entry', () => {
     expect(screen.getByRole('button', { name: 'Save game' })).toBeDisabled();
     fireEvent.submit(screen.getByRole('form', { name: 'Game settings' }));
     expect(props.onSave).not.toHaveBeenCalled();
-    expect(screen.getByText(/Manual Sweep requires API support. Your draft is retained/)).toBeVisible();
+    expect(screen.getByText(/Manual Sweep is temporarily unavailable in this app version. Your draft is retained/)).toBeVisible();
   });
 
   it('defaults Wolf High/Low Sweep off and does not enable duplicate legacy linked awards', () => {

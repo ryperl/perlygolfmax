@@ -73,7 +73,7 @@ test('Churchie birdie Murphy permits par Sandy/Pully, retains target on retry/re
     await dialog.getByRole('button', { name: 'Done', exact: true }).click();
     fixture.failNextAcknowledgement();
     await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
-    await expect(page.getByRole('alert')).toContainText('Service request failed (503)');
+    await expect(page.getByRole('alert')).toContainText('Saving could not be confirmed');
     const interrupted = fixture.counters().requests[0];
     await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
     await expect(page.getByRole('form', { name: 'Group 1 hole 11 entry', exact: true })).toBeVisible();
@@ -150,7 +150,7 @@ test('Churchie Paree called derives par outcomes, survives retry/reload and reca
     await dialog.getByRole('button', { name: 'Done', exact: true }).click();
     fixture.failNextAcknowledgement();
     await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
-    await expect(page.getByRole('alert')).toContainText('Service request failed (503)');
+    await expect(page.getByRole('alert')).toContainText('Saving could not be confirmed');
     const first = fixture.counters().requests[0];
     await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
     await expect(page.getByRole('form', { name: 'Group 1 hole 11 entry', exact: true })).toBeVisible();
@@ -282,7 +282,7 @@ test('Churchie approach order and Sticky/Sandy calls survive a failed lean ackno
     await dialog.getByRole('button', { name: 'Done', exact: true }).click();
     fixture.failNextAcknowledgement();
     await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
-    await expect(page.getByRole('alert')).toContainText('Service request failed (503). Nothing was confirmed saved.');
+    await expect(page.getByRole('alert')).toContainText('Saving could not be confirmed. Your changes are kept. Refresh saved data before retrying.');
     expect(fixture.counters().requests).toHaveLength(1);
     expect(fixture.counters().writes).toBe(0);
     await expect(form.getByLabel('Fictional golfer 2 score', { exact: true })).toHaveValue('3');

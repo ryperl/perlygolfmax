@@ -34,7 +34,7 @@ export function EventSkinsSettings({ workspace, configure, onSaved }: {
       setPending(undefined); setNotice('Event skins settings saved. Loading fresh results.'); onSaved();
     } catch (error) {
       if (signal.aborted) return;
-      setNotice(`Save is not confirmed. Keep the same request for retry, or refresh to review. ${error instanceof Error ? error.message : 'Try again when connected.'}`);
+      setNotice(`Save is not confirmed. Your changes are kept. Retry or refresh to review. ${error instanceof Error ? error.message : 'Try again when connected.'}`);
     } finally { if (!signal.aborted) setBusy(false); }
   }
   if (workspace.event.role !== 'owner' || workspace.event.status !== 'active'

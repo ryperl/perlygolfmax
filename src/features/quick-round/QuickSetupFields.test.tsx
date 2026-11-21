@@ -53,7 +53,8 @@ describe('Quick round setup selections', () => {
         full={false} locked={false} disabled={false} onChange={(value) => { setDraft(value); changed(value); }} />;
     }
     render(<NineFixture />);
-    fireEvent.click(screen.getByRole('button', { name: 'Edit Group 1' }));
+    expect(screen.getByLabelText('Group 1 starting hole')).toBeVisible();
+    expect(screen.queryByLabelText('Fictional Player 1 group')).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Round holes'), { target: { value: 'back' } });
     expect(changed.mock.lastCall?.[0].rounds[0]).toMatchObject({ roundSide: 'back', groups: [{ startingHole: 10 }] });
     expect(within(screen.getByLabelText('Group 1 starting hole')).getAllByRole('option')).toHaveLength(9);
@@ -61,6 +62,26 @@ describe('Quick round setup selections', () => {
     expect(screen.getByLabelText('Group 1 starting hole')).toHaveValue('1');
     fireEvent.change(screen.getByLabelText('Round holes'), { target: { value: 'full' } });
     expect(within(screen.getByLabelText('Group 1 starting hole')).getAllByRole('option')).toHaveLength(18);
+  });
+  it('edits a shotgun start without opening the roster editor, retains invalid drafts and respects score locks', () => {
+    const changed = vi.fn<(value: EventSetupInput) => void>();
+    const props = { draft: fictionalSetup, courses: [], players: fictionalPlayers, profiles: [fictionalProfile],
+      full: false, locked: false, disabled: false, onChange: changed };
+    const view = render(<QuickSetupFields {...props} />);
+    const start = screen.getByLabelText('Group 1 starting hole');
+    expect(start).toBeVisible();
+    fireEvent.change(start, { target: { value: '7' } });
+    expect(changed.mock.lastCall?.[0].rounds[0]?.groups[0]?.startingHole).toBe(7);
+    const invalid = { ...fictionalSetup, rounds: fictionalSetup.rounds.map((round) => ({
+      ...round, groups: round.groups.map((group) => ({ ...group, startingHole: 18 })),
+    })) };
+    view.rerender(<QuickSetupFields {...props} draft={invalid} />);
+    expect(start).toHaveValue('18');
+    expect(within(start).getByRole('option', { name: /18.*unavailable/i })).toBeInTheDocument();
+    view.rerender(<QuickSetupFields {...props} locked />);
+    expect(start).toBeDisabled();
+    view.rerender(<QuickSetupFields {...props} disabled />);
+    expect(start).toBeDisabled();
   });
   it('sorts golfer choices by surname before paging without changing assignment identities', () => {
     const players = Array.from({ length: 25 }, (_, index) => ({

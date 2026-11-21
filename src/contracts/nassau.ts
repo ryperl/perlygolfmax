@@ -60,8 +60,8 @@ export function isNassauManualPress(value: unknown): value is NassauManualPress 
     && isUuid(value.id) && identifier(value.parentBetId) && identifier(value.matchId, 256)
     && integer(value.startHole, 1, 18) && integer(value.declaredAfterHole, 1, 18)
     && typeof value.proof === 'string'
-    && (value.proof.startsWith('nassau-v1:') ? value.startHole === value.declaredAfterHole + 1
-      : value.proof.startsWith('match-play-v1:') && value.startHole !== value.declaredAfterHole)
+    && (value.proof.startsWith('nassau-v1:') || value.proof.startsWith('match-play-v1:'))
+    && value.startHole !== value.declaredAfterHole
     && (value.pressingSide === 'a' || value.pressingSide === 'b') && value.proof.length <= 8192
     && /^[\x20-\x7e]+$/.test(value.proof);
 }

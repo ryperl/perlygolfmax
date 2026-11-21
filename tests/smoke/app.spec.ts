@@ -23,7 +23,7 @@ test('production shell supports navigation, history, and keyboard access', async
   await expect(page.getByRole('link', { name: 'Organizer tools', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Sign (in|out)$/ })).toHaveCount(0);
   if (process.env.EXPECT_PUBLIC_SERVICES_CONFIGURED !== 'true' && process.env.EXPECT_EVENT_SERVICES_CONFIGURED !== 'true') {
-    await expect(page.getByRole('heading', { name: 'Event services are not configured' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Event services are temporarily unavailable' })).toBeVisible();
   }
   await page.goto('/#unknown');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Events');

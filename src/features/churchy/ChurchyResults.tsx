@@ -1,6 +1,6 @@
 import type { ChurchyGameDefinition } from '../../domain/churchy';
 import type { RoundGameResult } from '../../domain/games';
-import { InternalSettlement } from '../dots';
+import { DotSpecialReviewNotice, InternalSettlement } from '../dots';
 import { gameDisplayName } from '../games';
 import './churchy.css';
 
@@ -22,6 +22,7 @@ export function ChurchyResults({ game, result }: {
     <p>{game.handicapRule === 'full-course-v1' ? 'Full captured CH' : 'SO off lowest in saved group'} · Specials use personal gross.</p>
     <p>{receipt.status === 'complete' ? 'Saved earned dots'
       : receipt.status === 'unavailable' ? 'Unavailable comparisons: no final total or settlement.' : 'Provisional: pending holes are not ties.'}</p>
+    <DotSpecialReviewNotice reviews={receipt.reviewRequired} players={result.players} />
     {game.version === 3 && game.orderMode === 'approach' && !receipt.order && <p className="game-hint">
       Partner order is not saved. Choose the approach order on hole {receipt.holes[0]?.number ?? '—'} in score entry.
     </p>}

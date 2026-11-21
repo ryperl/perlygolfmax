@@ -109,7 +109,7 @@ describe('RoundGamesPanel', () => {
     expect(screen.getByLabelText('Game name')).toBeDisabled();
     click('Retry save');
     expect(view.onSave).toHaveBeenCalledTimes(2);
-    expect(screen.getByText('Custom Churchie names require API support. Your draft is retained; refresh after an API update.')).toBeVisible();
+    expect(screen.getByText('Custom Churchie names are temporarily unavailable in this app version. Your draft is retained.')).toBeVisible();
   });
 
   it('opens one unsaved initial draft, retains edits across refresh props and does not reopen after cancel or save', async () => {

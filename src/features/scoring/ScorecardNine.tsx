@@ -2,7 +2,8 @@ import { scoreEntryText } from '../../contracts/scoring';
 import type { CourseHole } from '../../domain/catalog';
 import type { HoleScore, PlayerCourseHandicap, Scorecard } from '../../domain/scoring';
 import type { PlayerTeeProfile } from '../../domain/tees';
-import { ballDropContribution, ballDropScoreText, cardTotalText, pointsTotalText, scorecardBallDropTeams, scorecardGamePlayer, scorecardHandicapStrokes } from './scorecard-presentation';
+import { ballDropContribution, ballDropScoreText, cardTotalText, pointsTotalText, scorecardBallDropTeams, scorecardGamePlayer, scorecardHandicapStrokes, scorecardStrokeHandicap } from './scorecard-presentation';
+import type { RoundGroup } from '../../domain/setup';
 import type { ScorecardGame } from './scorecard-presentation';
 import { gameDisplayName, gameUnavailableMessage } from '../games';
 import { gameResultTotal, gameResultUnit } from '../../domain/games';
@@ -20,9 +21,9 @@ function scoreMark(score: HoleScore | undefined, par: number) {
     : { className: 'score-double', description: 'double bogey or more' };
 }
 
-function StrokeDots({ count, holeNumber }: { readonly count: number | undefined; readonly holeNumber: number }) {
+function StrokeDots({ count, holeNumber, basis }: { readonly count: number | undefined; readonly holeNumber: number; readonly basis: 'CH' | 'SO' }) {
   if (count === undefined || count <= 0) return null;
-  const description = `Hole ${String(holeNumber)}: ${String(count)} handicap stroke${count === 1 ? '' : 's'} received (tee Course Handicap)`;
+  const description = `Hole ${String(holeNumber)}: ${String(count)} handicap stroke${count === 1 ? '' : 's'} received (${basis === 'SO' ? 'SO' : 'tee Course Handicap'})`;
   return <span className="score-stroke-dots" role="img" aria-label={description} title={description}>
     {Array.from({ length: count > 3 ? 1 : count }, (_, index) => <span className="score-stroke-dot" key={index} aria-hidden="true" />)}
     {count > 3 && <span className="score-stroke-count" aria-hidden="true">x{count}</span>}
@@ -45,7 +46,7 @@ function CourseRows({ layout, fullLayout, showTotal, prefix = '' }: {
   </>;
 }
 
-export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game, onPlayerSelect, playerTees, defaultTeeLabel, courseHandicaps, teeStrokeAllocation, matchPlayers = cards }: {
+export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game, onPlayerSelect, playerTees, defaultTeeLabel, courseHandicaps, teeStrokeAllocation, matchPlayers = cards, groups = [] }: {
   readonly label: string;
   readonly subtotal: 'Out' | 'In';
   readonly layout: readonly CourseHole[];
@@ -58,12 +59,13 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
   readonly courseHandicaps?: readonly PlayerCourseHandicap[];
   readonly teeStrokeAllocation?: boolean | undefined;
   readonly matchPlayers?: readonly Pick<Scorecard, 'playerId' | 'displayName'>[];
+  readonly groups?: readonly RoundGroup[];
 }) {
   const showTotal = subtotal === 'In' || fullLayout.length === layout.length;
   const mixed = (playerTees?.length ?? 0) > 0;
   const unit = game?.definition.kind === 'dots' ? 'dots' : game ? gameResultUnit(game.definition) : 'points';
   const ballDrop = game?.definition.kind === 'ball-drop';
-  const matchPlay = game?.definition.kind === 'match-play';
+  const matchPlay = game?.definition.kind === 'match-play' || game?.definition.kind === 'nassau';
   const teams = scorecardBallDropTeams(game, cards);
   return <section className="recap-nine">
     <h4>{label}</h4>
@@ -79,7 +81,8 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
             const playerFullLayout = tee?.holes ?? fullLayout;
             const playerLayout = layout.map((hole) => playerFullLayout.find((item) => item.number === hole.number) ?? hole);
             const courseHandicap = courseHandicaps?.find((entry) => entry.playerId === card.playerId);
-            const strokeCounts = scorecardHandicapStrokes(courseHandicap?.courseHandicap, playerFullLayout, tee?.strokeAllocation ?? teeStrokeAllocation);
+            const strokeHandicap = scorecardStrokeHandicap(game, card.playerId, courseHandicaps, groups);
+            const strokeCounts = scorecardHandicapStrokes(strokeHandicap.value, playerFullLayout, tee?.strokeAllocation ?? teeStrokeAllocation);
             const saved = new Map(card.holes.map((hole) => [hole.number, hole.score]));
             const player = ballDrop || matchPlay ? undefined : scorecardGamePlayer(game, card.playerId);
             const holePoints = new Map(player?.strokeGame ? player.strokeGame.holes.map((hole) => [hole.number, hole.value])
@@ -98,7 +101,11 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
                 aria-label={`Open scorecard for ${card.displayName}`} onClick={() => { onPlayerSelect(card.playerId); }}>{card.displayName}</button> : card.displayName}
                 {courseHandicaps && <> <CourseHandicap className="scorecard-handicap"
                   value={courseHandicap} /></>}
-                {typeof courseHandicap?.courseHandicap === 'number' && courseHandicap.courseHandicap > 0 && !strokeCounts
+                {strokeHandicap.basis === 'SO' && <small className="scorecard-handicap"
+                  aria-label={strokeHandicap.value == null ? 'Strokes off the low player unavailable'
+                    : `Strokes off the low player: ${String(strokeHandicap.value)}`}>SO {strokeHandicap.value ?? '—'}</small>}
+                {(strokeHandicap.basis === 'SO' && strokeHandicap.value == null
+                  || typeof strokeHandicap.value === 'number' && strokeHandicap.value > 0 && !strokeCounts)
                   && <small className="scorecard-strokes-unavailable">Stroke dots unavailable</small>}</th>
               {playerLayout.map((hole) => {
                 const score = saved.get(hole.number);
@@ -110,7 +117,7 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
                   <span className={`score-mark ${mark.className}${text.length > 2 ? ' score-token' : ''}`}
                   title={mark.description || undefined}
                   aria-label={score ? `Hole ${String(hole.number)}: ${score.kind === 'unplayed' ? 'unplayed' : text}${mark.description ? `, ${mark.description}` : ''}` : `Hole ${String(hole.number)}: score unavailable`}>{text}</span>
-                  <StrokeDots count={strokeCounts?.get(hole.number)} holeNumber={hole.number} />
+                  <StrokeDots count={strokeCounts?.get(hole.number)} holeNumber={hole.number} basis={strokeHandicap.basis} />
                   </span>
                   {contribution && <span className="recap-counting-marker" aria-label={description} title={description}>
                     {contribution.basis === 'net' ? 'N' : 'G'}

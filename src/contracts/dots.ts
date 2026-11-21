@@ -72,7 +72,7 @@ function validateDotsHoleRecord(value: unknown, manualSweep = false): value is D
     }
     if (Number(player.counts.dime ?? 0) > 0 && Number(player.counts['super-dime'] ?? 0) > 0) return false;
     for (const call of player.calls) {
-      if (!isRecord(call) || !keys(call, ['id', 'kind', 'result'], ['murphyPresses', 'murphyTarget', 'pareeTarget']) || !isUuid(call.id)
+      if (!isRecord(call) || !keys(call, ['id', 'kind', 'result'], ['murphyPresses', 'murphyTarget', 'pareeTarget', 'pullyMurphyTarget']) || !isUuid(call.id)
         || !['paree', 'murphy', 'pully-murphy'].includes(String(call.kind))
         || !['pending', 'success', 'failure'].includes(String(call.result))
         || Object.hasOwn(call, 'murphyPresses') && (call.kind !== 'murphy'
@@ -80,7 +80,9 @@ function validateDotsHoleRecord(value: unknown, manualSweep = false): value is D
         || Object.hasOwn(call, 'murphyTarget') && (call.kind !== 'murphy' || call.result !== 'pending'
           || call.murphyTarget !== 'par' && call.murphyTarget !== 'birdie')
         || Object.hasOwn(call, 'pareeTarget') && (call.kind !== 'paree' || call.result !== 'pending'
-          || call.pareeTarget !== 'par')) return false;
+          || call.pareeTarget !== 'par')
+        || Object.hasOwn(call, 'pullyMurphyTarget') && (call.kind !== 'pully-murphy' || call.result !== 'pending'
+          || call.pullyMurphyTarget !== 'par')) return false;
       callIds.push(call.id);
     }
   }

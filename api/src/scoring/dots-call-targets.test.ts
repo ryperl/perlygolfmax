@@ -1,6 +1,7 @@
 import { HttpRequest, InvocationContext } from '@azure/functions';
 import { coexistenceRoundScores } from '../../../src/contracts/dot-coexistence.js';
 import { gameHandicapRoundScores } from '../../../src/contracts/game-handicaps.js';
+import { gameCalculationRoundScores } from '../../../src/contracts/game-calculations.js';
 import { describe, expect, it, vi } from 'vitest';
 import type { DotsCall, DotsGameDefinition, DotsHoleRecord } from '../../../src/domain/dots.js';
 import type { HoleScore, RoundScores } from '../../../src/domain/scoring.js';
@@ -94,7 +95,7 @@ describe('ordinary Dots authoritative calls and independent transport', () => {
     expect(projected?.dots?.[0]?.players[0]?.calls).toEqual([
       { id: f.paree.id, kind: 'paree', result: 'success' }, { id: f.murphy.id, kind: 'murphy', result: 'failure' },
     ]);
-    expect(decodeRoundScores(leanRoundScores(current.round, true, true, true))).toEqual(gameHandicapRoundScores(coexistenceRoundScores(legacy)));
+    expect(decodeRoundScores(leanRoundScores(current.round, true, true, true))).toEqual(gameCalculationRoundScores(gameHandicapRoundScores(coexistenceRoundScores(legacy))));
     if (!projected?.dots) throw new Error('Missing fictional projection');
     const echoed = await f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1, projected,
       etag(current.round, f.playerId), identifier(28202), undefined, true, false);
@@ -140,7 +141,7 @@ describe('ordinary Dots authoritative calls and independent transport', () => {
     const project = vi.spyOn(compatibility, 'murphyRoundScores');
     const projected = murphyTransport(value, false, false, true, true);
     expect(project).toHaveBeenCalledTimes(40);
-    expect(project).toHaveBeenNthCalledWith(1, saved.round, false, false, true);
+    expect(project).toHaveBeenNthCalledWith(1, gameCalculationRoundScores(saved.round), false, false, true);
     project.mockRestore();
     const first = privateReadResponse(f.request(), projected);
     if (!isRecord(first) || !isRecord(first.privateRead)) throw new Error('Missing fictional digest page');

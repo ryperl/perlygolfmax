@@ -2,6 +2,7 @@ import type { DotAward, DotHoleContext } from './dot-context.js';
 import type { Scorecard } from './scoring.js';
 import { groupStartingHole } from './round-navigation.js';
 import { hasStrokeAllocation } from './tees.js';
+import { handicapStrokesForHole } from './handicap-strokes.js';
 import { wolfForHole, wolfGroupMatchesRound } from './wolf.js';
 import type {
   WolfComebackReceipt, WolfComebackState, WolfContestResult, WolfGameDefinition,
@@ -106,8 +107,7 @@ export function calculateEarnedWolf(
       if (game.basis === 'net') {
         const handicap = handicaps.get(player.playerId);
         if (handicap === undefined) return unresolved('unavailable', 'missing-handicap-index');
-        const count = BigInt(player.layout.length), value = BigInt(handicap);
-        received = value / count + (BigInt(own.allocation) <= value % count ? 1n : 0n);
+        received = BigInt(handicapStrokesForHole(handicap, own.allocation, player.layout.length));
       }
       const value = exact(BigInt(score.strokes) - received);
       if (value === null) return unresolved('unavailable', 'arithmetic-range');

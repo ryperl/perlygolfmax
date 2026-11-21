@@ -1,5 +1,20 @@
-import type { DotsGameDefinition, DotsResults as Results } from '../../domain/dots';
+import type { DotSpecialReview, DotsGameDefinition, DotsResults as Results } from '../../domain/dots';
 import { dotsSpecialCatalog } from '../../domain/dots';
+
+export function DotSpecialReviewNotice({ reviews, players }: {
+  readonly reviews: readonly DotSpecialReview[] | undefined;
+  readonly players: readonly { readonly playerId: string; readonly displayName: string }[];
+}) {
+  if (!reviews?.length) return null;
+  return <div className="game-review" role="status">
+    <strong>Saved specials need review</strong>
+    <p>These claims no longer qualify against current round inputs. Unrelated awards remain visible; related totals are provisional.</p>
+    <ul>{reviews.map((review, index) => <li key={index}>
+      Hole {review.number} · {dotsSpecialCatalog.find((special) => special.kind === review.kind)?.label ?? 'Special'}
+      {review.playerId && ` · ${players.find((player) => player.playerId === review.playerId)?.displayName ?? 'Golfer unavailable'}`}
+    </li>)}</ul>
+  </div>;
+}
 
 export function DotsResults({ game, result }: { readonly game: DotsGameDefinition; readonly result: Results | undefined }) {
   const name = (id: string) => result?.players.find((player) => player.playerId === id)?.displayName ?? 'Golfer unavailable';
@@ -14,6 +29,7 @@ export function DotsResults({ game, result }: { readonly game: DotsGameDefinitio
         {' vs '}{game.partnerIds.slice(2).map(name).join(' + ')} · Same partners all round</p>}
       <p>{result.status === 'complete' ? 'Complete saved results' : result.status === 'unavailable'
         ? 'Saved inputs need review · Totals unavailable' : 'Provisional saved results'}</p>
+      <DotSpecialReviewNotice reviews={result.reviewRequired} players={result.players} />
       {game.mode === 'rotating' && <p>{result.rotation?.rotation
         ? `Cycle starts on hole ${String(result.rotation.firstHole)}${result.rotation.rotation.recordedLate ? ' · Order recovered after scoring started' : ''}`
         : 'Partner order pending. No sharing is inferred.'}</p>}

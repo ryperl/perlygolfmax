@@ -5,7 +5,7 @@ import { CalledSpecialControls } from './CalledSpecialControls';
 import { coexistenceMessage } from './coexistence-message';
 
 export function DotsPlayerControls({ game, declaration, saved, name, par, onChange, specialLabels, allowMurphyPresses = false,
-  scoreDerivedMurphy = false, scoreDerivedParee = false, score, contests = [], coexistenceRules = false, categoryPar }: {
+  scoreDerivedMurphy = false, scoreDerivedParee = false, scoreDerivedPullyMurphy = false, score, contests = [], coexistenceRules = false, categoryPar }: {
   readonly game: DotsGameDefinition;
   readonly declaration: DotsPlayerDeclaration;
   readonly saved: DotsPlayerDeclaration | undefined;
@@ -16,6 +16,7 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
   readonly allowMurphyPresses?: boolean;
   readonly scoreDerivedMurphy?: boolean;
   readonly scoreDerivedParee?: boolean;
+  readonly scoreDerivedPullyMurphy?: boolean;
   readonly score?: HoleScore | undefined;
   readonly contests?: readonly DotsContest[];
   readonly coexistenceRules?: boolean;
@@ -23,7 +24,7 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
 }) {
   const enabled = (kind: DotsSpecialKind) => game.specials.some((special) => special.kind === kind);
   const hasOpponents = game.mode !== 'individual' || game.playerIds.length > 1;
-  const context = scoreDerivedMurphy || scoreDerivedParee ? { score, par } : undefined;
+  const context = scoreDerivedMurphy || scoreDerivedParee || scoreDerivedPullyMurphy ? { score, par } : undefined;
   const validate = (value: DotsPlayerDeclaration) => coexistenceRules
     ? dotsCoexistenceWriteIssues(value, { score, par, contests, categoryPar }) : dotsDeclarationWriteIssues(value, context);
   const issues = validate(declaration);
@@ -97,8 +98,12 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
       score={score} par={par} blocked={false} hasOpponents={hasOpponents}
       validateCalls={coexistenceRules ? (calls) => validate({ ...declaration, calls }).conflicts.length === 0 : undefined}
       onChange={(value) => { onChange({ ...declaration, calls: value }); }} />}
+    {scoreDerivedPullyMurphy && enabled('pully-murphy') && <CalledSpecialControls kind="pully-murphy" calls={declaration.calls} name={name}
+      score={score} par={par} blocked={false} hasOpponents={hasOpponents}
+      validateCalls={coexistenceRules ? (calls) => validate({ ...declaration, calls }).conflicts.length === 0 : undefined}
+      onChange={(value) => { onChange({ ...declaration, calls: value }); }} />}
     {calls.filter((kind) => enabled(kind) && !(scoreDerivedMurphy && kind === 'murphy')
-      && !(scoreDerivedParee && kind === 'paree')).map((kind) => {
+      && !(scoreDerivedParee && kind === 'paree') && !(scoreDerivedPullyMurphy && kind === 'pully-murphy')).map((kind) => {
       const callBlocked = kind === 'murphy' && (declaration.counts.hogan ?? 0) > 0;
       return <div className="dots-call-controls" key={kind}>
         <button type="button" aria-label={`Call ${label(kind)} · ${name}`} disabled={callBlocked} onClick={() => {

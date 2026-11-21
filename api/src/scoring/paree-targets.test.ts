@@ -1,6 +1,7 @@
 import { HttpRequest, InvocationContext } from '@azure/functions';
 import { coexistenceRoundScores } from '../../../src/contracts/dot-coexistence.js';
 import { gameHandicapRoundScores } from '../../../src/contracts/game-handicaps.js';
+import { gameCalculationRoundScores } from '../../../src/contracts/game-calculations.js';
 import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import type { ChurchyGameDefinitionV3, ChurchySpecialsV3 } from '../../../src/domain/churchy.js';
@@ -163,7 +164,7 @@ describe('authoritative Churchie Paree targets', () => {
           }
           const current = await f.scores.get(owner ? creator : f.actor, event.id, f.roundId);
           const text = JSON.stringify(lean ? leanRoundScores(current, murphy, paree, true)
-            : gameHandicapRoundScores(coexistenceRoundScores(murphyRoundScores(current, murphy, paree))));
+            : gameCalculationRoundScores(gameHandicapRoundScores(coexistenceRoundScores(murphyRoundScores(current, murphy, paree)))));
           const hash = createHash('sha256').update(text).digest('hex'), parts = Math.ceil(text.length / privateReadPartCharacters);
           const handler = owner ? createScoringHandler(() => f.api, 'scores') : createPublicHandler(() => f.api, 'scores');
           for (let index = 0; index < parts; index++) {

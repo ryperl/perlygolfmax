@@ -55,11 +55,32 @@ and the base High/Low comparison uses net 4. Distance and category qualification
 also remain unchanged. Score entry shows CH and applicable whole-group SO,
 not a hole's received-stroke count.
 
+Scorecard stroke dots follow the selected game's effective SO when applicable,
+including an explicitly linked Wolf context. Full/gross and strokes-only views
+retain CH dots. The full saved group supplies the minimum even in an individual
+card. Personal tee allocation, gross score marks and counting-ball roles remain
+unchanged; unavailable SO never becomes scratch.
+
+Pully Murphy's explicit called checkbox opts into a score-derived **exact
+personal gross par** target. It does not infer a call or a long putt from strokes.
+Birdie is not a made Pully Murphy; ordinary Pully still permits par or birdie.
+Unplayed remains pending, pickup/DNF misses. Legacy manual calls remain manual
+until explicit opt-in, preserving their identities and existing multipliers.
+
+Compatible owner input corrections apply without deleting retained special
+claims. A claim that no longer qualifies is withheld and flagged for review;
+unrelated known specials and Churchie High/Low remain available. Related totals
+remain provisional, not final settlement. Invalid manual success is not
+silently changed into an opponent-awarding failure. Correction award audits
+include standalone Churchie version 3 and never rewrite original receipts.
+
 ## Starting holes and carries
 
 Group circuits wrap through the captured layout from the saved starting hole.
 Changing the start affects the group's navigation and all circuit-based games.
 It is a conditional round-setup write, not an independent game-settings write.
+Quick-round starting-hole choices are visible for each group without opening
+its roster editor. Organizer round setup retains the same shared choice.
 
 New or explicitly changed Skins carryovers require the **entire round** to be
 one saved group containing exactly four golfers. The configuration uses
@@ -74,6 +95,11 @@ Overall follows the entire shared circuit. Automatic and manual presses remain
 independent bets within their parent segment, and new proofs bind the selected
 rules and whole-group CH where required.
 
+Singles setup uses Golfer/Opponent, then the selected names throughout entry
+and results. Team matches show their members and custom team names. Saved
+strokes calculate the normal outcome automatically; optional concede/halve
+actions do not replace raw strokes and save through the existing hole write.
+
 ## Protocol and legacy compatibility
 
 The API advertises `gameHandicapRules: 1` in round scores. Current score, game,
@@ -81,6 +107,14 @@ purse and tester transports negotiate `gameHandicaps=1`, including digest pages,
 staged publications and lean acknowledgements. Unknown or duplicate versions
 require an update. Full and lean decoders validate markers, captured group-low
 values and transmitted results without substituting different totals.
+
+Updated clients additionally negotiate `gameCalculations=2`; the API advertises
+`gameCalculationsVersion: 2` and narrow `pullyMurphyTargets` support. This covers
+signed full-plus Wolf allocation, circuit Nassau presses, isolated special
+review and score-derived Pully Murphy. Compatible unaffected old reads remain
+available; affected old reads and business writes require an update before
+mutation. New full-net Wolf writes require version-2 support even before
+captured inputs could become plus. Full/lean numerical authority is preserved.
 
 Unmarked saved definitions retain their original rules: Stableford allowance,
 full-CH stroke games, off-low Churchie/Wolf, and match-participant-low

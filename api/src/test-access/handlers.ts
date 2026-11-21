@@ -2,6 +2,7 @@ import type { HttpRequest, HttpResponseInit, InvocationContext } from '@azure/fu
 import { isCreateTesterLink, isRenewTesterLink, isRevokeTesterLink } from '../../../src/contracts/test-access.js';
 import { isEventRevision, isUuid } from '../../../src/contracts/events.js';
 import { ApiError } from '../errors.js';
+import { failureDiagnostics } from '../diagnostics.js';
 import { readJson, response } from '../http.js';
 import type { VerifyIdentity } from '../identity.js';
 import type { RequestLimiter } from '../limits.js';
@@ -96,8 +97,8 @@ export function createTesterHandler(resolveApi: () => TesterApi, action: TesterA
       const status = error instanceof ApiError || error instanceof StringRulesClientUpdateRequired || error instanceof DotsCallsClientUpdateRequired || error instanceof CategorySweepsClientUpdateRequired || error instanceof ChurchyNamesClientUpdateRequired || error instanceof DotsCoexistenceClientUpdateRequired || error instanceof GameHandicapClientUpdateRequired ? error.status : 503;
       const code = error instanceof ApiError || error instanceof StringRulesClientUpdateRequired || error instanceof DotsCallsClientUpdateRequired || error instanceof CategorySweepsClientUpdateRequired || error instanceof ChurchyNamesClientUpdateRequired || error instanceof DotsCoexistenceClientUpdateRequired || error instanceof GameHandicapClientUpdateRequired ? error.code : 'SERVICE_UNAVAILABLE';
       // Only fixed classifications are logged, never headers, bodies, secrets, or raw provider errors.
-      if (status >= 500) context.error('Tester API failed', { code, invocationId: context.invocationId });
-      else context.warn('Tester API rejected', { code, status, invocationId: context.invocationId });
+      if (status >= 500) context.error('Tester API failed', { code, action, status, invocationId: context.invocationId, ...failureDiagnostics(error) });
+      else context.warn('Tester API rejected', { code, action, status, invocationId: context.invocationId });
       return response(status, { code });
     }
   };

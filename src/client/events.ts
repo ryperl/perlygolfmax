@@ -53,7 +53,7 @@ export function createEventsClient(apiUrl: string, getToken: () => Promise<strin
         method: 'POST', body: JSON.stringify({ name }),
         headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestId },
       });
-      if (!isEventSummary(result)) throw new Error('Invalid saved event response. Retry with the same request.');
+      if (!isEventSummary(result)) throw new Error('Invalid saved event response. Your draft is kept. Refresh saved data before retrying.');
       return result;
     },
     async setStatus(event, status, signal) {

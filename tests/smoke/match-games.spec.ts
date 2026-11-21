@@ -115,8 +115,9 @@ for (const count of [9, 18] as const) {
       await editor.getByRole('combobox', { name: 'Game type', exact: true }).selectOption('match-play');
       await editor.getByRole('combobox', { name: 'Playing group', exact: true }).selectOption('1');
       await editor.getByRole('combobox', { name: 'Score basis', exact: true }).selectOption('gross');
-      await editor.getByRole('combobox', { name: 'Side A golfer 1', exact: true }).selectOption('00000000-0000-4000-8000-000000000001');
-      await editor.getByRole('combobox', { name: 'Side B golfer 1', exact: true }).selectOption('00000000-0000-4000-8000-000000000002');
+      await editor.getByRole('combobox', { name: 'Golfer', exact: true }).selectOption('00000000-0000-4000-8000-000000000001');
+      await editor.getByRole('combobox', { name: 'Opponent', exact: true }).selectOption('00000000-0000-4000-8000-000000000002');
+      await expect(editor.getByText('Fictional golfer 1 vs Fictional golfer 2', { exact: true })).toBeVisible();
       await editor.getByRole('textbox', { name: 'Match stake per side · USD $', exact: true }).fill('1.01');
       await expect(editor.getByRole('textbox', { name: 'Front stake per side · USD $' })).toHaveCount(0);
       await editor.getByRole('button', { name: 'Save game', exact: true }).click();
@@ -125,7 +126,16 @@ for (const count of [9, 18] as const) {
       const start = count === 9 ? 17 : 1;
       for (const hole of [start, start + 1]) {
         const form = page.getByRole('form', { name: `Group 1 hole ${String(hole)} entry`, exact: true });
-        await form.getByRole('combobox', { name: `Side A vs Side B · Hole ${String(hole)}`, exact: true }).selectOption('side-a');
+        const actions = form.getByRole('group', { name: 'Match Play · Match actions', exact: true });
+        const summary = actions.locator('summary');
+        await expect(actions.getByRole('button', { name: /Concede/ })).toHaveCount(0);
+        await summary.focus();
+        await summary.press('Enter');
+        await expect(summary.locator('..')).toHaveJSProperty('open', true);
+        const concede = actions.getByRole('button', { name: 'Concede to Fictional golfer 1', exact: true });
+        expect((await concede.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+        await concede.click();
+        await expect(summary).toContainText('Conceded to Fictional golfer 1 · Not saved');
         for (const input of await form.locator('input[inputmode="numeric"]').all()) await input.fill('4');
         await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
       }
@@ -213,7 +223,7 @@ for (const theme of ['light', 'dark']) {
       await editor.getByRole('combobox', { name: 'Score basis', exact: true }).selectOption('gross');
       await editor.getByRole('combobox', { name: 'Nassau format', exact: true }).selectOption('two-v-two-best-ball');
       for (const [index, playerId] of wolf.playerIds.entries()) {
-        await editor.getByRole('combobox', { name: `Side ${index < 2 ? 'A' : 'B'} golfer ${String(index % 2 + 1)}`, exact: true }).selectOption(playerId);
+        await editor.getByRole('combobox', { name: `Team ${index < 2 ? '1' : '2'} golfer ${String(index % 2 + 1)}`, exact: true }).selectOption(playerId);
       }
       await editor.getByRole('button', { name: 'No planned money', exact: true }).click();
       await editor.getByLabel('Front stake per side · USD $', { exact: true }).fill('1.01');
@@ -226,7 +236,7 @@ for (const theme of ['light', 'dark']) {
       const controls = form.locator('.round-game-hole-controls');
       expect(await form.evaluate((element) => element.querySelector('form'))).toBeNull();
       const wolfControls = form.getByRole('group', { name: 'Wolf · Hole 1', exact: true });
-      const nassauControls = form.getByRole('group', { name: 'Nassau · Match outcomes and presses', exact: true });
+      const nassauControls = form.getByRole('group', { name: 'Nassau · Match actions', exact: true });
       expect(await wolfControls.evaluate((element) => {
         const scores = element.closest('form')?.querySelector('.group-entry-rows');
         return !!scores && (element.compareDocumentPosition(scores) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
@@ -248,7 +258,13 @@ for (const theme of ['light', 'dark']) {
       }
       await expect(form.locator('button[type="submit"], button:not([type])')).toHaveCount(1);
       await form.getByRole('combobox', { name: 'Wolf declaration', exact: true }).selectOption('pig');
-      await form.getByRole('combobox', { name: 'Side A vs Side B · Hole 1', exact: true }).selectOption('side-a');
+      await expect(nassauControls.getByRole('combobox')).toHaveCount(0);
+      await nassauControls.locator('summary').click();
+      const concede = nassauControls.getByRole('button', { name: 'Concede to Fictional golfer 4 + Fictional golfer 3', exact: true });
+      expect((await concede.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+      await concede.click();
+      await expect(nassauControls.locator('summary')).toContainText('Not saved');
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       expect(fixture.counters().writes).toBe(0);
       await page.getByRole('button', { name: 'Games', exact: true }).click();
       const openWolf = async () => {
@@ -320,15 +336,15 @@ test('saved late Wolf decisions stay read-only, corrections use peer revision, a
     await expect(results.getByRole('columnheader', { name: 'Dot balance', exact: true })).toBeVisible();
     fixture.unsupported();
     await page.getByRole('button', { name: 'Refresh saved round', exact: true }).click();
-    await expect(page.getByText('This API does not advertise support for editing this game.')).toHaveCount(2);
+    await expect(page.getByText('Editing this game is temporarily unavailable in this app version.')).toHaveCount(2);
     await page.getByRole('button', { name: 'Add game', exact: true }).click();
     const editor = page.getByRole('form', { name: 'Game settings', exact: true });
     for (const kind of ['stroke-play', 'wolf', 'nassau']) await expect(editor.locator(`option[value="${kind}"]`)).toHaveJSProperty('disabled', true);
     await editor.getByRole('button', { name: 'Cancel editing', exact: true }).click();
     await page.getByRole('button', { name: 'Enter scores', exact: true }).click();
     await expect(form.getByRole('combobox', { name: 'Wolf match outcome', exact: true })).toBeDisabled();
-    await expect(form.getByText('Wolf declarations unavailable: API support is required.')).toBeVisible();
-    await expect(form.getByText('Nassau declarations unavailable: API support is required.')).toBeVisible();
+    await expect(form.getByText('Wolf choices are temporarily unavailable in this app version.')).toBeVisible();
+    await expect(form.getByText('Nassau choices are temporarily unavailable in this app version.')).toBeVisible();
     expect(fixture.counters().writes).toBe(1);
   } finally { await fixture.close(); }
 });

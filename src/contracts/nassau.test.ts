@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { NassauGameDefinition, NassauHoleRecord, NassauManualPress, NassauRoundContext } from '../domain/nassau.js';
 import { calculateNassau, calculateNassauFromHandicaps, nassauMatchId } from '../domain/nassau.js';
 import { publishedCourseHandicaps } from '../domain/playing-handicaps.js';
+import { isHoleScore } from './scoring.js';
 import { strokeGameFixture, strokeGameId } from '../domain/stroke-games.test-support.js';
 import { isNassauDefinition, isNassauHoleRecord, isNassauManualPress, isNassauResults,
   nassauDefinitionMatchesRound, nassauRecordsMatchGame } from './nassau.js';
@@ -67,6 +68,26 @@ describe('Nassau runtime definition contracts', () => {
 });
 
 describe('Nassau saved record contracts', () => {
+  it('round-trips a genuine 9-to-1 shared-circuit Front press into semantic validation without changing its identity', () => {
+    const f = fixture();
+    const game = { ...f.game, basis: 'gross' as const, playOrder: 'shared-group-v1' as const, automaticPresses: false };
+    const round = { ...f.snapshot, groups: f.snapshot.groups.map((group) => ({ ...group, startingHole: 5 })) };
+    const cards = f.cards.map((card, index) => ({ ...card, holes: card.holes.map((hole) => ({ ...hole,
+      score: hole.number >= 5 && hole.number <= 9 ? { kind: 'strokes' as const, strokes: index === 0 ? 3 : 4 }
+        : { kind: 'unplayed' as const } })) }));
+    const option = calculateNassau(game, round, cards).pressOptions.find((option) => option.startHole === 1);
+    if (!option) throw new Error('Missing fictional wrapped press');
+    const press = { ...option, id: strokeGameId(981) };
+    const record = { ...f.record, number: 1, outcomes: [], presses: [press] };
+    expect(press).toMatchObject({ declaredAfterHole: 9, startHole: 1 });
+    expect(isNassauManualPress(press)).toBe(true);
+    expect(isNassauHoleRecord(record)).toBe(true);
+    expect(isHoleScore({ kind: 'unplayed', nassau: [record] })).toBe(true);
+    expect(nassauRecordsMatchGame([record], game)).toBe(true);
+    expect(calculateNassau(game, round, cards, [record]).stalePresses).toEqual([]);
+    expect(calculateNassau(game, round, cards, [{ ...record, presses: [{ ...press, proof: 'nassau-v1:[]' }] }])
+      .stalePresses).toHaveLength(1);
+  });
   it('checks structural declarations separately from actual source proof eligibility', () => {
     const f = fixture();
     expect(isNassauManualPress(f.manual)).toBe(true);

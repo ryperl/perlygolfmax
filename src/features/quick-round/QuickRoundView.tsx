@@ -34,7 +34,7 @@ function requireQuick(workspace: EventWorkspace, eventId: string): EventWorkspac
 function requireQuickScores(round: RoundScores, eventId: string, roundId: string): RoundScores {
   if (round.eventId !== eventId || round.roundId !== roundId || round.eventStatus !== 'active'
     || !canManageRoundGames(round) || round.permissions?.role !== 'public' || round.quickRound !== true) {
-    throw new Error('Public Quick round games are unavailable from this API.');
+    throw new Error('Quick round games are temporarily unavailable in this app version.');
   }
   return round;
 }

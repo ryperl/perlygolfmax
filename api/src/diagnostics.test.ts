@@ -2,6 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { failureDiagnostics } from './diagnostics.js';
 
 describe('safe dependency failure diagnostics', () => {
+  it('retains an opaque dependency request reference but never an arbitrary identifier or URL', () => {
+    const requestId = '00000000-0000-4000-8000-000000000001';
+    expect(failureDiagnostics({ requestId })).toEqual({ failureRequestId: requestId });
+    for (const value of ['fixture-sensitive-token', 'fixture@example.test', 'https://fixture.example.test']) {
+      expect(failureDiagnostics({ requestId: value })).toEqual({});
+    }
+  });
   it('retains only bounded type, code, status and network-cause classifications', () => {
     const error = Object.assign(new Error('private fixture detail'), {
       name: 'RestError', code: 'AuthorizationPermissionMismatch', statusCode: 403,

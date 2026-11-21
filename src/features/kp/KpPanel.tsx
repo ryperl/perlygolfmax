@@ -55,7 +55,7 @@ export function KpPanel({ round, busy, dirty, groupNumber, holeNumber, onGroup, 
   const group = round.groups.find((entry) => entry.number === groupNumber);
   return <section className="kp-panel" aria-label="KP Competition">
     <h2>KP Competition</h2>
-    {round.kpEnabled !== true ? <p role="status">KP requires a newer API. Entry is unavailable.</p> : !eligible.length
+    {round.kpEnabled !== true ? <p role="status">KP entry is temporarily unavailable in this app version.</p> : !eligible.length
       ? <p role="status">No par 3 holes in the saved default tee. KP is not configurable.</p>
       : !round.kp ? <>{owner && <button disabled={locked} onClick={() => { void manage({
         version: 1, context: kpContext(round.layout, round.cards.map((card) => card.playerId), round.kpCaptureIdentity), status: 'open', decisions: [],

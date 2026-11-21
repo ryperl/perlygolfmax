@@ -47,7 +47,7 @@ export function createQuickRoundClient(apiUrl: string, send: typeof fetch = fetc
       method: 'PUT', body: input, requestId, ...(etag === null ? { createOnly: true } : { etag }),
     }, maximumEventSetupBytes);
     if (!isRecord(value) || value.eventId !== eventId || value.requestId !== requestId || !isEventRevision(value.workspaceEtag)) {
-      throw new Error('Quick round save is uncertain. Keep this draft and retry the same request.');
+      throw new Error('Quick round save is uncertain. Your changes are kept. Retry or refresh saved data.');
     }
     const saved = await load(eventId, signal);
     const requested = input.rounds[0];
@@ -82,7 +82,7 @@ export function createQuickRoundClient(apiUrl: string, send: typeof fetch = fetc
       const value = await request(`${eventId}/archive`, signal, { method: 'PUT', body: {}, etag, requestId });
       if (!isRecord(value) || Object.keys(value).length !== 3 || value.eventId !== eventId
         || value.requestId !== requestId || value.status !== 'archived') {
-        throw new Error('Archive is not confirmed. Retain the same request and refresh before retrying.');
+        throw new Error('Archive is not confirmed. Refresh saved data before retrying.');
       }
     },
     create: (eventId, input, signal) => write(eventId, null, eventId, input, signal),

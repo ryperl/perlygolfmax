@@ -14,6 +14,7 @@ import { churchyNamesRoundScores } from './churchy-names.js';
 import { sweepRulesRoundScores, requireSweepRulesInValue } from './sweep-rules.js';
 import { coexistenceRoundScores } from './dot-coexistence.js';
 import { gameHandicapRoundScores } from './game-handicaps.js';
+import { gameCalculationRoundScores } from './game-calculations.js';
 
 function without(value: object, ...keys: readonly string[]): Record<string, unknown> {
   return Object.fromEntries(Object.entries(value).filter(([name]) => !keys.includes(name)));
@@ -30,7 +31,8 @@ function leanWolf(value: WolfResults, game: WolfGameDefinition | undefined, roun
 }
 
 /** Omit evidence and duplicate derived views, never captured inputs or canonical write receipts. */
-export function leanRoundScores(input: RoundScores, murphyTargets = false, pareeTargets = false, stringRules = false, dotsCalls = false, categorySweeps = false, churchyNames = false, sweepRules = false, dotCoexistence = false, gameHandicaps = false) {
+export function leanRoundScores(input: RoundScores, murphyTargets = false, pareeTargets = false, stringRules = false, dotsCalls = false, categorySweeps = false, churchyNames = false, sweepRules = false, dotCoexistence = false, gameHandicaps = false, gameCalculations = false) {
+  input = gameCalculationRoundScores(input, gameCalculations);
   const round = gameHandicapRoundScores(coexistenceRoundScores(sweepRulesRoundScores(churchyNamesRoundScores(categorySweepRoundScores(stringRoundScores(murphyRoundScores(input, murphyTargets, pareeTargets, dotsCalls), stringRules), categorySweeps), churchyNames), sweepRules), dotCoexistence), gameHandicaps);
   const games = round.games;
   return {
@@ -52,9 +54,9 @@ export function leanRoundScores(input: RoundScores, murphyTargets = false, paree
   };
 }
 
-export function leanScoreWriteResult(value: ScoreWriteResult, murphyTargets = false, pareeTargets = false, stringRules = false, dotsCalls = false, categorySweeps = false, churchyNames = false, sweepRules = false, dotCoexistence = false, gameHandicaps = false) {
+export function leanScoreWriteResult(value: ScoreWriteResult, murphyTargets = false, pareeTargets = false, stringRules = false, dotsCalls = false, categorySweeps = false, churchyNames = false, sweepRules = false, dotCoexistence = false, gameHandicaps = false, gameCalculations = false) {
   if (!sweepRules) requireSweepRulesInValue(value.change);
-  return { round: leanRoundScores(value.round, murphyTargets, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps),
+  return { round: leanRoundScores(value.round, murphyTargets, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations),
     change: without(murphyScoreChange(value.change, murphyTargets, value.round, pareeTargets, dotsCalls), 'dotAwardAudit') };
 }
 

@@ -7,7 +7,7 @@ export function EventSkinsBoard({ value, onDetails, detailsTrigger }: {
   readonly value: EventSkinsDisplay; readonly onDetails?: () => void; readonly detailsTrigger?: Ref<HTMLButtonElement>;
 }) {
   const { workspace, eventSkins: results } = value;
-  if (workspace.eventSkinsSupported !== true) return <p>Event-wide skins is not supported by this API.</p>;
+  if (workspace.eventSkinsSupported !== true) return <p>Event-wide skins is temporarily unavailable in this app version.</p>;
   if (!workspace.eventSkins) return <section><h1>Event-wide skins</h1><p>Event skins is not configured.</p>
     <p>The organizer can enable this independent competition without changing round games or the primary overall competition.</p></section>;
   if (!results) return <p role="alert">Event skins results are unavailable. Refresh to retry.</p>;

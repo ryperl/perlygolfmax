@@ -44,7 +44,7 @@ describe('GameSettings', () => {
     const view = render(<GameSettings {...props} />);
     expect(screen.getByLabelText('Game name')).toHaveValue(game.name);
     expect(screen.getByLabelText('Game name')).toBeDisabled();
-    expect(screen.getByText(/names are read-only until this API/)).toBeVisible();
+    expect(screen.getByText(/Custom Churchie names are temporarily unavailable/)).toBeVisible();
     view.rerender(<GameSettings {...props} churchyCustomNamesSupported />);
     expect(screen.getByLabelText('Game name')).toBeEnabled();
     fireEvent.change(screen.getByLabelText('Game name'), { target: { value: 'Fictional evening game' } });
@@ -80,8 +80,8 @@ describe('GameSettings', () => {
     expect(screen.getByLabelText('Game name')).toHaveValue('Fictional group game');
     fireEvent.change(screen.getByLabelText('Game type'), { target: { value: 'match-play' } });
     expect(screen.getByLabelText('Playing group')).toHaveValue(String(first.number));
-    expect(screen.getByLabelText('Side A golfer 1')).toHaveValue('');
-    expect(screen.getByLabelText('Side B golfer 1')).toHaveValue('');
+    expect(screen.getByLabelText('Golfer')).toHaveValue('');
+    expect(screen.getByLabelText('Opponent')).toHaveValue('');
   });
 
   it('uses fixed named v2 toggles and locks group, order and specials after scoring while retaining stake editing', () => {

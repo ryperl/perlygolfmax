@@ -3,7 +3,7 @@ import type { DotsCall } from '../../domain/dots';
 import type { HoleScore } from '../../domain/scoring';
 
 export function CalledSpecialControls({ kind, calls, name, score, par, blocked, onChange, hasOpponents = true, validateCalls }: {
-  readonly kind: 'murphy' | 'paree';
+  readonly kind: 'murphy' | 'paree' | 'pully-murphy';
   readonly calls: readonly DotsCall[];
   readonly name: string;
   readonly score: HoleScore | undefined;
@@ -14,13 +14,15 @@ export function CalledSpecialControls({ kind, calls, name, score, par, blocked, 
   readonly validateCalls?: ((calls: readonly DotsCall[]) => boolean) | undefined;
 }) {
   const selected = calls.filter((call) => call.kind === kind);
-  const label = kind === 'murphy' ? 'Murphy' : 'Paree';
+  const label = kind === 'murphy' ? 'Murphy' : kind === 'paree' ? 'Paree' : 'Pully Murphy';
   function newCall(id: string = crypto.randomUUID()): DotsCall {
     return { id, kind, result: 'pending',
-      ...(kind === 'murphy' ? { murphyTarget: 'par', murphyPresses: 0 } : { pareeTarget: 'par' }) };
+      ...(kind === 'murphy' ? { murphyTarget: 'par', murphyPresses: 0 }
+        : kind === 'paree' ? { pareeTarget: 'par' } : { pullyMurphyTarget: 'par' }) };
   }
   function scoreTarget(call: DotsCall): DotsCall {
-    return { ...call, result: 'pending', ...(kind === 'murphy' ? { murphyTarget: 'par' } : { pareeTarget: 'par' }) };
+    return { ...call, result: 'pending', ...(kind === 'murphy' ? { murphyTarget: 'par' }
+      : kind === 'paree' ? { pareeTarget: 'par' } : { pullyMurphyTarget: 'par' }) };
   }
   function replace(call: DotsCall, value: DotsCall) {
     onChange(calls.map((entry) => entry.id === call.id ? value : entry));
@@ -31,7 +33,8 @@ export function CalledSpecialControls({ kind, calls, name, score, par, blocked, 
       const suffix = selected.length > 1 ? ` ${String(index + 1)}` : '';
       const result = call ? dotsCallResult(call, score, par) : 'pending';
       const stage = call?.murphyPresses ?? 0;
-      const automatic = kind === 'murphy' ? call?.murphyTarget !== undefined : call?.pareeTarget !== undefined;
+      const automatic = kind === 'murphy' ? call?.murphyTarget !== undefined : kind === 'paree'
+        ? call?.pareeTarget !== undefined : call?.pullyMurphyTarget !== undefined;
       const target = par - (kind === 'murphy' && call?.murphyTarget === 'birdie' ? 1 : 0);
       const candidate = call ? undefined : newCall('new-call-candidate');
       const nextCalls = candidate ? [...calls, candidate] : calls;
@@ -56,7 +59,7 @@ export function CalledSpecialControls({ kind, calls, name, score, par, blocked, 
         </label>}
         <p className="called-special-outcome" aria-live="polite">{automatic
           ? result === 'pending' ? 'Pending · enter a gross score'
-            : `${result === 'success' ? 'Made' : hasOpponents ? 'Missed · opponents earn' : 'Missed · no opponents'} · needs ${String(target)} or better`
+            : `${result === 'success' ? 'Made' : hasOpponents ? 'Missed · opponents earn' : 'Missed · no opponents'} · needs ${kind === 'pully-murphy' ? `exact gross par ${String(target)}` : `${String(target)} or better`}`
           : `Manual result: ${result === 'success' ? 'Made' : result === 'failure' ? 'Missed' : 'Pending'}`}</p>
         {!automatic && <button type="button" disabled={validateCalls?.(calls.map((entry) => entry.id === call.id ? scoreTarget(call) : entry)) === false} onClick={() => {
           replace(call, scoreTarget(call));
@@ -73,6 +76,7 @@ export function CalledSpecialControls({ kind, calls, name, score, par, blocked, 
         </>}
       </div>;
     })}
+    {kind === 'pully-murphy' && <small>Call the long par putt explicitly. Only the gross score determines its made/missed outcome.</small>}
     {kind === 'paree' && selected.length > 0 && <button type="button" aria-label={`Add another Paree call · ${name}`}
       disabled={validateCalls?.([...calls, newCall('new-call-candidate')]) === false}
       onClick={() => { onChange([...calls, newCall()]); }}>Add another Paree call</button>}

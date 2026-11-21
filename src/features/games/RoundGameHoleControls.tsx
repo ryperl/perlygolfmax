@@ -51,9 +51,9 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
         onChange={(record) => { onChurchyChange?.(record); }} />;
     }
     if (game.kind === 'nassau' || game.kind === 'match-play') return <div key={game.id}>
-      {!supportsRoundGame(round, game.kind) && <p>{game.kind === 'match-play' ? 'Match Play' : 'Nassau'} declarations unavailable: API support is required.</p>}
+      {!supportsRoundGame(round, game.kind) && <p>{game.kind === 'match-play' ? 'Match Play' : 'Nassau'} choices are temporarily unavailable in this app version.</p>}
       <NassauHoleControls game={game} result={round.games?.results.find((result) => result.gameId === game.id)?.nassau}
-        holeNumber={holeNumber} etag={etag ?? ''} disabled={locked}
+        players={round.cards} holeNumber={holeNumber} etag={etag ?? ''} disabled={locked}
         saved={saved.nassau?.find((record) => record.gameId === game.id && record.number === holeNumber)}
         draft={draft?.nassau?.find((record) => record.gameId === game.id && record.number === holeNumber)}
         onChange={(record) => { onNassauChange([...(draft?.nassau ?? []).filter((entry) => entry.gameId !== game.id), record]); }} />
@@ -78,9 +78,9 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
         }
       }
       return <div key={game.id}>
-      {!supportsRoundGame(round, 'wolf') && <p>Wolf declarations unavailable: API support is required.</p>}
+      {!supportsRoundGame(round, 'wolf') && <p>Wolf choices are temporarily unavailable in this app version.</p>}
       {game.version === 2 && game.highLowSweep === true && round.wolfHighLowSweep !== true
-        && <p>Wolf High/Low Sweep declarations require advertised API support.</p>}
+        && <p>Wolf High/Low Sweep is temporarily unavailable in this app version.</p>}
       <WolfHoleControls game={game} wolfId={game.version === 2
         ? result?.holes.find((hole) => hole.number === holeNumber)?.wolfId ?? null
         : wolfForHole(game, round, holeNumber)} players={round.cards}
@@ -108,7 +108,7 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
         const record = staged ?? saved.dots?.find((record) => record.gameId === game.id && record.number === holeNumber)
           ?? { number: holeNumber, gameId: game.id, gameEtag: etag ?? '', players: [], contests: [] };
         return <fieldset key={game.id} disabled={dotsLocked}><legend>{game.name}</legend>
-          {!round.dotsRulesVersions?.includes(2) && <p>Rotating Dots edits require advertised API version-2 support.</p>}
+          {!round.dotsRulesVersions?.includes(2) && <p>Rotating Dots edits are temporarily unavailable in this app version.</p>}
           <DotsRotationControls game={game} holeNumber={holeNumber} record={record} rotation={rotation}
             locked={rotationLocked} players={round.cards}
             onChange={(record) => { onSpecialDotsChange?.([...(draft?.dots ?? []).filter((entry) => entry.gameId !== game.id),
@@ -121,6 +121,7 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
         par: round.playerTees?.find((entry) => entry.playerId === playerId)?.profile.holes.find((hole) => hole.number === holeNumber)?.par
           ?? round.layout.find((hole) => hole.number === holeNumber)?.par ?? 0 }))}
       scoreDerivedMurphy={round.dotsCallTargets === true} scoreDerivedParee={round.dotsCallTargets === true}
+      scoreDerivedPullyMurphy={round.pullyMurphyTargets === true}
       coexistenceRules={round.dotsCoexistenceRulesVersion === 2}
       allowMurphyPresses={round.dotsCallTargets === true}
       playerScores={playerScores ?? round.cards.map((card) => ({ playerId: card.playerId,
@@ -139,9 +140,9 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
         disabled={dotsLocked} staged={staged?.players.some((player) => player.playerId === playerId) === true}>
         {controls}
       </DotsEntryButton> : <Fragment key={game.id}>
-        {individualUnsupported && <p>Individual Dots edits for this group size require advertised API support.</p>}
-        {game.version === 2 && !round.dotsRulesVersions?.includes(2) && <p>Rotating Dots edits require advertised API version-2 support.</p>}
-        {game.sweepRule === 'manual-v1' && round.dotsManualSweep !== true && <p>Manual Sweep edits require advertised API support.</p>}
+        {individualUnsupported && <p>Individual Dots edits for this group size are temporarily unavailable in this app version.</p>}
+        {game.version === 2 && !round.dotsRulesVersions?.includes(2) && <p>Rotating Dots edits are temporarily unavailable in this app version.</p>}
+        {game.sweepRule === 'manual-v1' && round.dotsManualSweep !== true && <p>Manual Sweep edits are temporarily unavailable in this app version.</p>}
         {controls}
       </Fragment>;
     }

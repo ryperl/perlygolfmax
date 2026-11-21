@@ -230,7 +230,7 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
               counts={row.draft?.churchyCounts} value={
                 row.draft?.churchy ?? row.saved.churchy ?? emptyChurchySpecials(churchy, gameEtag)
               } onChange={(value, counts) => { cancelMovement(); onDotsEdit(row.playerId, { ...value, gameId: churchy.id, gameEtag }, counts); }} />
-            {churchy.version === 2 && !churchyV2Supported && <p className="entry-error">Churchie edits require API rules support. Refresh before editing specials.</p>}
+            {churchy.version === 2 && !churchyV2Supported && <p className="entry-error">Churchie special edits are temporarily unavailable in this app version. Your changes are kept.</p>}
           </>}
           {rows.length === 1 && <div className="quick-scores" aria-label={`Quick scores for ${row.displayName}`}>{quickScores.map((value) => <button type="button" key={value}
             aria-label={`${pickedUp ? 'X' : ''}${String(value)} ${pickedUp ? 'pickup' : 'strokes'} for ${row.displayName}`}

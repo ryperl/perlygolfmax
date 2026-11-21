@@ -148,6 +148,8 @@ main:focus { outline: none; }
 .boundary-note { padding-top: 24px; font-size: 0.8rem; color: var(--cp-text-muted); }
 .site-footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 24px 0; border-top: 1px solid var(--cp-border); color: var(--cp-text-muted); font-size: 0.65rem; }
 .site-footer > span:first-child { font-weight: 700; letter-spacing: 0.08em; color: var(--cp-text); }
+.site-footer p { display: flex; align-items: center; flex-wrap: wrap; gap: .65rem; }
+.site-version { font-size: .65rem; white-space: nowrap; color: var(--cp-text-muted); }
 .skip-link { position: fixed; top: 8px; left: 8px; z-index: 10; padding: 12px 20px; background: var(--cp-surface); border: 2px solid var(--cp-accent); border-radius: 10px; transform: translateY(-160%); }
 .skip-link:focus { transform: translateY(0); }
 

@@ -10,7 +10,7 @@ function Editor({ score, initial = [], changed, kind = 'murphy' }: {
   readonly score: HoleScore | undefined;
   readonly initial?: readonly DotsCall[];
   readonly changed: (calls: readonly DotsCall[]) => void;
-  readonly kind?: 'murphy' | 'paree';
+  readonly kind?: 'murphy' | 'paree' | 'pully-murphy';
 }) {
   const [calls, setCalls] = useState(initial);
   return <CalledSpecialControls kind={kind} calls={calls} name="Fictional golfer" score={score} par={4} blocked={false}
@@ -18,6 +18,41 @@ function Editor({ score, initial = [], changed, kind = 'murphy' }: {
 }
 
 describe('score-aware called-special controls', () => {
+  it('uses a called Pully Murphy checkbox, exact personal gross par and no manual outcome dropdown', async () => {
+    const user = userEvent.setup(), changed = vi.fn<(calls: readonly DotsCall[]) => void>();
+    const view = render(<Editor kind="pully-murphy" score={{ kind: 'strokes', strokes: 4 }} changed={changed} />);
+    expect(changed).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('checkbox', { name: 'Pully Murphy called · Fictional golfer' }));
+    const call = changed.mock.lastCall?.[0]?.[0];
+    if (!call) throw new Error('Missing fictional Pully Murphy call');
+    expect(call).toMatchObject({ kind: 'pully-murphy', result: 'pending', pullyMurphyTarget: 'par' });
+    expect(screen.getByText('Made · needs exact gross par 4')).toBeVisible();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/stakes/)).not.toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Pully Murphy called · Fictional golfer' })).toHaveFocus();
+    changed.mockClear();
+    for (const score of [{ kind: 'strokes', strokes: 3 }, { kind: 'strokes', strokes: 5 },
+      { kind: 'picked-up', reportedStrokes: 7 }, { kind: 'did-not-finish' }] satisfies readonly HoleScore[]) {
+      view.rerender(<Editor kind="pully-murphy" score={score} changed={changed} />);
+      expect(screen.getByText('Missed · opponents earn · needs exact gross par 4')).toBeVisible();
+    }
+    view.rerender(<Editor kind="pully-murphy" score={{ kind: 'unplayed' }} changed={changed} />);
+    expect(screen.getByText('Pending · enter a gross score')).toBeVisible();
+    expect(changed).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('checkbox', { name: 'Pully Murphy called · Fictional golfer' }));
+    expect(changed).toHaveBeenLastCalledWith([]);
+  });
+
+  it('retains a manual Pully Murphy until explicit score opt-in, preserving its call identity', async () => {
+    const user = userEvent.setup(), changed = vi.fn();
+    const original: DotsCall = { id: 'fictional-pully', kind: 'pully-murphy', result: 'failure' };
+    render(<Editor kind="pully-murphy" initial={[original]} score={{ kind: 'strokes', strokes: 4 }} changed={changed} />);
+    expect(screen.getByText('Manual result: Missed')).toBeVisible();
+    expect(changed).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Use score outcome' }));
+    expect(changed).toHaveBeenLastCalledWith([{ ...original, result: 'pending', pullyMurphyTarget: 'par' }]);
+    expect(screen.getByText('Made · needs exact gross par 4')).toBeVisible();
+  });
   it('does not imply an opponent award in a solo Dots context', () => {
     render(<CalledSpecialControls kind="murphy" name="Fictional golfer" par={4}
       calls={[{ id: 'solo-call', kind: 'murphy', result: 'pending', murphyTarget: 'par' }]}

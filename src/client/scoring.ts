@@ -12,7 +12,7 @@ import { isRecord } from '../contracts/events';
 import { sameJsonValue } from '../contracts/round-context';
 import { createPrivateRequest, readPrivateValue, writePrivateValue } from './private-request';
 
-export const scoringRulesQuery = 'murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1&churchyNames=1&sweepRules=2&dotCoexistence=2&gameHandicaps=1';
+export const scoringRulesQuery = 'murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1&churchyNames=1&sweepRules=2&dotCoexistence=2&gameHandicaps=1&gameCalculations=2';
 
 function decodeRoundResult(value: unknown): unknown {
   return isRecord(value) ? { ...value, round: decodeRoundScores(value.round) } : value;
@@ -48,7 +48,7 @@ export function createScoresClient(apiUrl: string, getToken: () => Promise<strin
       if (!isRecord(value) || !round || round.eventId !== eventId || round.roundId !== roundId
         || value.requestId !== requestId || value.expectedEtag !== etag || !sameJsonValue(value.selection, selection)
         || round.kpEnabled !== true || !round.kp || round.permissions?.role !== 'owner') {
-        throw new Error('KP outcome uncertain. Keep this request and refresh before retrying.');
+        throw new Error('KP outcome uncertain. Your changes are kept. Refresh saved data before retrying.');
       }
       return round;
     },
@@ -78,7 +78,7 @@ export function createScoresClient(apiUrl: string, getToken: () => Promise<strin
         || !scoreMatchesIntent(value.change.after, score) || !sameHoleScore(value.change.after, preserveScoreExtras(score, value.change.after))
         || !value.round.setupLocked || value.round.lastUpdatedAt === null
         || !value.round.cards.some((card) => card.playerId === playerId && card.etag !== null)) {
-        throw new Error('Invalid save acknowledgement. The outcome is uncertain; retain this draft and request ID and refresh to review.');
+        throw new Error('Invalid save acknowledgement. The outcome is uncertain; keep your changes and refresh saved data before retrying.');
       }
       return value;
     },

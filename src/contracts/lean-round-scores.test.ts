@@ -171,11 +171,11 @@ describe('lean routine round scores', () => {
     const context = { roundId: base.roundId, layout: base.layout, groups: base.groups, cards,
       ...(base.courseHandicaps ? { courseHandicaps: base.courseHandicaps } : {}), teeStrokeAllocation: true };
     const results = [...calculateInternalGameResults(games, context).values()];
-    const round = { ...base, cards, games: { configuration: {
+    const round = { ...base, gameCalculationsVersion: 2 as const, cards, games: { configuration: {
       eventId: base.eventId, roundId: base.roundId, etag: 'fictional-games-v1', games,
     }, results }, internalSettlements: calculateInternalSettlements(games, results, context) };
     expect(isRoundScores(round)).toBe(true);
-    expect(decodeRoundScores(leanRoundScores(round))).toEqual(round);
+    expect(decodeRoundScores(leanRoundScores(round, false, false, false, false, false, false, false, false, false, true))).toEqual(round);
   });
 
   it('rejects altered transmitted totals, hole points, states, money, captures and proofs instead of replacing them', () => {

@@ -1,8 +1,11 @@
 import type { PressMatchGameDefinition, NassauHoleRecord, NassauOutcome, NassauResults } from '../../domain/nassau';
+import type { Scorecard } from '../../domain/scoring';
+import { matchSideName } from './match-side-name';
 
-export function NassauHoleControls({ game, result, holeNumber, etag, saved, draft, disabled, onChange }: {
+export function NassauHoleControls({ game, result, players = [], holeNumber, etag, saved, draft, disabled, onChange }: {
   readonly game: PressMatchGameDefinition;
   readonly result: NassauResults | undefined;
+  readonly players?: readonly Pick<Scorecard, 'playerId' | 'displayName'>[];
   readonly holeNumber: number;
   readonly etag: string;
   readonly saved: NassauHoleRecord | undefined;
@@ -12,33 +15,42 @@ export function NassauHoleControls({ game, result, holeNumber, etag, saved, draf
 }) {
   const record: NassauHoleRecord = { ...(draft ?? { number: holeNumber, gameId: game.id, outcomes: [], presses: [] }), gameEtag: etag };
   const options = result?.pressOptions.filter((option) => option.startHole === holeNumber) ?? [];
-  return <fieldset disabled={disabled}><legend>{game.name} · Match outcomes and presses</legend>
+  return <fieldset disabled={disabled}><legend>{game.name} · Match actions</legend>
     {!result && <p>Saved match results unavailable. Refresh before declaring a press.</p>}
     {result?.matches.map((match) => {
       const current = record.outcomes.find((entry) => entry.matchId === match.id)
         ?? saved?.outcomes.find((entry) => entry.matchId === match.id);
-      return <label key={match.id}>{match.sideA.name} vs {match.sideB.name} · Hole {holeNumber}<select
-        value={current?.outcome ?? 'scores'} onChange={(event) => {
-          const outcome = event.target.value;
-          if (outcome !== 'scores' && outcome !== 'side-a' && outcome !== 'side-b' && outcome !== 'halved') return;
+      const a = matchSideName(match.sideA, players), b = matchSideName(match.sideB, players);
+      const outcome = current?.outcome ?? 'scores';
+      const decision = outcome === 'side-a' ? `Conceded to ${a}` : outcome === 'side-b' ? `Conceded to ${b}` : 'Halved';
+      const change = (outcome: NassauOutcome) => {
           const edit: { readonly matchId: string; readonly outcome: NassauOutcome } = { matchId: match.id, outcome };
           onChange({ ...record, outcomes: [...record.outcomes.filter((entry) => entry.matchId !== match.id), edit] });
-        }}>
-        <option value="scores">Use actual saved strokes</option>
-        <option value="side-a">{match.sideA.name} wins · conceded</option>
-        <option value="side-b">{match.sideB.name} wins · conceded</option>
-        <option value="halved">Explicitly halved</option>
-      </select></label>;
+      };
+      return <details key={`${match.id}:${String(holeNumber)}`} className="match-hole-actions">
+        <summary>{a} vs {b} · Hole {holeNumber}{outcome !== 'scores'
+          ? ` · ${decision} · ${draft?.outcomes.some((entry) => entry.matchId === match.id) ? 'Not saved' : 'Saved'}`
+          : ' · Concede / halve'}</summary>
+        <p>Normally calculated from saved strokes. Only change for an agreed concession or halve; saves with the hole.</p>
+        <div className="match-decision-actions" role="group" aria-label={`${a} vs ${b} hole ${String(holeNumber)} decision`}>
+          <button type="button" aria-pressed={outcome === 'side-a'} onClick={() => { change('side-a'); }}>Concede to {a}</button>
+          <button type="button" aria-pressed={outcome === 'side-b'} onClick={() => { change('side-b'); }}>Concede to {b}</button>
+          <button type="button" aria-pressed={outcome === 'halved'} onClick={() => { change('halved'); }}>Halve hole</button>
+          {outcome !== 'scores' && <button type="button" onClick={() => { change('scores'); }}>Use saved strokes</button>}
+        </div>
+      </details>;
     })}
-    <p>Match outcomes do not replace actual strokes. Press eligibility uses acknowledged saved holes, never score drafts.</p>
+    {options.length > 0 && <p>Press eligibility uses acknowledged saved holes, never score drafts.</p>}
     {options.map((option) => {
       const match = result?.matches.find((entry) => entry.id === option.matchId);
       const parent = match?.bets.find((bet) => bet.id === option.parentBetId);
       const staged = record.presses.some((press) => press.parentBetId === option.parentBetId);
       const alreadySaved = saved?.presses.some((press) => press.parentBetId === option.parentBetId) === true;
+      const a = match ? matchSideName(match.sideA, players) : 'Match unavailable';
+      const b = match ? matchSideName(match.sideB, players) : 'Match unavailable';
       return <div key={option.parentBetId}>
-        <span>{match?.sideA.name ?? 'Side A'} vs {match?.sideB.name ?? 'Side B'} · {game.kind === 'match-play' ? 'Match' : parent?.segment ?? 'Match'} ·
-          {' '}{option.pressingSide === 'a' ? match?.sideA.name ?? 'Side A' : match?.sideB.name ?? 'Side B'} press · Starts hole {option.startHole}
+        <span>{a} vs {b} · {game.kind === 'match-play' ? 'Match' : parent?.segment ?? 'Match'} ·
+          {' '}{option.pressingSide === 'a' ? a : b} press · Starts hole {option.startHole}
           {parent && `, ends hole ${String(parent.endHole)}`}</span>
         <button type="button" disabled={alreadySaved || staged} onClick={() => {
           onChange({ ...record, presses: [...record.presses, { ...option, id: crypto.randomUUID() }] });

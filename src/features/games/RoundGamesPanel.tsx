@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { needsUpdatedGameCalculations } from '../../contracts/game-calculations';
 import { EventChangedError } from '../../client/events';
 import type { DotPresetStore } from '../../client/dot-presets';
 import type { RoundGameDefinition } from '../../domain/games';
@@ -112,7 +113,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
   async function save() {
     if (!editor || disabled || editor.conflict || inFlight.current) return;
     if (!supportsRoundGame(round, editor.draft.kind ?? 'stableford') || !supportsRoundGame(editingRound, editor.draft.kind ?? 'stableford')) {
-      setMessage('This API does not support editing this game. Your draft is retained.');
+      setMessage('Editing this game is temporarily unavailable in this app version. Your draft is retained.');
       return;
     }
     if ((round.setupLocked || editingRound.setupLocked) && (editor.draft.kind === 'nassau' || editor.draft.kind === 'match-play' || editor.draft.kind === 'wolf' || editor.draft.kind === 'dots')) {
@@ -127,7 +128,13 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
     const previousGame = editor.base.find((entry) => entry.id === editor.draft.id);
     if (game && hasGameHandicapRules(game)
       && (round.gameHandicapRules !== 1 || editingRound.gameHandicapRules !== 1)) {
-      setMessage('Explicit handicap and carry-order rules require API support. Your draft is retained.');
+      setMessage('These handicap or carry options are temporarily unavailable in this app version. Your draft is retained.');
+      return;
+    }
+    if (game && needsUpdatedGameCalculations(editingRound, [game], true)
+      && editingRound.gameCalculationsVersion !== 2) {
+      setEditor({ ...editor, conflict: true });
+      setMessage('This game cannot be saved until the app update is available. Your changes are kept. Use Refresh latest settings to check again.');
       return;
     }
     const previousRule = previousGame && 'handicapRule' in previousGame ? previousGame.handicapRule : undefined;
@@ -151,32 +158,32 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
     const sweepGames = [...editor.base, ...(game ? [game] : [])];
     if (sweepGames.some((entry) => entry.kind === 'dots' && entry.sweepRule === 'manual-v1')
       && (round.dotsManualSweep !== true || editingRound.dotsManualSweep !== true)) {
-      setMessage('Manual Sweep requires API support. Your draft is retained; refresh after an API update.');
+      setMessage('Manual Sweep is temporarily unavailable in this app version. Your draft is retained.');
       return;
     }
     if (sweepGames.some((entry) => entry.kind === 'wolf' && entry.version === 2 && entry.highLowSweep === true)
       && (round.wolfHighLowSweep !== true || editingRound.wolfHighLowSweep !== true)) {
-      setMessage('Wolf High/Low Sweep requires API support. Your draft is retained; refresh after an API update.');
+      setMessage('Wolf High/Low Sweep is temporarily unavailable in this app version. Your draft is retained.');
       return;
     }
     if ([...(previousGame ? [previousGame] : []), ...(game ? [game] : [])].some(hasCustomChurchyName)
       && (round.churchyCustomNames !== true || editingRound.churchyCustomNames !== true)) {
-      setMessage('Custom Churchie names require API support. Your draft is retained; refresh after an API update.');
+      setMessage('Custom Churchie names are temporarily unavailable in this app version. Your draft is retained.');
       return;
     }
     if (game?.kind === 'dots' && game.mode === 'individual'
       && (!supportsIndividualDotsPlayerCount(round, game.playerIds.length)
         || !supportsIndividualDotsPlayerCount(editingRound, game.playerIds.length))) {
-      setMessage('This API does not support individual Dots for this group size. Your draft is retained.');
+      setMessage('Individual Dots for this group size is temporarily unavailable in this app version. Your draft is retained.');
       return;
     }
     if (game?.kind === 'dots' && (previousGame?.kind === 'dots' && previousGame.version !== game.version
       || game.version === 2 && (!round.dotsRulesVersions?.includes(2) || !editingRound.dotsRulesVersions?.includes(2)))) {
-      setMessage('Rotating Dots requires API rules support. Saved rules versions cannot be converted.');
+      setMessage('Rotating Dots is temporarily unavailable in this app version. Your draft is retained; saved games are unchanged.');
       return;
     }
     if (game?.kind === 'dots' && (!supportsDotsSpecials(round, game.specials) || !supportsDotsSpecials(editingRound, game.specials))) {
-      setMessage('These Dots specials require advertised API support. Your draft is retained.');
+      setMessage('These Dots specials are temporarily unavailable in this app version. Your draft is retained.');
       return;
     }
     const explicitChurchyUpgrade = previousGame?.kind === 'churchy' && previousGame.version === 2
@@ -202,7 +209,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
     if (game && (!canManageGame(round, game) || !canManageGame(editingRound, game)
       || !canManageAllRoundGames(editingRound) && previousGame !== undefined
         && (!canManageGame(editingRound, previousGame) || previousGame.kind !== game.kind))) {
-      setMessage('This game is not editable with the current permission or API capability. Your draft is retained.');
+      setMessage('Editing this game is not available to you right now. Your draft is retained.');
       return;
     }
     if (game?.kind === 'nassau' || game?.kind === 'match-play' || game?.kind === 'wolf' || game?.kind === 'dots') {
@@ -356,7 +363,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
           disabled={disabled || editor !== null || !supportsRoundGame(round, game.kind ?? 'stableford') || !canManageGame(round, game)}
           onClick={() => { open(game); }}>Edit {gameDisplayName(game)}{game.kind === 'churchy'
             && games.filter((entry) => entry.kind === 'churchy').length > 1 ? ` · Group ${String(game.groupNumber)}` : ''}</button>}
-        {!supportsRoundGame(round, game.kind ?? 'stableford') && <p>This API does not advertise support for editing this game.</p>}
+        {!supportsRoundGame(round, game.kind ?? 'stableford') && <p>Editing this game is temporarily unavailable in this app version.</p>}
       </div>)}
       {round.setupLocked && games.some((game) => game.kind === 'nassau' || game.kind === 'match-play' || game.kind === 'wolf' || game.kind === 'dots')
         && <p className="game-hint">Setup locked by saved scoring. Score entry retains hole declarations.</p>}

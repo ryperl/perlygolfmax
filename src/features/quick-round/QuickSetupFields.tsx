@@ -135,24 +135,27 @@ export function QuickSetupFields({ draft, courses, players, profiles, courseHand
       }} />Personal tees</label>}
       {error && <p role="alert">{error}</p>}
       {draft.playerIds.length > 0 && <h3>Playing groups</h3>}
+      {draft.playerIds.length > 0 && <small>Shotgun start: choose each group&apos;s first hole. The start is shared by all its games.</small>}
       {round.groups.map((group) => <section key={group.number} className="quick-group" aria-label={`Group ${String(group.number)}`}>
-        <div className="quick-section-heading"><div><h4>Group {group.number}</h4>
-          <small>Starts hole {group.startingHole ?? common?.holes[0]?.number ?? 1}</small></div>
+        <div className="quick-section-heading"><div><h4>Group {group.number}</h4></div>
           <button type="button" aria-expanded={editingGroups.includes(group.number)} aria-label={`${editingGroups.includes(group.number) ? 'Done editing' : 'Edit'} Group ${String(group.number)}`}
             onClick={() => { setEditingGroups((values) => values.includes(group.number) ? values.filter((number) => number !== group.number) : [...values, group.number]); }}>
             {editingGroups.includes(group.number) ? 'Done' : 'Edit'}
           </button>
         </div>
+        <label>Group {group.number} starting hole<select value={group.startingHole ?? common?.holes[0]?.number ?? ''}
+          disabled={!common}
+          onChange={(event) => { changeRound({ ...round, groups: round.groups.map((entry) => entry.number === group.number
+            ? { ...entry, startingHole: Number(event.target.value) } : entry) }); }}>
+          {!common && <option value="">Choose a tee first</option>}
+          {common && group.startingHole !== undefined && !common.holes.some((hole) => hole.number === group.startingHole)
+            && <option value={group.startingHole}>Hole {group.startingHole} unavailable — choose again</option>}
+          {(common?.holes ?? []).map((hole) => <option key={hole.number} value={hole.number}>{hole.number}</option>)}
+        </select></label>
         {!editingGroups.includes(group.number) ? <ul className="quick-group-summary">{group.playerIds.map((id) => <li key={id}>
           <span>{players.find((player) => player.id === id)?.displayName ?? 'Saved golfer'}</span>
           <CourseHandicap className="quick-handicap" value={handicapFor(id)} />
         </li>)}</ul> : <>
-        <label>Group {group.number} starting hole<select value={group.startingHole ?? common?.holes[0]?.number ?? 1}
-          onChange={(event) => { changeRound({ ...round, groups: round.groups.map((entry) => entry.number === group.number
-            ? { ...entry, startingHole: Number(event.target.value) } : entry) }); }}>
-          {(common?.holes ?? []).map((hole) => <option key={hole.number} value={hole.number}>{hole.number}</option>)}
-        </select></label>
-        <small>This start is shared by every game in this group. New Skins carryovers require the entire round to be one foursome.</small>
         {group.playerIds.map((id) => {
           const player = players.find((entry) => entry.id === id);
           const tee = playingProfiles.find((profile) => profile.id === round.playerTeeSelections?.find((entry) => entry.playerId === id)?.teeProfileId) ?? common;

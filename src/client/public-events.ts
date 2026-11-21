@@ -61,7 +61,7 @@ export function createPublicServices(apiUrl: string, send: typeof fetch = fetch)
       const value = await rawScores.save(eventId, roundId, playerId, holeNumber, score, etag, requestId, signal, inputRevision);
       if (value.round.permissions?.role !== 'public' || !isPublicScoreIdentity(value.change.recordedBy)
         || value.change.recordedBy.eventId !== eventId) {
-        throw new Error('Invalid public save acknowledgement. The outcome is uncertain; retain this draft and request ID and refresh to review.');
+        throw new Error('Invalid public save acknowledgement. The outcome is uncertain; keep your changes and refresh saved data before retrying.');
       }
       return value;
     },
@@ -72,7 +72,7 @@ export function createPublicServices(apiUrl: string, send: typeof fetch = fetch)
         || value.round.internalGamesSupported === true && preservesProtectedGameDefinitions(value.change.before, value.change.after);
       if (!authorized || value.round.permissions?.role !== 'public' || !isPublicScoreIdentity(value.change.recordedBy)
         || value.change.recordedBy.eventId !== eventId) {
-        throw new Error('Public game save is uncertain. Keep this draft and retry the same request.');
+        throw new Error('Public game save is uncertain. Your changes are kept. Retry or refresh saved data.');
       }
       return value;
     },
@@ -96,7 +96,7 @@ export function createPublicServices(apiUrl: string, send: typeof fetch = fetch)
       async details(eventId, signal) {
         const value = await readPrivateValue(request, `${path(eventId)}/leaderboard?view=event-skins-details&format=compact`, signal);
         const detail = expandSkinsDetails(value) ?? (isEventSkinsDetails(value) ? value : null);
-        if (!detail || detail.eventId !== eventId) throw new Error('Skins details are unavailable from this API. Refresh to retry.');
+        if (!detail || detail.eventId !== eventId) throw new Error('Skins details are unavailable right now. Refresh to retry.');
         return detail;
       },
       async load(eventId, signal, kind = 'overall') {
@@ -116,7 +116,7 @@ export function createPublicServices(apiUrl: string, send: typeof fetch = fetch)
       async player(eventId, playerId, signal) {
         if (!isUuid(playerId)) throw new Error('Invalid player identifier.');
         const value = await readPrivateValue(request, `${path(eventId)}/purse?view=player&playerId=${encodeURIComponent(playerId)}`, signal);
-        if (!isPlayerWinningsBreakdown(value) || value.eventId !== eventId || value.playerId !== playerId) throw new Error('Player winnings are unavailable from this API. Refresh to retry.');
+        if (!isPlayerWinningsBreakdown(value) || value.eventId !== eventId || value.playerId !== playerId) throw new Error('Player winnings are unavailable right now. Refresh to retry.');
         return value;
       },
       async load(eventId, signal) {

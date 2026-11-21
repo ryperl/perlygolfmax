@@ -79,7 +79,7 @@ export function DotSpecialsSettings({ specials, mode, onChange, supportedKinds =
           : special.kind === 'sweep' ? 'Sweep requires a linked game with actual High and Low results.'
             : 'Assassin requires partnered 2-v-2 play, not individual mode.'}
           {selected && (unsupported
-            ? ' This saved selection is retained for review; refresh after an API upgrade before saving.'
+            ? ' This saved selection is retained for review and is temporarily unavailable in this app version.'
             : ' This saved selection is retained for review; change mode before saving.')}</small>}
       </div>;
     })}</div>

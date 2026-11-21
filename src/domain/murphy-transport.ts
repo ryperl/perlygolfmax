@@ -12,7 +12,7 @@ export class DotsCallsClientUpdateRequired extends Error {
 
 export function requireLegacyDotsCalls(scores: readonly HoleScore[]): void {
   if (scores.some((score) => score.dots?.some((record) => record.players.some((player) =>
-    player.calls.some((call) => (call.murphyPresses ?? 0) > 0))))) throw new DotsCallsClientUpdateRequired();
+    player.calls.some((call) => (call.murphyPresses ?? 0) > 0 || call.pullyMurphyTarget !== undefined))))) throw new DotsCallsClientUpdateRequired();
 }
 
 function sameTransportValue(left: unknown, right: unknown): boolean {

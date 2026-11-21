@@ -44,6 +44,38 @@ async function openGameStandings(page: Page, name: string) {
   })) await summary.click();
 }
 
+test('Pully Murphy uses an explicit touch checkbox and saved personal gross score, retaining the call through raw correction', async ({ page }, testInfo) => {
+  const fixture = await openDotsFixture(page, testInfo, 'pully-targets');
+  try {
+    await page.setViewportSize({ width: 390, height: 900 });
+    const form = page.getByRole('form', { name: 'Group 1 hole 1 entry', exact: true });
+    for (const input of await form.locator('input[inputmode="numeric"]').all()) await input.fill('4');
+    await form.getByRole('button', { name: 'Dots for Fictional golfer 1 · Fictional current Dots', exact: true }).click();
+    const dialog = form.getByRole('dialog');
+    const called = dialog.getByRole('checkbox', { name: 'Pully Murphy called · Fictional golfer 1', exact: true });
+    await called.focus();
+    await called.press('Space');
+    await expect(called).toBeChecked();
+    await expect(called).toBeFocused();
+    expect(await called.evaluate((element) => element.closest('label')?.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+    await expect(dialog.getByText('Made · needs exact gross par 4', { exact: true })).toBeVisible();
+    await expect(dialog.getByRole('combobox')).toHaveCount(0);
+    await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+    await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+    await expect(page.getByRole('form', { name: 'Group 1 hole 2 entry', exact: true })).toBeVisible();
+    const first = fixture.read().cards[0]?.holes[0]?.score.dots?.[0]?.players[0]?.calls[0];
+    expect(first).toMatchObject({ kind: 'pully-murphy', result: 'pending', pullyMurphyTarget: 'par' });
+    await page.getByRole('button', { name: 'Previous hole', exact: true }).click();
+    await form.locator('input[inputmode="numeric"]').first().fill('5');
+    await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+    await expect(page.getByRole('form', { name: 'Group 1 hole 2 entry', exact: true })).toBeVisible();
+    expect(fixture.read().cards[0]?.holes[0]?.score.dots?.[0]?.players[0]?.calls).toEqual([first]);
+    expect(fixture.read().games?.results[0]?.dots?.awards.map((award) => award.recipientIds))
+      .toEqual([[...dotsPlayers.slice(1)]]);
+    expect(fixture.counters().pageErrors).toEqual([]);
+  } finally { await fixture.close(); }
+});
+
 test('same-source dot choices reject Chippy/Pully and Seve/KP/Long Drive while allowing Seve/Blue Plate/Gorilla', async ({ page }, testInfo) => {
   const fixture = await openDotsFixture(page, testInfo, 'coexistence');
   try {
@@ -616,8 +648,8 @@ for (const [theme, mode] of [['light', 'individual'], ['dark', 'fixed']] as cons
       await expect(editor.getByLabel('Sweep · Automatic', { exact: true })).toBeDisabled();
       if (mode === 'individual') await expect(editor.getByLabel('Assassin · Automatic', { exact: true })).toBeDisabled();
       else {
-        await expect(editor.getByRole('combobox', { name: 'Side A golfer 1', exact: true })).toHaveValue(dotsPlayers[0] ?? '');
-        await expect(editor.getByRole('combobox', { name: 'Side B golfer 1', exact: true })).toHaveValue(dotsPlayers[2] ?? '');
+        await expect(editor.getByRole('combobox', { name: 'Team 1 golfer 1', exact: true })).toHaveValue(dotsPlayers[0] ?? '');
+        await expect(editor.getByRole('combobox', { name: 'Team 2 golfer 1', exact: true })).toHaveValue(dotsPlayers[2] ?? '');
       }
       await narrowControls(page, editor);
       await editor.getByRole('button', { name: 'Save game', exact: true }).click();
@@ -757,7 +789,7 @@ test('older API capabilities keep Dots and earned Wolf readonly without disablin
     await page.getByRole('button', { name: 'Games', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Add game', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Edit Fictional/ })).toHaveCount(0);
-    await expect(page.getByText('This API does not advertise support for editing this game.', { exact: true })).toHaveCount(2);
+    await expect(page.getByText('Editing this game is temporarily unavailable in this app version.', { exact: true })).toHaveCount(2);
     expect(fixture.counters().writes).toBe(0);
     expect(fixture.counters().configWrites).toBe(0);
     expect(fixture.counters().pageErrors).toEqual([]);

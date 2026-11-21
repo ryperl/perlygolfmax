@@ -51,13 +51,13 @@ export function createCatalogClient(apiUrl: string, getToken: () => Promise<stri
     const seen = new Set<string>();
     do {
       const history = await request(pagePath(`catalog/players/${encodeURIComponent(player.id)}/indices`, cursor), signal);
-      if (!isPlayerIndexHistory(history)) throw new Error('The requested initial observation was not confirmed. Invalid history response; retry with the same request.');
+      if (!isPlayerIndexHistory(history)) throw new Error('The requested initial observation was not confirmed. Invalid history response; refresh saved data before retrying.');
       if (history.observations.some(matches)) return;
       cursor = history.continuationToken;
-      if (cursor && seen.has(cursor)) throw new Error('The requested initial observation was not confirmed. Invalid history paging; retry with the same request.');
+      if (cursor && seen.has(cursor)) throw new Error('The requested initial observation was not confirmed. Invalid history paging; refresh saved data before retrying.');
       if (cursor) seen.add(cursor);
     } while (cursor);
-    throw new Error('The requested initial observation was not confirmed. Retry with the same request.');
+    throw new Error('The requested initial observation was not confirmed. Your draft is kept. Refresh saved data before retrying.');
   }
   return {
     async courses(signal, cursor) {
@@ -116,7 +116,7 @@ export function createCatalogClient(apiUrl: string, getToken: () => Promise<stri
       const value = await request('catalog/players', signal, {
         method: 'POST', body: { displayName, ...(initialIndex === undefined ? {} : { initialIndex }) }, requestId,
       });
-      if (!isPlayerProfile(value) || value.id !== requestId) throw new Error('Invalid saved player response. Retry with the same request.');
+      if (!isPlayerProfile(value) || value.id !== requestId) throw new Error('Invalid saved player response. Your draft is kept. Refresh saved data before retrying.');
       if (initialIndex !== undefined) await confirmInitialIndex(value, initialIndex, requestId, signal);
       return value;
     },

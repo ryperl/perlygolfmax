@@ -13,7 +13,7 @@ export default defineConfig({
   projects: [
     { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'mobile-chromium', use: { ...devices['Pixel 7'] } },
-    { name: 'iphone-16-pro-webkit', testMatch: ['**/game-handicaps.spec.ts', '**/handicap-update.spec.ts', '**/score-resume.spec.ts', '**/public-app-visit.spec.ts', '**/public-scoring-styles.spec.ts', '**/stroke-games.spec.ts', '**/stroke-dots.spec.ts', '**/round-differential.spec.ts', '**/churchy.spec.ts', '**/churchy-v2.spec.ts', '**/churcie-v3.spec.ts', '**/kp.spec.ts', '**/event-skins.spec.ts', '**/public-purse.spec.ts', '**/public-leaderboard.spec.ts', '**/corrections.spec.ts', '**/round-theme.spec.ts', '**/saved-event-layout.spec.ts', '**/catalog-workspace.spec.ts', '**/quick-round.spec.ts', '**/match-games.spec.ts', '**/dots.spec.ts'],
+    { name: 'iphone-16-pro-webkit', testMatch: ['**/build-version.spec.ts', '**/game-handicaps.spec.ts', '**/handicap-update.spec.ts', '**/score-resume.spec.ts', '**/public-app-visit.spec.ts', '**/public-scoring-styles.spec.ts', '**/stroke-games.spec.ts', '**/stroke-dots.spec.ts', '**/round-differential.spec.ts', '**/churchy.spec.ts', '**/churchy-v2.spec.ts', '**/churcie-v3.spec.ts', '**/kp.spec.ts', '**/event-skins.spec.ts', '**/public-purse.spec.ts', '**/public-leaderboard.spec.ts', '**/corrections.spec.ts', '**/round-theme.spec.ts', '**/saved-event-layout.spec.ts', '**/catalog-workspace.spec.ts', '**/quick-round.spec.ts', '**/match-games.spec.ts', '**/dots.spec.ts'],
       use: { browserName: 'webkit', viewport: { width: 402, height: 874 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true } },
   ],
   webServer: {

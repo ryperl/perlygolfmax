@@ -76,7 +76,7 @@ describe('hole-first owner scoring', () => {
     mount(store);
     await loaded();
     expect(screen.getByRole('note')).toHaveTextContent(rule === 'String'
-      ? 'This API uses previous String calculations.' : 'Automatic Long Drive + Blue Plate category sweeps require the newer API.');
+      ? 'This round uses previous String calculations.' : 'Automatic Long Drive + Blue Plate category sweeps are not available in this app version.');
     await enter(userEvent.setup(), '4');
     await userEvent.click(screen.getByRole('button', { name: 'Save & Next Hole' }));
     await screen.findByText(/This scoring view needs an app update/);

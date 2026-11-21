@@ -187,7 +187,7 @@ export function RoundEditor({ round, number, saved, courses, players, rosterIds,
     </fieldset>}
     <fieldset><legend>Playing groups</legend>
       <p>Assign every selected player once, up to four per group. Playing groups are not competition teams.</p>
-      <p>Each group's starting hole is shared by all its games. New Skins carryovers require the entire round to be one foursome.</p>
+      <p>Shotgun start: choose each group's first hole. It is shared by all its games. New Skins carryovers require the entire round to be one foursome.</p>
       {round.groups.map((group) => <label key={group.number}>Round {number} Group {group.number} starting hole
         <select value={groupStartingHole(group, tee?.holes ?? []) ?? ''} disabled={!tee} onChange={(event) => {
           onChange({ ...round, groups: round.groups.map((item) => item.number === group.number

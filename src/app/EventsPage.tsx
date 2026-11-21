@@ -186,7 +186,7 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
       if (mounted.current && !controller.signal.aborted) {
         if (error instanceof SessionExpiredError) expire(error.message);
         else if (error instanceof EventChangedError) setNotice(error.message);
-        else setNotice('The operation failed. Nothing was confirmed saved. Refresh before retrying; an event creation retry uses the same request ID.');
+        else setNotice('The operation failed and saving was not confirmed. Your draft is kept. Refresh before retrying.');
       }
       return false;
     } finally {
@@ -358,7 +358,9 @@ export function EventsPage({ services, configurationError, onSignedOut, accountH
     && state.capabilities.eventAdministrationSupported === true ? services?.administration : undefined;
   return <>{accountControl}<EventsView
     eventHref={(event) => `#organizer?event=${event.id}`}
-    state={services ? state : { kind: 'unconfigured', message: configurationError ?? 'Identity and API settings have not been supplied.' }}
+    state={services ? state : { kind: 'unconfigured', message: configurationError
+      ? 'The organizer workspace is temporarily unavailable. Please try again later.'
+      : 'Organizer sign-in is not available in this build.' }}
     busy={busy || administrationBusy} notice={notice} view={view}
     renderArchivedDeletion={(event) => administration ? <ArchivedEventDeletion client={administration} event={event}
       disabled={busy} onBusyChange={setAdministrationBusy} onDeleted={() => {

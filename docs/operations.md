@@ -2,6 +2,46 @@
 
 ## Status and approval boundary
 
+### User recovery and developer diagnostics
+
+Players are not asked to update APIs, change infrastructure, repair credentials
+or manually copy score drafts. System/capability failures keep drafts in the
+current page; retry, in-app refresh and explicit conflict review remain available
+when appropriate. Unconfirmed writes are never described as unsaved or successful
+without acknowledgement. Signing in, selecting an active event and repairing
+actual game-input conflicts remain legitimate user actions.
+
+Functions handlers send failure/rejection logs through the existing host and
+Application Insights integration. System failures retain the operation, safe
+error classification/status, invocation reference and a validated dependency
+request reference when available. They do not include tokens, request/response
+bodies, scores, drafts, golfer names, private observations or raw error messages.
+These operational traces are separate from immutable scoring/correction audits.
+
+Developers can inspect the existing Log Analytics workspace:
+
+```kql
+AppTraces
+| where TimeGenerated > ago(24h)
+| where SeverityLevel >= 3
+| where Message has_any("API request failed", "API failed", "administration failed")
+| project TimeGenerated, OperationId, Message
+| order by TimeGenerated desc
+```
+
+Use the logged invocation/dependency reference and `OperationId` to correlate
+failures with `AppRequests`. The infrastructure source configures 30-day retention
+and the existing host uses adaptive sampling with a two-item/second cap. This is
+not a complete or immutable failure history; sampling can omit traces. No
+retention, sampling, resource, role or application-setting change is implied.
+Pure browser/network failures may never reach the API and are not claimed to
+have a server trace. No private client-data cache or diagnostic upload endpoint
+is added.
+
+The footer version/build label comes from the package version and actual Git
+revision at build time. Local modifications are explicitly marked `-local`.
+Its timestamp is the build time, not a claim about deployment completion.
+
 ### Request-size configuration for test and future production
 
 Set `FUNCTIONS_REQUEST_BODY_SIZE_LIMIT` to **12288 bytes (12 KiB)** on the

@@ -2,6 +2,7 @@ import type {
   GameWriteResult, HoleScore, RoundScores, Scorecard, ScoreChange, ScoreHistoryPage, ScoreWriteResult,
 } from '../domain/scoring.js';
 import { maximumExactHoleStrokes } from '../domain/scoring.js';
+import { needsUpdatedGameCalculations } from './game-calculations.js';
 import { boundedText, positiveInteger, isVersionId } from './catalog.js';
 import { isEventRevision, isEventStatus, isRecord, isUuid } from './events.js';
 import { isGameChange, isRoundGamesView } from './games.js';
@@ -117,6 +118,10 @@ export function isScorecard(value: unknown): value is Scorecard {
 }
 
 export function isRoundScores(value: unknown): value is RoundScores {
+  return isRoundScoresValue(value) && (!needsUpdatedGameCalculations(value) || value.gameCalculationsVersion === 2);
+}
+
+function isRoundScoresValue(value: unknown): value is RoundScores {
   return validateRoundScores(value);
 }
 
@@ -129,7 +134,11 @@ export function decodeRoundScores(value: unknown): RoundScores | null {
 }
 
 function validateRoundScores(value: unknown, lean = false): value is RoundScores {
+  if (isRecord(value) && value.pullyMurphyTargets !== undefined
+    && (value.pullyMurphyTargets !== true || value.internalGamesSupported !== true
+      || isRecord(value.permissions) && value.permissions.role === 'tester')) return false;
   if (isRecord(value) && value.gameHandicapRules !== undefined && value.gameHandicapRules !== 1) return false;
+  if (isRecord(value) && value.gameCalculationsVersion !== undefined && value.gameCalculationsVersion !== 2) return false;
   if (isRecord(value) && value.dotsCoexistenceRulesVersion !== undefined
     && (value.dotsCoexistenceRulesVersion !== 2 || value.internalGamesSupported !== true
       || isRecord(value.permissions) && value.permissions.role === 'tester')) return false;

@@ -1,7 +1,8 @@
 import type { CourseHole } from '../../domain/catalog';
-import type { NassauMatchResult, NassauSide } from '../../domain/nassau';
+import type { NassauMatchResult } from '../../domain/nassau';
 import type { Scorecard } from '../../domain/scoring';
 import type { ScorecardGame } from './scorecard-presentation';
+import { matchSideName as sideName } from '../nassau';
 
 type Position = { readonly status: 'known'; readonly value: number }
   | { readonly status: 'pending' | 'unavailable' };
@@ -32,10 +33,6 @@ function positionText(position: Position, sideA: boolean, accessible = false): s
   const value = position.value * (sideA ? 1 : -1);
   return value === 0 ? accessible ? 'all square' : 'AS'
     : `${String(Math.abs(value))} ${value > 0 ? accessible ? 'up' : 'UP' : accessible ? 'down' : 'DN'}`;
-}
-
-function sideName(side: NassauSide, players: readonly PlayerName[]): string {
-  return side.playerIds.map((id) => players.find((player) => player.playerId === id)?.displayName ?? side.name).join(' + ');
 }
 
 export function MatchPlaySummary({ game, players, playerId }: {

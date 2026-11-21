@@ -1,4 +1,5 @@
 import type { NassauBetResult, PressMatchGameDefinition, NassauResults as Results } from '../../domain/nassau';
+import { matchSideName } from './match-side-name';
 
 function money(value: number | null, pending = false): string {
   if (value === null) return pending ? 'Pending' : 'Unavailable';
@@ -43,16 +44,17 @@ export function NassauResults({ game, result, players = [] }: {
         </p>}
         <p className="game-hint">Planned only · Not paid</p>
       </section>
-      {result.matches.map((match) => <section key={match.id} aria-label={`${match.sideA.name} vs ${match.sideB.name}`}>
-        <h4>{match.sideA.name} vs {match.sideB.name}</h4>
-        <p>{match.sideA.playerIds.map(playerName).join(' + ')} vs {match.sideB.playerIds.map(playerName).join(' + ')}</p>
+      {result.matches.map((match) => {
+        const a = matchSideName(match.sideA, players), b = matchSideName(match.sideB, players);
+        return <section key={match.id} aria-label={`${a} vs ${b}`}>
+        <h4>{a} vs {b}</h4>
         <ul>{match.bets.map((bet) => {
           const parent = match.bets.find((entry) => entry.id === bet.parentBetId);
           return <li key={bet.id} className="nassau-bet"><details><summary>
             <strong>{betLabel(bet, game.kind === 'match-play')}</strong> · {bet.status === 'won'
-              ? `${bet.winner === 'a' ? match.sideA.name : match.sideB.name} won` : bet.status === 'push' ? 'Push' : bet.status}
+              ? `${bet.winner === 'a' ? a : b} won` : bet.status === 'push' ? 'Push' : bet.status}
             {bet.currentPosition !== null && <> · {bet.currentPosition === 0 ? 'All square'
-              : `${bet.currentPosition > 0 ? match.sideA.name : match.sideB.name} ${String(Math.abs(bet.currentPosition))} up`}</>}
+              : `${bet.currentPosition > 0 ? a : b} ${String(Math.abs(bet.currentPosition))} up`}</>}
             {bet.status === 'stale' && <strong> · Review required</strong>}
             </summary>
             <p>{game.kind === 'match-play' ? `Starts hole ${String(bet.startHole)} · Ends hole ${String(bet.endHole)}`
@@ -62,7 +64,7 @@ export function NassauResults({ game, result, players = [] }: {
             <small> · Unallocated {money(bet.settlement.unallocatedMinor, bet.settlement.status === 'pending')}</small>
           </details></li>;
         })}</ul>
-      </section>)}
+      </section>; })}
       {result.stalePresses.length > 0 && <p role="status">{result.stalePresses.length} stale press declaration(s). Saved declarations remain read-only; refresh and review match inputs.</p>}
     </>}
   </section>;

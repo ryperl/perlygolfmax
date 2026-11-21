@@ -20,9 +20,28 @@ describe('private catalog/setup transport', () => {
     const result = request('events/fictional/scores?stringRules=2', new AbortController().signal,
       { method: 'PUT', body: { score: 4 }, requestId: 'fictional-operation' });
     await expect(result).rejects.toMatchObject({ status: 426 });
-    await expect(result).rejects.toThrow('Copy any unsaved scores, then refresh the page');
+    await expect(result).rejects.toThrow('Your changes are kept');
+    await expect(result).rejects.not.toThrow(/Copy|refresh the page|API/);
     expect(send).toHaveBeenCalledOnce();
     expect(send.mock.calls[0]?.[1]?.headers).toHaveProperty('Idempotency-Key', 'fictional-operation');
+  });
+  it('keeps malformed successful save confirmations explicit and never exposes parser or response details', async () => {
+    const send = vi.fn<typeof fetch>().mockResolvedValue(new Response('<html>fixture-private-response</html>'));
+    const request = createPrivateRequest('https://fictional.example.test/api', () => Promise.resolve('fictional'), send);
+    const result = request('scores', new AbortController().signal, { method: 'PUT', body: { score: 4 } });
+    await expect(result).rejects.toMatchObject({ status: 502 });
+    await expect(result).rejects.toThrow('save confirmation could not be read');
+    await expect(result).rejects.not.toThrow(/fixture-private|JSON|SyntaxError/);
+    expect(send).toHaveBeenCalledOnce();
+  });
+  it('reports interrupted writes as unconfirmed without asking users to repair the service or automatically retrying', async () => {
+    const send = vi.fn<typeof fetch>().mockRejectedValue(new TypeError('fixture-private-network-detail'));
+    const request = createPrivateRequest('https://fictional.example.test/api', () => Promise.resolve('fictional'), send);
+    const result = request('scores', new AbortController().signal, { method: 'PUT', body: { score: 4 } });
+    await expect(result).rejects.toMatchObject({ status: 503 });
+    await expect(result).rejects.toThrow('saving was not confirmed');
+    await expect(result).rejects.not.toThrow(/fixture-private|API|configure|Nothing was saved/);
+    expect(send).toHaveBeenCalledOnce();
   });
   it('bounds actual UTF-8 bytes before acquiring a token or sending a write', async () => {
     const send = vi.fn<typeof fetch>();
@@ -30,7 +49,7 @@ describe('private catalog/setup transport', () => {
     const request = createPrivateRequest('https://fictional.example.test/api', token, send);
     await expect(request('catalog/players', new AbortController().signal, {
       method: 'POST', body: { displayName: '界'.repeat(1400) },
-    })).rejects.toThrow('4096-byte UTF-8');
+    })).rejects.toMatchObject({ status: 413 });
     expect(send).not.toHaveBeenCalled();
     expect(token).not.toHaveBeenCalled();
   });
@@ -51,11 +70,11 @@ describe('private catalog/setup transport', () => {
     send.mockClear();
     await expect(request('fixture', new AbortController().signal, {
       method: 'PUT', body: { name: '界'.repeat(4100) },
-    })).rejects.toThrow('12288-byte UTF-8');
+    })).rejects.toMatchObject({ status: 413 });
     expect(token).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
     const ordinary = createPrivateRequest('https://fictional.example.test/api', token, send);
-    await expect(ordinary('fixture', new AbortController().signal, { method: 'PUT', body: bounded })).rejects.toThrow('4096-byte UTF-8');
+    await expect(ordinary('fixture', new AbortController().signal, { method: 'PUT', body: bounded })).rejects.toMatchObject({ status: 413 });
     expect(token).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
   });

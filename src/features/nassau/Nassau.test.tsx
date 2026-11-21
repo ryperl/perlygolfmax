@@ -55,8 +55,8 @@ describe('Nassau saved match UI', () => {
     const onChange = vi.fn<(record: NassauHoleRecord) => void>();
     const props = { game, result, holeNumber: 4, etag: 'current-revision', saved, draft: undefined, disabled: false, onChange };
     const view = render(<NassauHoleControls {...props} />);
-    const select = screen.getByLabelText('Fictional Red vs Fictional Blue · Hole 4');
-    expect(select).toHaveValue('side-a');
+    fireEvent.click(screen.getByText('Fictional Red vs Fictional Blue · Hole 4 · Conceded to Fictional Red · Saved'));
+    expect(screen.getByRole('button', { name: 'Concede to Fictional Red' })).toHaveAttribute('aria-pressed', 'true');
     const button = screen.getAllByRole('button', { name: 'Stage manual press' })[0];
     if (!button) throw new Error('Missing fictional press action');
     fireEvent.click(button);
@@ -69,13 +69,57 @@ describe('Nassau saved match UI', () => {
     expect(staged.gameEtag).toBe('current-revision');
     view.rerender(<NassauHoleControls {...props} draft={staged} />);
     expect(screen.getByRole('button', { name: 'Press staged' })).toBeDisabled();
-    fireEvent.change(select, { target: { value: 'scores' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Use saved strokes' }));
     const cleared = onChange.mock.calls[1]?.[0];
     expect(cleared?.outcomes).toEqual([{ matchId: option.matchId, outcome: 'scores' }]);
     expect(cleared?.presses).toEqual(staged.presses);
     view.rerender(<NassauHoleControls {...props} draft={cleared} />);
     expect(screen.getByRole('button', { name: 'Press staged' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: /Save/ })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['singles', [1, 1]], ['three-way', [1, 1, 1]], ['one-v-two', [1, 2]],
+    ['two-v-two-best-ball', [2, 2]], ['two-v-two-aggregate', [2, 2]],
+  ] as const)('uses participants for %s and keeps decisions optional, staged and reversible', (variant, sizes) => {
+    const { f, game: base, cards } = fixture();
+    let offset = 0;
+    const game: MatchPlayGameDefinition = { ...base, kind: 'match-play', variant,
+      sides: sizes.map((size, index) => {
+        const playerIds = cards.slice(offset, offset + size).map((card) => card.playerId);
+        offset += size;
+        return { id: strokeGameId(970 + index), name: `Side ${String.fromCharCode(65 + index)}`, playerIds };
+      }), stakes: { ...base.stakes, frontMinor: 0, backMinor: 0 } };
+    const result = calculateNassau(game, f.snapshot, cards);
+    const onChange = vi.fn<(record: NassauHoleRecord) => void>();
+    const props = { game, result, players: cards, holeNumber: 1, etag: 'current', saved: undefined,
+      draft: undefined, disabled: false, onChange };
+    const view = render(<NassauHoleControls {...props} />);
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(view.container.querySelector('details')).not.toHaveAttribute('open');
+    expect(view.container).not.toHaveTextContent(/Side [AB]/);
+    const summary = view.container.querySelector('summary');
+    if (!summary) throw new Error('Missing match action disclosure');
+    fireEvent.click(summary);
+    const a = result.matches[0]?.sideA.playerIds.map((id) => cards.find((card) => card.playerId === id)?.displayName).join(' + ');
+    if (!a) throw new Error('Missing fictional match participants');
+    const controls = summary.closest('details');
+    if (!controls) throw new Error('Missing match decision context');
+    fireEvent.click(within(controls).getByRole('button', { name: `Concede to ${a}` }));
+    const conceded = onChange.mock.calls[0]?.[0];
+    if (!conceded) throw new Error('Missing concession draft');
+    expect(conceded.outcomes).toEqual([{ matchId: result.matches[0]?.id, outcome: 'side-a' }]);
+    expect(cards).toEqual(fixture().cards);
+    view.rerender(<NassauHoleControls {...props} draft={conceded} />);
+    expect(summary).toHaveTextContent('Not saved');
+    fireEvent.click(within(controls).getByRole('button', { name: 'Halve hole' }));
+    const halved = onChange.mock.calls[1]?.[0];
+    expect(halved?.outcomes).toEqual([{ matchId: result.matches[0]?.id, outcome: 'halved' }]);
+    view.rerender(<NassauHoleControls {...props} draft={halved} disabled />);
+    expect(within(controls).getByRole('button', { name: 'Use saved strokes' })).toBeDisabled();
+    view.rerender(<NassauHoleControls {...props} draft={halved} />);
+    fireEvent.click(within(controls).getByRole('button', { name: 'Use saved strokes' }));
+    expect(onChange.mock.calls[2]?.[0].outcomes).toEqual([{ matchId: result.matches[0]?.id, outcome: 'scores' }]);
   });
 
   it('offers no draft-calculated, wrong-hole or unavailable presses and leaves saved declarations read-only', () => {

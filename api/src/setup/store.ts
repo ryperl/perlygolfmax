@@ -44,7 +44,10 @@ import { isHandicapIndex } from '../../../src/contracts/catalog.js';
 import type { PublicScoreIdentity } from '../../../src/domain/public-access.js';
 import { dotsDefinitionMatchesRound } from '../../../src/contracts/dots.js';
 import { definitionCards, dotRound } from '../scoring/internal-games.js';
-import { buildDotAwardAudit, correctionAuditCards } from '../scoring/dot-audit.js';
+import { buildDotAwardAudit, correctionAuditCards, supportsDotAwardAudit } from '../scoring/dot-audit.js';
+import { requireGameCalculations } from '../../../src/contracts/game-calculations.js';
+import { publishedCourseHandicaps } from '../../../src/domain/playing-handicaps.js';
+import { calculateGameResults } from '../../../src/domain/stableford.js';
 import type { EventHandicapRefreshResult } from '../../../src/domain/player-handicap-update.js';
 import { readPublicAccess } from '../public-access/authority.js';
 import {
@@ -460,7 +463,7 @@ export class TableWorkspaceStore {
   }
 
   async correctRound(identity: AccountIdentity, eventId: string, roundId: string,
-    requestId: string, body: RoundCorrectionWriteRequest): Promise<RoundCorrectionWriteResult> {
+    requestId: string, body: RoundCorrectionWriteRequest, gameCalculations = true): Promise<RoundCorrectionWriteResult> {
     if (!isUuid(requestId) || !isRoundCorrectionWriteRequest(body)) throw new ApiError(400, 'INVALID_ROUND_CORRECTION');
     const state = await this.correctionState(identity, eventId, roundId);
     const replayKey = `round-correction:${roundId}:${requestId}`;
@@ -530,7 +533,7 @@ export class TableWorkspaceStore {
           },
         };
       }),
-      ...(playerTees.length ? { playerTees } : {}),
+      ...(body.correction.playerTeeSelections === undefined ? {} : { playerTees }),
       inputRevision: requestId,
     };
     if (!isRecord(updatedRound) || !isEventWorkspace({ ...state.workspace, rounds: state.workspace.rounds.map((round) =>
@@ -593,10 +596,18 @@ export class TableWorkspaceStore {
     if (canonical(before) === canonical(after) && warnings.length === (state.round.reviewWarnings?.length ?? 0)) {
       return { applied: false, model: await this.correctionModel(identity, eventId, roundId) };
     }
-    const auditCards = state.games?.games.some((game) => game.kind === 'dots' || game.kind === 'wolf' && game.version === 2)
+    const auditCards = state.games?.games.some(supportsDotAwardAudit)
       ? await correctionAuditCards(this.table, eventId, state.round, state.lock) : [];
     const dotAwardAudit = buildDotAwardAudit(updatedGames, state.round, withWarnings,
       auditCards, auditCards, state.games?.etag ?? null);
+    if (!gameCalculations) {
+      for (const round of [state.round, withWarnings]) requireGameCalculations({
+        cards: auditCards, layout: round.teeProfile.holes, groups: round.groups,
+        courseHandicaps: publishedCourseHandicaps(round),
+        ...(state.games ? { games: { configuration: { ...state.games, games: updatedGames },
+          results: calculateGameResults(updatedGames, round, auditCards) } } : {}),
+      }, false, updatedGames, true);
+    }
     const receipt: RoundCorrectionReceipt = {
       id: requestId, eventId, roundId, expected: body.expected, before, after, reason: body.reason,
       ...(body.reviewSummary ? { reviewSummary: body.reviewSummary } : {}),

@@ -166,7 +166,7 @@ export function GameSettings({
           {groups.filter((entry) => entry.playerIds.length === 4).map((group) => <option key={group.number} value={group.number}>Group {group.number}</option>)}
         </select></label>}
         {draft.kind === 'churchy' && !churchyCustomNamesSupported
-          && <small>Churchie names are read-only until this API advertises custom-name support. Refresh after an API update.</small>}
+          && <small>Custom Churchie names are temporarily unavailable in this app version. Your saved name is unchanged.</small>}
         {stableford && <label>Points preset
           <select value={draft.preset} onChange={(event) => {
             if (event.target.value === 'standard' || event.target.value === 'modified') {
@@ -248,12 +248,12 @@ export function GameSettings({
                 onChange={(event) => { onChange({ ...draft, wolfHighLowSweep: event.target.checked }); }} />
                 High/Low Sweep · +1 dot per winning teammate
               </label>
-              {!wolfHighLowSweepSupported && <small>High/Low Sweep requires advertised Wolf API support.</small>}
+              {!wolfHighLowSweepSupported && <small>High/Low Sweep is temporarily unavailable in this app version.</small>}
               {legacyWolfSweep && <small>Remove or explicitly convert the legacy linked High/Low Sweep in Dots before enabling this option.</small>}
               <label>USD per dot difference<span>$ <input aria-label="USD per dot difference" inputMode="decimal" value={draft.stake ?? ''}
                 onChange={(event) => { onChange({ ...draft, stake: event.target.value }); }} /></span></label>
               <small>Optional dollars and cents. Blank or 0 means points-only; one individual settlement per opponent.</small>
-              {!wolfV2Supported && <p>This API does not advertise earned Wolf editing support.</p>}
+              {!wolfV2Supported && <p>Earned Wolf editing is temporarily unavailable in this app version.</p>}
             </>}
             {draft.wolfVersion !== 2 && <p>Legacy Wolf · This game will not convert to earned-dot rules.</p>}
             <label>Allow PIG<input type="checkbox" checked={draft.allowPig ?? false} onChange={(event) => { onChange({ ...draft, allowPig: event.target.checked }); }} /></label>
@@ -266,10 +266,20 @@ export function GameSettings({
             }}><option value="singles">Singles · 1 vs 1</option><option value="three-way">Three-way · three pairwise matches</option>
               <option value="one-v-two">1 vs 2 · Best ball</option><option value="two-v-two-best-ball">2 vs 2 · Best ball</option>
               <option value="two-v-two-aggregate">2 vs 2 · Aggregate</option></select></label>
-            {(draft.nassauSides ?? []).map((side, sideIndex) => <fieldset key={side.id}><legend>{side.name}</legend>
-              <label>Side {sideIndex + 1} name<input value={side.name} onChange={(event) => { onChange({ ...draft,
+            {draft.nassauVariant === 'singles' && draft.nassauSides?.every((side) => side.playerIds.every((id) =>
+              roster.some((player) => player.playerId === id))) && <p className="match-setup-preview">
+              {draft.nassauSides.map((side) => side.playerIds.map((id) =>
+                roster.find((player) => player.playerId === id)?.displayName ?? 'Golfer unavailable').join(' + ')).join(' vs ')}
+            </p>}
+            {(draft.nassauSides ?? []).map((side, sideIndex) => <fieldset key={side.id}>
+              <legend>{draft.nassauVariant === 'singles' ? sideIndex === 0 ? 'Golfer' : 'Opponent'
+                : `${side.playerIds.length === 1 ? 'Golfer' : 'Team'} ${String(sideIndex + 1)}`}</legend>
+              {side.playerIds.length > 1 && <label>Team {sideIndex + 1} name<input value={side.name} onChange={(event) => { onChange({ ...draft,
                 nassauSides: (draft.nassauSides ?? []).map((entry) => entry.id === side.id ? { ...entry, name: event.target.value } : entry) }); }} /></label>
-              {side.playerIds.map((id, index) => <label key={index}>{side.name} golfer {index + 1}<select value={id} onChange={(event) => {
+              }
+              {side.playerIds.map((id, index) => <label key={index}>{draft.nassauVariant === 'singles'
+                ? sideIndex === 0 ? 'Golfer' : 'Opponent' : side.playerIds.length === 1 ? `Golfer ${String(sideIndex + 1)}`
+                : `Team ${String(sideIndex + 1)} golfer ${String(index + 1)}`}<select value={id} onChange={(event) => {
                 onChange({ ...draft, nassauSides: (draft.nassauSides ?? []).map((entry) => entry.id === side.id
                   ? { ...entry, playerIds: entry.playerIds.map((playerId, position) => position === index ? event.target.value : playerId) } : entry) });
               }}><option value="">Choose participant</option>
@@ -469,10 +479,10 @@ export function GameSettings({
       </fieldset>
       {matchLocked && <p>Saved scoring locks Dots, Nassau and Wolf setup. Other games can still be edited.</p>}
       {draft.kind === 'churchy' && draft.churchyVersion === 2 && !churchyV2Supported
-        && <p>Churchie edits require API rules support. Refresh before editing this game.</p>}
+        && <p>Churchie edits are temporarily unavailable in this app version. Saved games are unchanged.</p>}
       {draft.kind === 'churchy' && draft.churchyVersion === 3 && !churchyV3Supported
-        && <p>Updated Churchie edits require advertised API version-3 support.</p>}
-      {draft.kind !== 'churchy' && supportedGameKinds === undefined && <p>This API does not advertise Stroke Play, Wolf or Nassau support. Refresh after an API upgrade to configure these games.</p>}
+        && <p>Updated Churchie edits are temporarily unavailable in this app version. Saved games are unchanged.</p>}
+      {draft.kind !== 'churchy' && supportedGameKinds === undefined && <p>Stroke Play, Wolf and Nassau setup are temporarily unavailable in this app version.</p>}
       <div className="game-actions">
         <button type="submit" disabled={disabled || matchLocked || saveDisabled
           || draft.kind === 'dots' && draft.dotsMode === 'rotating' && !dotsV2Supported

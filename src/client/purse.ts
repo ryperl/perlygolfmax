@@ -36,7 +36,7 @@ export function createPurseClient(apiUrl: string, getToken: () => Promise<string
       if (!isPurseWriteResult(value) || value.current.workspace.event.id !== eventId || value.change.id !== requestId
         || value.change.expectedEtag !== etag || !samePursePlan(value.change.after.plan, plan)
         || !samePurseTieResolutions(value.change.after.resolutions, resolutions)) {
-        throw new Error('Invalid purse save acknowledgement. The outcome is uncertain; keep this draft and request ID and refresh to review.');
+        throw new Error('Invalid purse save acknowledgement. The outcome is uncertain; keep your changes and refresh saved data before retrying.');
       }
       return value;
     },

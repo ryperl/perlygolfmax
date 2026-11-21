@@ -1,7 +1,7 @@
 import type { RoundScores, Scorecard } from '../../domain/scoring';
 import { scorecardHoles, scorecardTee } from '../../domain/tees';
 import { ScorecardNine } from './ScorecardNine';
-import { scorecardGame, scorecardGameWarnings, summarizeCard } from './scorecard-presentation';
+import { scorecardGame, scorecardGameWarnings, scorecardUsesStrokesOff, summarizeCard } from './scorecard-presentation';
 import './scorecard-recap.css';
 import { gameDisplayName, gameScoringLabel } from '../games';
 import { PlayerDifferential } from '../differentials';
@@ -25,7 +25,7 @@ export function PlayerScorecardRecap({ round, card, gameId }: {
       <div><h3>{card.displayName}</h3><p>{round.roundName} — {round.courseName}</p>
         <p>{tee?.name ?? round.teeName} / {tee?.category ?? round.teeCategory}{totalRating ? ` · Course rating ${String(totalRating.course)} · Slope ${String(totalRating.slope)}` : ''}
           {(round.playerTees?.length ?? 0) > 0 ? tee ? ' · personal tee' : ' · default tee' : ''}</p>
-        {game && <p className="scorecard-game-context">{gameDisplayName(game.definition)} · {game.definition.kind === 'ball-drop' || game.definition.kind === 'skins' || game.definition.kind === 'churchy' || game.definition.kind === 'stroke-play' || game.definition.kind === 'wolf' || game.definition.kind === 'dots' || game.definition.kind === 'match-play'
+        {game && <p className="scorecard-game-context">{gameDisplayName(game.definition)} · {game.definition.kind === 'ball-drop' || game.definition.kind === 'skins' || game.definition.kind === 'churchy' || game.definition.kind === 'stroke-play' || game.definition.kind === 'wolf' || game.definition.kind === 'dots' || game.definition.kind === 'match-play' || game.definition.kind === 'nassau'
           ? gameScoringLabel(game.definition) : `${game.definition.basis === 'net' ? 'Net' : 'Gross'} points`}</p>}
       </div>
       <p className="recap-total">{summary.complete ? 'Gross total' : 'Recorded total'}:
@@ -41,14 +41,16 @@ export function PlayerScorecardRecap({ round, card, gameId }: {
       && <p>Nassau match bets and presses are in Games and Leaderboard.</p>}
     <MatchPlaySummary game={game} players={round.cards} playerId={card.playerId} />
     {scorecardGameWarnings(game, [card]).map((warning) => <p className="scorecard-game-unavailable" key={warning}>{warning}</p>)}
-    {(round.courseHandicaps?.find((entry) => entry.playerId === card.playerId)?.courseHandicap ?? 0) > 0
-      && <p className="scorecard-stroke-key">Stroke dots: tee Course Handicap.</p>}
+    {(scorecardUsesStrokesOff(game) || (round.courseHandicaps?.find((entry) => entry.playerId === card.playerId)?.courseHandicap ?? 0) > 0)
+      && <p className="scorecard-stroke-key">Stroke dots: {scorecardUsesStrokesOff(game) ? 'SO' : 'tee Course Handicap'}.</p>}
     <div className="recap-sections">
       {front.length > 0 && <ScorecardNine label="Front nine" subtotal="Out" layout={front} fullLayout={layout} cards={[card]} game={game}
         matchPlayers={round.cards}
+        groups={round.groups}
         courseHandicaps={round.courseHandicaps ?? []} teeStrokeAllocation={tee?.strokeAllocation ?? round.teeStrokeAllocation} />}
       {back.length > 0 && <ScorecardNine label="Back nine" subtotal="In" layout={back} fullLayout={layout} cards={[card]} game={game}
         matchPlayers={round.cards}
+        groups={round.groups}
         courseHandicaps={round.courseHandicaps ?? []} teeStrokeAllocation={tee?.strokeAllocation ?? round.teeStrokeAllocation} />}
     </div>
     {game?.definition.kind === 'match-play' && <p className="scorecard-match-key">UP / DN: running match position · AS: all square · —: pending or unavailable. Main match only; presses are in Games.</p>}
