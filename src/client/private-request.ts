@@ -67,6 +67,11 @@ export function createPrivateRequest(apiUrl: string, getToken: () => Promise<str
     if (response.status === 401) throw new SessionExpiredError('Your session expired. Sign in again.');
     if (response.status === 426) throw new PrivateRequestError(426,
       'This scoring view needs an app update. Copy any unsaved scores, then refresh the page. Nothing was confirmed saved.');
+    if (response.status === 400 && response.headers.get('content-type')?.startsWith('application/json')) {
+      const failure: unknown = await response.json();
+      if (isRecord(failure) && failure.code === 'SKINS_FOURSOME_REQUIRED') throw new PrivateRequestError(400,
+        'Skins carryovers require the entire round to be one saved foursome. Turn carryovers off or change round setup. Your draft is retained.');
+    }
     if (response.status === 409) throw new EventChangedError('This data changed. Refresh before approving and retrying. Your draft was preserved.');
     if (!response.ok) throw new PrivateRequestError(response.status, response.status === 403
       ? 'You do not have permission for this operation. Nothing was confirmed saved.'

@@ -19,7 +19,8 @@ const reasons = ['missing-handicap-index', 'uncaptured-handicap-index', 'invalid
 
 export function isWolfDefinition(value: unknown): value is WolfGameDefinition {
   return isRecord(value) && keys(value, ['id', 'name', 'kind', 'version', 'basis', 'groupNumber', 'playerIds', 'allowPig',
-    ...(value.version === 2 ? ['stakeMinor'] : [])], value.version === 2 ? ['highLowSweep'] : [])
+    ...(value.version === 2 ? ['stakeMinor'] : [])], ['handicapRule', ...(value.version === 2 ? ['highLowSweep'] : [])])
+    && isGameHandicapSettings(value)
     && (!Object.hasOwn(value, 'highLowSweep') || value.highLowSweep === true)
     && isUuid(value.id) && boundedText(value.name) && value.kind === 'wolf'
     && (value.version === 1 || value.version === 2 && (value.stakeMinor === null || nonnegative(value.stakeMinor)))
@@ -148,7 +149,7 @@ export function isWolfResults(value: unknown, game: WolfGameDefinition, context?
     for (const [index, player] of players.entries()) {
       if (!isRecord(player) || !keys(player, ['playerId', 'displayName', 'playingHandicap', 'holesScored', 'totalHoles',
         'status', 'dotsWon', 'dotsLost', 'balance']) || player.playerId !== game.playerIds[index]
-        || !boundedText(player.displayName) || player.playingHandicap !== null && !nonnegative(player.playingHandicap)
+        || !boundedText(player.displayName) || !isGameHandicapValue(player.playingHandicap, game.handicapRule)
         || game.basis === 'gross' && player.playingHandicap !== null
         || player.totalHoles !== holes.length || player.status !== value.status) return false;
       const entries = holes.flatMap((hole) => isRecord(hole) && Array.isArray(hole.transfers)
@@ -162,3 +163,4 @@ export function isWolfResults(value: unknown, game: WolfGameDefinition, context?
   }
   return context === undefined || sameJsonValue(value, calculateWolf(game, context.round, context.cards, context.records));
 }
+import { isGameHandicapSettings, isGameHandicapValue } from './game-handicaps.js';

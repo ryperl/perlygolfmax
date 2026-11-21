@@ -4,6 +4,7 @@ import type { ChurchyGameDefinition, ChurchyResults } from './churchy.js';
 import type { WolfGameDefinition, WolfResults } from './wolf.js';
 import type { NassauGameDefinition, MatchPlayGameDefinition, NassauResults } from './nassau.js';
 import type { DotsGameDefinition, DotsResults } from './dots.js';
+import type { GameHandicapSettings } from './game-handicaps.js';
 
 export type StablefordPreset = 'standard' | 'modified';
 export type GameScoreBasis = 'gross' | 'net';
@@ -19,7 +20,7 @@ export interface StablefordPointsTable {
   readonly worseScorePoints: number;
 }
 
-interface CommonGameDefinition {
+interface CommonGameDefinition extends GameHandicapSettings {
   readonly id: string;
   readonly name: string;
   readonly kind?: 'stableford';
@@ -51,7 +52,7 @@ export interface TeamGameDefinition extends CommonGameDefinition {
   readonly teams: readonly GameTeam[];
 }
 
-interface StrokeGameDefinition {
+interface StrokeGameDefinition extends GameHandicapSettings {
   readonly id: string;
   readonly name: string;
   readonly version: 1;
@@ -72,6 +73,7 @@ export interface SkinsGameDefinition extends StrokeGameDefinition {
   readonly kind: 'skins';
   readonly basis: GameScoreBasis;
   readonly carryovers: boolean;
+  readonly carryOrder?: 'shared-group-v1';
   readonly format?: never;
   readonly teams?: never;
 }
@@ -91,6 +93,12 @@ export type RoundGameKind = (typeof roundGameKinds)[number];
 
 export function isStablefordGame(game: RoundGameDefinition): game is StablefordGameDefinition {
   return game.kind === undefined || game.kind === 'stableford';
+}
+
+export function changesSkinsCarryRules(game: RoundGameDefinition, previous: RoundGameDefinition | undefined): boolean {
+  return game.kind === 'skins' && game.carryovers && (previous?.kind !== 'skins' || !previous.carryovers
+    || game.carryOrder !== previous.carryOrder || game.basis !== previous.basis
+    || game.handicapRule !== previous.handicapRule);
 }
 
 export function isTeamGameDefinition(game: StablefordGameDefinition): game is TeamGameDefinition;
@@ -244,6 +252,8 @@ export function sameGameDefinitions(left: readonly RoundGameDefinition[], right:
   return left.length === right.length && left.every((game, index) => {
     const other = right[index];
     if (!other) return false;
+    if (('handicapRule' in game ? game.handicapRule : undefined)
+      !== ('handicapRule' in other ? other.handicapRule : undefined)) return false;
     if (game.kind === 'dots' || other.kind === 'dots') {
       return game.kind === 'dots' && other.kind === 'dots' && game.id === other.id && game.name === other.name
         && game.groupNumber === other.groupNumber && game.mode === other.mode && game.version === other.version
@@ -265,6 +275,7 @@ export function sameGameDefinitions(left: readonly RoundGameDefinition[], right:
       return (game.kind === 'nassau' || game.kind === 'match-play') && (other.kind === 'nassau' || other.kind === 'match-play')
         && game.kind === other.kind && game.id === other.id && game.name === other.name
         && game.basis === other.basis && game.groupNumber === other.groupNumber && game.variant === other.variant
+        && game.playOrder === other.playOrder
         && game.automaticPresses === other.automaticPresses
         && game.stakes.frontMinor === other.stakes.frontMinor && game.stakes.backMinor === other.stakes.backMinor
         && game.stakes.overallMinor === other.stakes.overallMinor && game.sides.length === other.sides.length
@@ -292,7 +303,7 @@ export function sameGameDefinitions(left: readonly RoundGameDefinition[], right:
         && game.id === other.id && game.name === other.name && game.kind === other.kind
         && game.basis === other.basis && game.format === other.format
         && (game.kind === 'stroke-play' && other.kind === 'stroke-play' ? true
-          : game.kind === 'skins' && other.kind === 'skins' ? game.carryovers === other.carryovers
+          : game.kind === 'skins' && other.kind === 'skins' ? game.carryovers === other.carryovers && game.carryOrder === other.carryOrder
           : game.kind === 'ball-drop' && other.kind === 'ball-drop'
             && game.teams.length === other.teams.length && game.teams.every((team, index) => {
               const counterpart = other.teams[index];

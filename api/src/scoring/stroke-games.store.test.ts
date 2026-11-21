@@ -26,7 +26,8 @@ function definitions(playerIds: readonly string[]): readonly RoundGameDefinition
     })),
   };
   const skins: SkinsGameDefinition = {
-    id: identifier(701), name: 'Fictional Net Skins', kind: 'skins', version: 1, basis: 'net', carryovers: true,
+    id: identifier(701), name: 'Fictional Net Skins', kind: 'skins', version: 1, basis: 'net', carryovers: playerIds.length === 4,
+    ...(playerIds.length === 4 ? { carryOrder: 'shared-group-v1' as const } : {}),
   };
   const strokePlay: StrokePlayGameDefinition = {
     id: identifier(702), name: 'Fictional Net Stroke Play', kind: 'stroke-play', version: 1, basis: 'net',

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { adjacentHole, groupStartingHole } from '../../domain/round-navigation';
+import { gameHandicap } from '../../domain/game-handicaps';
 import type { ScoresClient } from '../../client/scoring';
 import type { DotPresetStore } from '../../client/dot-presets';
 import { EventChangedError } from '../../client/events';
@@ -475,10 +476,19 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
             game.kind === 'churchy' && game.groupNumber === group.number && game.playerIds.includes(playerId)) : undefined;
           const churchyPlayer = churchyGame ? round.games?.results.find((result) =>
             result.gameId === churchyGame.id)?.players.find((player) => player.playerId === playerId) : undefined;
+          const groupLowGame = round.games?.configuration.games.some((game) =>
+            game.kind !== 'dots' && game.basis === 'net' && game.handicapRule === 'group-low-v1'
+            && (game.kind === 'churchy' || game.kind === 'wolf' || game.kind === 'nassau' || game.kind === 'match-play'
+              ? game.groupNumber === group.number : true));
+          const relative = groupLowGame ? gameHandicap('group-low-v1', playerId,
+            round.courseHandicaps?.map((entry) => ({ playerId: entry.playerId,
+              handicap: entry.courseHandicap ?? entry.unavailableReason ?? null })) ?? [], round.groups) : null;
           return {
             playerId, displayName: card.displayName, saved: savedHole(card, hole.number),
             grossProgress: savedGrossProgress(card, scorecardHoles(round, playerId)),
-            ...(churchyPlayer ? { strokesOff: churchyPlayer.playingHandicap } : {}),
+            ...(groupLowGame ? { strokesOff: typeof relative === 'number' ? relative : null }
+              : churchyPlayer && churchyGame?.kind === 'churchy' && churchyGame.handicapRule === undefined
+                ? { strokesOff: churchyPlayer.playingHandicap } : {}),
             ...(courseHandicap ? { courseHandicap } : {}),
             ...(playerHole ? { hole: playerHole } : {}),
             ...((round.playerTees?.length ?? 0) > 0 ? {

@@ -186,7 +186,7 @@ describe('RoundGamesPanel', () => {
     expect(screen.queryByRole('button', { name: 'Add game' })).not.toBeInTheDocument();
   });
   it.each(['skins', 'ball-drop'] as const)('creates %s with dedicated wire fields and retains the complete draft/request on unconfirmed save', async (kind) => {
-    const view = setup();
+    const view = setup({ ...fictionalRoundScores, gameHandicapRules: 1 });
     view.onSave.mockResolvedValue(null);
     click('Add game');
     field('Game type', kind);
@@ -201,6 +201,7 @@ describe('RoundGamesPanel', () => {
     expect(first?.[0][0]).toMatchObject({ kind, version: 1 });
     expect(first?.[0][0]).not.toHaveProperty('points');
     expect(first?.[0][0]).not.toHaveProperty('handicapAllowancePercent');
+    if (kind === 'skins') expect(first?.[0][0]).toHaveProperty('carryOrder', 'shared-group-v1');
     click('Retry save');
     await waitFor(() => { expect(view.onSave).toHaveBeenCalledTimes(2); });
     expect(view.onSave.mock.calls[1]).toEqual(first);

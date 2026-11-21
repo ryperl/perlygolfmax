@@ -18,6 +18,7 @@ import type { RoundGameScoringContext } from '../domain/game-declarations.js';
 import { sameJsonValue } from './round-context.js';
 import { isDotsDefinition } from './dots.js';
 import { calculateInternalGameResults } from '../domain/internal-games.js';
+import { isGameHandicapSettings } from './game-handicaps.js';
 
 function keys(value: Record<string, unknown>, required: readonly string[], optional: readonly string[] = []): boolean {
   return required.every((key) => Object.hasOwn(value, key))
@@ -46,6 +47,7 @@ function pointsTable(value: unknown, maximum: number): boolean {
 }
 
 export function isRoundGameDefinition(value: unknown): value is RoundGameDefinition {
+  if (isRecord(value) && !isGameHandicapSettings(value)) return false;
   if (isRecord(value) && value.kind === 'dots') return isDotsDefinition(value);
   if (isRecord(value) && value.kind === 'wolf') return isWolfDefinition(value);
   if (isRecord(value) && (value.kind === 'nassau' || value.kind === 'match-play')) return isPressMatchDefinition(value);
@@ -53,10 +55,11 @@ export function isRoundGameDefinition(value: unknown): value is RoundGameDefinit
   if (isRecord(value) && (value.kind === 'ball-drop' || value.kind === 'skins' || value.kind === 'stroke-play')) {
     if (!isUuid(value.id) || !boundedText(value.name) || value.version !== 1
       || value.basis !== 'gross' && value.basis !== 'net') return false;
-    if (value.kind === 'stroke-play') return keys(value, ['id', 'name', 'kind', 'version', 'basis']);
-    if (value.kind === 'skins') return keys(value, ['id', 'name', 'kind', 'version', 'basis', 'carryovers'])
-      && typeof value.carryovers === 'boolean';
-    if (!keys(value, ['id', 'name', 'kind', 'version', 'basis', 'format', 'teams'])
+    if (value.kind === 'stroke-play') return keys(value, ['id', 'name', 'kind', 'version', 'basis'], ['handicapRule']);
+    if (value.kind === 'skins') return keys(value, ['id', 'name', 'kind', 'version', 'basis', 'carryovers'], ['handicapRule', 'carryOrder'])
+      && typeof value.carryovers === 'boolean'
+      && (!Object.hasOwn(value, 'carryOrder') || value.carryOrder === 'shared-group-v1');
+    if (!keys(value, ['id', 'name', 'kind', 'version', 'basis', 'format', 'teams'], ['handicapRule'])
       || typeof value.format !== 'string'
       || !['ball-drop-net-gross', 'ball-drop-two-net', 'ball-drop-two-gross'].includes(value.format)
       || value.basis !== (value.format === 'ball-drop-two-gross' ? 'gross' : 'net')
@@ -80,8 +83,8 @@ export function isRoundGameDefinition(value: unknown): value is RoundGameDefinit
     || !integer(value.handicapAllowancePercent) || value.handicapAllowancePercent < 1 || value.handicapAllowancePercent > 100) return false;
   const common = ['id', 'name', 'preset', 'basis', 'handicapAllowancePercent', 'points'];
   if (value.kind !== undefined && value.kind !== 'stableford') return false;
-  if (!Object.hasOwn(value, 'format')) return keys(value, common, ['kind']) && pointsTable(value.points, maximumExactGamePoints);
-  if (!keys(value, [...common, 'format', 'teams'], ['kind']) || value.basis !== 'net'
+  if (!Object.hasOwn(value, 'format')) return keys(value, common, ['kind', 'handicapRule']) && pointsTable(value.points, maximumExactGamePoints);
+  if (!keys(value, [...common, 'format', 'teams'], ['kind', 'handicapRule']) || value.basis !== 'net'
     || value.format !== 'two-net-better-ball' && value.format !== 'two-net-aggregate' && value.format !== 'four-two-net'
     || !Array.isArray(value.teams)) return false;
   const size = teamSize(value.format);
@@ -240,7 +243,7 @@ export function isRoundGamesView(value: unknown, context?: RoundGameScoringConte
       continue;
     }
     if (game && !isStablefordGame(game)) {
-      if (!isStrokeGameResult(result, game)) return false;
+      if (!isStrokeGameResult(result, game, context?.groups, context?.layout[0]?.number)) return false;
       const ids = result.players.map((player) => player.playerId).sort().join(',');
       if (expectedIds !== undefined && expectedIds !== ids) return false;
       expectedIds = ids;

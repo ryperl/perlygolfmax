@@ -15,7 +15,7 @@ import { isEventSkinsConfiguration } from '../../../src/contracts/event-skins.js
 import { calculateEventSkinsDetails } from '../../../src/domain/event-skins.js';
 import type { HoleScore } from '../../../src/domain/scoring.js';
 import { leanRoundScores, leanScoreWriteResult } from '../../../src/contracts/lean-round-scores.js';
-import { murphyTransport, supportsMurphyTargets, supportsPareeTargets, supportsStringRules, supportsDotsCalls, supportsCategorySweeps, supportsChurchyNames, supportsSweepRules } from './murphy-transport.js';
+import { murphyTransport, supportsMurphyTargets, supportsPareeTargets, supportsStringRules, supportsDotsCalls, supportsCategorySweeps, supportsChurchyNames, supportsSweepRules, supportsGameHandicaps } from './murphy-transport.js';
 import { SweepRulesClientUpdateRequired } from '../../../src/contracts/sweep-rules.js';
 import { ChurchyNamesClientUpdateRequired } from '../../../src/contracts/churchy-names.js';
 import { CategorySweepsClientUpdateRequired } from '../../../src/contracts/category-sweeps.js';
@@ -23,6 +23,7 @@ import { StringRulesClientUpdateRequired } from '../../../src/contracts/string-r
 import { DotsCallsClientUpdateRequired } from '../../../src/domain/murphy-transport.js';
 import { DotsCoexistenceClientUpdateRequired } from '../../../src/contracts/dot-coexistence.js';
 import { supportsDotCoexistence } from './murphy-transport.js';
+import { GameHandicapClientUpdateRequired } from '../../../src/contracts/game-handicaps.js';
 
 export interface ScoringApi {
   readonly verify: VerifyIdentity;
@@ -64,9 +65,10 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
       const categorySweeps = supportsCategorySweeps(request);
       const churchyNames = supportsChurchyNames(request);
       const sweepRules = supportsSweepRules(request);
+      const gameHandicaps = supportsGameHandicaps(request);
       const dotCoexistence = supportsDotCoexistence(request);
-      const send = (value: unknown) => response(200, murphyTransport(value, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence));
-      const read = (value: unknown) => privateReadResponse(request, murphyTransport(value, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence));
+      const send = (value: unknown) => response(200, murphyTransport(value, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps));
+      const read = (value: unknown) => privateReadResponse(request, murphyTransport(value, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps));
       const api = resolveApi();
       const identity = await api.verify(request.headers.get('authorization'));
       const write = action === 'score-hole' || action === 'score-game-hole' || action === 'round-games' || action === 'round-kp' || action === 'event-skins-config';
@@ -96,35 +98,35 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
       const lean = request.query.get('format') === 'lean';
       if (action === 'scores') {
         const round = await api.scores.get(identity, eventId, roundId);
-        return response(200, lean ? privateReadResponse(request, leanRoundScores(round, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence)) : read(round));
+        return response(200, lean ? privateReadResponse(request, leanRoundScores(round, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps)) : read(round));
       }
       if (action === 'round-kp') {
         const requestId = uuid(request.headers.get('Idempotency-Key'));
         const expectedEtag = precondition(request, 'KP_REVISION_REQUIRED');
         let body = await readJson(request, maximumGameConfigurationBytes);
         if (isRecord(body) && (Object.hasOwn(body, 'privateUpload') || Object.hasOwn(body, 'privateCommit'))) {
-          const received = await api.scores.receiveKp(identity, eventId, roundId, body, expectedEtag, requestId, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules);
+          const received = await api.scores.receiveKp(identity, eventId, roundId, body, expectedEtag, requestId, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, gameHandicaps);
           if (received.kind === 'part') return response(200, { privateStaged: { id: received.id, index: received.index } });
           body = received.value;
         }
         if (!isKpSelection(body)) throw new ApiError(400, 'INVALID_KP_SETUP');
-        const result = await api.scores.saveKp(identity, eventId, roundId, body, expectedEtag, requestId, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules);
-        return lean ? response(200, { ...result, round: leanRoundScores(result.round, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence) }) : send(result);
+        const result = await api.scores.saveKp(identity, eventId, roundId, body, expectedEtag, requestId, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, gameHandicaps);
+        return lean ? response(200, { ...result, round: leanRoundScores(result.round, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps) }) : send(result);
       }
       if (action === 'round-games') {
         const requestId = uuid(request.headers.get('Idempotency-Key'));
         const expectedEtag = precondition(request, 'GAME_REVISION_REQUIRED');
         let body = await readJson(request, maximumGameConfigurationBytes);
         if (isRecord(body) && (Object.hasOwn(body, 'privateUpload') || Object.hasOwn(body, 'privateCommit'))) {
-          const received = await api.scores.receiveGames(identity, eventId, roundId, body, expectedEtag, requestId, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules);
+          const received = await api.scores.receiveGames(identity, eventId, roundId, body, expectedEtag, requestId, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, gameHandicaps);
           if (received.kind === 'part') return response(200, { privateStaged: { id: received.id, index: received.index } });
           body = received.value;
         }
         if (!isRecord(body) || Object.keys(body).length !== 1 || !isRoundGameDefinitions(body.games) || body.games.length === 0) {
           throw new ApiError(400, 'INVALID_GAME_SETUP');
         }
-        const result = await api.scores.saveGames(identity, eventId, roundId, body.games, expectedEtag, requestId, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules);
-        return lean ? response(200, { ...result, round: leanRoundScores(result.round, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence) }) : send(result);
+        const result = await api.scores.saveGames(identity, eventId, roundId, body.games, expectedEtag, requestId, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, gameHandicaps);
+        return lean ? response(200, { ...result, round: leanRoundScores(result.round, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps) }) : send(result);
       }
       const playerId = uuid(request.params.playerId);
       if (action === 'score-history') return send(await api.scores.history(identity, eventId, roundId, playerId, readCursor(request)));
@@ -134,7 +136,7 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
       if (typeof rawHole !== 'string' || !/^(?:[1-9]|1[0-8])$/.test(rawHole)) throw new ApiError(400, 'INVALID_HOLE_NUMBER');
       let body = await readJson(request, action === 'score-game-hole' ? maximumGameConfigurationBytes : undefined);
       if (action === 'score-game-hole') {
-        const received = await api.scores.receiveGameScore(identity, eventId, roundId, playerId, Number(rawHole), body, expectedEtag, requestId, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence);
+        const received = await api.scores.receiveGameScore(identity, eventId, roundId, playerId, Number(rawHole), body, expectedEtag, requestId, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps);
         if (received.kind === 'part') return response(200, { privateStaged: { id: received.id, index: received.index } });
         body = received.value;
       }
@@ -142,11 +144,11 @@ export function createScoringHandler(resolveApi: () => ScoringApi, action: Scori
       if (action === 'score-game-hole' && !parsed.score.nassau?.length && !parsed.score.wolf?.length
         && !parsed.score.dots?.length && parsed.score.churchy?.version !== 3) throw new ApiError(400, 'INVALID_GAME_SCORE');
       const result = await api.scores.write(identity, eventId, roundId, playerId, Number(rawHole),
-        parsed.score, expectedEtag, requestId, parsed.inputRevision, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence);
-      return lean ? response(200, leanScoreWriteResult(result, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence)) : send(result);
+        parsed.score, expectedEtag, requestId, parsed.inputRevision, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps);
+      return lean ? response(200, leanScoreWriteResult(result, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps)) : send(result);
     } catch (error) {
-      const status = error instanceof ApiError || error instanceof StringRulesClientUpdateRequired || error instanceof DotsCallsClientUpdateRequired || error instanceof CategorySweepsClientUpdateRequired || error instanceof ChurchyNamesClientUpdateRequired || error instanceof SweepRulesClientUpdateRequired || error instanceof DotsCoexistenceClientUpdateRequired ? error.status : 503;
-      const code = error instanceof ApiError || error instanceof StringRulesClientUpdateRequired || error instanceof DotsCallsClientUpdateRequired || error instanceof CategorySweepsClientUpdateRequired || error instanceof ChurchyNamesClientUpdateRequired || error instanceof SweepRulesClientUpdateRequired || error instanceof DotsCoexistenceClientUpdateRequired ? error.code : 'SERVICE_UNAVAILABLE';
+      const status = error instanceof ApiError || error instanceof StringRulesClientUpdateRequired || error instanceof DotsCallsClientUpdateRequired || error instanceof CategorySweepsClientUpdateRequired || error instanceof ChurchyNamesClientUpdateRequired || error instanceof SweepRulesClientUpdateRequired || error instanceof DotsCoexistenceClientUpdateRequired || error instanceof GameHandicapClientUpdateRequired ? error.status : 503;
+      const code = error instanceof ApiError || error instanceof StringRulesClientUpdateRequired || error instanceof DotsCallsClientUpdateRequired || error instanceof CategorySweepsClientUpdateRequired || error instanceof ChurchyNamesClientUpdateRequired || error instanceof SweepRulesClientUpdateRequired || error instanceof DotsCoexistenceClientUpdateRequired || error instanceof GameHandicapClientUpdateRequired ? error.code : 'SERVICE_UNAVAILABLE';
       if (status >= 500) context.error('Scoring API request failed', { code, invocationId: context.invocationId, ...failureDiagnostics(error) });
       else context.warn('Scoring API request rejected', { code, status, invocationId: context.invocationId });
       return response(status, { code });

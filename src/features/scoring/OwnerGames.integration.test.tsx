@@ -6,6 +6,9 @@ import type { GameWriteResult } from '../../domain/scoring';
 import { SessionExpiredError } from '../../client/events';
 import { OwnerScoresView } from './OwnerScoresView';
 import { deferred, memoryScores } from './scoring.test-support';
+import { strokeGameFixture, strokeGamesRound } from '../../domain/stroke-games.test-support';
+import { calculateGameResults } from '../../domain/stableford';
+import { publishedCourseHandicaps } from '../../domain/playing-handicaps';
 
 function mount(store = memoryScores(scoreResult().round)) {
   const onSessionExpired = vi.fn();
@@ -18,6 +21,33 @@ async function openGames(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe('games integrated with owner stroke entry', () => {
+  it.each(['full-course-v1', 'group-low-v1'] as const)('shows CH and only applicable SO for %s without another read or draft calculation', async (handicapRule) => {
+    const f = strokeGameFixture(18);
+    const snapshot = { ...f.snapshot, players: f.snapshot.players.map((player, index) => ({
+      ...player, handicapIndex: { ...player.handicapIndex, value: ['11', '4', '8', '3'][index] ?? '0' },
+    })) };
+    const cards = f.cards.map((card) => ({ ...card, etag: null, updatedAt: null,
+      holes: card.holes.map((hole) => ({ ...hole, score: { kind: 'unplayed' as const } })) }));
+    const game = { ...f.ballDrop, handicapRule };
+    const base = strokeGamesRound({ ...f, snapshot, cards });
+    const round = { ...base, setupLocked: false, lastUpdatedAt: null, gameHandicapRules: 1 as const, teeStrokeAllocation: true,
+      courseHandicaps: publishedCourseHandicaps(snapshot), games: { configuration: {
+        eventId: base.eventId, roundId: base.roundId, etag: 'fictional-games', games: [game],
+      }, results: calculateGameResults([game], snapshot, cards) } };
+    const source = memoryScores(round);
+    render(<OwnerScoresView client={source.client} eventId={round.eventId} roundId={round.roundId} onSessionExpired={vi.fn()} />);
+    await screen.findByRole('heading', { name: 'Round scorecard' });
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Enter scores' }));
+    for (const [index, ch] of [11, 4, 8, 3].entries()) {
+      const article = within(screen.getByRole('article', { name: `Fictional golfer ${String(index + 1)} scorecard` }));
+      expect(article.getByRole('heading')).toHaveTextContent(`CH ${String(ch)}`);
+      if (handicapRule === 'group-low-v1') expect(article.getByRole('heading')).toHaveTextContent(`SO ${String(ch - 3)}`);
+      else expect(article.queryByLabelText(/Strokes off the low player/)).not.toBeInTheDocument();
+    }
+    expect(source.client.load).toHaveBeenCalledOnce();
+    expect(source.client.save).not.toHaveBeenCalled();
+    expect(source.client.saveGames).not.toHaveBeenCalled();
+  });
   it('saves customized gross and net games on existing strokes without writing or changing the raw card', async () => {
     const view = mount();
     const originalCards = view.read().cards;

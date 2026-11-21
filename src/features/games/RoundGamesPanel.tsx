@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { EventChangedError } from '../../client/events';
 import type { DotPresetStore } from '../../client/dot-presets';
 import type { RoundGameDefinition } from '../../domain/games';
-import { maximumGamesPerRound, sameGameDefinitions, visibleGames } from '../../domain/games';
+import { changesSkinsCarryRules, maximumGamesPerRound, sameGameDefinitions, visibleGames } from '../../domain/games';
 import type { GameWriteResult, RoundScores } from '../../domain/scoring';
 import { scorePermissions, supportsDotsSpecials, supportsIndividualDotsPlayerCount, supportsRoundGame } from '../../domain/scoring';
 import type { GameDraft } from './game-draft';
@@ -14,6 +14,8 @@ import { InternalSettlement } from '../dots';
 import { gameDisplayName } from './game-presentation';
 import { dotsSpecialCatalog } from '../../domain/dots';
 import { hasCustomChurchyName } from '../../contracts/churchy-names';
+import { hasGameHandicapRules } from '../../contracts/game-handicaps';
+import { skinsCarryCircuit } from '../../domain/round-navigation';
 import './games.css';
 
 export interface RoundGamesPanelProps {
@@ -45,7 +47,7 @@ interface Editor {
 }
 
 function createEditor(round: RoundScores, game?: RoundGameDefinition, defaultGroupNumber?: number): Editor {
-  const draft = game ? draftFromGame(game) : canManageAllRoundGames(round) ? newGameDraft()
+  const draft = game ? draftFromGame(game) : canManageAllRoundGames(round) ? newGameDraft(round.gameHandicapRules === 1)
     : defaultGameGroup(setGameKind(newGameDraft(), 'dots', round.cards.length), round.groups,
       [1, 2, 3, 4].filter((count) => supportsIndividualDotsPlayerCount(round, count)), defaultGroupNumber);
   return {
@@ -123,6 +125,29 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
     }
     const game = buildGame(editor.draft, editor.roster.map((card) => card.playerId));
     const previousGame = editor.base.find((entry) => entry.id === editor.draft.id);
+    if (game && hasGameHandicapRules(game)
+      && (round.gameHandicapRules !== 1 || editingRound.gameHandicapRules !== 1)) {
+      setMessage('Explicit handicap and carry-order rules require API support. Your draft is retained.');
+      return;
+    }
+    const previousRule = previousGame && 'handicapRule' in previousGame ? previousGame.handicapRule : undefined;
+    if (game && (round.setupLocked || editingRound.setupLocked)
+      && (('handicapRule' in game ? game.handicapRule : undefined) !== previousRule
+        || game.kind === 'skins' && game.carryOrder !== (previousGame?.kind === 'skins' ? previousGame.carryOrder : undefined))) {
+      setMessage('Saved scoring locks the game handicap and starting-hole rules. Your draft is retained.');
+      return;
+    }
+    if (game?.kind === 'skins' && game.carryovers && game.carryOrder === 'shared-group-v1'
+      && !skinsCarryCircuit(editingRound.layout.map((hole) => hole.number), editingRound.groups,
+        editingRound.cards.map((card) => card.playerId))) {
+      setMessage('Skins carryovers require the entire round to be one saved foursome. Change round setup first, or turn carryovers off.');
+      return;
+    }
+    if (game?.kind === 'skins' && game.carryovers && game.carryOrder === undefined
+      && changesSkinsCarryRules(game, previousGame)) {
+      setMessage('New or changed Skins carryovers require the one-foursome shared circuit. Select the carry order before saving.');
+      return;
+    }
     const sweepGames = [...editor.base, ...(game ? [game] : [])];
     if (sweepGames.some((entry) => entry.kind === 'dots' && entry.sweepRule === 'manual-v1')
       && (round.dotsManualSweep !== true || editingRound.dotsManualSweep !== true)) {
@@ -369,6 +394,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
           churchyV3Supported={round.churchyRulesVersions?.includes(3) === true && editingRound.churchyRulesVersions?.includes(3) === true}
           churchyCustomNamesSupported={round.churchyCustomNames === true && editingRound.churchyCustomNames === true}
           holeNumbers={editingRound.layout.map((hole) => hole.number)}
+          gameHandicapsSupported={round.gameHandicapRules === 1 && editingRound.gameHandicapRules === 1}
           setupLocked={round.setupLocked || editingRound.setupLocked}
           allowChurchyCreation={!editor.base.some((game) => game.id === editor.draft.id)}
           saveDisabled={editor.conflict || unsupportedSweep} cancelDisabled={working} retry={editor.attempt !== null}

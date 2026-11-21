@@ -20,7 +20,7 @@ describe('organizer per-golfer captured tees', () => {
       await f.workspace.save(creator, event.id, input, f.saved.etag);
       const base = { id: identifier(740), name: 'Fictional nine-hole game', basis: 'net' as const, version: 1 as const };
       const ids = f.input.playerIds;
-      const game: RoundGameDefinition = kind === 'skins' ? { ...base, kind, carryovers: true }
+      const game: RoundGameDefinition = kind === 'skins' ? { ...base, kind, carryovers: true, carryOrder: 'shared-group-v1' }
         : kind === 'stroke-play' ? { ...base, kind }
         : kind === 'ball-drop' ? { ...base, kind, format: 'ball-drop-net-gross', teams: [{ id: identifier(741), name: 'Fictional team', playerIds: ids }] }
         : kind === 'wolf' ? { ...base, kind, version: 2, groupNumber: 1, playerIds: ids, allowPig: true, stakeMinor: null }
@@ -38,7 +38,7 @@ describe('organizer per-golfer captured tees', () => {
           { kind: 'strokes', strokes: 4 }, null, identifier(750 + index))).round;
       }
       expect(isRoundScores(read)).toBe(true);
-      expect(decodeRoundScores(leanRoundScores(read))).toBeDefined();
+      expect(decodeRoundScores(leanRoundScores(read, false, false, false, false, false, false, false, false, kind === 'skins'))).toBeDefined();
       expect(read.layout.map((hole) => hole.number)).toEqual([10, 11, 12, 13, 14, 15, 16, 17, 18]);
     },
   );

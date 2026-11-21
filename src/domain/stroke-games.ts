@@ -7,6 +7,8 @@ import { gameTeamsMatchRoster } from './games.js';
 import type { Scorecard } from './scoring.js';
 import { handicapStrokesForHole } from './stableford.js';
 import { aggregateStrokePlayResults } from './stroke-play.js';
+import type { RoundGroup } from './setup.js';
+import { skinsCarryCircuit } from './round-navigation.js';
 
 export interface StrokeGamePlayer {
   readonly playerId: string;
@@ -48,6 +50,8 @@ function summary(score: StrokeGameScore) {
 
 export function calculateStrokeGameResults(
   game: NewRoundGameDefinition, inputs: readonly StrokeGamePlayer[], cards: readonly Scorecard[],
+  groups: readonly RoundGroup[] = [],
+  defaultStartingHole = inputs[0]?.layout[0]?.number,
 ): RoundGameResult {
   const players: GamePlayerResult[] = inputs.map((player) => {
     const card = cards.find((entry) => entry.playerId === player.playerId);
@@ -80,11 +84,13 @@ export function calculateStrokeGameResults(
       ...(reason ? { unavailableReason: reason } : {}),
     };
   });
-  return aggregateStrokeGameResults(game, players);
+  return aggregateStrokeGameResults(game, players, groups, defaultStartingHole);
 }
 
 export function aggregateStrokeGameResults(
   game: NewRoundGameDefinition, players: readonly GamePlayerResult[],
+  groups: readonly RoundGroup[] = [],
+  defaultStartingHole?: number,
 ): RoundGameResult {
   if (game.kind === 'stroke-play') return aggregateStrokePlayResults(game, players);
   const numbers = players[0]?.holes.map((hole) => hole.number) ?? [];
@@ -132,15 +138,17 @@ export function aggregateStrokeGameResults(
   let unawardedSkins = 0;
   let pendingSkins = 0;
   let blocked = false;
-  for (const number of numbers) {
+  const circuit = game.carryovers && game.carryOrder === 'shared-group-v1'
+    ? skinsCarryCircuit(numbers, groups, players.map((player) => player.playerId), defaultStartingHole) : numbers;
+  for (const number of circuit ?? numbers) {
     const entries = players.map((player) => ({ player,
       hole: player.strokeGame?.holes.find((hole) => hole.number === number) }));
-    const unknown = entries.some((entry) => !entry.hole || entry.hole.status === 'pending' || entry.hole.status === 'unavailable');
+    const unknown = circuit === null || entries.some((entry) => !entry.hole || entry.hole.status === 'pending' || entry.hole.status === 'unavailable');
     if (unknown || game.carryovers && blocked) {
       pendingSkins++;
       blocked = true;
       for (const entry of entries) if (entry.hole) awards.get(entry.player.playerId)?.push({
-        ...entry.hole, value: null, countingPlayerIds: [],
+        ...entry.hole, ...(circuit === null ? { status: 'unavailable' as const } : {}), value: null, countingPlayerIds: [],
       });
       continue;
     }
@@ -166,8 +174,9 @@ export function aggregateStrokeGameResults(
   if (blocked && game.carryovers) pendingSkins += carry;
   else unawardedSkins += carry;
   const resolved = players.map((player): GamePlayerResult => {
-    const score = outcome('skins', awards.get(player.playerId) ?? []);
-    const reason = players.find((entry) => entry.strokeGame?.unavailableReason)?.strokeGame?.unavailableReason;
+    const score = outcome('skins', [...awards.get(player.playerId) ?? []].sort((a, b) => a.number - b.number));
+    const reason = circuit === null ? 'missing-score-data'
+      : players.find((entry) => entry.strokeGame?.unavailableReason)?.strokeGame?.unavailableReason;
     return { ...player, ...summary({ ...score, ...(reason ? { unavailableReason: reason } : {}) }) };
   });
   return { gameId: game.id, kind: game.kind, version: 1, players: resolved, unawardedSkins, pendingSkins };

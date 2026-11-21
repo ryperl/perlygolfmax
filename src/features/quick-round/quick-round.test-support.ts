@@ -27,7 +27,7 @@ export function quickWorkspace(eventId: string, input: EventSetupInput): EventWo
   };
 }
 
-export function quickSource() {
+export function quickSource(explicitGameRules = false) {
   let workspace = quickWorkspace(fictionalId(50), inputFrom(fictionalWorkspace));
   const client: QuickRoundClient = {
     courses: vi.fn<QuickRoundClient['courses']>().mockResolvedValue({ items: [{
@@ -47,6 +47,7 @@ export function quickSource() {
     }),
   };
   const currentScores = () => ({
+    ...(explicitGameRules ? { gameHandicapRules: 1 as const } : {}),
     ...fictionalRoundScores, quickRound: true as const, eventId: workspace.event.id, eventName: workspace.event.name,
     roundId: workspace.rounds[0]?.id ?? fictionalId(70), groups: workspace.rounds[0]?.groups ?? [],
     cards: fictionalRoundScores.cards.filter((card) => workspace.roster.some((player) => player.playerId === card.playerId)),

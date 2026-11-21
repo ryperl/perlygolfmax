@@ -7,6 +7,7 @@ import { sameJsonValue } from './round-context.js';
 import { dotsSpecialCatalog } from '../domain/dots.js';
 import { isChurchyV3HoleRecord } from './dots.js';
 import { isChurchyV3Result } from './churchy-v3.js';
+import { isGameHandicapSettings, isGameHandicapValue } from './game-handicaps.js';
 
 function exact(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
@@ -27,10 +28,11 @@ function earnedDots(hole: Record<string, unknown>, playerId: unknown): bigint {
 }
 
 export function isChurchyDefinition(value: unknown): value is ChurchyGameDefinition {
+  if (isRecord(value) && !isGameHandicapSettings(value)) return false;
   if (isRecord(value) && value.version === 3) {
     const { basis, currency, amountPerDotMinor, orderMode } = value;
     return keys(value, ['id', 'name', 'kind', 'version', 'basis', 'currency', 'groupNumber',
-      'amountPerDotMinor', 'playerIds', 'orderMode', 'specials'])
+      'amountPerDotMinor', 'playerIds', 'orderMode', 'specials', ...(Object.hasOwn(value, 'handicapRule') ? ['handicapRule'] : [])])
       && boundedText(value.name) && basis === 'net' && currency === 'USD' && exact(amountPerDotMinor)
       && (orderMode === 'tee' || orderMode === 'approach')
       && isUuid(value.id) && value.kind === 'churchy' && exact(value.groupNumber) && value.groupNumber > 0
@@ -40,9 +42,10 @@ export function isChurchyDefinition(value: unknown): value is ChurchyGameDefinit
         && dotsSpecialCatalog.some((special) => special.kind === entry.kind) && exact(entry.units) && entry.units > 0)
       && new Set(value.specials.map((entry: { readonly kind: string }) => entry.kind)).size === value.specials.length;
   }
-  return isRecord(value) && keys(value, value.version === 2
+  return isRecord(value) && keys(value, [...(value.version === 2
     ? ['id', 'name', 'kind', 'version', 'basis', 'currency', 'groupNumber', 'amountPerDotMinor', 'playerIds', 'enabledSpecials']
-    : ['id', 'name', 'kind', 'version', 'basis', 'currency', 'groupNumber', 'amountPerDotMinor', 'playerIds'])
+    : ['id', 'name', 'kind', 'version', 'basis', 'currency', 'groupNumber', 'amountPerDotMinor', 'playerIds']),
+    ...(Object.hasOwn(value, 'handicapRule') ? ['handicapRule'] : [])])
     && isUuid(value.id) && boundedText(value.name) && value.kind === 'churchy'
     && (value.version === 1 || value.version === 2 && Array.isArray(value.enabledSpecials)
       && value.enabledSpecials.every((key: unknown) => defaultChurchySpecials.some((special) => special === key))
@@ -106,13 +109,13 @@ function isChurchyResultShape(value: unknown, game: ChurchyGameDefinition): valu
     if (!isRecord(player) || !keys(player, ['playerId', 'displayName', 'playingHandicap', 'status', 'holes',
       'holesScored', 'totalHoles', 'frontPoints', 'backPoints', 'totalPoints'])
       || player.playerId !== game.playerIds[index] || !boundedText(player.displayName)
-      || !nullable(player.playingHandicap) || player.status !== data.status || player.totalHoles !== count
+      || !isGameHandicapValue(player.playingHandicap, game.handicapRule) || player.status !== data.status || player.totalHoles !== count
       || !exact(player.holesScored) || player.holesScored > count
       || !nullable(player.frontPoints) || !nullable(player.backPoints) || !nullable(player.totalPoints)
       || !Array.isArray(player.holes) || player.holes.length !== count
       || !player.holes.every((hole: unknown, index: number) => isRecord(hole)
         && keys(hole, ['number', 'points', 'strokesReceived']) && hole.number === index + firstNumber
-        && nullable(hole.points) && nullable(hole.strokesReceived))) return false;
+        && nullable(hole.points) && isGameHandicapValue(hole.strokesReceived, game.handicapRule))) return false;
   }
   function winners(value: unknown): boolean {
     return Array.isArray(value) && (value.length === 0 || value.length === 2)

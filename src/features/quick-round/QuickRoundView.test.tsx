@@ -29,6 +29,29 @@ async function showGames() {
 }
 
 describe('public Quick round controller', () => {
+  it('saves the shared start before games and preserves an explicit SO choice without another setup or score write', async () => {
+    const source = quickSource(true);
+    render(<QuickRoundView client={source.client} scores={source.scores} />);
+    await choose();
+    for (const number of [2, 3, 4]) fireEvent.click(screen.getByLabelText(`Fictional Player ${String(number)}`, { exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Group 1' }));
+    fireEvent.change(screen.getByLabelText('Group 1 starting hole'), { target: { value: '7' } });
+    await showGames();
+    expect(source.client.create).toHaveBeenCalledOnce();
+    expect(vi.mocked(source.client.create).mock.calls[0]?.[1].rounds[0]?.groups[0]?.startingHole).toBe(7);
+    expect(screen.getByRole('region', { name: 'Shared starting holes' })).toHaveTextContent('Group 1 starts at hole 7');
+    fireEvent.change(screen.getByLabelText('Score basis'), { target: { value: 'net' } });
+    expect(screen.getByLabelText('Net handicap rule')).toHaveValue('full-course-v1');
+    fireEvent.change(screen.getByLabelText('Net handicap rule'), { target: { value: 'group-low-v1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save game' }));
+    await screen.findByText('Game settings saved.');
+    expect(vi.mocked(source.scores.saveGames).mock.calls[0]?.[2][0]).toMatchObject({ handicapRule: 'group-low-v1', basis: 'net' });
+    expect(source.client.save).not.toHaveBeenCalled();
+    expect(source.scores.save).not.toHaveBeenCalled();
+    expect(source.scores.load).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to round setup' }));
+    expect(screen.getByLabelText('Group 1 starting hole')).toHaveValue('7');
+  });
   it('retries Add games with the same setup identity and waits for scoring context before opening the editor', async () => {
     const source = quickSource();
     vi.mocked(source.client.create).mockRejectedValueOnce(new Error('Fictional interrupted setup'));

@@ -180,13 +180,15 @@
   Pickup/DNF award minimum configured points; unplayed remains pending.
   Missing net inputs are unavailable, never a zero handicap.
 - Ball Drop and Skins are versioned stroke games, never Stableford presets.
-  Net always uses 100% captured Course Handicap and each golfer's captured tee;
+  Net uses full captured CH or explicit saved-group-low SO and personal tees;
   keep their points/allowance controls absent. Ball Drop uses explicit foursomes:
   minimum two-ball combination from different golfers, 1 Net + 1 Gross/2 Net/
   2 Gross, summed relative to personal par, lowest first. Wait for all four saved
   dispositions; fewer than two numeric balls is unavailable. Skins compares
   individual numeric gross/net strokes round-wide, unique lowest wins, highest
-  awarded count ranks first; ties optionally carry in hole-number order.
+  awarded count ranks first. New/changed carries require the entire round to
+  be one saved foursome and use its shared starting-hole circuit. Unmarked
+  saved carries retain printed order without migration.
   Earlier pending holes block later carry awards; final unclaimed skins remain
   unawarded. Pickup/X7/DNF are ineligible, not penalties. Keep exact overflow,
   pending/unavailable/known-zero, stale teams and saved/draft separation explicit.
@@ -205,6 +207,13 @@
   unallocated. Ties push. Manual presses use acknowledged two-down positions;
   automatic presses fire once per bet and may themselves be pressed. Keep
   immutable/stale receipts and independent bet money, not a place-purse metric.
+- Explicit game handicap rules preserve unmarked legacy results. New UI net
+  games default full CH (Stableford retains configured allowance); selected SO
+  subtracts the lowest full CH in the entire saved playing group, not a match
+  pair or competition team. Specials/calls remain personal gross. Starts are
+  shared round setup, not per-game writes; new Nassau retains printed Front/Back
+  membership in actual circuit order. Require negotiated markers and
+  fail-before-mutation compatibility. See `docs/game-rules.md`.
 - Legacy Wolf version 1 uses explicit foursome order and group starting hole,
   best ball and net
   off lowest captured CH. Partnered wins/losses transfer +/-2 each; Blind Wolf

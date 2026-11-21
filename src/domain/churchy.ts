@@ -9,9 +9,11 @@ import type { DotAward } from './dot-context.js';
 import type { RoundGroup } from './setup.js';
 import { calculateChurchyV3Results } from './churchy-v3.js';
 import { sameDotsRecords } from './game-declarations.js';
+import { gameHandicap } from './game-handicaps.js';
+import type { GameHandicapSettings } from './game-handicaps.js';
 export { churchyDotsDefinition, churchyV3Context, churchyV3Records, churchyV3RecordsMatchGame } from './churchy-v3.js';
 
-interface CommonChurchyGameDefinition {
+interface CommonChurchyGameDefinition extends GameHandicapSettings {
   readonly id: string;
   readonly name: string;
   readonly kind: 'churchy';
@@ -222,7 +224,10 @@ export function calculateChurchyResults(game: ChurchyGameDefinition, inputs: rea
   const handicaps = known.flatMap((entry) => typeof entry.handicap === 'number' ? [entry.handicap] : []);
   const lowest = validHandicaps ? Math.min(...handicaps) : null;
   const relative = new Map(known.map((entry) => [entry.playerId,
-    lowest !== null && typeof entry.handicap === 'number' && Number.isSafeInteger(entry.handicap - lowest) ? entry.handicap - lowest : null]));
+    game.handicapRule ? (() => {
+      const value = validHandicaps ? gameHandicap(game.handicapRule, entry.playerId, inputs, groups) : null;
+      return typeof value === 'number' ? value : null;
+    })() : lowest !== null && typeof entry.handicap === 'number' && Number.isSafeInteger(entry.handicap - lowest) ? entry.handicap - lowest : null]));
   const numbers = [...(known[0]?.layout ?? inputs[0]?.layout ?? [])].sort((a, b) => a.number - b.number).map((hole) => hole.number);
   let highCarry: number | null = 0;
   let lowCarry: number | null = 0;

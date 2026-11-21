@@ -1,5 +1,6 @@
 import { HttpRequest, InvocationContext } from '@azure/functions';
 import { coexistenceRoundScores } from '../../../src/contracts/dot-coexistence.js';
+import { gameHandicapRoundScores } from '../../../src/contracts/game-handicaps.js';
 import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import type { ChurchyGameDefinitionV3, ChurchySpecialsV3 } from '../../../src/domain/churchy.js';
@@ -94,7 +95,8 @@ describe('score-derived Murphy authoritative persistence and negotiation', () =>
     const api = { ...f, limiter: { check: vi.fn().mockResolvedValue(undefined) } };
     const context = new InvocationContext({ invocationId: 'fictional-negotiated-pages', logHandler: () => undefined });
     for (const negotiated of [false, true]) {
-      const expected = lean ? leanRoundScores(initial.round, negotiated, false, true) : coexistenceRoundScores(murphyRoundScores(initial.round, negotiated));
+      const expected = lean ? leanRoundScores(initial.round, negotiated, false, true)
+        : gameHandicapRoundScores(coexistenceRoundScores(murphyRoundScores(initial.round, negotiated)));
       const text = JSON.stringify(expected);
       const sha256 = createHash('sha256').update(text).digest('hex');
       const request = (hash: string, index = 0) => new HttpRequest({

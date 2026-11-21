@@ -4,6 +4,16 @@ import { createPrivateRequest, PrivateRequestError } from './private-request';
 afterEach(() => { vi.useRealTimers(); });
 
 describe('private catalog/setup transport', () => {
+  it('surfaces the authoritative one-foursome Skins rejection without losing or retrying setup intent', async () => {
+    const send = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ code: 'SKINS_FOURSOME_REQUIRED' }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } }));
+    const request = createPrivateRequest('https://fictional.example.test/api', () => Promise.resolve('fictional'), send);
+    await expect(request('events/fictional/workspace', new AbortController().signal,
+      { method: 'PUT', body: { groups: [] }, requestId: 'fictional-operation' })).rejects.toThrow('one saved foursome');
+    expect(send).toHaveBeenCalledOnce();
+    expect(send.mock.calls[0]?.[1]?.body).toBe(JSON.stringify({ groups: [] }));
+    expect(new Headers(send.mock.calls[0]?.[1]?.headers).get('Idempotency-Key')).toBe('fictional-operation');
+  });
   it('surfaces an update-required response without parsing arbitrary error content or retrying the write', async () => {
     const send = vi.fn<typeof fetch>().mockResolvedValue(new Response('not JSON', { status: 426 }));
     const request = createPrivateRequest('https://fictional.example.test/api', () => Promise.resolve('fictional'), send);

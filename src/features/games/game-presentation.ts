@@ -23,17 +23,19 @@ export function gameDisplayName(game: RoundGameDefinition): string {
 
 export function gameScoringLabel(game: RoundGameDefinition): string {
   if (game.kind === 'dots') return 'Dots · Separate earned specials';
+  const netRule = game.handicapRule === 'group-low-v1' ? 'SO off lowest in saved group' : '100% Course Handicap';
   if (game.kind === 'wolf') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Wolf${game.allowPig ? ' / PIG' : ''} · ${game.version === 2 ? 'Earned dots' : 'Legacy dot balance'}`;
   if (game.kind === 'nassau') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Nassau · Match play · ${game.variant.replaceAll('-', ' ')}`;
   if (game.kind === 'match-play') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Match Play · One match with presses · ${game.variant.replaceAll('-', ' ')}`;
-  if (game.kind === 'stroke-play') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Stroke Play · Lowest to personal par${game.basis === 'net' ? ' · 100% Course Handicap' : ''}`;
+  if (game.kind === 'stroke-play') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Stroke Play · Lowest to personal par${game.basis === 'net' ? ` · ${netRule}` : ''}`;
   if (game.kind === 'churchy') return `Group ${String(game.groupNumber)} · Rotating partners · Earned dots`;
   if (game.kind === 'ball-drop') return `Ball Drop · ${game.format === 'ball-drop-net-gross' ? '1 Net + 1 Gross'
-    : game.format === 'ball-drop-two-net' ? '2 Net' : '2 Gross'} · 4-person teams · Lowest to par${game.basis === 'net' ? ' · 100% Course Handicap' : ''}`;
-  if (game.kind === 'skins') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Skins · ${game.carryovers ? 'Carryovers on' : 'Carryovers off'}${game.basis === 'net' ? ' · 100% Course Handicap' : ''}`;
+    : game.format === 'ball-drop-two-net' ? '2 Net' : '2 Gross'} · 4-person teams · Lowest to par${game.basis === 'net' ? ` · ${netRule}` : ''}`;
+  if (game.kind === 'skins') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Skins · ${game.carryovers ? 'Carryovers on' : 'Carryovers off'}${game.basis === 'net' ? ` · ${netRule}` : ''}${game.carryovers && game.carryOrder ? ' · Shared starting-hole circuit' : ''}`;
   const preset = game.preset === 'standard' ? 'Standard Stableford' : 'Modified Stableford';
   const custom = !sameGameDefinitions([game], [{ ...game, points: stablefordPoints(game.preset) }]);
   const format = !isTeamGameDefinition(game) ? '' : game.format === 'two-net-better-ball'
     ? '2-man net Better Ball · ' : game.format === 'two-net-aggregate' ? '2-man net Aggregate · ' : '4-man 2-net Stableford · ';
-  return `${format}${preset}${custom ? ' · Custom points' : ''} · ${game.basis === 'gross' ? 'Gross' : `Net · ${String(game.handicapAllowancePercent)}% allowance`}`;
+  return `${format}${preset}${custom ? ' · Custom points' : ''} · ${game.basis === 'gross' ? 'Gross'
+    : game.handicapRule === 'group-low-v1' ? `Net · ${netRule}` : `Net · ${String(game.handicapAllowancePercent)}% allowance`}`;
 }

@@ -38,6 +38,8 @@ import {
 import { isRoundGameDefinitions } from '../../../src/contracts/games.js';
 import { gameTeamsMatchRoster, isTeamGameDefinition } from '../../../src/domain/games.js';
 import type { RoundGameDefinition } from '../../../src/domain/games.js';
+import { skinsCarryCircuit } from '../../../src/domain/round-navigation.js';
+import { hasGameHandicapRules } from '../../../src/contracts/game-handicaps.js';
 import { isHandicapIndex } from '../../../src/contracts/catalog.js';
 import type { PublicScoreIdentity } from '../../../src/domain/public-access.js';
 import { dotsDefinitionMatchesRound } from '../../../src/contracts/dots.js';
@@ -547,6 +549,16 @@ export class TableWorkspaceStore {
         throw new ApiError(409, 'MATCH_SETUP_CHANGED');
       }
     }
+    if (state.games?.games.some(hasGameHandicapRules) && state.round.players.some((player) => {
+      const before = state.round.groups.find((group) => group.playerIds.includes(player.playerId));
+      const after = updatedRound.groups.find((group) => group.playerIds.includes(player.playerId));
+      return (before?.startingHole ?? state.round.teeProfile.holes[0]?.number)
+        !== (after?.startingHole ?? updatedRound.teeProfile.holes[0]?.number);
+    })) throw new ApiError(409, 'GAME_START_SETUP_LOCKED');
+    if (state.games?.games.some((game) => game.kind === 'skins' && game.carryovers && game.carryOrder === 'shared-group-v1')
+      && !skinsCarryCircuit(updatedRound.teeProfile.holes.map((hole) => hole.number), updatedRound.groups, roster)) {
+      throw new ApiError(400, 'SKINS_FOURSOME_REQUIRED');
+    }
     const churchyGames = state.games?.games.filter((game) => game.kind === 'churchy') ?? [];
     for (const churchy of churchyGames) {
       const group = updatedRound.groups.find((entry) => entry.number === churchy.groupNumber);
@@ -785,9 +797,14 @@ export class TableWorkspaceStore {
       const roundSide = round.roundSide ?? oldRound?.roundSide ?? 'full';
       const teeProfile = sourceTee && roundTee(sourceTee, roundSide);
       if (!teeProfile) throw new ApiError(400, 'TEE_PROFILE_NOT_FOUND');
-      if (teeProfile.holeCount === 9) {
+      if (configuredGameRounds(access.event.gameRoundIds).includes(round.id)) {
         const games = await readGameConfiguration(this.table, id, round.id, configuredGameRounds(access.event.gameRoundIds));
-        if (games?.games.some((game) => game.kind === 'nassau')) throw new ApiError(400, 'NASSAU_REQUIRES_EIGHTEEN_HOLES');
+        if (games?.games.some((game) => game.kind === 'skins' && game.carryovers && game.carryOrder === 'shared-group-v1')
+          && !skinsCarryCircuit(teeProfile.holes.map((hole) => hole.number), round.groups, input.playerIds)) {
+          throw new ApiError(400, 'SKINS_FOURSOME_REQUIRED');
+        }
+        if (teeProfile.holeCount === 9
+          && games?.games.some((game) => game.kind === 'nassau')) throw new ApiError(400, 'NASSAU_REQUIRES_EIGHTEEN_HOLES');
       }
       if (round.groups.some((group) => group.startingHole !== undefined
         && !teeProfile.holes.some((hole) => hole.number === group.startingHole))) {

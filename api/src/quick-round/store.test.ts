@@ -31,6 +31,41 @@ async function fixture() {
 }
 
 describe('public Quick round authority and persistence', () => {
+  it('shares the conditional one-foursome start across explicit net games and new Skins carries, then locks it with the first score', async () => {
+    const f = await fixture();
+    const input = { ...f.input, playerIds: f.input.playerIds.slice(0, 4), rounds: f.input.rounds.map((round) => ({
+      ...round, groups: [{ number: 1, playerIds: f.input.playerIds.slice(0, 4), startingHole: 10 }],
+    })) };
+    const initial = await f.quick.create(f.id, input);
+    const games: readonly RoundGameDefinition[] = [
+      { id: identifier(8300), name: 'Fictional one-foursome Skins', kind: 'skins', version: 1, basis: 'gross',
+        carryovers: true, carryOrder: 'shared-group-v1' },
+      { id: identifier(8301), name: 'Fictional SO Stroke', kind: 'stroke-play', version: 1, basis: 'net', handicapRule: 'group-low-v1' },
+    ];
+    const saved = await f.scores.saveGames(f.actor, f.id, f.roundId, games, null, identifier(8302));
+    expect(saved.round.permissions?.role).toBe('public');
+    expect(saved.round.gameHandicapRules).toBe(1);
+    expect(saved.round.groups[0]?.startingHole).toBe(10);
+    const current = await f.quick.load(f.id);
+    const changed = { ...input, rounds: input.rounds.map((round) => ({
+      ...round, groups: round.groups.map((group) => ({ ...group, startingHole: 14 })),
+    })) };
+    const edited = await f.quick.save(f.id, current.etag, identifier(8303), changed);
+    expect(edited.rounds[0]?.groups[0]?.startingHole).toBe(14);
+    expect(edited.etag).not.toBe(initial.etag);
+    const scores = await f.scores.write(f.actor, f.id, f.roundId, f.playerId, 14, { kind: 'strokes', strokes: 4 }, null, identifier(8304));
+    expect(scores.round.groups[0]?.startingHole).toBe(14);
+    expect(scores.round.setupLocked).toBe(true);
+    expect(scores.round.games?.configuration.games).toEqual(games);
+    expect(scores.round.games?.results[1]?.players.every((player) => player.playingHandicap === null
+      && player.status === 'unavailable')).toBe(true);
+    const locked = await f.quick.load(f.id);
+    await expect(f.quick.save(f.id, locked.etag, identifier(8305), input)).rejects.toMatchObject({ code: 'ROUND_SCORING_STARTED' });
+    const rows = new Map(f.rows);
+    expect((await f.scores.write(f.actor, f.id, f.roundId, f.playerId, 14,
+      { kind: 'strokes', strokes: 4 }, null, identifier(8304))).change).toEqual(scores.change);
+    expect(f.rows).toEqual(rows);
+  });
   it('edits a created roster before scoring but refuses the same change after the first saved entry', async () => {
     const f = await fixture();
     const initial = await f.quick.create(f.id, f.input);
@@ -208,7 +243,7 @@ describe('public Quick round authority and persistence', () => {
     const f = await fixture();
     await f.quick.create(f.id, f.input);
     const games: readonly RoundGameDefinition[] = [
-      { id: identifier(8070), name: 'Fictional Skins', kind: 'skins', version: 1, basis: 'net', carryovers: true },
+      { id: identifier(8070), name: 'Fictional Skins', kind: 'skins', version: 1, basis: 'net', carryovers: false },
       { id: identifier(8071), name: 'Fictional Ball Drop', kind: 'ball-drop', version: 1, basis: 'net',
         format: 'ball-drop-net-gross', teams: f.input.rounds[0]?.groups.map((group) => ({
           id: identifier(8080 + group.number), name: `Fictional team ${String(group.number)}`, playerIds: group.playerIds,

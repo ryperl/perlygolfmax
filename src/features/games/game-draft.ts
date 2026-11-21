@@ -11,8 +11,12 @@ import { moneyText, parseMoney } from '../../domain/money';
 import type { ChurchySpecialKey } from '../../domain/churchy';
 import { defaultChurchySpecials, defaultChurchySpecialSelections } from '../../domain/churchy';
 import type { RoundGroup } from '../../domain/setup';
+import type { GameHandicapRule } from '../../domain/game-handicaps';
 
 export interface GameDraft {
+  readonly handicapRule?: GameHandicapRule;
+  readonly carryOrder?: 'shared-group-v1';
+  readonly playOrder?: 'shared-group-v1';
   readonly kind?: 'stableford' | 'ball-drop' | 'skins' | 'churchy' | 'stroke-play' | 'wolf' | 'nassau' | 'match-play' | 'dots';
   readonly wolfVersion?: 1 | 2;
   readonly stake?: string;
@@ -57,7 +61,10 @@ export interface GameDraft {
 }
 
 export function draftFromGame(game: RoundGameDefinition): GameDraft {
-  return { ...draftFromDefinition(game), preserveName: true };
+  return { ...draftFromDefinition(game), preserveName: true,
+    ...('handicapRule' in game ? { handicapRule: game.handicapRule } : {}),
+    ...(game.kind === 'skins' && game.carryOrder ? { carryOrder: game.carryOrder } : {}),
+    ...(game.kind === 'nassau' && game.playOrder ? { playOrder: game.playOrder } : {}) };
 }
 
 function draftFromDefinition(game: RoundGameDefinition): GameDraft {
@@ -95,11 +102,12 @@ function draftFromDefinition(game: RoundGameDefinition): GameDraft {
   };
 }
 
-export function newGameDraft(): GameDraft {
+export function newGameDraft(explicitRules = false): GameDraft {
   return { ...draftFromGame({
     id: crypto.randomUUID(), name: 'Stableford', preset: 'standard', basis: 'gross',
     handicapAllowancePercent: defaultHandicapAllowancePercent, points: stablefordPoints('standard'),
-  }), allowanceConfigured: false, preserveName: false };
+  }), allowanceConfigured: false, preserveName: false,
+    ...(explicitRules ? { handicapRule: 'full-course-v1' as const } : {}) };
 }
 
 function emptyTeams(format: CompetitionTeamFormat, rosterCount: number): readonly GameTeam[] {
@@ -125,6 +133,8 @@ export function setFormat(draft: GameDraft, format: CompetitionTeamFormat | unde
   return {
     ...rest, ...(format === undefined ? {} : { format, teams: teams ?? [] }),
     basis: format === 'ball-drop-two-gross' ? 'gross' : format === undefined ? draft.basis : 'net',
+    ...(format === 'ball-drop-two-gross' && draft.handicapRule === 'group-low-v1'
+      ? { handicapRule: 'full-course-v1' as const } : {}),
     allowance: draft.allowanceConfigured === false
       ? String(format === undefined ? defaultHandicapAllowancePercent : defaultTeamHandicapAllowancePercent) : draft.allowance,
     assignmentsCleared: changedSize,
@@ -144,6 +154,7 @@ export function setGameKind(draft: GameDraft, kind: NonNullable<GameDraft['kind'
     return { ...fresh, kind, dotsMode: 'individual', dotsPlayers: [], dotsSpecials: [], stake: '' };
   }
   if (kind === 'nassau') return setNassauVariant({ ...reset, kind, basis: 'net',
+    ...(draft.handicapRule ? { playOrder: 'shared-group-v1' as const } : {}),
     nassauStakes: ['', '', ''], automaticPresses: false }, 'singles');
   if (kind === 'match-play') return setNassauVariant({ ...reset, kind, basis: 'net',
     nassauStakes: ['0', '0', ''], automaticPresses: false }, 'singles');
@@ -153,7 +164,8 @@ export function setGameKind(draft: GameDraft, kind: NonNullable<GameDraft['kind'
   return kind === 'ball-drop'
     ? { ...setFormat(reset, 'ball-drop-net-gross', rosterCount), kind, allowance: '100' }
     : { ...reset, kind,
-      ...(kind === 'skins' ? { carryovers: false, allowance: '100' } : {}) };
+      ...(kind === 'skins' ? { carryovers: false, allowance: '100',
+        ...(draft.handicapRule ? { carryOrder: 'shared-group-v1' as const } : {}) } : {}) };
 }
 
 export function defaultGameGroup(
@@ -227,6 +239,7 @@ function integer(text: string): number | undefined {
 }
 
 export function buildGame(draft: GameDraft, playerIds: readonly string[] = []): RoundGameDefinition | null {
+  const rule = draft.handicapRule ? { handicapRule: draft.handicapRule } : {};
   if (draft.kind === 'dots') {
     const stake = draft.stake?.trim() ? parseMoney(draft.stake) : null;
     if (draft.stake?.trim() && stake === null) return null;
@@ -246,10 +259,11 @@ export function buildGame(draft: GameDraft, playerIds: readonly string[] = []): 
     const stake = draft.stake?.trim() ? parseMoney(draft.stake) : null;
     if (draft.kind === 'wolf' && draft.wolfVersion === 2 && draft.stake?.trim() && stake === null) return null;
     const game = draft.kind === 'wolf'
-      ? { id: draft.id, name: draft.name.trim(), kind: draft.kind, version: draft.wolfVersion ?? 1, basis: draft.basis,
+      ? { ...rule, id: draft.id, name: draft.name.trim(), kind: draft.kind, version: draft.wolfVersion ?? 1, basis: draft.basis,
         ...(draft.wolfVersion === 2 ? { stakeMinor: stake, ...(draft.wolfHighLowSweep ? { highLowSweep: true } : {}) } : {}),
         groupNumber: draft.groupNumber, playerIds: draft.wolfPlayers, allowPig: draft.allowPig ?? false }
-      : { id: draft.id, name: draft.name.trim(), kind: draft.kind, version: 1, basis: draft.basis,
+      : { ...rule, id: draft.id, name: draft.name.trim(), kind: draft.kind, version: 1, basis: draft.basis,
+        ...(draft.kind === 'nassau' && draft.playOrder ? { playOrder: draft.playOrder } : {}),
         groupNumber: draft.groupNumber, variant: draft.nassauVariant, sides: draft.nassauSides,
         stakes: { currency: 'USD', frontMinor: parseMoney(draft.nassauStakes?.[0] ?? ''),
           backMinor: parseMoney(draft.nassauStakes?.[1] ?? ''), overallMinor: parseMoney(draft.nassauStakes?.[2] ?? '') },
@@ -258,23 +272,24 @@ export function buildGame(draft: GameDraft, playerIds: readonly string[] = []): 
     return isPressMatchDefinition(game) && game.sides.flatMap((side) => side.playerIds).every((id) => playerIds.includes(id)) ? game : null;
   }
   if (draft.kind === 'stroke-play') {
-    const game = { id: draft.id, name: draft.name.trim(), kind: draft.kind, version: 1, basis: draft.basis };
+    const game = { ...rule, id: draft.id, name: draft.name.trim(), kind: draft.kind, version: 1, basis: draft.basis };
     return isRoundGameDefinition(game) ? game : null;
   }
   if (draft.kind === 'churchy') {
-    const game = { id: draft.id, name: draft.name.trim(), kind: 'churchy', version: draft.churchyVersion ?? 1, basis: 'net',
+    const game = { ...rule, id: draft.id, name: draft.name.trim(), kind: 'churchy', version: draft.churchyVersion ?? 1, basis: 'net',
       groupNumber: draft.churchyGroup, playerIds: draft.churchyPlayers, currency: 'USD',
       amountPerDotMinor: draft.churchyVersion === 3 && !draft.amountPerDotMinor?.trim() ? 0 : parseMoney(draft.amountPerDotMinor ?? ''),
       ...(draft.churchyVersion === 2 ? { enabledSpecials: draft.churchySpecials ?? defaultChurchySpecials }
         : draft.churchyVersion === 3 ? { orderMode: draft.churchyOrderMode ?? 'approach',
           specials: draft.churchySpecialSelections ?? defaultChurchySpecialSelections } : {}) };
-    return isRoundGameDefinition(game)
+    return isRoundGameDefinition(game) && game.kind === 'churchy'
       && game.playerIds.every((id) => playerIds.includes(id)) ? game : null;
   }
   if (draft.kind === 'ball-drop' || draft.kind === 'skins') {
     const game = draft.kind === 'skins'
-      ? { id: draft.id, name: draft.name.trim(), kind: draft.kind, version: 1, basis: draft.basis, carryovers: draft.carryovers ?? false }
-      : { id: draft.id, name: draft.name.trim(), kind: draft.kind, version: 1,
+      ? { ...rule, id: draft.id, name: draft.name.trim(), kind: draft.kind, version: 1, basis: draft.basis, carryovers: draft.carryovers ?? false,
+        ...(draft.carryOrder ? { carryOrder: draft.carryOrder } : {}) }
+      : { ...rule, id: draft.id, name: draft.name.trim(), kind: draft.kind, version: 1,
         basis: draft.format === 'ball-drop-two-gross' ? 'gross' : 'net', format: draft.format,
         teams: (draft.teams ?? []).map((team) => ({ ...team, name: team.name.trim() })) };
     return isRoundGameDefinition(game) && gameTeamsMatchRoster(game, playerIds) ? game : null;
@@ -293,7 +308,7 @@ export function buildGame(draft: GameDraft, playerIds: readonly string[] = []): 
     rows.push({ scoreToPar: row.scoreToPar, points });
   }
   const common = {
-    id: draft.id, name: draft.name.trim(), preset: draft.preset, basis: draft.basis,
+    ...rule, id: draft.id, name: draft.name.trim(), preset: draft.preset, basis: draft.basis,
     handicapAllowancePercent: allowance,
     points: { rows, betterScorePoints: better, worseScorePoints: worse },
   };

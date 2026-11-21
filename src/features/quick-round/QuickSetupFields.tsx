@@ -152,6 +152,7 @@ export function QuickSetupFields({ draft, courses, players, profiles, courseHand
             ? { ...entry, startingHole: Number(event.target.value) } : entry) }); }}>
           {(common?.holes ?? []).map((hole) => <option key={hole.number} value={hole.number}>{hole.number}</option>)}
         </select></label>
+        <small>This start is shared by every game in this group. New Skins carryovers require the entire round to be one foursome.</small>
         {group.playerIds.map((id) => {
           const player = players.find((entry) => entry.id === id);
           const tee = playingProfiles.find((profile) => profile.id === round.playerTeeSelections?.find((entry) => entry.playerId === id)?.teeProfileId) ?? common;

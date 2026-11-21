@@ -43,6 +43,7 @@ interface GameSettingsProps {
   readonly dotsSpecialKinds?: readonly DotsSpecialKind[] | undefined;
   readonly presetStore?: DotPresetStore | undefined;
   readonly existing?: boolean;
+  readonly gameHandicapsSupported?: boolean;
 }
 
 function scoreLabel(value: number): string {
@@ -62,8 +63,12 @@ export function GameSettings({
   dotsIndividualPlayerCounts = [4], dotsSpecialKinds, presetStore, existing = false, churchyV3Supported = false,
   churchyCustomNamesSupported = false, holeNumbers = [], defaultGroupNumber,
   wolfHighLowSweepSupported = false, dotsManualSweepSupported = false,
+  gameHandicapsSupported = false,
 }: GameSettingsProps) {
   const allowanceHint = useId();
+  const netHint = useId();
+  const startHint = useId();
+  const carryHint = useId();
   const stableford = draft.kind === undefined || draft.kind === 'stableford';
   const matchGame = draft.kind === 'nassau' || draft.kind === 'match-play' || draft.kind === 'wolf';
   const matchLocked = (matchGame || draft.kind === 'dots') && setupLocked;
@@ -77,6 +82,9 @@ export function GameSettings({
   const numbers = [...holeNumbers].sort((a, b) => a - b);
   const start = numbers.indexOf(selectedChurchyGroup?.startingHole ?? numbers[0] ?? 0);
   const circuit = start < 0 ? [] : [...numbers.slice(start), ...numbers.slice(0, start)];
+  const gameGroup = draft.kind === 'churchy' ? draft.churchyGroup : draft.groupNumber;
+  const startGroups = matchGame || draft.kind === 'churchy' || draft.kind === 'dots'
+    ? groups.filter((group) => group.number === gameGroup) : groups;
   const legacyWolfSweep = games.some((game) => game.kind === 'dots' && game.mode === 'linked'
     && game.linkedGameId === draft.id && game.sweepRule === undefined
     && game.specials.some((special) => special.kind === 'sweep'));
@@ -104,7 +112,8 @@ export function GameSettings({
               || !internalOnly && (kind === 'stroke-play' || kind === 'nassau' || kind === 'match-play' && !existing)) && supportedGameKinds?.includes(kind)
             || kind === 'dots' && supportedGameKinds?.includes('dots')
             || kind === 'churchy' && churchyEnabled && churchyV3Supported && allowChurchyCreation && !setupLocked) {
-            onChange(defaultGameGroup(setGameKind(draft, kind, roster.length), groups, dotsIndividualPlayerCounts,
+            onChange(defaultGameGroup(setGameKind(gameHandicapsSupported
+              ? { ...draft, handicapRule: 'full-course-v1' } : draft, kind, roster.length), groups, dotsIndividualPlayerCounts,
               (draft.kind === 'churchy' ? draft.churchyGroup : draft.groupNumber) ?? defaultGroupNumber));
           }
         }}>
@@ -131,6 +140,22 @@ export function GameSettings({
           {groups.filter((group) => draft.kind !== 'wolf' || group.playerIds.length === 4).map((group) =>
             <option key={group.number} value={group.number}>Group {group.number}</option>)}
         </select></label>}
+        <section aria-label="Shared starting holes">
+          {startGroups.map((group) => <p key={group.number}>Group {group.number} starts at hole {group.startingHole ?? holeNumbers[0] ?? '—'}.</p>)}
+          <small>Shared by every game in the playing group. {setupLocked ? 'Locked by saved scoring.'
+            : internalOnly ? 'Only authorized round setup can change the start; game editing does not grant setup access.'
+              : 'Cancel game editing and change the start in round setup before scoring.'}</small>
+          {draft.kind === 'churchy' && draft.churchyVersion !== 3 && <small>Legacy Churchie retains printed-hole partner/stake rules.
+            An eligible unstarted version-2 game can explicitly upgrade to version 3 below.</small>}
+        </section>
+        {draft.kind === 'nassau' && <div><label>Starting-hole order
+          <select value={draft.playOrder ?? 'legacy'} aria-describedby={startHint} disabled={setupLocked || !gameHandicapsSupported}
+            onChange={(event) => { if (event.target.value === 'shared-group-v1') onChange({ ...draft, playOrder: 'shared-group-v1' }); }}>
+            {!draft.playOrder && <option value="legacy">Saved printed order · unchanged</option>}
+            <option value="shared-group-v1">Shared group circuit</option>
+          </select></label>
+          <small id={startHint}>Front remains holes 1–9, Back remains 10–18; each bet follows actual played order.</small>
+        </div>}
         {draft.kind === 'dots' && <DotsPlayingGroupSelect draft={draft} groups={groups}
           individualPlayerCounts={dotsIndividualPlayerCounts} onChange={(patch) => { onChange({ ...draft, ...patch }); }} />}
         {draft.kind === 'churchy' && <label>Churchie playing group<select value={draft.churchyGroup ?? ''} disabled={churchyLocked} onChange={(event) => {
@@ -165,23 +190,43 @@ export function GameSettings({
             <option value="four-two-net">4-man 2-net Stableford · Standard or Modified preset</option>
             <option value="two-net-aggregate">2-man net Aggregate · both count</option></> : <>
               <option value="ball-drop-net-gross">1 Net + 1 Gross</option>
-              <option value="ball-drop-two-net">2 Net</option><option value="ball-drop-two-gross">2 Gross</option>
+              <option value="ball-drop-two-net">2 Net</option><option value="ball-drop-two-gross"
+                disabled={setupLocked && draft.handicapRule === 'group-low-v1'}>2 Gross</option>
             </>}
           </select>
         </label>}
         {draft.kind !== 'churchy' && draft.kind !== 'dots' && <label>Score basis
-          <select value={draft.basis} disabled={draft.format !== undefined} onChange={(event) => {
+          <select value={draft.basis} disabled={draft.format !== undefined || setupLocked && draft.handicapRule === 'group-low-v1'} onChange={(event) => {
             if (event.target.value === 'gross' || event.target.value === 'net') {
-              onChange({ ...draft, basis: event.target.value });
+              onChange({ ...draft, basis: event.target.value,
+                ...(event.target.value === 'gross' && draft.handicapRule === 'group-low-v1'
+                  ? { handicapRule: 'full-course-v1' as const } : {}) });
             }
           }}>
             <option value="gross">Gross</option>
             <option value="net">Net</option>
           </select>
         </label>}
+        {draft.kind !== 'dots' && draft.basis === 'net' && <div><label>Net handicap rule
+          <select value={draft.handicapRule ?? 'legacy'} aria-describedby={netHint} disabled={setupLocked || !gameHandicapsSupported}
+            onChange={(event) => {
+              const rule = event.target.value;
+              if (rule === 'full-course-v1' || rule === 'group-low-v1') onChange({ ...draft, handicapRule: rule });
+            }}>
+            {draft.handicapRule === undefined && <option value="legacy">Saved legacy rule · unchanged</option>}
+            <option value="full-course-v1">{stableford ? 'Full handicap · configured allowance' : 'Full Course Handicap'}</option>
+            <option value="group-low-v1">Strokes off lowest in saved playing group</option>
+          </select></label>
+          <small id={netHint}>SO = full captured CH minus the lowest CH in the whole saved group; personal tees apply.
+            {(draft.kind === 'churchy' || draft.kind === 'wolf') && ' Specials remain personal gross.'}
+            {!gameHandicapsSupported && ' Requires updated API support.'}</small>
+        </div>}
+        {draft.kind === 'dots' && <small>{draft.dotsMode === 'linked'
+          ? 'Net comparisons use the explicitly linked Wolf game’s saved handicap rule. Edit that game separately; this does not change it.'
+          : 'No net ball comparison in standalone Dots.'} All specials and calls qualify on personal gross scores, never SO.</small>}
         {matchGame && <section aria-label={`${draft.kind === 'wolf' ? 'Wolf' : draft.kind === 'match-play' ? 'Match Play' : 'Nassau'} setup`}>
           <p>Configure before this round&apos;s first saved score. Setup and participant order lock once scoring starts.
-            Net uses 100% captured Course Handicap off the lowest {draft.kind === 'nassau' || draft.kind === 'match-play' ? 'within each match' : 'of the four golfers'}.</p>
+            {draft.handicapRule === undefined && <> Legacy net uses captured CH off the lowest {draft.kind === 'nassau' || draft.kind === 'match-play' ? 'within each match' : 'of the four golfers'}.</>}</p>
           {draft.kind === 'wolf' ? <>
             <details><summary>Wolf rules</summary><p>Wolf tees last; choose a partner immediately after their drive, before the next drive, or pass all.
               Blind Wolf passes all after seeing drives (double); PIG is declared before any tee shots (triple).
@@ -301,7 +346,7 @@ export function GameSettings({
             Closest + farthest, then closest + next farthest, then closest + the remaining golfer; repeat after nine played holes.
             Stakes 1, 2, 3 follow the playing circuit. Murphy presses multiply its configured units; Sweep uses its units times the current stake.</p>}
           <p>High and Low carry independently across all holes. Stakes 1, 2, 3 repeat; sweep adds only the current stake.
-            Both partners earn the full dots. Lowest captured Course Handicap plays 0; relative strokes use each golfer&apos;s captured tee.</p>
+            Both partners earn the full dots. Net ball comparisons use the selected handicap rule and captured personal tees; specials remain gross.</p>
           {draft.churchyVersion === 2 && <p>Birdie 2 and Eagle 4 require exactly one and two under gross par respectively, never both.
             Sandy counts each qualifying occurrence on exact gross par. Sticky is a scorer-confirmed approach inside the flagstick; Other accepts whole dots.</p>}
           </details>
@@ -315,14 +360,23 @@ export function GameSettings({
         </section>}
         {draft.kind === 'skins' && <label>Carry tied skins forward
           <input type="checkbox" checked={draft.carryovers ?? false} onChange={(event) => {
-            onChange({ ...draft, carryovers: event.target.checked });
+            onChange({ ...draft, carryovers: event.target.checked,
+              ...(event.target.checked && gameHandicapsSupported ? { carryOrder: 'shared-group-v1' as const } : {}) });
           }} />
         </label>}
-        {!stableford && !matchGame && draft.kind !== 'churchy' && draft.kind !== 'dots' && <p>Net uses 100% of captured Course Handicap. Numeric saved strokes only; pickup and DNF are ineligible.
+        {draft.kind === 'skins' && draft.carryovers && <div><label>Skins carry order
+          <select value={draft.carryOrder ?? 'legacy'} aria-describedby={carryHint} disabled={setupLocked || !gameHandicapsSupported}
+            onChange={(event) => { if (event.target.value === 'shared-group-v1') onChange({ ...draft, carryOrder: 'shared-group-v1' }); }}>
+            {!draft.carryOrder && <option value="legacy">Saved printed order · unchanged</option>}
+            <option value="shared-group-v1">One foursome · shared starting-hole circuit</option>
+          </select></label>
+          <small id={carryHint}>New or changed carryovers require exactly one saved foursome in the entire round. Unchanged legacy carries are retained.</small>
+        </div>}
+        {!stableford && !matchGame && draft.kind !== 'churchy' && draft.kind !== 'dots' && <p>Net uses the selected captured handicap rule. Numeric saved strokes only; pickup and DNF are ineligible.
           {draft.kind === 'stroke-play' ? ' Lowest score relative to personal par ranks first. Totals remain partial until all holes have numeric scores; pickup or DNF makes a valid stroke total unavailable.'
             : draft.kind === 'skins' ? ' All golfers must save a disposition before a hole is awarded. Final unclaimed skins remain unawarded.'
             : ' The lowest valid two-ball combination counts, from two different golfers. Par is 0, birdie −1, bogey +1. Lowest team total wins.'}</p>}
-        {stableford && draft.basis === 'net' && <div><label>Handicap allowance (%)
+        {stableford && draft.basis === 'net' && draft.handicapRule !== 'group-low-v1' && <div><label>Handicap allowance (%)
           <input inputMode="numeric" aria-describedby={allowanceHint} value={draft.allowance}
             onChange={(event) => { onChange({ ...draft, allowance: event.target.value, allowanceConfigured: true }); }} />
         </label><small id={allowanceHint}>Whole percent, 1–100.</small></div>}

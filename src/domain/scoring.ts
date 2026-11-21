@@ -72,6 +72,7 @@ export interface RoundScores {
   readonly dotsManualSweep?: true;
   readonly wolfHighLowSweep?: true;
   readonly sweepRulesVersion?: 2;
+  readonly gameHandicapRules?: 1;
   readonly stringRulesVersion?: 2;
   readonly dotsCategorySweepsVersion?: 1;
   readonly churchyMurphyTargets?: true;

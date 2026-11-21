@@ -129,6 +129,7 @@ export function decodeRoundScores(value: unknown): RoundScores | null {
 }
 
 function validateRoundScores(value: unknown, lean = false): value is RoundScores {
+  if (isRecord(value) && value.gameHandicapRules !== undefined && value.gameHandicapRules !== 1) return false;
   if (isRecord(value) && value.dotsCoexistenceRulesVersion !== undefined
     && (value.dotsCoexistenceRulesVersion !== 2 || value.internalGamesSupported !== true
       || isRecord(value.permissions) && value.permissions.role === 'tester')) return false;
@@ -346,6 +347,10 @@ function validateRoundScores(value: unknown, lean = false): value is RoundScores
         return !card || card.displayName !== player.displayName || player.totalHoles !== count
           || !player.holes.every((hole) => card.holes.some((entry) => entry.number === hole.number));
       }))) return false;
+    if (value.games.configuration.games.some(hasGameHandicapRules)
+      && (value.gameHandicapRules !== 1 || courseHandicaps === undefined)) return false;
+    const captured = courseHandicaps?.map((entry) => ({ playerId: entry.playerId,
+      handicap: entry.courseHandicap ?? entry.unavailableReason ?? null })) ?? [];
     if (value.churchyCustomNames !== true && value.games.configuration.games.some(hasCustomChurchyName)) return false;
     if (value.games.configuration.games.some((game) => game.kind === 'dots' && game.sweepRule !== undefined
       || game.kind === 'wolf' && game.highLowSweep !== undefined) && value.sweepRulesVersion !== 2) return false;
@@ -387,16 +392,25 @@ function validateRoundScores(value: unknown, lean = false): value is RoundScores
           const published = courseHandicaps?.find((entry) => entry.playerId === player.playerId);
           return { playerId: player.playerId, displayName: player.displayName,
             layout: playerLayouts.get(player.playerId) ?? layout,
-            handicap: game.basis === 'gross' ? null : player.unavailableReason === 'missing-stroke-index'
+            handicap: game.basis === 'gross' ? null : game.handicapRule
+              ? !(playerAllocations.get(player.playerId) ?? value.teeStrokeAllocation) ? 'missing-stroke-index'
+                : gameHandicap(game.handicapRule, player.playerId, captured, groups)
+              : player.unavailableReason === 'missing-stroke-index'
               ? 'missing-stroke-index' : published ? published.courseHandicap
                 ?? (published.unavailableReason === 'uncaptured-handicap-index' ? 'missing-handicap-index' : published.unavailableReason)
                 ?? 'missing-handicap-index' : player.playingHandicap ?? player.unavailableReason ?? 'missing-handicap-index' };
-        }), cards);
+        }), cards, groups, layout[0]?.number);
         if (!sameJsonValue(result, expected)) return false;
         continue;
       }
       const minimum = Math.min(game.points.betterScorePoints, game.points.worseScorePoints, ...game.points.rows.map((row) => row.points));
       for (const player of result.players) {
+        if (game.basis === 'net' && game.handicapRule === 'group-low-v1') {
+          const handicap = !(playerAllocations.get(player.playerId) ?? value.teeStrokeAllocation)
+            ? 'missing-stroke-index' : gameHandicap(game.handicapRule, player.playerId, captured, groups);
+          if (typeof handicap === 'number' ? player.playingHandicap !== handicap
+            : player.status !== 'unavailable' || player.unavailableReason !== handicap) return false;
+        }
         if (player.status === 'unavailable') continue;
         const card = cardsById.get(player.playerId);
         if (!card) return false;
@@ -446,3 +460,5 @@ export function isScoreHistoryPage(value: unknown): value is ScoreHistoryPage {
     && value.changes.every(isScoreChange)
     && (value.continuationToken === undefined || typeof value.continuationToken === 'string' && value.continuationToken.length <= 2048);
 }
+import { hasGameHandicapRules } from './game-handicaps.js';
+import { gameHandicap } from '../domain/game-handicaps.js';

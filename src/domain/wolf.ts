@@ -7,8 +7,10 @@ import { hasStrokeAllocation } from './tees.js';
 import { handicapStrokesForHole } from './handicap-strokes.js';
 import { calculateEarnedWolf } from './wolf-earned.js';
 import type { DotAward, DotHoleContext, DotPrefixPoints } from './dot-context.js';
+import { gameHandicap } from './game-handicaps.js';
+import type { GameHandicapSettings } from './game-handicaps.js';
 
-export interface WolfGameDefinition {
+export interface WolfGameDefinition extends GameHandicapSettings {
   readonly id: string;
   readonly name: string;
   readonly kind: 'wolf';
@@ -198,8 +200,9 @@ export function calculateWolf(
     if (!netReason) {
       const minimum = Math.min(...captured.values());
       for (const [id, handicap] of captured) {
-        const relative = exact(BigInt(handicap) - BigInt(minimum));
-        if (relative === null) { netReason = 'arithmetic-range'; break; }
+        const relative = game.handicapRule ? gameHandicap(game.handicapRule, id, round.players, round.groups)
+          : exact(BigInt(handicap) - BigInt(minimum));
+        if (typeof relative !== 'number') { netReason = relative ?? 'arithmetic-range'; break; }
         handicaps.set(id, relative);
       }
     }

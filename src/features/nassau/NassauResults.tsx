@@ -26,7 +26,9 @@ export function NassauResults({ game, result, players = [] }: {
   }
   return <section className="game-results" aria-label={`${game.name} matchboard`}>
     <h3>{game.name}</h3>
-    <p>{game.basis === 'net' ? 'Net · 100% captured CH off the lowest within each match' : 'Gross'} · Match play · Ties push</p>
+    <p>{game.basis !== 'net' ? 'Gross' : game.handicapRule === 'full-course-v1' ? 'Net · Full captured CH'
+      : game.handicapRule === 'group-low-v1' ? 'Net · SO off lowest in saved group'
+        : 'Net · 100% captured CH off the lowest within each match'} · Match play · Ties push</p>
     {!result ? <p>Saved match results unavailable. Refresh to retry.</p> : <>
       <p>Saved matches · {result.status}</p>
       <section aria-label={`${game.kind === 'match-play' ? 'Match Play' : 'Nassau'} planned settlement`}>

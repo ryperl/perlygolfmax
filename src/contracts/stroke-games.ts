@@ -3,6 +3,7 @@ import { aggregateStrokeGameResults } from '../domain/stroke-games.js';
 import { boundedText } from './catalog.js';
 import { isRecord, isUuid } from './events.js';
 import { sameJsonValue } from './round-context.js';
+import type { RoundGroup } from '../domain/setup.js';
 
 function keys(value: Record<string, unknown>, required: readonly string[], optional: readonly string[] = []): boolean {
   return required.every((key) => Object.hasOwn(value, key))
@@ -77,10 +78,10 @@ function isPlayer(value: unknown, game: NewRoundGameDefinition): value is GamePl
   return true;
 }
 
-export function isStrokeGameResult(value: unknown, game: NewRoundGameDefinition): value is RoundGameResult {
+export function isStrokeGameResult(value: unknown, game: NewRoundGameDefinition, groups: readonly RoundGroup[] = [], defaultStartingHole?: number): value is RoundGameResult {
   if (!isRecord(value) || !Array.isArray(value.players) || value.players.length === 0
     || !value.players.every((player: unknown) => isPlayer(player, game))
     || new Set(value.players.map((player: GamePlayerResult) => player.playerId)).size !== value.players.length
     || new Set(value.players.map((player: GamePlayerResult) => player.totalHoles)).size !== 1) return false;
-  return sameJsonValue(value, aggregateStrokeGameResults(game, value.players));
+  return sameJsonValue(value, aggregateStrokeGameResults(game, value.players, groups, defaultStartingHole));
 }

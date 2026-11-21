@@ -4,6 +4,8 @@ import type { RoundSnapshot } from './setup.js';
 import { publishedCourseHandicaps } from './playing-handicaps.js';
 import { handicapStrokesForHole } from './stableford.js';
 import { compatibleTeeLayouts, hasStrokeAllocation } from './tees.js';
+import { gameHandicap } from './game-handicaps.js';
+import type { GameHandicapSettings } from './game-handicaps.js';
 
 export type NassauVariant = 'singles' | 'three-way' | 'one-v-two' | 'two-v-two-best-ball' | 'two-v-two-aggregate';
 export type NassauSideKey = 'a' | 'b';
@@ -16,7 +18,8 @@ export interface NassauSide {
   readonly playerIds: readonly string[];
 }
 
-interface MatchGameDefinition {
+interface MatchGameDefinition extends GameHandicapSettings {
+  readonly playOrder?: 'shared-group-v1';
   readonly id: string;
   readonly name: string;
   readonly kind: 'nassau' | 'match-play';
@@ -215,7 +218,7 @@ export function nassauConfigurationIssues(game: PressMatchGameDefinition, round:
     || tee.holeCount !== count || new Set(tee.holes.map((hole) => hole.number)).size !== count
     || tee.holes.some((hole) => !Number.isInteger(hole.number) || hole.number < 1 || hole.number > 18)
     || count === 9 && !tee.holes.every((hole) => hole.number <= 9) && !tee.holes.every((hole) => hole.number >= 10)
-    || game.kind === 'match-play' && !tee.holes.some((hole) => hole.number === start)
+    || (game.kind === 'match-play' || game.playOrder !== undefined) && !tee.holes.some((hole) => hole.number === start)
     || ids.some((id) => !compatibleTeeLayouts(tee, selectedTee(round, id))
       || (round.playerTees?.filter((entry) => entry.playerId === id).length ?? 0) > 1)) issues.push({ code: 'invalid-layout' });
   if (game.kind === 'match-play' && (game.stakes.frontMinor !== 0 || game.stakes.backMinor !== 0)) {
@@ -226,7 +229,7 @@ export function nassauConfigurationIssues(game: PressMatchGameDefinition, round:
 
 function playingNumbers(game: PressMatchGameDefinition, round: NassauRoundContext): readonly number[] {
   const numbers = [...round.teeProfile.holes].sort((a, b) => a.number - b.number).map((hole) => hole.number);
-  if (game.kind === 'nassau') return Array.from({ length: 18 }, (_, index) => index + 1);
+  if (game.kind === 'nassau' && game.playOrder === undefined) return Array.from({ length: 18 }, (_, index) => index + 1);
   const start = round.groups.find((group) => group.number === game.groupNumber)?.startingHole ?? round.teeProfile.holes[0]?.number;
   const index = numbers.indexOf(start ?? 0);
   return index < 0 ? numbers : [...numbers.slice(index), ...numbers.slice(0, index)];
@@ -276,8 +279,15 @@ function holeResults(
   const netValid = values.every((value) => typeof value === 'number' && Number.isSafeInteger(value))
     && ids.every((id) => hasStrokeAllocation(selectedTee(round, id)));
   const lowest = netValid ? Math.min(...values.flatMap((value) => typeof value === 'number' ? [value] : [])) : null;
-  const relativeValid = lowest !== null && values.every((value) =>
-    typeof value === 'number' && exact(BigInt(value) - BigInt(lowest)) !== null);
+  const inputs = handicaps.map((entry) => ({ playerId: entry.playerId,
+    handicap: entry.courseHandicap ?? entry.unavailableReason ?? null }));
+  const relative = new Map(ids.map((id) => [id, game.handicapRule
+    ? gameHandicap(game.handicapRule, id, inputs, round.groups)
+    : (() => {
+      const handicap = handicaps.find((entry) => entry.playerId === id)?.courseHandicap;
+      return typeof handicap === 'number' && lowest !== null ? exact(BigInt(handicap) - BigInt(lowest)) : null;
+    })()]));
+  const relativeValid = netValid && [...relative.values()].every((value) => typeof value === 'number');
   return playingNumbers(game, round).map((number): NassauHoleResult => {
     const matching = records.filter((record) => record.number === number);
     const overrides = matching.flatMap((record) => record.outcomes.filter((entry) => entry.matchId === matchId));
@@ -297,11 +307,10 @@ function holeResults(
     const numeric = new Map(scores.map(({ id, score }) => {
       if (score?.kind !== 'strokes' || !Number.isSafeInteger(score.strokes) || score.strokes < 1) return [id, null];
       const tee = selectedTee(round, id);
-      const handicap = handicaps.find((entry) => entry.playerId === id)?.courseHandicap;
-      const relative = typeof handicap === 'number' && lowest !== null ? exact(BigInt(handicap) - BigInt(lowest)) : null;
+      const handicap = relative.get(id);
       const allocation = tee.holes.find((hole) => hole.number === number)?.allocation;
-      const received = game.basis === 'gross' ? 0 : relative !== null && allocation !== undefined
-        ? handicapStrokesForHole(relative, allocation, round.teeProfile.holes.length) : null;
+      const received = game.basis === 'gross' ? 0 : typeof handicap === 'number' && allocation !== undefined
+        ? handicapStrokesForHole(handicap, allocation, tee.holes.length) : null;
       return [id, received === null || !Number.isSafeInteger(received) ? null : exact(BigInt(score.strokes) - BigInt(received))];
     }));
     const sideScore = (side: NassauSide): number | null => {
@@ -326,10 +335,11 @@ function delta(hole: NassauHoleResult): number {
 type BetInput = Pick<NassauBetResult,
   'id' | 'matchId' | 'segment' | 'origin' | 'parentBetId' | 'manualPress' | 'startHole' | 'endHole' | 'stakeMinor'>;
 
-function betHoles(holes: readonly NassauHoleResult[], bet: Pick<BetInput, 'startHole' | 'endHole'>): readonly NassauHoleResult[] {
-  const first = holes.findIndex((hole) => hole.number === bet.startHole);
-  const last = holes.findIndex((hole) => hole.number === bet.endHole);
-  return first < 0 || last < first ? [] : holes.slice(first, last + 1);
+function betHoles(holes: readonly NassauHoleResult[], bet: Pick<BetInput, 'startHole' | 'endHole' | 'segment'>): readonly NassauHoleResult[] {
+  const segment = holes.filter((hole) => bet.segment === 'front' ? hole.number <= 9 : bet.segment === 'back' ? hole.number > 9 : true);
+  const first = segment.findIndex((hole) => hole.number === bet.startHole);
+  const last = segment.findIndex((hole) => hole.number === bet.endHole);
+  return first < 0 || last < first ? [] : segment.slice(first, last + 1);
 }
 
 function betResult(
@@ -364,7 +374,9 @@ function proofFor(
   const publicHandicaps = published.courseHandicaps;
   const ids = [...match.sideA.playerIds, ...match.sideB.playerIds];
   // Lossless semantic receipt, not a credential/hash. No HI observations, actor IDs or shared config etags.
-  const next = match.holes[match.holes.findIndex((hole) => hole.number === after) + 1]?.number;
+  const window = game.playOrder === 'shared-group-v1' ? betHoles(match.holes, bet) : match.holes;
+  const next = window[window.findIndex((hole) => hole.number === after) + 1]?.number;
+  const group = round.groups.find((entry) => entry.number === game.groupNumber);
   return `${game.kind === 'match-play' ? 'match-play-v1' : 'nassau-v1'}:${JSON.stringify([
     [game.id, game.basis, game.variant, game.groupNumber, game.sides.map((side) => [side.id, side.playerIds]),
       game.stakes.frontMinor, game.stakes.backMinor, game.stakes.overallMinor, game.automaticPresses],
@@ -375,8 +387,14 @@ function proofFor(
         tee.strokeAllocation, [...tee.holes].sort((a, b) => a.number - b.number).map((hole) => [hole.number, hole.allocation])];
     })],
     [match.id, bet.id, bet.parentBetId, bet.startHole, bet.endHole, bet.stakeMinor, lead, next],
-    betHoles(match.holes, { startHole: bet.startHole, endHole: after })
+    betHoles(match.holes, { startHole: bet.startHole, endHole: after, segment: bet.segment })
       .map((hole) => [hole.number, hole.outcome, hole.source]),
+    ...(game.handicapRule || game.playOrder ? [[game.handicapRule ?? null, game.playOrder ?? null,
+      group?.startingHole ?? round.teeProfile.holes[0]?.number,
+      game.handicapRule === 'group-low-v1' ? group?.playerIds.map((id) => {
+        const handicap = publicHandicaps.find((entry) => entry.playerId === id);
+        return [id, handicap?.courseHandicap ?? null, handicap?.unavailableReason ?? null];
+      }) ?? [] : []]] : []),
   ])}`;
 }
 
@@ -387,7 +405,8 @@ function optionAt(
   if (bet.status === 'stale' || bet.stakeMinor === null) return null;
   const lead = prefixAt(match.holes, bet, after);
   if (lead === null || Math.abs(lead) < 2) return null;
-  const next = match.holes[match.holes.findIndex((hole) => hole.number === after) + 1]?.number;
+  const window = betHoles(match.holes, bet);
+  const next = window[window.findIndex((hole) => hole.number === after) + 1]?.number;
   if (next === undefined) return null;
   return { parentBetId: bet.id, matchId: match.id, declaredAfterHole: after, startHole: next,
     pressingSide: lead > 0 ? 'b' : 'a', proof: proofFor(game, round, match, bet, after, lead, published) };
@@ -466,7 +485,12 @@ export function calculateNassauFromHandicaps(
     };
     const first = match.holes[0]?.number, last = match.holes.at(-1)?.number;
     const primary = game.kind === 'match-play'
-      ? first === undefined || last === undefined ? [] : [{ segment: 'overall' as const, start: first, end: last }] : segments;
+      ? first === undefined || last === undefined ? [] : [{ segment: 'overall' as const, start: first, end: last }]
+      : game.playOrder === 'shared-group-v1' ? segments.flatMap(({ segment }) => {
+        const holes = match.holes.filter((hole) => segment === 'front' ? hole.number <= 9 : segment === 'back' ? hole.number > 9 : true);
+        const start = holes[0]?.number, end = holes.at(-1)?.number;
+        return start === undefined || end === undefined ? [] : [{ segment, start, end }];
+      }) : segments;
     for (const { segment, start, end } of primary) add({
       id: `${match.id}:${segment}`, matchId: match.id, segment, origin: 'primary', parentBetId: null,
       manualPress: null, startHole: start, endHole: end,

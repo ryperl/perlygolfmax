@@ -7,6 +7,7 @@ import { isRecord } from './events.js';
 import { boundedText } from './catalog.js';
 import { sameJsonValue } from './round-context.js';
 import { isDotAward } from './dot-audit.js';
+import { isGameHandicapValue } from './game-handicaps.js';
 
 const exact = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 const nullable = (value: unknown) => value === null || exact(value);
@@ -77,7 +78,7 @@ function isChurchyV3ResultShape(value: unknown, game: ChurchyGameDefinitionV3): 
     if (!isRecord(player) || !keys(player, ['playerId', 'displayName', 'playingHandicap', 'status', 'holes',
       'holesScored', 'totalHoles', 'frontPoints', 'backPoints', 'totalPoints'])
       || player.playerId !== game.playerIds[index] || !boundedText(player.displayName)
-      || !nullable(player.playingHandicap) || player.status !== data.status || !exact(player.holesScored)
+      || !isGameHandicapValue(player.playingHandicap, game.handicapRule) || player.status !== data.status || !exact(player.holesScored)
       || player.holesScored > holes.length || player.totalHoles !== holes.length || !Array.isArray(player.holes)
       || player.holes.length !== holes.length || !nullable(player.frontPoints) || !nullable(player.backPoints)
       || !nullable(player.totalPoints)) return false;
@@ -87,7 +88,7 @@ function isChurchyV3ResultShape(value: unknown, game: ChurchyGameDefinitionV3): 
       const award = awards[index];
       if (!isRecord(hole) || !keys(hole, ['number', 'points', 'strokesReceived']) || !isRecord(receipt)
         || hole.number !== receipt.number || !isRecord(award) || hole.points !== award.dots
-        || !nullable(hole.strokesReceived)) return false;
+        || !isGameHandicapValue(hole.strokesReceived, game.handicapRule)) return false;
     }
     const subtotal = (selected: readonly unknown[]) => {
       const values: number[] = [];

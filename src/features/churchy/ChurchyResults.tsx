@@ -19,6 +19,7 @@ export function ChurchyResults({ game, result }: {
   }
   return <section className="churchy-results" aria-label={`${name} · Group ${String(game.groupNumber)} results`}>
     <h3>{name} · Group {game.groupNumber}</h3>
+    <p>{game.handicapRule === 'full-course-v1' ? 'Full captured CH' : 'SO off lowest in saved group'} · Specials use personal gross.</p>
     <p>{receipt.status === 'complete' ? 'Saved earned dots'
       : receipt.status === 'unavailable' ? 'Unavailable comparisons: no final total or settlement.' : 'Provisional: pending holes are not ties.'}</p>
     {game.version === 3 && game.orderMode === 'approach' && !receipt.order && <p className="game-hint">
@@ -39,7 +40,7 @@ export function ChurchyResults({ game, result }: {
       ? <InternalSettlement settlement={receipt.internalSettlement} gameNames={[name]} ranked
         provisional={receipt.status !== 'complete'}
         progress={result.players.map((player) => ({ playerId: player.playerId,
-          label: `${String(player.holesScored)}/${String(player.totalHoles)} holes · CH ${String(player.playingHandicap ?? 'unavailable')}`,
+          label: `${String(player.holesScored)}/${String(player.totalHoles)} holes · ${game.handicapRule === 'full-course-v1' ? 'CH' : 'SO'} ${String(player.playingHandicap ?? 'unavailable')}`,
         }))} />
       : <p>Planned settlement unavailable. Refresh saved scores.</p> : <>
     <h4>Planned shared pot · {money(game.amountPerDotMinor)} per dot</h4>

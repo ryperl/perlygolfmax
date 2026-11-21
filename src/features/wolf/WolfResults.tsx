@@ -8,7 +8,8 @@ export function WolfResults({ game, result }: {
   const name = (id: string) => result?.players.find((player) => player.playerId === id)?.displayName ?? 'Golfer unavailable';
   return <section className={`game-results wolf-results${game.version === 2 ? ' wolf-results-earned' : ''}`} aria-label={`${game.name} results`}>
     <h3>{game.name}</h3>
-    <p>{game.basis === 'gross' ? 'Gross' : 'Net · 100% captured CH off lowest four'} · {game.version === 2 ? 'Saved earned dots' : 'Legacy transfer balance'} · Ties zero, no carry</p>
+    <p>{game.basis === 'gross' ? 'Gross' : game.handicapRule === 'full-course-v1'
+      ? 'Net · Full captured CH' : 'Net · SO off lowest in saved group'} · {game.version === 2 ? 'Saved earned dots' : 'Legacy transfer balance'} · Ties zero, no carry</p>
     {!result ? <p>Saved Wolf results unavailable. Refresh to retry.</p> : <>
       <p>{result.status}{game.version === 1 && ' · No dollar settlement'}</p>
       <WolfSoloProgress game={game} holes={result.holes} players={result.players} />

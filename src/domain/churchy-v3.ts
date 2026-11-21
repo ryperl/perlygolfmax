@@ -8,6 +8,7 @@ import type { RoundGroup } from './setup.js';
 import type { Scorecard } from './scoring.js';
 import { handicapStrokesForHole } from './stableford.js';
 import type { CourseHole } from './catalog.js';
+import { gameHandicap } from './game-handicaps.js';
 
 /** An internal adapter consumes neutral pairs/High/Low, not a persisted linked game. */
 export function churchyDotsDefinition(game: ChurchyGameDefinitionV3): DotsGameDefinition {
@@ -84,8 +85,11 @@ export function calculateChurchyV3Results(game: ChurchyGameDefinitionV3, inputs:
     && input.layout.every((hole) => Number.isSafeInteger(hole.allocation) && hole.allocation >= 1
       && hole.allocation <= round.layout.length) ? [input.handicap] : []);
   const lowest = handicaps.length === 4 ? Math.min(...handicaps) : null;
-  const relative = new Map(selected.flatMap((input) => input && typeof input.handicap === 'number'
-    && lowest !== null && Number.isSafeInteger(input.handicap - lowest) ? [[input.playerId, input.handicap - lowest] as const] : []));
+  const relative = new Map(selected.flatMap((input) => {
+    if (!input || typeof input.handicap !== 'number' || lowest === null) return [];
+    const value = game.handicapRule ? gameHandicap(game.handicapRule, input.playerId, inputs, groups) : input.handicap - lowest;
+    return typeof value === 'number' && Number.isSafeInteger(value) ? [[input.playerId, value] as const] : [];
+  }));
   let highCarry: number | null = 0, lowCarry: number | null = 0;
   const base: ChurchyHoleReceipt[] = [];
   for (const [index, context] of rotation.contexts.entries()) {

@@ -62,8 +62,9 @@ export function calculateEarnedWolf(
       const minimum = Math.min(...players.map((player) => typeof player.handicap === 'number' ? player.handicap : 0));
       for (const player of players) {
         if (typeof player.handicap !== 'number') continue;
-        const relative = exact(BigInt(player.handicap) - BigInt(minimum));
-        if (relative === null) { netReason = 'arithmetic-range'; break; }
+        const relative = game.handicapRule ? gameHandicap(game.handicapRule, player.playerId, round.players, round.groups)
+          : exact(BigInt(player.handicap) - BigInt(minimum));
+        if (typeof relative !== 'number') { netReason = relative ?? 'arithmetic-range'; break; }
         handicaps.set(player.playerId, relative);
       }
     }
@@ -164,6 +165,7 @@ export function calculateEarnedWolf(
       if (wolfId) {
         const proof = JSON.stringify({
           game: { id: game.id, version: game.version, basis: game.basis, playerIds: game.playerIds, groupNumber: game.groupNumber, allowPig: game.allowPig,
+            ...(game.handicapRule ? { handicapRule: game.handicapRule } : {}),
             ...(game.highLowSweep ? { highLowSweep: true } : {}) },
           group: group ? { number: group.number, playerIds: group.playerIds, startingHole: groupStartingHole(group, layout) } : null,
           circuit: circuit.map((hole) => ({ number: hole.number, par: hole.par, allocation: hole.allocation })),
@@ -239,3 +241,4 @@ export function calculateEarnedWolf(
         holesScored: entries.length, totalHoles: layout.length, status, dotsWon: dots, dotsLost: 0, balance: dots };
     }) };
 }
+import { gameHandicap } from './game-handicaps.js';

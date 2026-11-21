@@ -26,7 +26,10 @@ export function isMatchPlayDefinition(value: unknown): value is MatchPlayGameDef
 }
 
 export function isPressMatchDefinition(value: unknown): value is PressMatchGameDefinition {
-  if (!isRecord(value) || !keys(value, ['id', 'name', 'kind', 'version', 'basis', 'groupNumber', 'variant', 'sides', 'stakes', 'automaticPresses'])
+  if (!isRecord(value) || !isGameHandicapSettings(value) || !keys(value, ['id', 'name', 'kind', 'version', 'basis', 'groupNumber', 'variant', 'sides', 'stakes', 'automaticPresses',
+    ...(Object.hasOwn(value, 'handicapRule') ? ['handicapRule'] : []),
+    ...(Object.hasOwn(value, 'playOrder') ? ['playOrder'] : [])])
+    || Object.hasOwn(value, 'playOrder') && (value.kind !== 'nassau' || value.playOrder !== 'shared-group-v1')
     || !isUuid(value.id) || !boundedText(value.name) || value.kind !== 'nassau' && value.kind !== 'match-play' || value.version !== 1
     || (value.basis !== 'gross' && value.basis !== 'net') || !integer(value.groupNumber, 1)
     || typeof value.automaticPresses !== 'boolean' || !isRecord(value.stakes)
@@ -101,3 +104,4 @@ export function isNassauResults(
   return isPressMatchDefinition(game) && records.every(isNassauHoleRecord)
     && sameJsonValue(value, calculateNassauFromHandicaps(game, round, cards, records, published));
 }
+import { isGameHandicapSettings } from './game-handicaps.js';

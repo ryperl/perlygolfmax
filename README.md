@@ -408,7 +408,9 @@ entry can additionally offer explicit quick scores.
 Name headers show subtle **CH 4, SO 1** when an off-low result applies: CH is
 the round/tee Course Handicap and SO is the existing handicap difference from
 the low player in that playing group, not strokes received on the current hole.
-Unknown SO stays **—**; other formats do not acquire a new off-low scoring rule.
+Unknown SO stays **—**; gross scores and gross-qualified specials remain unchanged.
+An explicitly selected group-low rule now makes SO available for the supported
+round net games; unmarked saved games retain their legacy rules.
 Scores stay blank until entered. The first + or − tap on a blank score enters
 that hole's par; later taps adjust it. After an 850 ms pause in valid numeric
 typing, focus moves to the next empty golfer, allowing multi-digit scores.
@@ -484,7 +486,9 @@ between saved games or a strokes-only view, for both group and individual cards.
 These are the existing server-derived results, not a second client calculation.
 Standard and Modified Stableford presets can each use gross or net scoring, and
 multiple games can use the same round. Net allowance defaults to 95% and is
-configurable per game.
+configurable per game in full-handicap mode. The optional **Net handicap rule**
+can instead use full captured CH off the lowest in the saved playing group,
+without an allowance. See [game starts and net rules](docs/game-rules.md).
 
 Games shows one compact scorecard per configured game, with golfers in rows
 and hole points visible without expanding individual golfers. Front/Back
@@ -605,13 +609,16 @@ visible for repair and produce no team result.
 After every golfer has saved a disposition for a hole, its unique lowest
 eligible stroke score wins a skin. Tied lows remain unawarded with carryovers
 off; with carryovers on they carry to the next unique winner. Holes are
-evaluated in captured hole-number order, not a group's starting-hole circuit.
+evaluated in the saved foursome's actual circuit for new carry configurations.
+New or changed carryovers require the entire round to be one saved foursome;
+unmarked legacy carries retain printed order, including multi-group rounds.
 An earlier pending hole blocks later carryover awards. Final tied or otherwise
 unclaimed skins remain unawarded; they never roll into another round.
 Highest awarded skin count ranks first. A resolved zero wins is distinct from
 pending or unavailable awards.
 
-Both formats use **100% of captured Course Handicap** for net, including
+Both formats default to **100% of captured Course Handicap** for net, with an
+explicit saved-group-low SO option. Both choices retain
 plus handicaps and personal tees; there is no allowance or points-table editor
 for these kinds. Missing required net inputs remain unavailable. Calculations
 use exact arithmetic and report unavailable overflow without reducing the
@@ -642,8 +649,9 @@ personal tees and acknowledged online scores. The API advertises
 `supportedGameKinds`; older APIs without an explicit new-kind capability cannot
 authorize new definitions or declarations. No local drafts enter saved results.
 
-**Stroke Play** is individual gross or net, with 100% captured Course Handicap
-for net and no Stableford points/allowance controls. Cards show actual strokes;
+**Stroke Play** is individual gross or net, defaulting to full captured CH with
+an explicit saved-group-low SO option and no points/allowance controls.
+Cards show actual strokes;
 standings rank lowest cumulative relative-to-personal-par, consistent with overall
 Stroke Play when tees have different pars. Pickup, `X7` and DNF invalidate a
 numeric stroke total rather than inventing penalties. Pending holes, missing net
@@ -670,8 +678,11 @@ press totals, individual game points or money; presses stay in Games.
 **Nassau** is match play over an 18-hole captured layout, with independent front
 1-9, back 10-18 and overall matches. Choose singles 1v1, three-way individuals
 (three separate pairwise Nassaus), 1v2 best ball, or 2v2 best ball/aggregate.
-Select explicit sides within one saved playing group. Net uses 100% captured CH
-off the lowest golfer **within each match**, honoring personal stroke indexes.
+Select explicit sides within one saved playing group. New net definitions offer
+full captured CH or SO off the lowest in the **entire saved playing group**.
+Unmarked saved matches retain their original match-participant-low rule.
+New Nassau follows the shared starting-hole circuit while retaining printed
+Front/Back membership; old proofs and printed-order definitions are preserved.
 An ineligible numeric side is unavailable; explicitly concede or halve a hole
 without fabricating strokes. Tied bets push, with no carryover.
 
@@ -1145,6 +1156,8 @@ determine handicap-posting eligibility or retrieve GHIN records.
 
 New games use **version 3**. The displayed game is Churchie; the internal
 `churchy` identifier remains compatible with saved data.
+New net games default to full captured CH and can explicitly select whole-group
+SO for High/Low. All specials and calls remain personal gross.
 
 Choose the partnership method before scoring:
 

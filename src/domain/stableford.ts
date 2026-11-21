@@ -15,6 +15,8 @@ import { nassauRecordsFor } from './game-declarations.js';
 import { calculateInternalGameResults } from './internal-games.js';
 import { publishedCourseHandicaps } from './playing-handicaps.js';
 import { handicapStrokesForHole } from './handicap-strokes.js';
+import { gameHandicap } from './game-handicaps.js';
+import type { CapturedGameHandicap } from './game-handicaps.js';
 export { handicapStrokesForHole } from './handicap-strokes.js';
 
 export function stablefordPoints(preset: StablefordPreset): StablefordPointsTable {
@@ -118,6 +120,7 @@ function sumPoints(holes: GamePlayerResult['holes']): number | null {
 function playerResult(
   game: StablefordGameDefinition, tee: TeeProfile, player: RoundPlayerSnapshot,
   cards: readonly Scorecard[],
+  round: RoundSnapshot, captured: readonly CapturedGameHandicap[],
 ): GamePlayerResult {
   const layout = [...tee.holes].sort((left, right) => left.number - right.number);
   const card = cards.find((candidate) => candidate.playerId === player.playerId);
@@ -126,8 +129,12 @@ function playerResult(
   }
   let handicap: number | null = null;
   if (game.basis === 'net') {
-    if (player.handicapIndex == null) return unavailable(player, layout, 'missing-handicap-index');
-    const result = calculatePlayingHandicap(player.handicapIndex.value, tee, game.handicapAllowancePercent);
+    if (player.handicapIndex == null && game.handicapRule !== 'group-low-v1') return unavailable(player, layout, 'missing-handicap-index');
+    const result = game.handicapRule === 'group-low-v1'
+      ? !hasStrokeAllocation(tee) ? 'missing-stroke-index'
+        : gameHandicap(game.handicapRule, player.playerId, captured, round.groups)
+      : player.handicapIndex == null ? 'missing-handicap-index'
+        : calculatePlayingHandicap(player.handicapIndex.value, tee, game.handicapAllowancePercent);
     if (typeof result === 'string') return unavailable(player, layout, result);
     handicap = result;
   }
@@ -156,7 +163,9 @@ export function calculateGameResults(
   dotsCategorySweepsVersion: 0 | 1 = 1,
 ): readonly RoundGameResult[] {
   const layout = [...round.teeProfile.holes].sort((left, right) => left.number - right.number);
-  const courseHandicaps = games.some((game) => game.kind === 'wolf' || game.kind === 'nassau' || game.kind === 'match-play') ? publishedCourseHandicaps(round) : [];
+  const courseHandicaps = publishedCourseHandicaps(round);
+  const captured = courseHandicaps.map((entry) => ({ playerId: entry.playerId,
+    handicap: entry.courseHandicap ?? entry.unavailableReason ?? null }));
   const internal = calculateInternalGameResults(games, { roundId: round.id, layout, groups: round.groups, cards, stringRulesVersion, dotsCategorySweepsVersion,
     courseHandicaps: games.some((game) => game.kind === 'wolf') ? courseHandicaps : [],
     teeStrokeAllocation: round.teeProfile.strokeAllocation,
@@ -174,18 +183,22 @@ export function calculateGameResults(
       return calculateChurchyResults(game, round.players.map((player) => {
         const tee = playerTee(round, player.playerId);
         return { playerId: player.playerId, displayName: player.displayName, layout: tee.holes,
-          handicap: !tee.strokeAllocation ? 'missing-stroke-index' : player.handicapIndex == null ? 'missing-handicap-index'
-            : calculateCourseHandicap(player.handicapIndex.value, tee) };
+          handicap: !tee.strokeAllocation ? 'missing-stroke-index' : game.handicapRule
+            ? gameHandicap('full-course-v1', player.playerId, captured, round.groups)
+            : player.handicapIndex == null ? 'missing-handicap-index' : calculateCourseHandicap(player.handicapIndex.value, tee) };
       }), cards, group?.playerIds.length === 4 && group.playerIds.every((id) => game.playerIds.includes(id)),
       round.groups, round.teeProfile.holes, stringRulesVersion);
     }
     if (!isStablefordGame(game)) return calculateStrokeGameResults(game, round.players.map((player) => {
       const tee = playerTee(round, player.playerId);
       return { playerId: player.playerId, displayName: player.displayName, layout: tee.holes,
-        handicap: game.basis === 'gross' ? null : player.handicapIndex == null ? 'missing-handicap-index'
-          : calculatePlayingHandicap(player.handicapIndex.value, tee, 100) };
-    }), cards);
-    const players = round.players.map((player) => playerResult(game, playerTee(round, player.playerId), player, cards));
+        handicap: game.basis === 'gross' ? null : game.handicapRule
+          ? !hasStrokeAllocation(tee) ? 'missing-stroke-index'
+            : gameHandicap(game.handicapRule, player.playerId, captured, round.groups)
+          : player.handicapIndex == null ? 'missing-handicap-index'
+            : calculatePlayingHandicap(player.handicapIndex.value, tee, 100) };
+    }), cards, round.groups, round.teeProfile.holes[0]?.number);
+    const players = round.players.map((player) => playerResult(game, playerTee(round, player.playerId), player, cards, round, captured));
     return {
       gameId: game.id, players,
       ...(isTeamGameDefinition(game)
