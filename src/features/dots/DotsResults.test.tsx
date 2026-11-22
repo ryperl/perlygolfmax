@@ -7,6 +7,24 @@ import { InternalSettlement } from './InternalSettlement';
 import { dotsFixture } from './dots.test-support';
 
 describe('saved Dots awards and one internal settlement', () => {
+  it('keeps transmitted High/Low, special and combined totals distinct and never calls pending base results complete', () => {
+    const f = dotsFixture();
+    const game: DotsGameDefinition = { ...f.game, version: 2, mode: 'rotating', rotationHoles: 3,
+      highLow: { version: 1, handicapRule: 'group-low-v1' } };
+    const player = { playerId: f.ids[0] ?? '', displayName: 'Fictional golfer 1', playingHandicap: 8, holes: [],
+      holesScored: 1, totalHoles: 9, status: 'in-progress' as const, frontPoints: 3, backPoints: null, totalPoints: 3 };
+    const result: Results = { status: 'complete', holes: [], players: [player], issues: [], unawarded: [], awards: [] };
+    const highLow = { status: 'in-progress' as const, holes: [], awards: [], players: [{ ...player, totalPoints: 2 }] };
+    render(<DotsResults game={game} result={result} highLow={highLow} players={[{ ...player, totalPoints: 5 }]} />);
+    expect(screen.getByText('Provisional saved results')).toBeVisible();
+    expect(screen.queryByText('Complete saved results')).not.toBeInTheDocument();
+    const ledger = screen.getByRole('table', { name: 'Saved High/Low and special dots' });
+    expect(within(ledger).getByRole('columnheader', { name: 'High/Low' })).toBeVisible();
+    expect(within(ledger).getByRole('cell', { name: '2' })).toBeVisible();
+    expect(within(ledger).getByRole('cell', { name: '3' })).toBeVisible();
+    expect(within(ledger).getByRole('cell', { name: '5' })).toBeVisible();
+    expect(screen.getByText('Net High/Low holes').closest('details')).not.toHaveAttribute('open');
+  });
   it.each([2, 3])('explains a %i-player net using only actual participants', (count) => {
     const { f, game } = dotsFixture();
     const settlement = calculateDotSettlement({ groupNumber: 1, gameIds: [game.id], stakeMinor: 50, complete: true,

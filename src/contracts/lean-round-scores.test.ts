@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { calculateChurchyResults } from '../domain/churchy.js';
 import type { ChurchyGameDefinition } from '../domain/churchy.js';
-import { strokeGameId } from '../domain/stroke-games.test-support.js';
+import { strokeGameFixture, strokeGameId, strokeGamesRound } from '../domain/stroke-games.test-support.js';
+import type { DotsGameDefinition } from '../domain/dots.js';
+import type { Scorecard } from '../domain/scoring.js';
 import { decodeRoundScores, isRoundScores } from './scoring.js';
 import { leanRoundScores, leanScoreWriteResult } from './lean-round-scores.js';
 import { leanScoresFixture } from './lean-round-scores.test-support.js';
@@ -10,6 +12,36 @@ import { calculateInternalGameResults, calculateInternalSettlements } from '../d
 import { isRecord } from './events.js';
 
 describe('lean routine round scores', () => {
+  it('strictly preserves separate High/Low, gross specials and combined totals without eager base evidence', () => {
+    const f = strokeGameFixture();
+    const base = strokeGamesRound(f);
+    const ids = base.groups[0]?.playerIds ?? [];
+    const game: DotsGameDefinition = { id: strokeGameId(990), name: 'Fictional Modified Sixes', kind: 'dots', version: 2,
+      mode: 'rotating', rotationHoles: 3, groupNumber: 1, playerIds: ids, specials: [], stakeMinor: 50,
+      highLow: { version: 1, handicapRule: 'group-low-v1' } };
+    const cards: readonly Scorecard[] = base.cards.map((card, index) => ({ ...card, holes: card.holes.map((hole) => ({
+      ...hole, score: { kind: 'strokes', strokes: index < 2 ? 3 : 5,
+        ...(index === 0 && hole.number === 1 ? { dots: [{ number: 1, gameId: game.id, gameEtag: 'fictional-game-revision',
+          players: [], contests: [], rotation: { playerIds: ids } }] } : {}) },
+    })) }));
+    const context = { ...base, cards, teeStrokeAllocation: true };
+    const results = [...calculateInternalGameResults([game], context).values()];
+    const round = { ...context, dotsHighLowVersion: 1 as const, dotsRulesVersions: [1, 2] as const,
+      games: { configuration: { eventId: base.eventId, roundId: base.roundId, etag: 'fictional-game-revision', games: [game] }, results },
+      internalSettlements: calculateInternalSettlements([game], results, context) };
+    expect(isRoundScores(round)).toBe(true);
+    const wire = leanRoundScores(round, false, false, false, false, false, false, false, false, false, false, false, true);
+    expect(wire.round.games?.results[0]?.dotsHighLow).not.toHaveProperty('awards');
+    expect(wire.round.games?.results[0]?.dotsHighLow).not.toHaveProperty('players');
+    expect(decodeRoundScores(JSON.parse(JSON.stringify(wire)))).toEqual(round);
+    expect(isRoundScores({ ...round, dotsHighLowVersion: undefined })).toBe(false);
+    const view = wire.round.games;
+    if (!view) throw new Error('Missing fictional games');
+    expect(decodeRoundScores({ ...wire, round: { ...wire.round, games: { ...view, results: view.results.map((result) =>
+      !isRecord(result.dotsHighLow) || !Array.isArray(result.dotsHighLow.holes) ? result : { ...result,
+        dotsHighLow: { ...result.dotsHighLow, holes: result.dotsHighLow.holes.map((hole: unknown) =>
+          isRecord(hole) ? { ...hole, status: 'pending' } : hole) } }) } } })).toBeNull();
+  });
   it('preserves explicit individual Dots participant capabilities and rejects invalid lean metadata', () => {
     const round = { ...leanScoresFixture(), dotsIndividualPlayerCounts: [1, 2, 3, 4] as const };
     const wire = leanRoundScores(round);

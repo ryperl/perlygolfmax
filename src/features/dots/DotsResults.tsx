@@ -1,5 +1,7 @@
 import type { DotSpecialReview, DotsGameDefinition, DotsResults as Results } from '../../domain/dots';
 import { dotsSpecialCatalog } from '../../domain/dots';
+import type { DotsHighLowResults } from '../../domain/dots-high-low';
+import type { GamePlayerResult } from '../../domain/games';
 
 export function DotSpecialReviewNotice({ reviews, players }: {
   readonly reviews: readonly DotSpecialReview[] | undefined;
@@ -16,29 +18,49 @@ export function DotSpecialReviewNotice({ reviews, players }: {
   </div>;
 }
 
-export function DotsResults({ game, result }: { readonly game: DotsGameDefinition; readonly result: Results | undefined }) {
+export function DotsResults({ game, result, highLow, players }: {
+  readonly game: DotsGameDefinition; readonly result: Results | undefined;
+  readonly highLow?: DotsHighLowResults | undefined;
+  readonly players?: readonly GamePlayerResult[] | undefined;
+}) {
   const name = (id: string) => result?.players.find((player) => player.playerId === id)?.displayName ?? 'Golfer unavailable';
   const label = (kind: string) => dotsSpecialCatalog.find((special) => special.kind === kind)?.label ?? 'Special';
   const pending = result?.holes.filter((hole) => hole.status === 'pending').map((hole) => hole.number) ?? [];
   const unavailable = result?.holes.filter((hole) => hole.status === 'unavailable').map((hole) => hole.number) ?? [];
+  const status = !game.highLow ? result?.status : !highLow || highLow.status === 'unavailable' || result?.status === 'unavailable'
+    || players?.some((player) => player.status === 'unavailable')
+    ? 'unavailable' : highLow.status === 'complete' && result?.status === 'complete' ? 'complete' : 'in-progress';
   return <section className="game-results dots-results" aria-label={`${game.name} results`}>
     <h3>{game.name}</h3><p>{game.mode === 'individual' ? game.playerIds.length === 1 ? 'Solo stats only' : 'Individual' : game.mode === 'fixed' ? 'Fixed partners'
       : game.mode === 'rotating' ? game.rotationHoles === 3 ? 'Modified Sixes · 3-hole partners' : 'Sixes · 6-hole partners' : 'Linked sides'}</p>
     {!result ? <p>Saved Dots results unavailable. Refresh to retry.</p> : <>
       {game.mode === 'fixed' && <p className="game-hint">{game.partnerIds.slice(0, 2).map(name).join(' + ')}
         {' vs '}{game.partnerIds.slice(2).map(name).join(' + ')} · Same partners all round</p>}
-      <p>{result.status === 'complete' ? 'Complete saved results' : result.status === 'unavailable'
+      <p>{status === 'complete' ? 'Complete saved results' : status === 'unavailable'
         ? 'Saved inputs need review · Totals unavailable' : 'Provisional saved results'}</p>
       <DotSpecialReviewNotice reviews={result.reviewRequired} players={result.players} />
       {game.mode === 'rotating' && <p>{result.rotation?.rotation
         ? `Cycle starts on hole ${String(result.rotation.firstHole)}${result.rotation.rotation.recordedLate ? ' · Order recovered after scoring started' : ''}`
         : 'Partner order pending. No sharing is inferred.'}</p>}
       <div className="game-scroll" role="region" aria-label="Dots earned ledger" tabIndex={0}><table>
-        <caption>Saved special dots</caption><thead><tr><th scope="col">Golfer</th>
+        <caption>{game.highLow ? 'Saved High/Low and special dots' : 'Saved special dots'}</caption><thead><tr><th scope="col">Golfer</th>
+          {game.highLow && <><th scope="col">High/Low</th><th scope="col">Specials</th></>}
           <th scope="col">Earned dots</th><th scope="col">Holes</th></tr></thead>
         <tbody>{result.players.map((player) => <tr key={player.playerId}><th scope="row">{player.displayName}</th>
-          <td>{player.totalPoints ?? '—'}</td><td>{player.holesScored}/{player.totalHoles}</td></tr>)}</tbody>
+          {game.highLow && <><td>{highLow?.players.find((entry) => entry.playerId === player.playerId)?.totalPoints ?? '—'}</td>
+            <td>{player.totalPoints ?? '—'}</td></>}
+          <td>{game.highLow ? players?.find((entry) => entry.playerId === player.playerId)?.totalPoints ?? '—' : player.totalPoints ?? '—'}</td>
+          <td>{(game.highLow ? players?.find((entry) => entry.playerId === player.playerId)?.holesScored : player.holesScored) ?? 0}/{player.totalHoles}</td></tr>)}</tbody>
       </table></div>
+      {game.highLow && <details><summary>Net High/Low holes</summary>
+        <p>{game.highLow.handicapRule === 'group-low-v1' ? 'SO off the lowest player in your saved group.' : 'Full Course Handicap.'}
+          {' '}One dot per winning teammate for each contest; ties push. Specials use gross scores.</p>
+        {!highLow ? <p>Saved High/Low results unavailable. Refresh to retry.</p>
+          : highLow.holes.map((hole) => <p key={hole.number}>Hole {hole.number} · {hole.sides.map((side) => side.map(name).join(' + ')).join(' vs ')}
+            {' · '}{hole.contests.map((contest) => `${contest.kind === 'high' ? 'High' : 'Low'}: ${
+              contest.status === 'won' ? contest.winnerIds.map(name).join(' + ') : contest.status === 'tied' ? 'Push'
+                : contest.status === 'pending' ? 'Pending scores or order' : 'Unavailable'}`).join(' · ')}</p>)}
+      </details>}
       {result.unawarded.map((entry, index) => <p key={`${entry.kind}:${String(index)}`}>Unawarded {label(entry.kind)}: {entry.units} units · Holes {entry.sourceHoles.join(', ')}.
         No rollover or retroactive winner.</p>)}
       {pending.length > 0 && <details><summary>Pending holes ({pending.length})</summary>

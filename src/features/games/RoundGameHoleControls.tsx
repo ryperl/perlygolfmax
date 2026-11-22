@@ -3,7 +3,7 @@ import type { NassauHoleRecord } from '../../domain/nassau';
 import type { HoleScore, RoundScores } from '../../domain/scoring';
 import { supportsDotsSpecials, supportsIndividualDotsPlayerCount, supportsRoundGame } from '../../domain/scoring';
 import type { WolfHoleRecord } from '../../domain/wolf';
-import { wolfForHole } from '../../domain/wolf';
+import { wolfForHole, wolfOrder } from '../../domain/wolf';
 import { NassauHoleControls } from '../nassau';
 import { WolfHoleControls } from '../wolf';
 import type { DotsHoleRecord } from '../../domain/dots';
@@ -59,6 +59,12 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
         onChange={(record) => { onNassauChange([...(draft?.nassau ?? []).filter((entry) => entry.gameId !== game.id), record]); }} />
     </div>;
     if (game.kind === 'wolf') {
+      const group = round.groups.find((entry) => entry.number === groupNumber);
+      const records = round.cards.find((card) => card.playerId === group?.playerIds[0])?.holes
+        .flatMap((hole) => hole.score.wolf?.filter((record) => record.choice.gameId === game.id) ?? []) ?? [];
+      const orderReceipt = game.orderMode ? wolfOrder(game, round, records) : null;
+      const staged = draft?.wolf?.find((record) => record.choice.gameId === game.id && record.number === holeNumber);
+      const previewRecords = staged ? [...records.filter((record) => record.number !== holeNumber), staged] : records;
       const result = round.games?.results.find((result) => result.gameId === game.id)?.wolf;
       const layout = [...round.layout].sort((a, b) => a.number - b.number);
       const start = layout.findIndex((hole) => hole.number === groupStartingHole(round.groups.find((group) => group.number === groupNumber), layout));
@@ -81,11 +87,14 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
       {!supportsRoundGame(round, 'wolf') && <p>Wolf choices are temporarily unavailable in this app version.</p>}
       {game.version === 2 && game.highLowSweep === true && round.wolfHighLowSweep !== true
         && <p>Wolf High/Low Sweep is temporarily unavailable in this app version.</p>}
-      <WolfHoleControls game={game} wolfId={game.version === 2
+      <WolfHoleControls game={game} wolfId={game.orderMode && (staged?.order || game.version === 1)
+        ? wolfForHole(game, round, holeNumber, previewRecords) : game.version === 2
         ? result?.holes.find((hole) => hole.number === holeNumber)?.wolfId ?? null
         : wolfForHole(game, round, holeNumber)} players={round.cards}
+        firstHole={groupStartingHole(group, round.layout)} savedOrder={orderReceipt ?? undefined}
+        orderSupported={round.wolfOrderVersion === 1}
         comeback={result?.comeback} holes={result?.holes} reviewMessages={reviewMessages}
-        holeNumber={holeNumber} etag={etag ?? ''} disabled={locked || game.version === 2
+        holeNumber={holeNumber} etag={etag ?? ''} disabled={locked || game.orderMode !== undefined && round.wolfOrderVersion !== 1 || game.version === 2
           && (!round.wolfRulesVersions?.includes(2) || game.highLowSweep === true && round.wolfHighLowSweep !== true)}
         saved={saved.wolf?.find((record) => record.choice.gameId === game.id && record.number === holeNumber)}
         draft={draft?.wolf?.find((record) => record.choice.gameId === game.id && record.number === holeNumber)}
@@ -103,6 +112,7 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
       const individualUnsupported = game.mode === 'individual' && !supportsIndividualDotsPlayerCount(round, game.playerIds.length);
       const dotsLocked = locked || !onSpecialDotsChange || individualUnsupported || !supportsDotsSpecials(round, game.specials)
         || game.version === 2 && !round.dotsRulesVersions?.includes(2)
+        || game.version === 2 && game.highLow !== undefined && round.dotsHighLowVersion !== 1
         || game.sweepRule === 'manual-v1' && round.dotsManualSweep !== true;
       if (placement === 'before' && game.version === 2 && rotation) {
         const record = staged ?? saved.dots?.find((record) => record.gameId === game.id && record.number === holeNumber)

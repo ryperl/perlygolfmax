@@ -31,6 +31,36 @@ function fixture(count: 9 | 18 = 9, startingHole = 1) {
 }
 
 describe('version 2 Wolf earned dots', () => {
+  it('waits for a saved first-tee order, rotates on a shotgun circuit and binds comeback ties/proofs to it', () => {
+    const f = fixture(9, 5), game = { ...f.game, orderMode: 'first-tee-v1' as const };
+    expect(calculateWolf(game, f.round, f.cards([{ kind: 'strokes', strokes: 4 }]), []).holes
+      .every((hole) => hole.status === 'pending' && hole.wolfId === null)).toBe(true);
+    const ids = [...game.playerIds].reverse();
+    const order: WolfHoleRecord = { number: 5, choice: { gameId: game.id, gameEtag: 'fictional-order', mode: 'order' },
+      order: { playerIds: ids } };
+    const initial = calculateWolf(game, f.round, f.cards([{ kind: 'strokes', strokes: 4 }]), [order]);
+    expect(initial.holes.find((hole) => hole.number === 5)).toMatchObject({ status: 'pending', wolfId: ids[0], mode: null });
+    expect(wolfForHole(game, f.round, 1, [order])).toBe(ids[1]);
+    expect(wolfForHole(game, f.round, 5, [{ ...order, number: 1 }])).toBeNull();
+    const records = f.prefix.map((number): WolfHoleRecord => ({ number,
+      ...(number === 5 ? { order: order.order } : {}),
+      choice: { gameId: game.id, gameEtag: 'fictional-order', mode: 'blind' } }));
+    const cards = f.cards([]).map((card) => ({ ...card,
+      holes: card.holes.map((hole) => ({ ...hole, score: { kind: 'strokes' as const, strokes: 4 } })) }));
+    const candidate = calculateWolf(game, f.round, cards, records).comeback?.receipt;
+    expect(candidate?.wolfId).toBe(ids[3]);
+    expect(candidate?.afterHoles).toEqual([5, 6, 7, 8, 9, 1, 2]);
+    expect(candidate?.proof).toContain(JSON.stringify({ order: order.order }).slice(1, -1));
+    if (!candidate) throw new Error('Missing fictional ordered comeback');
+    const final: WolfHoleRecord = { number: 3, choice: { gameId: game.id, gameEtag: 'fictional-order', mode: 'blind' }, comeback: candidate };
+    const corrected = cards.map((card, index) => ({ ...card, holes: card.holes.map((hole) => ({
+      ...hole, score: { kind: 'strokes' as const, strokes: index === 0 ? 2 : 5 },
+    })) }));
+    expect(calculateWolf(game, f.round, corrected, [...records, final]).comeback)
+      .toMatchObject({ status: 'saved', receipt: candidate, changed: true });
+    expect(calculateWolf(f.game, f.round, cards, f.prefixRecords).holes.find((hole) => hole.number === 5)?.wolfId)
+      .toBe(game.playerIds[0]);
+  });
   it.each([9, 18] as const)('gives a full plus CH stroke back on the personal allocation %i rather than inventing a solo win', (count) => {
     const f = fixture(count);
     const game = { ...f.game, basis: 'net' as const, handicapRule: 'full-course-v1' as const, stakeMinor: 100 };

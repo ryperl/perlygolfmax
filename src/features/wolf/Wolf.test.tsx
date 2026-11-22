@@ -16,6 +16,36 @@ function fixture() {
 }
 
 describe('Wolf declarations and ledger', () => {
+  it('chooses a first-tee order before declaring, retains partial drafts and renders acknowledged order read-only', () => {
+    const { f, game: legacy } = fixture();
+    const game: WolfGameDefinition = { ...legacy, version: 2, stakeMinor: null, orderMode: 'first-tee-v1' };
+    const onChange = vi.fn<(record: WolfHoleRecord) => void>();
+    const props = { game, wolfId: null, holeNumber: 5, firstHole: 5, etag: 'current',
+      saved: undefined, draft: undefined, players: f.cards, disabled: false, orderSupported: true, onChange };
+    const view = render(<WolfHoleControls {...props} />);
+    expect(screen.getByLabelText('Wolf declaration')).toBeDisabled();
+    let draft: WolfHoleRecord | undefined;
+    const labels = ['First Wolf', 'Second Wolf', 'Third Wolf', 'Fourth Wolf'];
+    for (const [index, id] of [...game.playerIds].reverse().entries()) {
+      fireEvent.change(screen.getByLabelText(labels[index] ?? ''), { target: { value: id } });
+      draft = onChange.mock.lastCall?.[0];
+      view.rerender(<WolfHoleControls {...props} draft={draft} />);
+      expect(screen.getByLabelText(labels[index] ?? '')).toHaveValue(id);
+    }
+    expect(draft?.choice.mode).toBe('order');
+    view.rerender(<WolfHoleControls {...props} draft={draft} wolfId={game.playerIds[3] ?? null} />);
+    fireEvent.change(screen.getByLabelText('Wolf declaration'), { target: { value: 'pig' } });
+    expect(onChange.mock.lastCall?.[0]).toMatchObject({ choice: { mode: 'pig' }, order: draft?.order });
+    view.rerender(<WolfHoleControls {...props} saved={draft} savedOrder={draft?.order}
+      wolfId={game.playerIds[3] ?? null} />);
+    expect(screen.queryByLabelText('First Wolf')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Wolf declaration')).toBeEnabled();
+    view.rerender(<WolfHoleControls {...props} holeNumber={6} />);
+    expect(screen.queryByLabelText('First Wolf')).not.toBeInTheDocument();
+    expect(screen.getByText(/Choose the order at this group/)).toBeVisible();
+    view.rerender(<WolfHoleControls {...props} orderSupported={false} />);
+    expect(screen.getByLabelText('First Wolf')).toBeDisabled();
+  });
   it('uses names only for partners and tracks acknowledged solo turns without counting a draft or blocking choices', () => {
     const { f, game: legacy, wolfId } = fixture();
     const game: WolfGameDefinition = { ...legacy, version: 2, stakeMinor: null };

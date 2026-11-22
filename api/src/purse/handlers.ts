@@ -20,6 +20,9 @@ import { GameHandicapClientUpdateRequired } from '../../../src/contracts/game-ha
 import { supportsGameHandicaps, supportsDotCoexistence } from '../scoring/murphy-transport.js';
 import { DotsCoexistenceClientUpdateRequired } from '../../../src/contracts/dot-coexistence.js';
 import { GameCalculationsClientUpdateRequired } from '../../../src/contracts/game-calculations.js';
+import { WolfOrdersClientUpdateRequired } from '../../../src/contracts/wolf-orders.js';
+import { supportsWolfOrders, supportsDotsHighLow } from '../scoring/murphy-transport.js';
+import { DotsHighLowClientUpdateRequired } from '../../../src/contracts/dots-high-low-rules.js';
 import { PullyMurphyClientUpdateRequired } from '../../../src/contracts/pully-murphy.js';
 import { supportsGameCalculations } from '../scoring/murphy-transport.js';
 
@@ -41,6 +44,8 @@ export function createPurseHandler(resolveApi: () => PurseApi) {
       const sweepRules = supportsSweepRules(request);
       const gameHandicaps = supportsGameHandicaps(request);
       const gameCalculations = supportsGameCalculations(request);
+      const wolfOrders = supportsWolfOrders(request);
+      const dotsHighLow = supportsDotsHighLow(request);
       const dotCoexistence = supportsDotCoexistence(request);
       const api = resolveApi();
       const identity = await api.verify(request.headers.get('authorization'));
@@ -49,7 +54,7 @@ export function createPurseHandler(resolveApi: () => PurseApi) {
       const eventId = request.params.id;
       if (!isUuid(eventId)) throw new ApiError(400, 'INVALID_REQUEST_ID');
       const chargeRead = (units: number) => api.limiter.check(identity, 'scores-read', units);
-      if (request.method === 'GET') return response(200, privateReadResponse(request, murphyTransport(await api.purse.get(identity, eventId, chargeRead), negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations)));
+      if (request.method === 'GET') return response(200, privateReadResponse(request, murphyTransport(await api.purse.get(identity, eventId, chargeRead), negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations, wolfOrders, dotsHighLow)));
       const match = request.headers.get('If-Match');
       const none = request.headers.get('If-None-Match');
       const expected = match !== null && none === null && isEventRevision(match) && !match.includes(',') ? match
@@ -57,16 +62,16 @@ export function createPurseHandler(resolveApi: () => PurseApi) {
       const requestId = request.headers.get('Idempotency-Key');
       if (expected === undefined) throw new ApiError(400, 'PURSE_REVISION_REQUIRED');
       if (!isUuid(requestId)) throw new ApiError(400, 'INVALID_REQUEST_ID');
-      const received = await api.purse.receive(identity, eventId, expected, requestId, await readJson(request, maximumPurseRequestBytes), stringRules, dotsCalls, chargeRead, categorySweeps, churchyNames, sweepRules, gameHandicaps, gameCalculations);
+      const received = await api.purse.receive(identity, eventId, expected, requestId, await readJson(request, maximumPurseRequestBytes), stringRules, dotsCalls, chargeRead, categorySweeps, churchyNames, sweepRules, gameHandicaps, gameCalculations, wolfOrders, dotsHighLow);
       if (received.kind === 'part') return response(200, { privateStaged: { id: received.id, index: received.index } });
       const body = received.value;
       if (!isRecord(body) || Object.keys(body).length !== 2 || !isPursePlan(body.plan)
         || !Array.isArray(body.resolutions) || !body.resolutions.every(isPurseTieResolution)) throw new ApiError(400, 'INVALID_PURSE_SETUP');
-      const result = await api.purse.save(identity, eventId, body.plan, body.resolutions, expected, requestId, chargeRead, received.publication, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, gameHandicaps, gameCalculations);
+      const result = await api.purse.save(identity, eventId, body.plan, body.resolutions, expected, requestId, chargeRead, received.publication, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, gameHandicaps, gameCalculations, wolfOrders, dotsHighLow);
       if (Buffer.byteLength(JSON.stringify(result), 'utf8') > maximumPrivateValueBytes) throw new ApiError(413, 'PRIVATE_VALUE_TOO_LARGE');
-      return response(200, murphyTransport(result, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations));
+      return response(200, murphyTransport(result, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations, wolfOrders, dotsHighLow));
     } catch (error) {
-      if (error instanceof GameCalculationsClientUpdateRequired || error instanceof PullyMurphyClientUpdateRequired) {
+      if (error instanceof GameCalculationsClientUpdateRequired || error instanceof PullyMurphyClientUpdateRequired || error instanceof WolfOrdersClientUpdateRequired || error instanceof DotsHighLowClientUpdateRequired) {
         context.warn('Purse API request rejected', { code: error.code, status: error.status, invocationId: context.invocationId });
         return response(error.status, { code: error.code });
       }

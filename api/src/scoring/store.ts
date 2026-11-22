@@ -38,7 +38,9 @@ import { configuredKpRounds, readKpPot } from './kp.js';
 import { GameDeclarationConflictError, dotsRecordsFor, gameAnchorPlayerId, nassauRecordsFor, sameDotsRecords, sameNassauRecords, sameWolfRecords, scoreMatchesIntent } from '../../../src/domain/game-declarations.js';
 import { nassauConfigurationIssues, validateNassauManualPress } from '../../../src/domain/nassau.js';
 import { nassauRecordsMatchGame } from '../../../src/contracts/nassau.js';
-import { wolfForHole, wolfGroupMatchesRound } from '../../../src/domain/wolf.js';
+import { wolfForHole, wolfGroupMatchesRound, wolfOrder } from '../../../src/domain/wolf.js';
+import { requireWolfOrders, requireWolfOrdersInValue } from '../../../src/contracts/wolf-orders.js';
+import { requireDotsHighLow, requireDotsHighLowInValue } from '../../../src/contracts/dots-high-low-rules.js';
 import { dotsDefinitionMatchesRound, dotsRecordsMatchGame } from '../../../src/contracts/dots.js';
 import { dotsAutomaticWriteConflicts, dotsCoexistenceWriteConflicts, dotsDeclarationIssues, dotsDeclarationWriteIssues, dotsFirstPlayedHole, dotsSpecialCatalog } from '../../../src/domain/dots.js';
 import { DotsCoexistenceClientUpdateRequired } from '../../../src/contracts/dot-coexistence.js';
@@ -120,9 +122,13 @@ private async kpProjection(eventId: string, roundId: string, configured: unknown
   return row ? { kp: { ...decode(await privateContent(this.table, eventId, `round-kp:${roundId}`, row.content), isKpSelection), etag: revision(row) } } : {};
 }
 
-async receiveKp(identity: AccountIdentity, eventId: string, roundId: string, body: unknown, expected: string | null, requestId: string, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true, sweepRules = true, gameHandicaps = true, gameCalculations = true) {
+async receiveKp(identity: AccountIdentity, eventId: string, roundId: string, body: unknown, expected: string | null, requestId: string, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true, sweepRules = true, gameHandicaps = true, gameCalculations = true, wolfOrders = true, dotsHighLow = true) {
   await this.requireCalculationWriter(identity, eventId, roundId, gameCalculations);
   const state = await this.snapshot(identity, eventId, roundId, true);
+  requireWolfOrders(state.games?.games ?? [], wolfOrders);
+  requireWolfOrdersInValue(body, wolfOrders);
+  requireDotsHighLow(state.games?.games ?? [], dotsHighLow);
+  requireDotsHighLowInValue(body, dotsHighLow);
   if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
   requireStringRules(state.games?.games ?? [], stringRules);
   requireCategorySweeps(state.games?.games ?? [], categorySweeps);
@@ -134,11 +140,13 @@ async receiveKp(identity: AccountIdentity, eventId: string, roundId: string, bod
 }
 
 async saveKp(identity: AccountIdentity, eventId: string, roundId: string, selection: KpSelection,
-  expectedEtag: string | null, requestId: string, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true, sweepRules = true, gameHandicaps = true, gameCalculations = true): Promise<KpWriteResult> {
+  expectedEtag: string | null, requestId: string, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true, sweepRules = true, gameHandicaps = true, gameCalculations = true, wolfOrders = true, dotsHighLow = true): Promise<KpWriteResult> {
   await this.requireCalculationWriter(identity, eventId, roundId, gameCalculations);
   if (!isUuid(requestId) || !isKpSelection(selection)
     || expectedEtag !== null && !isEventRevision(expectedEtag)) throw new ApiError(400, 'INVALID_KP_SETUP');
   const state = await this.snapshot(identity, eventId, roundId, true);
+  requireWolfOrders(state.games?.games ?? [], wolfOrders);
+  requireDotsHighLow(state.games?.games ?? [], dotsHighLow);
   requireStringRules(state.games?.games ?? [], stringRules);
   requireCategorySweeps(state.games?.games ?? [], categorySweeps);
   requireChurchyNames(state.games?.games ?? [], churchyNames);
@@ -322,6 +330,8 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       churchyEnabled: this.churchyEnabled(),
       ...(!access.testerLink && this.churchyEnabled() ? { churchyRulesVersions: [1, 2, 3] as const } : {}),
       ...(!access.testerLink ? { wolfRulesVersions: [1, 2] as const, dotsRulesVersions: [1, 2] as const,
+        wolfOrderVersion: 1 as const,
+        dotsHighLowVersion: 1 as const,
         dotsIndividualPlayerCounts: [1, 2, 3, 4] as const,
         dotsManualSweep: true as const, wolfHighLowSweep: true as const,
         dotsSpecialKinds: dotsSpecialCatalog.map((entry) => entry.kind),
@@ -446,7 +456,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
   }
 
   async saveGames(identity: AccountIdentity | PublicScoreIdentity, eventId: string, roundId: string, games: readonly RoundGameDefinition[],
-    expectedEtag: string | null, requestId: string, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true, sweepRules = true, gameHandicaps = true, gameCalculations = true): Promise<GameWriteResult> {
+    expectedEtag: string | null, requestId: string, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true, sweepRules = true, gameHandicaps = true, gameCalculations = true, wolfOrders = true, dotsHighLow = true): Promise<GameWriteResult> {
     if (!isUuid(requestId) || !isRoundGameDefinitions(games) || games.length === 0
       || expectedEtag !== null && !isEventRevision(expectedEtag)) throw new ApiError(400, 'INVALID_GAME_SETUP');
     if (Buffer.byteLength(JSON.stringify({ games }), 'utf8') > maximumPrivateWriteBytes) {
@@ -456,6 +466,8 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     await this.requireCalculationWriter(identity, eventId, roundId, gameCalculations,
       [...state.games?.games ?? [], ...games]);
     requireStringRules([...state.games?.games ?? [], ...games], stringRules);
+    requireWolfOrders([...state.games?.games ?? [], ...games], wolfOrders);
+    requireDotsHighLow([...state.games?.games ?? [], ...games], dotsHighLow);
     requireCategorySweeps([...state.games?.games ?? [], ...games], categorySweeps);
     requireChurchyNames([...state.games?.games ?? [], ...games], churchyNames);
     requireSweepRules([...state.games?.games ?? [], ...games], sweepRules);
@@ -578,7 +590,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
   }
 
   async receiveGames(identity: AccountIdentity | PublicScoreIdentity,
-    eventId: string, roundId: string, body: unknown, expected: string | null, requestId: string, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true, sweepRules = true, gameHandicaps = true, gameCalculations = true) {
+    eventId: string, roundId: string, body: unknown, expected: string | null, requestId: string, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true, sweepRules = true, gameHandicaps = true, gameCalculations = true, wolfOrders = true, dotsHighLow = true) {
     await this.requireCalculationWriter(identity, eventId, roundId, gameCalculations);
     if (!isUuid(roundId) || !isUuid(requestId)) throw new ApiError(400, 'INVALID_REQUEST_ID');
     const state = await this.access(identity, eventId);
@@ -595,7 +607,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     // Parts are inactive. Check the head revision without repeatedly decoding a large configuration.
     // The final save validates the complete captured workspace and games again.
     const head = await optionalRow(this.table, eventId, gameConfigurationKey(roundId));
-    if ((!stringRules || !categorySweeps || !churchyNames || !sweepRules || !gameHandicaps) && head) {
+    if ((!stringRules || !categorySweeps || !churchyNames || !sweepRules || !gameHandicaps || !wolfOrders || !dotsHighLow) && head) {
       const current = await readGameConfiguration(this.table, eventId, roundId,
         configuredGameRounds(state.event.gameRoundIds), { row: head });
       requireStringRules(current?.games ?? [], stringRules);
@@ -603,10 +615,14 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       requireChurchyNames(current?.games ?? [], churchyNames);
       requireSweepRules(current?.games ?? [], sweepRules);
       requireGameHandicapRules(current?.games ?? [], gameHandicaps);
+      requireWolfOrders(current?.games ?? [], wolfOrders);
+      requireDotsHighLow(current?.games ?? [], dotsHighLow);
     }
     if (isRecord(body) && isRoundGameDefinitions(body.games)) requireChurchyNames(body.games, churchyNames);
     if (!sweepRules) requireSweepRulesInValue(body);
     if (!gameHandicaps) requireGameHandicapRulesInValue(body);
+    requireWolfOrdersInValue(body, wolfOrders);
+    requireDotsHighLowInValue(body, dotsHighLow);
     if ((head ? revision(head) : null) !== expected) {
       const receipt = await this.gameReceipt(eventId, roundId, requestId);
       if (!receipt || receipt.expectedEtag !== expected || !sameScoreActor(receipt.recordedBy, identity)) throw new ApiError(409, 'GAMES_CHANGED');
@@ -659,13 +675,17 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
   }
 
   async write(identity: ScoreActor, eventId: string, roundId: string, playerId: string, holeNumber: number,
-    score: HoleScore, expectedEtag: string | null, requestId: string, inputRevision?: string | null, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true, sweepRules = true, dotCoexistence = true, gameHandicaps = true, gameCalculations = true): Promise<ScoreWriteResult> {
+    score: HoleScore, expectedEtag: string | null, requestId: string, inputRevision?: string | null, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true, sweepRules = true, dotCoexistence = true, gameHandicaps = true, gameCalculations = true, wolfOrders = true, dotsHighLow = true): Promise<ScoreWriteResult> {
     if (!isUuid(requestId) || !isUuid(playerId) || !isHoleScore(score) || !Number.isSafeInteger(holeNumber)
       || expectedEtag !== null && !isEventRevision(expectedEtag)
       || inputRevision !== undefined && inputRevision !== null && !isUuid(inputRevision)) throw new ApiError(400, 'INVALID_SCORE_WRITE');
     const state = await this.snapshot(identity, eventId, roundId);
     await this.requireCalculationWriter(identity, eventId, roundId, gameCalculations);
     requirePullyMurphyTargets(score, gameCalculations);
+    requireWolfOrders((state.games?.games ?? []).filter((game) => !state.testerLink || game.kind !== 'wolf'), wolfOrders);
+    requireWolfOrdersInValue(score, wolfOrders);
+    requireDotsHighLow((state.games?.games ?? []).filter((game) => !state.testerLink || game.kind !== 'dots'), dotsHighLow);
+    requireDotsHighLowInValue(score, dotsHighLow);
     requireGameHandicapRules(state.games?.games ?? [], gameHandicaps);
     if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     requireStringRules(state.games?.games ?? [], stringRules);
@@ -738,19 +758,32 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
         const results = game?.kind === 'wolf' && game.version === 2
           ? calculateGameResults(state.games?.games ?? [], state.round, cards) : [];
         const currentWolf = results.find((result) => result.gameId === game?.id)?.wolf;
-        const wolfId = game?.kind === 'wolf' && game.version === 2
+        const orderRecords = cards.find((card) => card.playerId === playerId)?.holes
+          .flatMap((hole) => hole.number === holeNumber ? savedScore.wolf ?? [] : hole.score.wolf ?? [])
+          .filter((entry) => entry.choice.gameId === record.choice.gameId) ?? [];
+        const wolfRound = { layout: state.round.teeProfile.holes, groups: state.round.groups };
+        const layout = [...wolfRound.layout].sort((a, b) => a.number - b.number);
+        const startingHole = game?.kind === 'wolf'
+          ? groupStartingHole(state.round.groups.find((entry) => entry.number === game.groupNumber), layout) : undefined;
+        const playedIndex = (layout.findIndex((hole) => hole.number === holeNumber)
+          - layout.findIndex((hole) => hole.number === startingHole) + layout.length) % layout.length;
+        const wolfId = game?.kind === 'wolf' && game.orderMode && (game.version === 1 || playedIndex < layout.length - 2)
+          ? wolfForHole(game, wolfRound, holeNumber, orderRecords) : game?.kind === 'wolf' && game.version === 2
           ? currentWolf?.holes.find((hole) => hole.number === holeNumber)?.wolfId
-          : game?.kind === 'wolf' ? wolfForHole(game, { layout: state.round.teeProfile.holes, groups: state.round.groups }, holeNumber) : null;
+          : game?.kind === 'wolf' ? wolfForHole(game, wolfRound, holeNumber, orderRecords) : null;
         if (game?.kind !== 'wolf' || record.choice.gameEtag !== state.games?.etag || record.number !== holeNumber
           || gameAnchorPlayerId(game, state.round.groups) !== playerId
           || !wolfGroupMatchesRound(game, { layout: state.round.teeProfile.holes, groups: state.round.groups })
           || record.choice.mode === 'pig' && !game.allowPig
           || game.version === 1 && record.comeback !== undefined
           || game.version === 2 && record.outcome !== undefined && record.outcome !== 'scores'
+          || record.order && (!game.orderMode || !wolfOrder(game, wolfRound, orderRecords))
+          || record.choice.mode === 'order' && (!game.orderMode || !record.order)
+          || game.orderMode && record.choice.mode !== 'order' && !wolfId
           || record.choice.mode === 'partner' && (!wolfId || record.choice.partnerId === wolfId || !game.playerIds.includes(record.choice.partnerId))) {
           throw new ApiError(409, 'MATCH_SETUP_CHANGED');
         }
-        if (game.version === 2) {
+        if (game.version === 2 && record.choice.mode !== 'order') {
           const layout = [...state.round.teeProfile.holes].sort((a, b) => a.number - b.number);
           const group = state.round.groups.find((entry) => entry.number === game.groupNumber);
           const start = layout.findIndex((hole) => hole.number === groupStartingHole(group, layout));
@@ -763,17 +796,21 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
             throw new ApiError(409, 'WOLF_COMEBACK_CHANGED');
           }
         }
-        if (previous && (previous.choice.mode !== record.choice.mode || previous.choice.partnerId !== record.choice.partnerId)) {
+        if (previous && previous.choice.mode !== 'order'
+          && (previous.choice.mode !== record.choice.mode || previous.choice.partnerId !== record.choice.partnerId)) {
           throw new ApiError(409, 'WOLF_CHOICE_LOCKED');
         }
         const index = wolf.findIndex((entry) => entry.choice.gameId === game.id);
         const stored = wolf[index];
-        const late = previous ? previous.recordedLate === true : game.playerIds.some((id) => cards.find((entry) => entry.playerId === id)?.holes
+        const late = previous?.choice.mode !== 'order' && previous ? previous.recordedLate === true : game.playerIds.some((id) => cards.find((entry) => entry.playerId === id)?.holes
           .some((hole) => hole.number === holeNumber && hole.score.kind !== 'unplayed'));
         if (stored) {
           wolf[index] = { number: stored.number, choice: stored.choice, ...(stored.outcome ? { outcome: stored.outcome } : {}),
+            ...(stored.order ? { order: previous?.order ?? { playerIds: stored.order.playerIds,
+              ...(game.playerIds.some((id) => cards.find((entry) => entry.playerId === id)?.holes
+                .some((hole) => hole.score.kind !== 'unplayed')) ? { recordedLate: true as const } : {}) } } : {}),
             ...(stored.comeback ? { comeback: stored.comeback } : {}),
-            ...(late ? { recordedLate: true as const } : {}) };
+            ...(late && stored.choice.mode !== 'order' ? { recordedLate: true as const } : {}) };
         }
       }
       savedScore = { ...savedScore, wolf };
@@ -999,12 +1036,16 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
   }
 
   async receiveGameScore(identity: ScoreActor, eventId: string, roundId: string, playerId: string, holeNumber: number,
-    body: unknown, expected: string | null, requestId: string, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true, sweepRules = true, dotCoexistence = true, gameHandicaps = true, gameCalculations = true) {
+    body: unknown, expected: string | null, requestId: string, stringRules = true, dotsCalls = true, categorySweeps = true, churchyNames = true, sweepRules = true, dotCoexistence = true, gameHandicaps = true, gameCalculations = true, wolfOrders = true, dotsHighLow = true) {
     await this.requireCalculationWriter(identity, eventId, roundId, gameCalculations);
     requirePullyMurphyTargets(body, gameCalculations);
     if (!isUuid(requestId) || !isUuid(playerId) || !Number.isInteger(holeNumber)
       || expected !== null && !isEventRevision(expected)) throw new ApiError(400, 'INVALID_SCORE_WRITE');
     const state = await this.snapshot(identity, eventId, roundId);
+    requireWolfOrders(state.games?.games ?? [], wolfOrders);
+    requireWolfOrdersInValue(body, wolfOrders);
+    requireDotsHighLow(state.games?.games ?? [], dotsHighLow);
+    requireDotsHighLowInValue(body, dotsHighLow);
     if (state.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     requireStringRules(state.games?.games ?? [], stringRules);
     requireCategorySweeps(state.games?.games ?? [], categorySweeps);

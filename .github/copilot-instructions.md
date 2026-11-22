@@ -241,6 +241,12 @@
   Put Wolf declaration before scores with name-only partner options. Remind
   who still needs a solo Wolf/PIG using acknowledged choices only; never block
   play or override comeback selection to enforce the reminder.
+  New first-tee-order games choose First/Second/Third/Fourth Wolf in entry at
+  the group's saved starting hole before declaration; never in setup. Store one
+  immutable canonical card receipt, retain raw-only edits/clears/retries, mark
+  late recovery on the server, and keep missing order pending without blocking
+  raw scores. Unmarked saved orders and comeback proofs stay unchanged.
+  Require `wolfOrders=1`/`wolfOrderVersion: 1` before affected reads/publications.
 - Legacy Dots version 1 supports individual, fixed partners, or explicit
   linked neutral contexts, never a Wolf-owned special subsystem.
   Individual play uses every golfer in a saved 1–4-player group; two/three
@@ -290,15 +296,20 @@
   both automatic sources for the same match. Require `sweepRules=2`/capabilities,
   preserve legacy definitions/audits and immutable final-hole Wolf choices.
   Thief/full Sixes
-  match engines remain deferred. Dots cannot stack with Churchie.
+  match engines remain deferred except explicit Modified Sixes High/Low below.
+  Dots cannot stack with Churchie.
 - Rotating Dots version 2 shares specials for Modified Sixes (three played
-  holes) and Sixes (six), not a full base-match engine. First-played-hole P1–P4
+  holes) and Sixes (six). Opt-in Modified Sixes net High/Low uses full captured
+  CH or whole-group SO, one dot per winning teammate per lane, ties push/no
+  carry; specials stay gross. Keep base/special sources separate and settle
+  once. Require `dotsHighLow=1`/`dotsHighLowVersion: 1` before affected reads or
+  publications; unmarked games and Sixes stay specials-only. First-played-hole P1–P4
   order cycles 12/34, 13/24, 14/23 from an acknowledged canonical group-first
   card receipt. Missing order is pending, never inferred fixed partners.
   Preserve the immutable order/origin on clears/raw-only edits and mark absent
   order recovery late on the server. Initial Sixes order goes above score
   fields; after acknowledgement show current teams only, not a future cycle.
-  No retrospective reshuffle or invented High/Low contests; explicit manual
+  No retrospective reshuffle or implicit High/Low migration; explicit manual
   Sweep remains independent. Require explicit `dotsRulesVersions` support, keep legacy
   definitions/results unchanged and retain group/input/revision/audit checks.
   New/changed declarations enforce same-source-golfer/whole-hole exclusions:

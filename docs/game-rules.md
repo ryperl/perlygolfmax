@@ -19,7 +19,7 @@ Saved scoring locks starts and explicit handicap/circuit rules.
 | Wolf | Full CH / group SO, net balls | Group circuit |
 | Nassau | Full CH / group SO, net balls | Explicit circuit |
 | Match Play | Full CH / group SO, net balls | Group circuit |
-| Dots | No standalone net contest | Group circuit |
+| Dots | Modified Sixes opt-in High/Low: Full CH / group SO | Group circuit |
 
 The Stableford rows describe the two formats of one game kind, not additional
 game kinds. Linked Dots consumes the explicitly linked Wolf's saved comparisons;
@@ -29,6 +29,16 @@ their existing full-handicap calculations. KP remains a distance competition.
 Overall Stableford consumes the selected round game's legitimate points.
 Competition teams remain separate from playing groups; each member's SO uses
 their own saved playing group, even for cross-group Ball Drop teams.
+
+Modified Sixes may explicitly enable net High/Low alongside its gross specials.
+Partners change every three played holes using the acknowledged P1–P4 order.
+High compares each pair's higher numeric ball; Low compares its lower ball.
+Each contest gives one dot to each winning teammate. Ties push with no carry,
+deduction, stake multiplier or automatic Sweep. A pickup loses High to an
+all-numeric pair; its partner's numeric Low still competes. Missing numeric
+Low is unavailable, never a penalty score. Missing scores/order stay pending.
+Base and special dots remain separate sources and settle only once. Six-hole
+rotations and unmarked saved Modified Sixes remain specials-only.
 
 ## Course Handicap and SO
 
@@ -82,6 +92,15 @@ It is a conditional round-setup write, not an independent game-settings write.
 Quick-round starting-hole choices are visible for each group without opening
 its roster editor. Organizer round setup retains the same shared choice.
 
+New Wolf games choose **First Wolf, Second Wolf, Third Wolf and Fourth Wolf**
+in score entry on the saved group's first tee, before the declaration, not in
+round/game setup. Shotgun starts use the shared saved starting hole.
+`orderMode: "first-tee-v1"` stores one immutable order receipt on the canonical
+group-first card. Raw scoring remains possible without it; Wolf stays pending.
+Other groups do not block order entry. Late recovery is server-marked, and raw
+edits, clears and retries preserve the saved order and final-hole comeback
+receipts. Unmarked saved Wolf games retain their original setup rotation.
+
 New or explicitly changed Skins carryovers require the **entire round** to be
 one saved group containing exactly four golfers. The configuration uses
 `carryOrder: "shared-group-v1"` and awards carries in that foursome's actual
@@ -115,6 +134,16 @@ review and score-derived Pully Murphy. Compatible unaffected old reads remain
 available; affected old reads and business writes require an update before
 mutation. New full-net Wolf writes require version-2 support even before
 captured inputs could become plus. Full/lean numerical authority is preserved.
+
+Opt-in Modified Sixes High/Low separately negotiates `dotsHighLow=1` and
+requires the advertised `dotsHighLowVersion: 1`. Older affected requests must
+update before reading or publishing new definitions/results. Full and lean
+decoders retain separate transmitted base contests, special totals and combined
+standings; lean reconstruction never replaces a transmitted numerical value.
+
+First-tee Wolf order separately negotiates `wolfOrders=1`, with advertised
+`wolfOrderVersion: 1`. Affected old reads and score, game, correction and purse
+publications fail before mutation. No general setup permission is added.
 
 Unmarked saved definitions retain their original rules: Stableford allowance,
 full-CH stroke games, off-low Churchie/Wolf, and match-participant-low

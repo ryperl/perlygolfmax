@@ -211,7 +211,7 @@ for (const theme of ['light', 'dark']) {
       const editor = page.getByRole('form', { name: 'Game settings', exact: true });
       await editor.getByRole('combobox', { name: 'Game type', exact: true }).selectOption('wolf');
       await editor.getByRole('combobox', { name: 'Playing group', exact: true }).selectOption('1');
-      await editor.getByRole('combobox', { name: 'Wolf P1', exact: true }).selectOption(wolf.playerIds[0] ?? '');
+      await expect(editor.getByRole('combobox', { name: 'Wolf P1', exact: true })).toHaveCount(0);
       await editor.getByRole('combobox', { name: 'Score basis', exact: true }).selectOption('gross');
       await editor.getByLabel('Allow PIG', { exact: true }).check();
       await narrowControls(page, editor);
@@ -233,6 +233,9 @@ for (const theme of ['light', 'dark']) {
       expect(fixture.counters().configWrites).toBe(2);
       await page.getByRole('button', { name: 'Enter scores', exact: true }).click();
       const form = page.getByRole('form', { name: 'Group 1 hole 1 entry', exact: true });
+      for (const [index, label] of ['First Wolf', 'Second Wolf', 'Third Wolf', 'Fourth Wolf'].entries()) {
+        await form.getByRole('combobox', { name: label, exact: true }).selectOption(wolf.playerIds[index] ?? '');
+      }
       const controls = form.locator('.round-game-hole-controls');
       expect(await form.evaluate((element) => element.querySelector('form'))).toBeNull();
       const wolfControls = form.getByRole('group', { name: 'Wolf · Hole 1', exact: true });

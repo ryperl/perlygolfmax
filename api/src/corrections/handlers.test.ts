@@ -131,6 +131,8 @@ describe('round corrections HTTP handlers', () => {
       identifier(900),
       expect.objectContaining({ reason: 'Fictional correction reason.' }),
       false,
+      false,
+      false,
     );
     expect(check).toHaveBeenCalledWith(creator, 'setup-write');
   });

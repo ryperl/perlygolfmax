@@ -1,5 +1,5 @@
 import type { WolfComebackReceipt, WolfGameDefinition, WolfHoleChoice, WolfHoleRecord, WolfResults } from '../domain/wolf.js';
-import { calculateWolf, wolfForHole, wolfGroupMatchesRound, wolfTransfers } from '../domain/wolf.js';
+import { calculateWolf, wolfForHole, wolfGroupMatchesRound, wolfOrder, wolfTransfers } from '../domain/wolf.js';
 import type { WolfRoundInput } from '../domain/wolf.js';
 import type { Scorecard } from '../domain/scoring.js';
 import { boundedText } from './catalog.js';
@@ -19,7 +19,8 @@ const reasons = ['missing-handicap-index', 'uncaptured-handicap-index', 'invalid
 
 export function isWolfDefinition(value: unknown): value is WolfGameDefinition {
   return isRecord(value) && keys(value, ['id', 'name', 'kind', 'version', 'basis', 'groupNumber', 'playerIds', 'allowPig',
-    ...(value.version === 2 ? ['stakeMinor'] : [])], ['handicapRule', ...(value.version === 2 ? ['highLowSweep'] : [])])
+    ...(value.version === 2 ? ['stakeMinor'] : [])], ['handicapRule', 'orderMode', ...(value.version === 2 ? ['highLowSweep'] : [])])
+    && (value.orderMode === undefined || value.orderMode === 'first-tee-v1')
     && isGameHandicapSettings(value)
     && (!Object.hasOwn(value, 'highLowSweep') || value.highLowSweep === true)
     && isUuid(value.id) && boundedText(value.name) && value.kind === 'wolf'
@@ -33,14 +34,20 @@ export function isWolfChoice(value: unknown): value is WolfHoleChoice {
   return isRecord(value) && isUuid(value.gameId) && isEventRevision(value.gameEtag)
     && (value.mode === 'partner'
       ? keys(value, ['gameId', 'gameEtag', 'mode', 'partnerId']) && isUuid(value.partnerId)
-      : (value.mode === 'blind' || value.mode === 'pig') && keys(value, ['gameId', 'gameEtag', 'mode']));
+      : (value.mode === 'blind' || value.mode === 'pig' || value.mode === 'order') && keys(value, ['gameId', 'gameEtag', 'mode']));
 }
 
 export function isWolfRecord(value: unknown): value is WolfHoleRecord {
-  return isRecord(value) && keys(value, ['number', 'choice'], ['outcome', 'recordedLate', 'comeback'])
+  return isRecord(value) && keys(value, ['number', 'choice'], ['outcome', 'recordedLate', 'comeback', 'order'])
+    && (value.order === undefined || isRecord(value.order) && keys(value.order, ['playerIds'], ['recordedLate'])
+      && (value.order.recordedLate === undefined || value.order.recordedLate === true)
+      && Array.isArray(value.order.playerIds) && value.order.playerIds.length === 4
+      && value.order.playerIds.every(isUuid) && new Set(value.order.playerIds).size === 4)
     && (value.recordedLate === undefined || value.recordedLate === true)
     && (value.comeback === undefined || isWolfComebackReceipt(value.comeback))
     && integer(value.number) && value.number >= 1 && value.number <= 18 && isWolfChoice(value.choice)
+    && (value.choice.mode !== 'order' || value.order !== undefined && value.outcome === undefined
+      && value.comeback === undefined && value.recordedLate === undefined)
     && (value.outcome === undefined || value.outcome === 'scores' || value.outcome === 'wolf'
       || value.outcome === 'opponents' || value.outcome === 'halved');
 }
@@ -69,11 +76,14 @@ export function wolfRecordMatchesGame(
     || record.choice.mode === 'pig' && !game.allowPig) return false;
   if (game.version === 1 && record.comeback !== undefined
     || game.version === 2 && record.outcome !== undefined && record.outcome !== 'scores') return false;
-  let wolfId = wolfForHole(game, round, record.number);
+  const anchor = round.groups.find((group) => group.number === game.groupNumber)?.playerIds[0];
+  const saved = cards.find((card) => card.playerId === anchor)?.holes
+    .flatMap((hole) => hole.score.wolf?.filter((entry) => entry.choice.gameId === game.id) ?? []) ?? [];
+  const updated = [...saved.filter((entry) => entry.number !== record.number), record];
+  if (record.order && (!game.orderMode || !wolfOrder(game, round, updated))) return false;
+  if (record.choice.mode === 'order') return game.orderMode !== undefined && record.order !== undefined;
+  let wolfId = wolfForHole(game, round, record.number, updated);
   if (game.version === 2) {
-    const anchor = round.groups.find((group) => group.number === game.groupNumber)?.playerIds[0];
-    const saved = cards.find((card) => card.playerId === anchor)?.holes
-      .flatMap((hole) => hole.score.wolf?.filter((entry) => entry.choice.gameId === game.id) ?? []) ?? [];
     const before = calculateWolf(game, round, cards, saved);
     const candidate = before.comeback?.receipt;
     if (record.comeback !== undefined && (!candidate || candidate.afterHoles.includes(record.number)
@@ -94,6 +104,9 @@ export function wolfRecordMatchesGame(
 export function isWolfResults(value: unknown, game: WolfGameDefinition, context?: {
   readonly round: WolfRoundInput; readonly cards: readonly Scorecard[]; readonly records: readonly WolfHoleRecord[];
 }): value is WolfResults {
+  if (context && (context.records.some((record) => record.order !== undefined || record.choice.mode === 'order')
+    && (!game.orderMode || !wolfOrder(game, context.round, context.records))
+    || game.orderMode !== undefined && context.records.length > 0 && !wolfOrder(game, context.round, context.records))) return false;
   if (game.version === 2) return context !== undefined
     && sameJsonValue(value, calculateWolf(game, context.round, context.cards, context.records));
   if (!isRecord(value) || !keys(value, ['status', 'holes', 'players'], ['reason'])

@@ -4,6 +4,7 @@ import type { HoleScore } from './scoring.js';
 import type { GamePlayerResult } from './games.js';
 import { dotsRotationContext } from './dots-rotation.js';
 import type { DotsRotationContext } from './dots-rotation.js';
+import type { GameHandicapRule } from './game-handicaps.js';
 export { dotsFirstPlayedHole, dotsRotationContext } from './dots-rotation.js';
 export type { DotsRotationContext } from './dots-rotation.js';
 
@@ -43,6 +44,10 @@ export const dotsSpecialCatalog: readonly {
 ];
 
 export interface DotsSpecialSelection { readonly kind: DotsSpecialKind; readonly units: number }
+export interface DotsHighLowSettings {
+  readonly version: 1;
+  readonly handicapRule: GameHandicapRule;
+}
 interface CommonDotsDefinition {
   readonly id: string; readonly name: string; readonly kind: 'dots';
   readonly groupNumber: number; readonly playerIds: readonly string[];
@@ -54,8 +59,9 @@ interface CommonDotsDefinition {
 }
 export type DotsGameDefinition = CommonDotsDefinition & (
   | { readonly version: 2; readonly mode: 'rotating'; readonly rotationHoles: 3 | 6;
+      readonly highLow?: DotsHighLowSettings;
       readonly stakeMinor: number | null; readonly partnerIds?: never; readonly linkedGameId?: never }
-  | ({ readonly version: 1; readonly rotationHoles?: never } & (
+  | ({ readonly version: 1; readonly rotationHoles?: never; readonly highLow?: never } & (
   | { readonly mode: 'individual'; readonly stakeMinor: number | null; readonly partnerIds?: never; readonly linkedGameId?: never }
   | { readonly mode: 'fixed'; readonly partnerIds: readonly string[]; readonly stakeMinor: number | null; readonly linkedGameId?: never }
   | { readonly mode: 'linked'; readonly linkedGameId: string; readonly stakeMinor?: never; readonly partnerIds?: never })));

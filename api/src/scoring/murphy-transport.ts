@@ -10,6 +10,22 @@ import { coexistenceRoundScores, DotsCoexistenceClientUpdateRequired } from '../
 import { gameHandicapRoundScores, GameHandicapClientUpdateRequired, requireGameHandicapRulesInValue } from '../../../src/contracts/game-handicaps.js';
 import { GameCalculationsClientUpdateRequired, gameCalculationRoundScores } from '../../../src/contracts/game-calculations.js';
 import { requirePullyMurphyTargets } from '../../../src/contracts/pully-murphy.js';
+import { WolfOrdersClientUpdateRequired, requireWolfOrdersInValue, wolfOrderRoundScores } from '../../../src/contracts/wolf-orders.js';
+import { DotsHighLowClientUpdateRequired, requireDotsHighLowInValue, dotsHighLowRoundScores } from '../../../src/contracts/dots-high-low-rules.js';
+
+export function supportsDotsHighLow(request: HttpRequest): boolean {
+  const versions = request.query.getAll('dotsHighLow');
+  if (versions.length === 0) return false;
+  if (versions.length !== 1 || versions[0] !== '1') throw new DotsHighLowClientUpdateRequired();
+  return true;
+}
+
+export function supportsWolfOrders(request: HttpRequest): boolean {
+  const versions = request.query.getAll('wolfOrders');
+  if (versions.length === 0) return false;
+  if (versions.length !== 1 || versions[0] !== '1') throw new WolfOrdersClientUpdateRequired();
+  return true;
+}
 
 export function supportsGameCalculations(request: HttpRequest): boolean {
   const versions = request.query.getAll('gameCalculations');
@@ -69,20 +85,22 @@ export function supportsSweepRules(request: HttpRequest): boolean {
 }
 
 /** Also covers nested leaderboard/source wrappers without assuming that every response is a bare round. */
-export function murphyTransport(value: unknown, negotiated: boolean, pareeTargets = false, stringRules = false, dotsCalls = false, categorySweeps = false, churchyNames = false, sweepRules = false, dotCoexistence = false, gameHandicaps = false, gameCalculations = false): unknown {
+export function murphyTransport(value: unknown, negotiated: boolean, pareeTargets = false, stringRules = false, dotsCalls = false, categorySweeps = false, churchyNames = false, sweepRules = false, dotCoexistence = false, gameHandicaps = false, gameCalculations = false, wolfOrders = false, dotsHighLow = false): unknown {
+  requireWolfOrdersInValue(value, wolfOrders);
+  requireDotsHighLowInValue(value, dotsHighLow);
   requirePullyMurphyTargets(value, gameCalculations);
   if (!gameHandicaps) requireGameHandicapRulesInValue(value);
   if (!sweepRules) requireSweepRulesInValue(value);
   if (!churchyNames) requireChurchyNamesInValue(value);
-  return projectTransport(value, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations);
+  return projectTransport(value, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations, wolfOrders, dotsHighLow);
 }
 
-function projectTransport(value: unknown, negotiated: boolean, pareeTargets: boolean, stringRules: boolean, dotsCalls: boolean, categorySweeps: boolean, churchyNames: boolean, sweepRules: boolean, dotCoexistence: boolean, gameHandicaps: boolean, gameCalculations: boolean): unknown {
-  if (Array.isArray(value)) return value.map((entry: unknown) => projectTransport(entry, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations));
+function projectTransport(value: unknown, negotiated: boolean, pareeTargets: boolean, stringRules: boolean, dotsCalls: boolean, categorySweeps: boolean, churchyNames: boolean, sweepRules: boolean, dotCoexistence: boolean, gameHandicaps: boolean, gameCalculations: boolean, wolfOrders: boolean, dotsHighLow: boolean): unknown {
+  if (Array.isArray(value)) return value.map((entry: unknown) => projectTransport(entry, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations, wolfOrders, dotsHighLow));
   if (!isRecord(value)) return value;
-  if (isRoundScores(value)) return gameHandicapRoundScores(coexistenceRoundScores(sweepRulesRoundScores(churchyNamesRoundScores(categorySweepRoundScores(stringRoundScores(murphyRoundScores(gameCalculationRoundScores(value, gameCalculations), negotiated, pareeTargets, dotsCalls), stringRules), categorySweeps), churchyNames), sweepRules), dotCoexistence), gameHandicaps);
+  if (isRoundScores(value)) return gameHandicapRoundScores(coexistenceRoundScores(sweepRulesRoundScores(churchyNamesRoundScores(categorySweepRoundScores(stringRoundScores(murphyRoundScores(gameCalculationRoundScores(dotsHighLowRoundScores(wolfOrderRoundScores(value, wolfOrders), dotsHighLow), gameCalculations), negotiated, pareeTargets, dotsCalls), stringRules), categorySweeps), churchyNames), sweepRules), dotCoexistence), gameHandicaps);
   if (isRecord(value.round) && isRoundScores(value.round)) return {
-    ...value, round: gameHandicapRoundScores(coexistenceRoundScores(sweepRulesRoundScores(churchyNamesRoundScores(categorySweepRoundScores(stringRoundScores(murphyRoundScores(gameCalculationRoundScores(value.round, gameCalculations), negotiated, pareeTargets, dotsCalls), stringRules), categorySweeps), churchyNames), sweepRules), dotCoexistence), gameHandicaps),
+    ...value, round: gameHandicapRoundScores(coexistenceRoundScores(sweepRulesRoundScores(churchyNamesRoundScores(categorySweepRoundScores(stringRoundScores(murphyRoundScores(gameCalculationRoundScores(dotsHighLowRoundScores(wolfOrderRoundScores(value.round, wolfOrders), dotsHighLow), gameCalculations), negotiated, pareeTargets, dotsCalls), stringRules), categorySweeps), churchyNames), sweepRules), dotCoexistence), gameHandicaps),
     ...(isScoreChange(value.change) ? { change: murphyScoreChange(value.change, negotiated, value.round, pareeTargets, dotsCalls) } : {}),
   };
   if (isScoreChange(value)) {
@@ -94,5 +112,5 @@ function projectTransport(value: unknown, negotiated: boolean, pareeTargets: boo
     }
     return murphyScoreChange(value, negotiated, undefined, pareeTargets, dotsCalls);
   }
-  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, projectTransport(entry, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations)]));
+  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, projectTransport(entry, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations, wolfOrders, dotsHighLow)]));
 }

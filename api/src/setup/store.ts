@@ -46,6 +46,8 @@ import { dotsDefinitionMatchesRound } from '../../../src/contracts/dots.js';
 import { definitionCards, dotRound } from '../scoring/internal-games.js';
 import { buildDotAwardAudit, correctionAuditCards, supportsDotAwardAudit } from '../scoring/dot-audit.js';
 import { requireGameCalculations } from '../../../src/contracts/game-calculations.js';
+import { requireWolfOrders } from '../../../src/contracts/wolf-orders.js';
+import { requireDotsHighLow } from '../../../src/contracts/dots-high-low-rules.js';
 import { publishedCourseHandicaps } from '../../../src/domain/playing-handicaps.js';
 import { calculateGameResults } from '../../../src/domain/stableford.js';
 import type { EventHandicapRefreshResult } from '../../../src/domain/player-handicap-update.js';
@@ -350,7 +352,7 @@ export class TableWorkspaceStore {
 
   async refreshPlayerIndex(
     identity: AccountIdentity, eventId: string, playerId: string, observationId: string,
-    etag: string, requestId: string, chargeRound?: () => Promise<void>,
+    etag: string, requestId: string, chargeRound?: () => Promise<void>, wolfOrders = true, dotsHighLow = true,
   ): Promise<EventHandicapRefreshResult> {
     requireManager(identity, this.allowed);
     if (!isUuid(identity.tenantId) || !isUuid(identity.objectId)
@@ -359,6 +361,15 @@ export class TableWorkspaceStore {
     const access = await readPublicAccess(this.table, { kind: 'public-score', eventId }, eventId);
     if (access.event.quickRound === true && access.event.quickRoundReady !== true) {
       throw new ApiError(403, 'PUBLIC_EVENT_NOT_AVAILABLE');
+    }
+    if (!wolfOrders || !dotsHighLow) {
+      const currentWorkspace = await this.load(access.summary, false, chargeRound);
+      for (const round of currentWorkspace.rounds.filter((round) => round.scoringStarted
+        && round.players.some((player) => player.playerId === playerId))) {
+        const games = await readGameConfiguration(this.table, eventId, round.id, configuredGameRounds(access.event.gameRoundIds));
+        requireWolfOrders(games?.games ?? [], wolfOrders);
+        requireDotsHighLow(games?.games ?? [], dotsHighLow);
+      }
     }
     const replay = () => playerIndexRefreshReplay(this.table, identity, eventId, playerId, observationId, etag, requestId);
     const previous = await replay();
@@ -463,9 +474,11 @@ export class TableWorkspaceStore {
   }
 
   async correctRound(identity: AccountIdentity, eventId: string, roundId: string,
-    requestId: string, body: RoundCorrectionWriteRequest, gameCalculations = true): Promise<RoundCorrectionWriteResult> {
+    requestId: string, body: RoundCorrectionWriteRequest, gameCalculations = true, wolfOrders = true, dotsHighLow = true): Promise<RoundCorrectionWriteResult> {
     if (!isUuid(requestId) || !isRoundCorrectionWriteRequest(body)) throw new ApiError(400, 'INVALID_ROUND_CORRECTION');
     const state = await this.correctionState(identity, eventId, roundId);
+    requireWolfOrders(state.games?.games ?? [], wolfOrders);
+    requireDotsHighLow(state.games?.games ?? [], dotsHighLow);
     const replayKey = `round-correction:${roundId}:${requestId}`;
     const replay = await optionalRow(this.table, eventId, replayKey);
     if (replay) {
@@ -644,10 +657,15 @@ export class TableWorkspaceStore {
     return true;
   }
 
-  async refreshIndices(identity: AccountIdentity, eventId: string, roundId: string, requestId: string, etag: string): Promise<EventWorkspace> {
+  async refreshIndices(identity: AccountIdentity, eventId: string, roundId: string, requestId: string, etag: string, wolfOrders = true, dotsHighLow = true): Promise<EventWorkspace> {
     const access = await this.ownerAccess(identity, eventId);
     if (access.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     requireManager(identity, this.allowed);
+    if (!wolfOrders || !dotsHighLow) {
+      const games = await readGameConfiguration(this.table, eventId, roundId, configuredGameRounds(access.event.gameRoundIds));
+      requireWolfOrders(games?.games ?? [], wolfOrders);
+      requireDotsHighLow(games?.games ?? [], dotsHighLow);
+    }
     if (await scoringLock(this.table, eventId, roundId)) throw new ApiError(409, 'ROUND_SCORING_STARTED');
     if (await this.refreshReplay(identity, eventId, roundId, requestId, etag)) {
       const current = await this.get(identity, eventId);

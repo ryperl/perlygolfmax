@@ -167,7 +167,7 @@ export function calculateGameResults(
   const captured = courseHandicaps.map((entry) => ({ playerId: entry.playerId,
     handicap: entry.courseHandicap ?? entry.unavailableReason ?? null }));
   const internal = calculateInternalGameResults(games, { roundId: round.id, layout, groups: round.groups, cards, stringRulesVersion, dotsCategorySweepsVersion,
-    courseHandicaps: games.some((game) => game.kind === 'wolf') ? courseHandicaps : [],
+    courseHandicaps: games.some((game) => game.kind === 'wolf' || game.kind === 'dots' && game.highLow !== undefined) ? courseHandicaps : [],
     teeStrokeAllocation: round.teeProfile.strokeAllocation,
     ...(round.playerTees ? { playerTees: round.playerTees } : {}) });
   return games.map((game) => {

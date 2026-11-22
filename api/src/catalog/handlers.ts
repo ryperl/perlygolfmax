@@ -16,6 +16,9 @@ import { requireManager } from './courses.js';
 import type { TableCourseCatalog } from './courses.js';
 import type { TablePlayerCatalog } from './players.js';
 import { privateReadResponse } from '../private-transport.js';
+import { supportsWolfOrders, supportsDotsHighLow } from '../scoring/murphy-transport.js';
+import { WolfOrdersClientUpdateRequired } from '../../../src/contracts/wolf-orders.js';
+import { DotsHighLowClientUpdateRequired } from '../../../src/contracts/dots-high-low-rules.js';
 
 export interface CatalogSetupApi {
   readonly verify: VerifyIdentity;
@@ -69,7 +72,7 @@ export function createCatalogHandler(resolveApi: () => CatalogSetupApi, action: 
           throw new ApiError(400, 'INVALID_PLAYER_INDEX_REFRESH');
         }
         return response(200, await api.workspace.refreshPlayerIndex(identity, id, playerId, body.observationId,
-          expected, requestId, () => api.limiter.check(identity, 'setup-read')));
+          expected, requestId, () => api.limiter.check(identity, 'setup-read'), supportsWolfOrders(request), supportsDotsHighLow(request)));
       }
       if (action === 'round-indices-refresh') {
         const id = uuid(request.params.id);
@@ -78,7 +81,7 @@ export function createCatalogHandler(resolveApi: () => CatalogSetupApi, action: 
         const expected = etag(request);
         const body = await readJson(request);
         if (!isRecord(body) || Object.keys(body).length !== 0) throw new ApiError(400, 'INVALID_INDEX_REFRESH');
-        return response(200, await api.workspace.refreshIndices(identity, id, roundId, requestId, expected));
+        return response(200, await api.workspace.refreshIndices(identity, id, roundId, requestId, expected, supportsWolfOrders(request), supportsDotsHighLow(request)));
       }
       if (action === 'workspace') {
         const id = uuid(request.params.id);
@@ -151,8 +154,8 @@ export function createCatalogHandler(resolveApi: () => CatalogSetupApi, action: 
         value: body.value, effectiveDate: body.effectiveDate, source: body.source,
       }, expected));
     } catch (error) {
-      const status = error instanceof ApiError ? error.status : 503;
-      const code = error instanceof ApiError ? error.code : 'SERVICE_UNAVAILABLE';
+      const status = error instanceof ApiError || error instanceof WolfOrdersClientUpdateRequired || error instanceof DotsHighLowClientUpdateRequired ? error.status : 503;
+      const code = error instanceof ApiError || error instanceof WolfOrdersClientUpdateRequired || error instanceof DotsHighLowClientUpdateRequired ? error.code : 'SERVICE_UNAVAILABLE';
       if (status >= 500) context.error('Catalog/setup API request failed', { code, action, status, invocationId: context.invocationId, ...failureDiagnostics(error) });
       else context.warn('Catalog/setup API request rejected', { code, action, status, invocationId: context.invocationId });
       return response(status, { code });

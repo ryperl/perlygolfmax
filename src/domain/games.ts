@@ -4,6 +4,7 @@ import type { ChurchyGameDefinition, ChurchyResults } from './churchy.js';
 import type { WolfGameDefinition, WolfResults } from './wolf.js';
 import type { NassauGameDefinition, MatchPlayGameDefinition, NassauResults } from './nassau.js';
 import type { DotsGameDefinition, DotsResults } from './dots.js';
+import type { DotsHighLowResults } from './dots-high-low.js';
 import type { GameHandicapSettings } from './game-handicaps.js';
 
 export type StablefordPreset = 'standard' | 'modified';
@@ -192,6 +193,7 @@ export interface RoundGameResult {
   readonly wolf?: WolfResults;
   readonly nassau?: NassauResults;
   readonly dots?: DotsResults;
+  readonly dotsHighLow?: DotsHighLowResults;
   readonly version?: 1 | 2 | 3;
   readonly unawardedSkins?: number;
   readonly pendingSkins?: number;
@@ -258,6 +260,7 @@ export function sameGameDefinitions(left: readonly RoundGameDefinition[], right:
       return game.kind === 'dots' && other.kind === 'dots' && game.id === other.id && game.name === other.name
         && game.groupNumber === other.groupNumber && game.mode === other.mode && game.version === other.version
         && game.rotationHoles === other.rotationHoles
+        && game.highLow?.version === other.highLow?.version && game.highLow?.handicapRule === other.highLow?.handicapRule
         && game.stakeMinor === other.stakeMinor && game.linkedGameId === other.linkedGameId
         && game.playerIds.length === other.playerIds.length && game.playerIds.every((id, i) => id === other.playerIds[i])
         && (game.partnerIds?.length ?? 0) === (other.partnerIds?.length ?? 0)
@@ -269,6 +272,7 @@ export function sameGameDefinitions(left: readonly RoundGameDefinition[], right:
       return game.kind === 'wolf' && other.kind === 'wolf' && game.id === other.id && game.name === other.name
         && game.basis === other.basis && game.groupNumber === other.groupNumber && game.allowPig === other.allowPig
         && game.version === other.version && game.stakeMinor === other.stakeMinor
+        && game.orderMode === other.orderMode
         && game.playerIds.length === other.playerIds.length && game.playerIds.every((id, i) => id === other.playerIds[i]);
     }
     if (game.kind === 'nassau' || game.kind === 'match-play' || other.kind === 'nassau' || other.kind === 'match-play') {

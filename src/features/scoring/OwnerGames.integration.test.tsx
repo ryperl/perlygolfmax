@@ -9,6 +9,7 @@ import { deferred, memoryScores } from './scoring.test-support';
 import { strokeGameFixture, strokeGamesRound } from '../../domain/stroke-games.test-support';
 import { calculateGameResults } from '../../domain/stableford';
 import { publishedCourseHandicaps } from '../../domain/playing-handicaps';
+import type { RoundGameDefinition } from '../../domain/games';
 
 function mount(store = memoryScores(scoreResult().round)) {
   const onSessionExpired = vi.fn();
@@ -21,16 +22,23 @@ async function openGames(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe('games integrated with owner stroke entry', () => {
-  it.each(['full-course-v1', 'group-low-v1'] as const)('shows CH and only applicable SO for %s without another read or draft calculation', async (handicapRule) => {
+  it.each([
+    ['full-course-v1', 'ball-drop'], ['group-low-v1', 'ball-drop'],
+    ['full-course-v1', 'dots'], ['group-low-v1', 'dots'],
+  ] as const)('shows CH and only applicable SO for %s in %s without another read or draft calculation', async (handicapRule, kind) => {
     const f = strokeGameFixture(18);
     const snapshot = { ...f.snapshot, players: f.snapshot.players.map((player, index) => ({
       ...player, handicapIndex: { ...player.handicapIndex, value: ['11', '4', '8', '3'][index] ?? '0' },
     })) };
     const cards = f.cards.map((card) => ({ ...card, etag: null, updatedAt: null,
       holes: card.holes.map((hole) => ({ ...hole, score: { kind: 'unplayed' as const } })) }));
-    const game = { ...f.ballDrop, handicapRule };
+    const game: RoundGameDefinition = kind === 'dots' ? { id: f.ballDrop.id, name: 'Fictional Modified Sixes',
+      kind: 'dots', version: 2, mode: 'rotating', rotationHoles: 3, groupNumber: 1,
+      playerIds: f.snapshot.groups[0]?.playerIds ?? [], specials: [], stakeMinor: null,
+      highLow: { version: 1, handicapRule } } : { ...f.ballDrop, handicapRule };
     const base = strokeGamesRound({ ...f, snapshot, cards });
     const round = { ...base, setupLocked: false, lastUpdatedAt: null, gameHandicapRules: 1 as const, teeStrokeAllocation: true,
+      ...(kind === 'dots' ? { dotsHighLowVersion: 1 as const, dotsRulesVersions: [1, 2] as const } : {}),
       courseHandicaps: publishedCourseHandicaps(snapshot), games: { configuration: {
         eventId: base.eventId, roundId: base.roundId, etag: 'fictional-games', games: [game],
       }, results: calculateGameResults([game], snapshot, cards) } };

@@ -51,7 +51,8 @@ export interface ScorecardGame {
 
 export function scorecardUsesStrokesOff(game: ScorecardGame | undefined): boolean {
   const definition = game?.linkedWolf?.definition ?? game?.definition;
-  return definition !== undefined && definition.kind !== 'dots' && definition.basis === 'net'
+  if (definition?.kind === 'dots') return definition.highLow?.handicapRule === 'group-low-v1';
+  return definition !== undefined && definition.basis === 'net'
     && (definition.handicapRule === 'group-low-v1'
       || definition.handicapRule === undefined && (definition.kind === 'churchy' || definition.kind === 'wolf'));
 }
@@ -63,11 +64,11 @@ export function scorecardStrokeHandicap(
   const course = { value: courseHandicaps?.find((entry) => entry.playerId === playerId)?.courseHandicap, basis: 'CH' as const };
   if (!scorecardUsesStrokesOff(game)) return course;
   const source = game?.linkedWolf ?? game;
-  if (!source || source.definition.kind === 'dots') return course;
+  if (!source) return course;
   const definition = source.definition;
   if ('groupNumber' in definition && !groups.some((group) => group.number === definition.groupNumber
     && group.playerIds.includes(playerId))) return course;
-  if (source.definition.handicapRule === undefined) {
+  if (definition.kind !== 'dots' && definition.handicapRule === undefined) {
     return { value: source.result?.players.find((player) => player.playerId === playerId)?.playingHandicap ?? null, basis: 'SO' };
   }
   const value = gameHandicap('group-low-v1', playerId, courseHandicaps?.map((entry) => ({

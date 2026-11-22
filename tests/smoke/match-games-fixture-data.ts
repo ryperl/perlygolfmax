@@ -47,6 +47,7 @@ export function matchRound(late = false, count: 9 | 18 = 18): RoundScores {
     lastUpdatedAt: late ? '2026-01-01T00:00:00Z' : null,
     supportedGameKinds: ['stableford', 'ball-drop', 'skins', 'stroke-play', 'wolf', 'nassau', 'match-play'],
     wolfRulesVersions: [1, 2],
+    wolfOrderVersion: 1,
     teeStrokeAllocation: true,
     gameInputContext: { courseVersionId: matchFixture.snapshot.courseVersionId, teeProfileId: matchFixture.snapshot.teeProfile.id },
     permissions: { role: 'public', writePlayerIds: cards.map((card) => card.playerId), canManageGames: true },

@@ -27,6 +27,9 @@ import { CategorySweepsClientUpdateRequired } from '../../../src/contracts/categ
 import { StringRulesClientUpdateRequired } from '../../../src/contracts/string-rules.js';
 import { DotsCallsClientUpdateRequired } from '../../../src/domain/murphy-transport.js';
 import { GameCalculationsClientUpdateRequired } from '../../../src/contracts/game-calculations.js';
+import { WolfOrdersClientUpdateRequired, requireWolfOrdersInValue } from '../../../src/contracts/wolf-orders.js';
+import { supportsWolfOrders, supportsDotsHighLow } from '../scoring/murphy-transport.js';
+import { DotsHighLowClientUpdateRequired, requireDotsHighLowInValue } from '../../../src/contracts/dots-high-low-rules.js';
 import { PullyMurphyClientUpdateRequired } from '../../../src/contracts/pully-murphy.js';
 import { supportsGameCalculations } from '../scoring/murphy-transport.js';
 
@@ -79,9 +82,11 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
       const sweepRules = supportsSweepRules(request);
       const gameHandicaps = supportsGameHandicaps(request);
       const gameCalculations = supportsGameCalculations(request);
+      const wolfOrders = supportsWolfOrders(request);
+      const dotsHighLow = supportsDotsHighLow(request);
       const dotCoexistence = supportsDotCoexistence(request);
-      const send = (value: unknown) => response(200, murphyTransport(value, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations));
-      const read = (value: unknown) => privateReadResponse(request, murphyTransport(value, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations));
+      const send = (value: unknown) => response(200, murphyTransport(value, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations, wolfOrders, dotsHighLow));
+      const read = (value: unknown) => privateReadResponse(request, murphyTransport(value, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations, wolfOrders, dotsHighLow));
       const api = resolveApi();
       if (request.method !== (action === 'score-hole' || action === 'score-game-hole' || action === 'games' ? 'PUT' : 'GET')) return response(405, { code: 'METHOD_NOT_ALLOWED' });
       if (action === 'events') {
@@ -104,12 +109,16 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
           return response(200, privateReadResponse(request, compact ? compactSkinsDetails(details) : details));
         }
         const value = await api.scores.leaderboard(identity, eventId, chargeRead);
+        requireWolfOrdersInValue(value, wolfOrders);
+        requireDotsHighLowInValue(value, dotsHighLow);
         const summary = view === 'overall' || view === 'event-skins' ? publicLeaderboardSummary(value, view) : value;
         return response(200, read(compact && 'kind' in summary && summary.kind === 'event-skins' ? compactSkinsSummary(summary) : summary));
       }
       if (action === 'purse') {
         const selectedPlayer = request.query.get('view') === 'player' ? uuid(request.query.get('playerId')) : null;
         const value = await api.purse.get(identity, eventId, chargeRead);
+        requireWolfOrdersInValue(value, wolfOrders);
+        requireDotsHighLowInValue(value, dotsHighLow);
         if (selectedPlayer) {
           const detail = playerWinningsBreakdown(value, selectedPlayer);
           if (!detail) throw new ApiError(404, 'PLAYER_NOT_FOUND');
@@ -121,18 +130,20 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
       const lean = request.query.get('format') === 'lean';
       if (action === 'scores') {
         const round = await api.scores.get(identity, eventId, roundId);
-        return response(200, lean ? privateReadResponse(request, leanRoundScores(round, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations)) : read(round));
+        requireWolfOrdersInValue(round, wolfOrders);
+        requireDotsHighLowInValue(round, dotsHighLow);
+        return response(200, lean ? privateReadResponse(request, leanRoundScores(round, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations, wolfOrders, dotsHighLow)) : read(round));
       }
       if (action === 'games') {
         const requestId = uuid(request.headers.get('Idempotency-Key'));
         const etag = scoreRevision(request);
         const body = await readJson(request, maximumGameConfigurationBytes);
-        const received = await api.scores.receiveGames(identity, eventId, roundId, body, etag, requestId, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, gameHandicaps, gameCalculations);
+        const received = await api.scores.receiveGames(identity, eventId, roundId, body, etag, requestId, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, gameHandicaps, gameCalculations, wolfOrders, dotsHighLow);
         if (received.kind === 'part') return response(200, { privateStaged: { id: received.id, index: received.index } });
         if (!isRecord(received.value) || Object.keys(received.value).length !== 1
           || !isRoundGameDefinitions(received.value.games)) throw new ApiError(400, 'INVALID_GAME_SETUP');
-        const result = await api.scores.saveGames(identity, eventId, roundId, received.value.games, etag, requestId, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, gameHandicaps, gameCalculations);
-        return lean ? response(200, { ...result, round: leanRoundScores(result.round, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations) }) : send(result);
+        const result = await api.scores.saveGames(identity, eventId, roundId, received.value.games, etag, requestId, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, gameHandicaps, gameCalculations, wolfOrders, dotsHighLow);
+        return lean ? response(200, { ...result, round: leanRoundScores(result.round, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations, wolfOrders, dotsHighLow) }) : send(result);
       }
       const playerId = uuid(request.params.playerId);
       const requestId = uuid(request.headers.get('Idempotency-Key'));
@@ -141,17 +152,17 @@ export function createPublicHandler(resolveApi: () => PublicApi, action: PublicA
       if (typeof hole !== 'string' || !/^(?:[1-9]|1[0-8])$/.test(hole)) throw new ApiError(400, 'INVALID_HOLE_NUMBER');
       let raw = await readJson(request, action === 'score-game-hole' ? maximumGameConfigurationBytes : undefined);
       if (action === 'score-game-hole') {
-        const received = await api.scores.receiveGameScore(identity, eventId, roundId, playerId, Number(hole), raw, etag, requestId, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations);
+        const received = await api.scores.receiveGameScore(identity, eventId, roundId, playerId, Number(hole), raw, etag, requestId, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations, wolfOrders, dotsHighLow);
         if (received.kind === 'part') return response(200, { privateStaged: { id: received.id, index: received.index } });
         raw = received.value;
       }
       const body = parseScoreWriteBody(raw);
       if (action === 'score-game-hole' && !body.score.nassau?.length && !body.score.wolf?.length
         && !body.score.dots?.length && body.score.churchy?.version !== 3) throw new ApiError(400, 'INVALID_GAME_SCORE');
-      const result = await api.scores.write(identity, eventId, roundId, playerId, Number(hole), body.score, etag, requestId, body.inputRevision, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations);
-      return lean ? response(200, leanScoreWriteResult(result, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations)) : send(result);
+      const result = await api.scores.write(identity, eventId, roundId, playerId, Number(hole), body.score, etag, requestId, body.inputRevision, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations, wolfOrders, dotsHighLow);
+      return lean ? response(200, leanScoreWriteResult(result, negotiated, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations, wolfOrders, dotsHighLow)) : send(result);
     } catch (error) {
-      if (error instanceof GameCalculationsClientUpdateRequired || error instanceof PullyMurphyClientUpdateRequired) {
+      if (error instanceof GameCalculationsClientUpdateRequired || error instanceof PullyMurphyClientUpdateRequired || error instanceof WolfOrdersClientUpdateRequired || error instanceof DotsHighLowClientUpdateRequired) {
         context.warn('Public API request rejected', { code: error.code, status: error.status, invocationId: context.invocationId });
         return response(error.status, { code: error.code });
       }

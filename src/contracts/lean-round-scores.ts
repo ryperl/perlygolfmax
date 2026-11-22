@@ -15,6 +15,8 @@ import { sweepRulesRoundScores, requireSweepRulesInValue } from './sweep-rules.j
 import { coexistenceRoundScores } from './dot-coexistence.js';
 import { gameHandicapRoundScores } from './game-handicaps.js';
 import { gameCalculationRoundScores } from './game-calculations.js';
+import { wolfOrderRoundScores, requireWolfOrdersInValue } from './wolf-orders.js';
+import { dotsHighLowRoundScores, requireDotsHighLowInValue } from './dots-high-low-rules.js';
 
 function without(value: object, ...keys: readonly string[]): Record<string, unknown> {
   return Object.fromEntries(Object.entries(value).filter(([name]) => !keys.includes(name)));
@@ -31,7 +33,8 @@ function leanWolf(value: WolfResults, game: WolfGameDefinition | undefined, roun
 }
 
 /** Omit evidence and duplicate derived views, never captured inputs or canonical write receipts. */
-export function leanRoundScores(input: RoundScores, murphyTargets = false, pareeTargets = false, stringRules = false, dotsCalls = false, categorySweeps = false, churchyNames = false, sweepRules = false, dotCoexistence = false, gameHandicaps = false, gameCalculations = false) {
+export function leanRoundScores(input: RoundScores, murphyTargets = false, pareeTargets = false, stringRules = false, dotsCalls = false, categorySweeps = false, churchyNames = false, sweepRules = false, dotCoexistence = false, gameHandicaps = false, gameCalculations = false, wolfOrders = false, dotsHighLow = false) {
+  input = dotsHighLowRoundScores(wolfOrderRoundScores(input, wolfOrders), dotsHighLow);
   input = gameCalculationRoundScores(input, gameCalculations);
   const round = gameHandicapRoundScores(coexistenceRoundScores(sweepRulesRoundScores(churchyNamesRoundScores(categorySweepRoundScores(stringRoundScores(murphyRoundScores(input, murphyTargets, pareeTargets, dotsCalls), stringRules), categorySweeps), churchyNames), sweepRules), dotCoexistence), gameHandicaps);
   const games = round.games;
@@ -44,6 +47,7 @@ export function leanRoundScores(input: RoundScores, murphyTargets = false, paree
           ...result,
           ...(result.dots ? { dots: { ...without(result.dots, 'awards', 'players'),
             holes: result.dots.holes.map((hole) => without(hole, 'awards')) } } : {}),
+          ...(result.dotsHighLow ? { dotsHighLow: without(result.dotsHighLow, 'awards', 'players') } : {}),
           ...(result.wolf?.rulesVersion === 2 ? { wolf: leanWolf(result.wolf,
             games.configuration.games.find((game): game is WolfGameDefinition => game.kind === 'wolf' && game.id === result.gameId), round) } : {}),
           ...(result.churchy ? { churchy: { ...without(result.churchy, 'awards'),
@@ -54,9 +58,11 @@ export function leanRoundScores(input: RoundScores, murphyTargets = false, paree
   };
 }
 
-export function leanScoreWriteResult(value: ScoreWriteResult, murphyTargets = false, pareeTargets = false, stringRules = false, dotsCalls = false, categorySweeps = false, churchyNames = false, sweepRules = false, dotCoexistence = false, gameHandicaps = false, gameCalculations = false) {
+export function leanScoreWriteResult(value: ScoreWriteResult, murphyTargets = false, pareeTargets = false, stringRules = false, dotsCalls = false, categorySweeps = false, churchyNames = false, sweepRules = false, dotCoexistence = false, gameHandicaps = false, gameCalculations = false, wolfOrders = false, dotsHighLow = false) {
+  requireWolfOrdersInValue(value.change, wolfOrders);
+  requireDotsHighLowInValue(value.change, dotsHighLow);
   if (!sweepRules) requireSweepRulesInValue(value.change);
-  return { round: leanRoundScores(value.round, murphyTargets, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations),
+  return { round: leanRoundScores(value.round, murphyTargets, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations, wolfOrders, dotsHighLow),
     change: without(murphyScoreChange(value.change, murphyTargets, value.round, pareeTargets, dotsCalls), 'dotAwardAudit') };
 }
 
@@ -73,15 +79,19 @@ export function restoreLeanRoundGames(value: unknown, context: RoundGameScoringC
     if (!isRecord(result)) return null;
     const game = configuration.games.find((entry) => entry.id === result.gameId);
     if (game?.kind === 'dots') {
-      const expected = internal.get(game.id)?.dots;
+      const expectedResult = internal.get(game.id), expected = expectedResult?.dots;
       if (!expected || !isRecord(result.dots) || Object.hasOwn(result.dots, 'awards') || !Array.isArray(result.dots.holes)) return null;
       const holes: unknown[] = [];
       for (const hole of result.dots.holes) {
         if (!isRecord(hole) || Object.hasOwn(hole, 'awards')) return null;
         holes.push({ ...hole, awards: expected.holes.find((entry) => entry.number === hole.number)?.awards });
       }
+      if (expectedResult.dotsHighLow && (!isRecord(result.dotsHighLow) || Object.hasOwn(result.dotsHighLow, 'awards')
+        || Object.hasOwn(result.dotsHighLow, 'players'))) return null;
       results.push({ ...result, dots: { ...result.dots, awards: expected.awards, holes,
-        players: Object.hasOwn(result.dots, 'players') ? result.dots.players : result.players } });
+        players: Object.hasOwn(result.dots, 'players') ? result.dots.players : expected.players },
+      ...(expectedResult.dotsHighLow && isRecord(result.dotsHighLow) ? { dotsHighLow: { ...result.dotsHighLow,
+        awards: expectedResult.dotsHighLow.awards, players: expectedResult.dotsHighLow.players } } : {}) });
     } else if (game?.kind === 'wolf' && game.version === 2) {
       const expected = internal.get(game.id)?.wolf;
       if (!expected || !isRecord(result.wolf) || Object.hasOwn(result.wolf, 'awards')) return null;

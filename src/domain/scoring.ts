@@ -71,6 +71,7 @@ export interface RoundScores {
   readonly churchyCustomNames?: true;
   readonly dotsManualSweep?: true;
   readonly wolfHighLowSweep?: true;
+  readonly wolfOrderVersion?: 1;
   readonly sweepRulesVersion?: 2;
   readonly gameHandicapRules?: 1;
   readonly stringRulesVersion?: 2;
@@ -84,6 +85,7 @@ export interface RoundScores {
   readonly internalGamesSupported?: boolean;
   readonly wolfRulesVersions?: readonly (1 | 2)[];
   readonly dotsRulesVersions?: readonly (1 | 2)[];
+  readonly dotsHighLowVersion?: 1;
   readonly dotsIndividualPlayerCounts?: readonly (1 | 2 | 3 | 4)[];
   readonly dotsSpecialKinds?: readonly DotsSpecialKind[];
   readonly churchyRulesVersions?: readonly (1 | 2 | 3)[];

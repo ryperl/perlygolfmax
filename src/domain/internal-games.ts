@@ -8,6 +8,7 @@ import { calculateDotSettlement } from './dot-settlement.js';
 import type { InternalGameSettlement } from './dot-settlement.js';
 import type { DotPrefixPoints } from './dot-context.js';
 import { groupStartingHole } from './round-navigation.js';
+import { calculateDotsHighLow, combinedDotsPlayers } from './dots-high-low.js';
 
 export function hasConflictingSweep(games: readonly RoundGameDefinition[], wolfId: string): boolean {
   return games.some((game) => game.kind === 'wolf' && game.id === wolfId && game.highLowSweep === true)
@@ -71,7 +72,9 @@ export function calculateInternalGameResults(
       : context.layout.map((hole) => ({ number: hole.number, status: 'unavailable' as const, sides: [],
         multiplier: 1 as const, reason: 'Linked game is missing, incompatible or duplicated.' }));
     const dots = calculateDots(game, round, dotsRecordsFor(game, context.groups, context.cards), contexts);
-    output.set(game.id, { gameId: game.id, kind: 'dots', version: game.version, dots, players: dots.players });
+    const highLow = game.highLow ? calculateDotsHighLow(game, context, dotsRecordsFor(game, context.groups, context.cards)) : undefined;
+    output.set(game.id, { gameId: game.id, kind: 'dots', version: game.version, dots,
+      players: highLow ? combinedDotsPlayers(dots, highLow) : dots.players, ...(highLow ? { dotsHighLow: highLow } : {}) });
   }
   return output;
 }
@@ -92,13 +95,16 @@ export function calculateInternalSettlements(
     const ids = [game.id, ...linked.map((entry) => entry.id)];
     settlements.push(calculateDotSettlement({ groupNumber: game.groupNumber, gameIds: ids, stakeMinor: game.stakeMinor ?? null,
       complete: sourceResults.length === ids.length && sourceResults.every((result) =>
-        result.dots?.status === 'complete' || result.wolf?.status === 'complete'),
+        (result.dots?.status === 'complete' || result.wolf?.status === 'complete')
+        && (!result.dotsHighLow || result.dotsHighLow.status === 'complete')),
       unavailable: linked.length > 1 || sourceResults.length !== ids.length
-        || sourceResults.some((result) => result.dots?.status === 'unavailable' || result.wolf?.status === 'unavailable'),
+        || sourceResults.some((result) => result.dots?.status === 'unavailable' || result.wolf?.status === 'unavailable'
+          || result.dotsHighLow?.status === 'unavailable' || result.players.some((player) => player.status === 'unavailable')),
       players: game.playerIds.map((playerId) => ({ playerId,
         displayName: context.cards.find((card) => card.playerId === playerId)?.displayName ?? 'Golfer unavailable',
-        baseDots: game.kind === 'wolf' ? base?.players.find((player) => player.playerId === playerId)?.totalPoints ?? null : 0,
-        specialDots: dots ? special?.players.find((player) => player.playerId === playerId)?.totalPoints ?? null : 0 })) }));
+        baseDots: game.kind === 'wolf' ? base?.players.find((player) => player.playerId === playerId)?.totalPoints ?? null
+          : special?.dotsHighLow ? special.dotsHighLow.players.find((player) => player.playerId === playerId)?.totalPoints ?? null : 0,
+        specialDots: dots ? special?.dots?.players.find((player) => player.playerId === playerId)?.totalPoints ?? null : 0 })) }));
   }
   return settlements;
 }

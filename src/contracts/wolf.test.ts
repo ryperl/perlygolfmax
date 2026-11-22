@@ -1,13 +1,39 @@
 import { describe, expect, it } from 'vitest';
 import { matchGamesFixture } from '../domain/match-games.test-support.js';
 import { calculateWolf } from '../domain/wolf.js';
-import { wolfInputFromScores } from '../domain/game-declarations.js';
+import { wolfInputFromScores, mergeWolfRecords } from '../domain/game-declarations.js';
+import { preserveScoreExtras } from '../domain/scoring.js';
+import { requireWolfOrdersInValue, WolfOrdersClientUpdateRequired } from './wolf-orders.js';
 import { isHoleScore, isRoundScores } from './scoring.js';
 import { isRoundGameDefinition, isRoundGamesView } from './games.js';
 import { isWolfChoice, isWolfComebackReceipt, isWolfDefinition, isWolfRecord, isWolfResults, wolfRecordMatchesGame } from './wolf.js';
 import { strokeGameId } from '../domain/stroke-games.test-support.js';
 
 describe('Wolf network contracts', () => {
+  it('validates first-tee receipts, preserves them on raw/explicit edits and rejects replacement or legacy publication', () => {
+    const f = matchGamesFixture();
+    const game = { ...f.wolf, orderMode: 'first-tee-v1' as const };
+    const order = { number: 1, choice: { gameId: game.id, gameEtag: 'fictional-order', mode: 'order' as const },
+      order: { playerIds: [...f.ids].reverse(), recordedLate: true as const } };
+    const round = wolfInputFromScores(f.round());
+    expect(isWolfDefinition(game)).toBe(true);
+    expect(isWolfDefinition({ ...game, orderMode: 'setup' })).toBe(false);
+    expect(isWolfRecord(order)).toBe(true);
+    expect(wolfRecordMatchesGame(game, round, f.cards, order)).toBe(true);
+    expect(wolfRecordMatchesGame(f.wolf, round, f.cards, order)).toBe(false);
+    expect(wolfRecordMatchesGame(game, round, f.cards, { ...order, number: 2 })).toBe(false);
+    for (const playerIds of [[f.ids[0]], [...f.ids.slice(0, 3), f.ids[0]], [...f.ids.slice(0, 3), 'not-an-id']]) {
+      expect(isWolfRecord({ ...order, order: { playerIds } })).toBe(false);
+    }
+    expect(isWolfRecord({ ...order, comeback: {}, outcome: 'wolf' })).toBe(false);
+    const declaration = { number: 1, choice: { gameId: game.id, gameEtag: 'fictional-order', mode: 'blind' as const } };
+    expect(mergeWolfRecords([declaration], [order])[0]?.order).toEqual(order.order);
+    expect(preserveScoreExtras({ kind: 'strokes', strokes: 4 }, { kind: 'unplayed', wolf: [order] }).wolf).toEqual([order]);
+    expect(() => mergeWolfRecords([{ ...declaration, order: { playerIds: f.ids } }], [order])).toThrow(/cannot be replaced/);
+    expect(() => { requireWolfOrdersInValue({ source: { games: [game] } }); }).toThrow(WolfOrdersClientUpdateRequired);
+    expect(() => { requireWolfOrdersInValue({ after: { wolf: [order] } }); }).toThrow(WolfOrdersClientUpdateRequired);
+    expect(() => { requireWolfOrdersInValue({ after: { wolf: [order] } }, true); }).not.toThrow();
+  });
   it('validates exact definitions, mode-specific choices and server-authored late markers without Stableford fields', () => {
     const f = matchGamesFixture();
     const choice = { gameId: f.wolf.id, gameEtag: 'fictional-game-revision', mode: 'pig' };

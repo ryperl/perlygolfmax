@@ -23,6 +23,8 @@ export interface GameDraft {
   readonly dotsMode?: DotsGameDefinition['mode'];
   readonly dotsVersion?: 1 | 2;
   readonly dotsRotationHoles?: 3 | 6;
+  readonly dotsHighLow?: boolean;
+  readonly dotsHighLowHandicapRule?: GameHandicapRule;
   readonly dotsPlayers?: readonly string[];
   readonly dotsPlayerIds?: readonly string[];
   readonly dotsSpecials?: readonly DotsSpecialSelection[];
@@ -32,6 +34,7 @@ export interface GameDraft {
   readonly linkedGameId?: string;
   readonly groupNumber?: number;
   readonly wolfPlayers?: readonly string[];
+  readonly wolfOrderMode?: 'first-tee-v1';
   readonly allowPig?: boolean;
   readonly nassauVariant?: NassauVariant;
   readonly nassauSides?: readonly NassauSide[];
@@ -69,7 +72,8 @@ export function draftFromGame(game: RoundGameDefinition): GameDraft {
 
 function draftFromDefinition(game: RoundGameDefinition): GameDraft {
   if (game.kind === 'dots') return { ...newGameDraft(), id: game.id, name: game.name, kind: 'dots',
-    dotsVersion: game.version, ...(game.version === 2 ? { dotsRotationHoles: game.rotationHoles } : {}),
+    dotsVersion: game.version, ...(game.version === 2 ? { dotsRotationHoles: game.rotationHoles,
+      ...(game.highLow ? { dotsHighLow: true, dotsHighLowHandicapRule: game.highLow.handicapRule } : {}) } : {}),
     groupNumber: game.groupNumber, dotsMode: game.mode, dotsPlayers: game.mode === 'fixed' ? game.partnerIds : game.playerIds, dotsPlayerIds: game.playerIds,
     dotsSpecials: game.specials, ...(game.sweepRule ? { dotsSweepRule: game.sweepRule } : {}),
     dotsLegacySweep: game.sweepRule === undefined && game.specials.some((special) => special.kind === 'sweep'),
@@ -78,6 +82,7 @@ function draftFromDefinition(game: RoundGameDefinition): GameDraft {
   if (game.kind === 'wolf') return { ...newGameDraft(), id: game.id, name: game.name, kind: game.kind,
     basis: game.basis, groupNumber: game.groupNumber, wolfPlayers: game.playerIds, allowPig: game.allowPig,
     wolfVersion: game.version, wolfHighLowSweep: game.version === 2 && game.highLowSweep === true,
+    ...(game.orderMode ? { wolfOrderMode: game.orderMode } : {}),
     stake: game.stakeMinor == null ? '' : moneyText(game.stakeMinor) };
   if (game.kind === 'nassau' || game.kind === 'match-play') return { ...newGameDraft(), id: game.id, name: game.name, kind: game.kind,
     basis: game.basis, groupNumber: game.groupNumber, nassauVariant: game.variant, nassauSides: game.sides,
@@ -147,10 +152,10 @@ export function setGameKind(draft: GameDraft, kind: NonNullable<GameDraft['kind'
     wolf: 'Wolf', dots: 'Dots', nassau: 'Nassau', 'match-play': 'Match Play', churchy: 'Churchie' };
   const name = draft.preserveName || draft.name !== names[draft.kind ?? 'stableford'] ? draft.name : names[kind];
   const reset = { ...setFormat(draft, undefined, rosterCount), name };
-  if (kind === 'wolf') return { ...reset, kind, basis: 'net', wolfPlayers: [], allowPig: false, wolfVersion: 2, wolfHighLowSweep: false, stake: '' };
+  if (kind === 'wolf') return { ...reset, kind, basis: 'net', wolfPlayers: [], allowPig: false, wolfVersion: 2, wolfHighLowSweep: false, wolfOrderMode: 'first-tee-v1', stake: '' };
   if (kind === 'dots') {
-    const { dotsSweepRule, dotsLegacySweep, ...fresh } = reset;
-    void dotsSweepRule; void dotsLegacySweep;
+    const { dotsSweepRule, dotsLegacySweep, dotsHighLow, dotsHighLowHandicapRule, ...fresh } = reset;
+    void dotsSweepRule; void dotsLegacySweep; void dotsHighLow; void dotsHighLowHandicapRule;
     return { ...fresh, kind, dotsMode: 'individual', dotsPlayers: [], dotsSpecials: [], stake: '' };
   }
   if (kind === 'nassau') return setNassauVariant({ ...reset, kind, basis: 'net',
@@ -248,7 +253,9 @@ export function buildGame(draft: GameDraft, playerIds: readonly string[] = []): 
       groupNumber: draft.groupNumber, playerIds: draft.dotsPlayerIds ?? draft.dotsPlayers, specials: draft.dotsSpecials ?? [],
       ...(draft.dotsSweepRule === 'manual-v1' && draft.dotsSpecials?.some((special) => special.kind === 'sweep')
         ? { sweepRule: 'manual-v1' } : {}) };
-    const game = draft.dotsMode === 'rotating' ? { ...common, mode: 'rotating', rotationHoles: draft.dotsRotationHoles ?? 3, stakeMinor: stake }
+    if (draft.dotsHighLow && (draft.dotsMode !== 'rotating' || (draft.dotsRotationHoles ?? 3) !== 3)) return null;
+    const game = draft.dotsMode === 'rotating' ? { ...common, mode: 'rotating', rotationHoles: draft.dotsRotationHoles ?? 3, stakeMinor: stake,
+      ...(draft.dotsHighLow ? { highLow: { version: 1, handicapRule: draft.dotsHighLowHandicapRule ?? 'full-course-v1' } } : {}) }
       : draft.dotsMode === 'linked' ? { ...common, mode: 'linked', linkedGameId: draft.linkedGameId }
       : draft.dotsMode === 'fixed' ? { ...common, mode: 'fixed', partnerIds: draft.dotsPlayers, stakeMinor: stake }
         : { ...common, mode: 'individual', stakeMinor: stake };
@@ -260,6 +267,7 @@ export function buildGame(draft: GameDraft, playerIds: readonly string[] = []): 
     if (draft.kind === 'wolf' && draft.wolfVersion === 2 && draft.stake?.trim() && stake === null) return null;
     const game = draft.kind === 'wolf'
       ? { ...rule, id: draft.id, name: draft.name.trim(), kind: draft.kind, version: draft.wolfVersion ?? 1, basis: draft.basis,
+        ...(draft.wolfOrderMode ? { orderMode: draft.wolfOrderMode } : {}),
         ...(draft.wolfVersion === 2 ? { stakeMinor: stake, ...(draft.wolfHighLowSweep ? { highLowSweep: true } : {}) } : {}),
         groupNumber: draft.groupNumber, playerIds: draft.wolfPlayers, allowPig: draft.allowPig ?? false }
       : { ...rule, id: draft.id, name: draft.name.trim(), kind: draft.kind, version: 1, basis: draft.basis,

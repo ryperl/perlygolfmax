@@ -43,7 +43,7 @@ describe('bounded game declaration score transport', () => {
     expect(await client.save(round.eventId, round.roundId, playerId, 3, score, change.expectedEtag, change.id, signal)).toEqual(result);
     expect(send.mock.calls.length).toBeGreaterThan(2);
     for (const [url, init] of send.mock.calls) {
-      expect(url).toBe(`https://fictional.example.test/api/public/events/${round.eventId}/rounds/${round.roundId}/players/${playerId}/holes/3/games?format=lean&murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1&churchyNames=1&sweepRules=2&dotCoexistence=2&gameHandicaps=1&gameCalculations=2`);
+      expect(url).toBe(`https://fictional.example.test/api/public/events/${round.eventId}/rounds/${round.roundId}/players/${playerId}/holes/3/games?format=lean&murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1&churchyNames=1&sweepRules=2&dotCoexistence=2&gameHandicaps=1&gameCalculations=2&wolfOrders=1&dotsHighLow=1`);
       expect(init?.credentials).toBe('omit');
       expect(new Headers(init?.headers).get('Idempotency-Key')).toBe(change.id);
       expect(new Headers(init?.headers).get('If-Match')).toBe(change.expectedEtag);

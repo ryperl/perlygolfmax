@@ -56,7 +56,7 @@ export function GameResults({ game, result, holeNumbers, players }: {
   if (game.kind === 'churchy') return <ChurchyResults game={game} result={result} />;
   if (game.kind === 'nassau' || game.kind === 'match-play') return <NassauResults game={game} result={result?.nassau} {...(players ? { players } : {})} />;
   if (game.kind === 'wolf') return <WolfResults game={game} result={result?.wolf} />;
-  if (game.kind === 'dots') return <DotsResults game={game} result={result?.dots} />;
+  if (game.kind === 'dots') return <DotsResults game={game} result={result?.dots} highLow={result?.dotsHighLow} players={result?.players} />;
   return (
     <section className="game-results" aria-label={`${game.name} results`}>
       <h3>{game.name}</h3>

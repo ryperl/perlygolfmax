@@ -76,7 +76,8 @@ describe('GameSettings', () => {
     fireEvent.change(screen.getByLabelText('Game name'), { target: { value: 'Fictional group game' } });
     fireEvent.change(screen.getByLabelText('Game type'), { target: { value: 'wolf' } });
     expect(screen.getByLabelText('Playing group')).toHaveValue(String(first.number));
-    expect(screen.getByLabelText('Wolf P1')).toHaveValue(first.playerIds[0]);
+    expect(screen.queryByLabelText('Wolf P1')).not.toBeInTheDocument();
+    expect(screen.getByText(/Choose the Wolf rotation on this group/)).toBeVisible();
     expect(screen.getByLabelText('Game name')).toHaveValue('Fictional group game');
     fireEvent.change(screen.getByLabelText('Game type'), { target: { value: 'match-play' } });
     expect(screen.getByLabelText('Playing group')).toHaveValue(String(first.number));

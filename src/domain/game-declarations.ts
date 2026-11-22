@@ -44,7 +44,7 @@ export type RoundGameScoringContext = Pick<RoundScores, 'roundId' | 'layout' | '
   & { readonly stringRulesVersion?: 1 | 2; readonly dotsCategorySweepsVersion?: 0 | 1 };
 
 export class GameDeclarationConflictError extends Error {
-  constructor(message: string, readonly code: 'NASSAU_PRESS_CONFLICT' | 'WOLF_COMEBACK_CONFLICT' | 'DOTS_ROTATION_CONFLICT' | 'CHURCHY_ORDER_CONFLICT' = 'NASSAU_PRESS_CONFLICT') { super(message); }
+  constructor(message: string, readonly code: 'NASSAU_PRESS_CONFLICT' | 'WOLF_COMEBACK_CONFLICT' | 'WOLF_ORDER_CONFLICT' | 'DOTS_ROTATION_CONFLICT' | 'CHURCHY_ORDER_CONFLICT' = 'NASSAU_PRESS_CONFLICT') { super(message); }
 }
 
 function samePress(a: NassauManualPress, b: NassauManualPress): boolean {
@@ -72,6 +72,7 @@ export function sameWolfRecords(a: readonly WolfHoleRecord[] | undefined, b: rea
     return other !== undefined && record.number === other.number && record.outcome === other.outcome
       && record.recordedLate === other.recordedLate
       && sameValue(record.comeback, other.comeback)
+      && sameValue(record.order, other.order)
       && sameWolfChoice(record.choice, other.choice);
   });
 }
@@ -101,11 +102,16 @@ export function mergeWolfRecords(edits: readonly WolfHoleRecord[], saved: readon
   const result = new Map(saved.map((record) => [record.choice.gameId, record]));
   for (const edit of edits) {
     const previous = result.get(edit.choice.gameId);
+    if (previous?.order && (previous.number !== edit.number
+      || edit.order && !sameValue(previous.order.playerIds, edit.order.playerIds))) {
+      throw new GameDeclarationConflictError('A saved Wolf order cannot be replaced.', 'WOLF_ORDER_CONFLICT');
+    }
     if (previous?.comeback && edit.comeback && !sameValue(previous.comeback, edit.comeback)) {
       throw new GameDeclarationConflictError('A saved Wolf comeback selection cannot be replaced.', 'WOLF_COMEBACK_CONFLICT');
     }
     const outcome = edit.outcome ?? previous?.outcome;
     result.set(edit.choice.gameId, { number: edit.number, choice: edit.choice,
+      ...(previous?.order || edit.order ? { order: previous?.order ?? edit.order } : {}),
       ...(previous?.recordedLate || edit.recordedLate ? { recordedLate: true as const } : {}),
       ...(previous?.comeback || edit.comeback ? { comeback: previous?.comeback ?? edit.comeback } : {}),
       ...(outcome && outcome !== 'scores' ? { outcome } : {}) });

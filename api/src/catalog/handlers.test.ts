@@ -50,7 +50,7 @@ describe('bounded authorized catalog/setup HTTP handlers', () => {
     });
     expect(await f.call('event-player-index-refresh', 'POST', body, params, headers)).toMatchObject({ status: 200 });
     expect(refresh).toHaveBeenCalledWith(creator, event.id, params.playerId, body.observationId,
-      headers['If-Match'], headers['Idempotency-Key'], expect.any(Function));
+      headers['If-Match'], headers['Idempotency-Key'], expect.any(Function), false, false);
     expect(f.api.limiter.check).toHaveBeenCalledWith(creator, 'setup-write');
     expect(f.api.limiter.check).toHaveBeenCalledWith(creator, 'setup-read');
     refresh.mockClear();

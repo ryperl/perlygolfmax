@@ -21,6 +21,7 @@ export interface WolfGameDefinition extends GameHandicapSettings {
   readonly playerIds: readonly string[];
   readonly allowPig: boolean;
   readonly highLowSweep?: true;
+  readonly orderMode?: 'first-tee-v1';
   readonly format?: never;
   readonly teams?: never;
   readonly preset?: never;
@@ -33,9 +34,13 @@ export type WolfHoleChoice = {
   readonly gameEtag: string;
 } & (
   | { readonly mode: 'partner'; readonly partnerId: string }
-  | { readonly mode: 'blind' | 'pig'; readonly partnerId?: never }
+  | { readonly mode: 'blind' | 'pig' | 'order'; readonly partnerId?: never }
 );
 
+export interface WolfOrderReceipt {
+  readonly playerIds: readonly string[];
+  readonly recordedLate?: true;
+}
 export type WolfHoleOutcome = 'scores' | 'wolf' | 'opponents' | 'halved';
 export interface WolfHoleRecord {
   readonly number: number;
@@ -43,6 +48,7 @@ export interface WolfHoleRecord {
   readonly outcome?: WolfHoleOutcome;
   readonly recordedLate?: true;
   readonly comeback?: WolfComebackReceipt;
+  readonly order?: WolfOrderReceipt;
 }
 export interface WolfComebackReceipt {
   readonly wolfId: string;
@@ -83,7 +89,7 @@ export interface WolfRoundInput {
 export interface WolfHoleResult {
   readonly number: number;
   readonly wolfId: string | null;
-  readonly mode: WolfHoleChoice['mode'] | null;
+  readonly mode: Exclude<WolfHoleChoice['mode'], 'order'> | null;
   readonly wolfSide: readonly string[];
   readonly opponents: readonly string[];
   readonly status: 'pending' | 'unavailable' | 'tied' | 'won';
@@ -125,13 +131,27 @@ export function sameWolfChoice(left: WolfHoleChoice | undefined, right: WolfHole
       && left.mode === right.mode && left.partnerId === right.partnerId;
 }
 
-export function wolfForHole(game: WolfGameDefinition, round: Pick<WolfRoundInput, 'layout' | 'groups'>, number: number): string | null {
+export function wolfOrder(
+  game: WolfGameDefinition, round: Pick<WolfRoundInput, 'layout' | 'groups'>, records: readonly WolfHoleRecord[],
+): WolfOrderReceipt | null {
+  if (!game.orderMode) return { playerIds: game.playerIds };
+  const first = groupStartingHole(round.groups.find((group) => group.number === game.groupNumber), round.layout);
+  const receipts = records.filter((record) => record.choice.gameId === game.id && record.order !== undefined);
+  const record = receipts[0], order = record?.order;
+  return receipts.length === 1 && record?.number === first && order?.playerIds.length === 4
+    && new Set(order.playerIds).size === 4 && order.playerIds.every((id) => game.playerIds.includes(id))
+    ? order : null;
+}
+
+export function wolfForHole(game: WolfGameDefinition, round: Pick<WolfRoundInput, 'layout' | 'groups'>, number: number,
+  records: readonly WolfHoleRecord[] = []): string | null {
   const group = round.groups.find((entry) => entry.number === game.groupNumber);
   const start = groupStartingHole(group, round.layout);
   const holes = [...round.layout].sort((a, b) => a.number - b.number);
   const first = holes.findIndex((hole) => hole.number === start), current = holes.findIndex((hole) => hole.number === number);
-  return first < 0 || current < 0 || game.playerIds.length !== 4 ? null
-    : game.playerIds[((current - first + holes.length) % holes.length) % 4] ?? null;
+  const order = wolfOrder(game, round, records);
+  return first < 0 || current < 0 || !order ? null
+    : order.playerIds[((current - first + holes.length) % holes.length) % 4] ?? null;
 }
 
 export function wolfGroupMatchesRound(game: WolfGameDefinition, round: Pick<WolfRoundInput, 'layout' | 'groups'>): boolean {
@@ -209,12 +229,14 @@ export function calculateWolf(
   }
   const orphan = records.some((record) => !layout.some((hole) => hole.number === record.number));
   const holes = layout.map((hole): WolfHoleResult => {
-    const wolfId = wolfForHole(game, round, hole.number);
+    const wolfId = wolfForHole(game, round, hole.number, records);
     const entries = records.filter((record) => record.number === hole.number);
+    if (!wolfId && game.orderMode) return emptyHole(hole.number, null);
     if (orphan || !wolfId || entries.length > 1) return emptyHole(hole.number, wolfId, 'invalid-wolf-choice');
     const record = entries[0];
     if (!record) return emptyHole(hole.number, wolfId);
     const choice = record.choice;
+    if (choice.mode === 'order') return emptyHole(hole.number, wolfId);
     if (choice.gameId !== game.id || choice.mode === 'pig' && !game.allowPig
       || choice.mode === 'partner' && (choice.partnerId === wolfId || !game.playerIds.includes(choice.partnerId))) {
       return emptyHole(hole.number, wolfId, 'invalid-wolf-choice');

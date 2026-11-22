@@ -3,7 +3,8 @@ import type { Scorecard } from './scoring.js';
 import { groupStartingHole } from './round-navigation.js';
 import { hasStrokeAllocation } from './tees.js';
 import { handicapStrokesForHole } from './handicap-strokes.js';
-import { wolfForHole, wolfGroupMatchesRound } from './wolf.js';
+import { compareHighLow } from './high-low.js';
+import { wolfForHole, wolfGroupMatchesRound, wolfOrder } from './wolf.js';
 import type {
   WolfComebackReceipt, WolfComebackState, WolfContestResult, WolfGameDefinition,
   WolfHoleRecord, WolfHoleResult, WolfResults, WolfRoundInput, WolfUnavailableReason,
@@ -78,6 +79,7 @@ export function calculateEarnedWolf(
     const record = entries[0];
     if (!record) return empty(number, wolfId);
     const choice = record.choice;
+    if (choice.mode === 'order') return empty(number, wolfId);
     if (choice.gameId !== game.id || choice.mode === 'pig' && !game.allowPig
       || choice.mode === 'partner' && (choice.partnerId === wolfId || !game.playerIds.includes(choice.partnerId))
       || record.outcome !== undefined && record.outcome !== 'scores') return empty(number, wolfId, 'invalid-wolf-choice');
@@ -116,15 +118,9 @@ export function calculateEarnedWolf(
     const a = wolfSide.flatMap((id) => numeric.has(id) ? [numeric.get(id) ?? 0] : []);
     const b = opponents.flatMap((id) => numeric.has(id) ? [numeric.get(id) ?? 0] : []);
     const contests = kinds.map((kind): WolfContestResult => {
-      const high = kind === 'high';
-      const wolfScore = a.length ? (high && a.length === wolfSide.length ? Math.max(...a) : !high ? Math.min(...a) : null) : null;
-      const opponentScore = b.length ? (high && b.length === opponents.length ? Math.max(...b) : !high ? Math.min(...b) : null) : null;
-      if (wolfScore === null && opponentScore === null || !high && (wolfScore === null || opponentScore === null)) {
-        return { kind, status: 'unavailable', winner: null, wolfScore, opponentScore };
-      }
-      const winner = wolfScore === null ? 'opponents' : opponentScore === null ? 'wolf'
-        : wolfScore === opponentScore ? null : wolfScore < opponentScore ? 'wolf' : 'opponents';
-      return { kind, status: winner === null ? 'tied' : 'won', winner, wolfScore, opponentScore };
+      const contest = compareHighLow(kind, a, wolfSide.length, b, opponents.length);
+      return { kind, status: contest.status, winner: contest.winner === 'a' ? 'wolf' : contest.winner === 'b' ? 'opponents' : null,
+        wolfScore: contest.aScore, opponentScore: contest.bScore };
     });
     const unavailable = contests.some((contest) => contest.status === 'unavailable');
     const winners = new Set(contests.flatMap((contest) => contest.winner ? [contest.winner] : []));
@@ -141,7 +137,7 @@ export function calculateEarnedWolf(
           + (swept && (winner === 'wolf' ? wolfSide : opponents).includes(playerId) ? 1 : 0) })) : [] };
   }
 
-  const first = prefix.map((number) => holeResult(number, wolfForHole(game, round, number)));
+  const first = prefix.map((number) => holeResult(number, wolfForHole(game, round, number, records)));
   let comeback: WolfComebackState = { status: 'pending', receipt: null, changed: false };
   const points = round.comebackPoints;
   const malformedPoints = points !== undefined && (points.length !== 4 || new Set(points.map((point) => point.playerId)).size !== 4
@@ -160,13 +156,15 @@ export function calculateEarnedWolf(
       const known = totals.flatMap((entry) => entry.dots === null ? [] : [{ playerId: entry.playerId, dots: entry.dots }]);
       const minimum = Math.min(...known.map((entry) => entry.dots));
       const scheduled = prefix.length % 4;
-      const order = [...game.playerIds.slice(scheduled), ...game.playerIds.slice(0, scheduled)];
+      const selectedOrder = wolfOrder(game, round, records)?.playerIds ?? [];
+      const order = [...selectedOrder.slice(scheduled), ...selectedOrder.slice(0, scheduled)];
       const wolfId = order.find((id) => known.some((entry) => entry.playerId === id && entry.dots === minimum));
       if (wolfId) {
         const proof = JSON.stringify({
           game: { id: game.id, version: game.version, basis: game.basis, playerIds: game.playerIds, groupNumber: game.groupNumber, allowPig: game.allowPig,
             ...(game.handicapRule ? { handicapRule: game.handicapRule } : {}),
             ...(game.highLowSweep ? { highLowSweep: true } : {}) },
+          ...(game.orderMode ? { order: wolfOrder(game, round, records) } : {}),
           group: group ? { number: group.number, playerIds: group.playerIds, startingHole: groupStartingHole(group, layout) } : null,
           circuit: circuit.map((hole) => ({ number: hole.number, par: hole.par, allocation: hole.allocation })),
           players: players.map((player) => ({ playerId: player.playerId, handicap: player.handicap,

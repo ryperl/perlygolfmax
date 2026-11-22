@@ -121,17 +121,17 @@ describe('shared match game setup and presentation', () => {
     const onSave = vi.fn().mockResolvedValue(null), onDirtyChange = vi.fn();
     render(<RoundGamesPanel round={round} busy={false} onDirtyChange={onDirtyChange} onSave={onSave} onRefresh={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Edit Fictional Wolf' }));
-    fireEvent.change(screen.getByLabelText('Wolf P1'), { target: { value: wolf.playerIds[1] } });
+    expect(screen.queryByLabelText('Wolf P1')).not.toBeInTheDocument();
+    expect(screen.getByText(/Saved Wolf order:/)).toBeVisible();
     fireEvent.click(screen.getByLabelText('Allow PIG'));
     fireEvent.click(screen.getByRole('button', { name: 'Save game' }));
     await screen.findByText('Save is not confirmed. Your draft is retained; retry when other work finishes.');
-    expect(onSave.mock.calls[0]?.[0]).toEqual([nassau, { ...wolf, allowPig: false,
-      playerIds: [wolf.playerIds[1], wolf.playerIds[0], ...wolf.playerIds.slice(2)] }]);
+    expect(onSave.mock.calls[0]?.[0]).toEqual([nassau, { ...wolf, allowPig: false }]);
     fireEvent.click(screen.getByRole('button', { name: 'Retry save' }));
     await waitFor(() => { expect(onSave).toHaveBeenCalledTimes(2); });
     expect(onSave.mock.calls[1]).toEqual(onSave.mock.calls[0]);
     expect(onDirtyChange).not.toHaveBeenCalledWith(false);
-    expect(screen.getByLabelText('Wolf P1')).toHaveValue(wolf.playerIds[1]);
+    expect(screen.getByText(/Saved Wolf order:/)).toBeVisible();
   });
 
   it('builds exact Nassau/Wolf definitions, rejects incomplete stakes/duplicate sides and resets variant assignments', () => {

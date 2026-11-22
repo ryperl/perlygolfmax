@@ -2,6 +2,7 @@ import type { DotsGameDefinition, DotsSpecialKind, DotsSpecialSelection } from '
 import type { DotPresetStore } from '../../client/dot-presets';
 import type { RoundGroup } from '../../domain/setup';
 import type { WolfGameDefinition } from '../../domain/wolf';
+import type { GameHandicapRule } from '../../domain/game-handicaps';
 import { formatMoney } from '../../domain/money';
 import { DotSpecialsSettings } from './DotSpecialsSettings';
 import { dotSpecialModeCompatible } from './dot-preset-options';
@@ -12,6 +13,8 @@ export interface DotsSetupDraft {
   readonly dotsMode?: DotsGameDefinition['mode'];
   readonly dotsVersion?: 1 | 2;
   readonly dotsRotationHoles?: 3 | 6;
+  readonly dotsHighLow?: boolean;
+  readonly dotsHighLowHandicapRule?: GameHandicapRule;
   readonly dotsPlayers?: readonly string[];
   readonly dotsPlayerIds?: readonly string[];
   readonly dotsSpecials?: readonly DotsSpecialSelection[];
@@ -46,7 +49,7 @@ export function DotsPlayingGroupSelect({ draft, groups, onChange, individualPlay
 }
 
 export function DotsSettings({ draft, groups, players, wolves, onChange, v2Supported = false, individualPlayerCounts = [4],
-  supportedKinds, presetStore, hidePlayingGroup = false, manualSweepSupported = false }: {
+  supportedKinds, presetStore, hidePlayingGroup = false, manualSweepSupported = false, highLowSupported = false }: {
   readonly draft: DotsSetupDraft;
   readonly groups: readonly RoundGroup[];
   readonly players: readonly { readonly playerId: string; readonly displayName: string }[];
@@ -58,6 +61,7 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
   readonly presetStore?: DotPresetStore;
   readonly hidePlayingGroup?: boolean;
   readonly manualSweepSupported?: boolean;
+  readonly highLowSupported?: boolean;
 }) {
   const group = groups.find((entry) => entry.number === draft.groupNumber);
   const linked = wolves.find((game) => game.id === draft.linkedGameId);
@@ -76,12 +80,14 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
       if (smallGroup && selectedMode !== 'individual') return;
       if ((selectedMode === 'rotating-3' || selectedMode === 'rotating-6') && v2Supported && draft.dotsVersion !== 1) {
         onChange({ dotsMode: 'rotating', dotsRotationHoles: selectedMode === 'rotating-3' ? 3 : 6,
+          ...(selectedMode === 'rotating-6' && draft.dotsHighLow ? { dotsHighLow: false } : {}),
           dotsSpecials: specials.filter((special) => compatible(special.kind, 'rotating')) });
         return;
       }
       if ((selectedMode === 'individual' || selectedMode === 'fixed' || selectedMode === 'linked') && selectedMode !== mode) {
         if (draft.dotsVersion === 2) return;
-        onChange({ dotsMode: selectedMode, dotsSpecials: specials.filter((special) => compatible(special.kind, selectedMode)) });
+        onChange({ dotsMode: selectedMode, ...(draft.dotsHighLow ? { dotsHighLow: false } : {}),
+          dotsSpecials: specials.filter((special) => compatible(special.kind, selectedMode)) });
       }
     }}><option value="rotating-3" disabled={smallGroup || !v2Supported || draft.dotsVersion === 1}>Modified Sixes · Change partners every 3 holes</option>
       <option value="rotating-6" disabled={smallGroup || !v2Supported || draft.dotsVersion === 1}>Sixes · Change partners every 6 holes</option>
@@ -91,7 +97,24 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
     {mode === 'individual' && smallGroup && !supportsGroup(mode, group.playerIds.length, individualPlayerCounts)
       && <p role="alert">Individual Dots for this group size is temporarily unavailable in this app version. Your draft is retained.</p>}
     {smallGroup && <small>Partner modes require four players.</small>}
-    {mode === 'rotating' && <p>Choose P1–P4 on your first played hole in score entry. Partners rotate in your playing circuit; only specials are shared, with no base match points.</p>}
+    {mode === 'rotating' && <p>Choose P1–P4 on your first played hole in score entry. Partners rotate in your playing circuit.</p>}
+    {mode === 'rotating' && (draft.dotsRotationHoles ?? 3) === 3 && <>
+      <label><input type="checkbox" checked={draft.dotsHighLow === true} disabled={!highLowSupported}
+        onChange={(event) => { onChange({ dotsHighLow: event.target.checked }); }} />Net High/Low</label>
+      {draft.dotsHighLow && <>
+        <label>High/Low net strokes<select value={draft.dotsHighLowHandicapRule ?? 'full-course-v1'} disabled={!highLowSupported}
+          onChange={(event) => {
+            const rule = event.target.value;
+            if (rule === 'full-course-v1' || rule === 'group-low-v1') onChange({ dotsHighLowHandicapRule: rule });
+          }}>
+          <option value="full-course-v1">Full Course Handicap</option>
+          <option value="group-low-v1">SO · Off lowest player in saved group</option>
+        </select></label>
+        <small>High and Low each earn one dot per winning teammate. Ties push; no carry. Specials still use gross scores.</small>
+      </>}
+      {!highLowSupported && <small>Net High/Low is temporarily unavailable in this app version.</small>}
+    </>}
+    {mode === 'rotating' && !draft.dotsHighLow && <small>Specials only · No base match points.</small>}
     {draft.dotsVersion === 1 && <small>Saved version-1 rules stay unchanged. Create a separate rotating Dots game before scoring to use Modified Sixes or Sixes.</small>}
     {!v2Supported && <small>Rotating Dots is temporarily unavailable in this app version.</small>}
     <small>Changing mode clears incompatible specials.</small>

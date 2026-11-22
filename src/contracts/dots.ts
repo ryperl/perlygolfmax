@@ -19,13 +19,16 @@ const members = (value: unknown, individual = false): value is string[] => Array
 
 export function isDotsDefinition(value: unknown): value is DotsGameDefinition {
   if (!isRecord(value) || !keys(value, ['id', 'name', 'kind', 'version', 'groupNumber', 'playerIds', 'specials', 'mode'],
-    ['stakeMinor', 'partnerIds', 'linkedGameId', 'rotationHoles', 'sweepRule']) || !isUuid(value.id) || !text(value.name)
+    ['stakeMinor', 'partnerIds', 'linkedGameId', 'rotationHoles', 'sweepRule', 'highLow']) || !isUuid(value.id) || !text(value.name)
     || value.kind !== 'dots' || value.version !== 1 && value.version !== 2 || !positive(value.groupNumber)
     || !members(value.playerIds, value.version === 1 && value.mode === 'individual')
     || !Array.isArray(value.specials) || !value.specials.every((entry: unknown) =>
       isRecord(entry) && keys(entry, ['kind', 'units']) && special(entry.kind) && positive(entry.units))
     || !distinct(value.specials.map((entry: { readonly kind: DotsSpecialKind }) => entry.kind))) return false;
   const kinds = value.specials.map((entry: { readonly kind: DotsSpecialKind }) => entry.kind);
+  if (Object.hasOwn(value, 'highLow') && (value.version !== 2 || value.mode !== 'rotating' || value.rotationHoles !== 3
+    || !isRecord(value.highLow) || !keys(value.highLow, ['version', 'handicapRule']) || value.highLow.version !== 1
+    || value.highLow.handicapRule !== 'full-course-v1' && value.highLow.handicapRule !== 'group-low-v1')) return false;
   if (Object.hasOwn(value, 'sweepRule') && (value.sweepRule !== 'manual-v1' || !kinds.includes('sweep'))) return false;
   if (value.mode === 'individual' && kinds.includes('assassin')
     || value.mode !== 'linked' && kinds.includes('sweep') && value.sweepRule !== 'manual-v1') return false;

@@ -22,7 +22,9 @@ export function gameDisplayName(game: RoundGameDefinition): string {
 }
 
 export function gameScoringLabel(game: RoundGameDefinition): string {
-  if (game.kind === 'dots') return 'Dots · Separate earned specials';
+  if (game.kind === 'dots') return game.highLow
+    ? `Modified Sixes · Net High/Low + gross specials · ${game.highLow.handicapRule === 'group-low-v1' ? 'SO off lowest in saved group' : 'Full Course Handicap'}`
+    : 'Dots · Separate earned specials';
   const netRule = game.handicapRule === 'group-low-v1' ? 'SO off lowest in saved group' : '100% Course Handicap';
   if (game.kind === 'wolf') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Wolf${game.allowPig ? ' / PIG' : ''} · ${game.version === 2 ? 'Earned dots' : 'Legacy dot balance'}`;
   if (game.kind === 'nassau') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Nassau · Match play · ${game.variant.replaceAll('-', ' ')}`;

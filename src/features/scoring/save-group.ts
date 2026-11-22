@@ -61,6 +61,7 @@ export function planGroup(round: RoundScores, playerIds: readonly string[], hole
     if (draft?.dots?.some((record) => {
       const game = round.games?.configuration.games.find((game) => game.kind === 'dots' && game.id === record.gameId);
       if (game?.kind !== 'dots' || game.version === 2 && !round.dotsRulesVersions?.includes(2)
+        || game.highLow !== undefined && round.dotsHighLowVersion !== 1
         || !supportsDotsSpecials(round, game.specials)
         || game.mode === 'individual' && !supportsIndividualDotsPlayerCount(round, game.playerIds.length)) return true;
       const previous = saved.dots?.find((entry) => entry.gameId === record.gameId && entry.number === record.number);

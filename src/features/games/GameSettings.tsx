@@ -33,12 +33,14 @@ interface GameSettingsProps {
   readonly internalOnly?: boolean;
   readonly wolfV2Supported?: boolean;
   readonly wolfHighLowSweepSupported?: boolean;
+  readonly wolfOrderSupported?: boolean;
   readonly dotsManualSweepSupported?: boolean;
   readonly churchyV2Supported?: boolean;
   readonly churchyV3Supported?: boolean;
   readonly churchyCustomNamesSupported?: boolean;
   readonly holeNumbers?: readonly number[];
   readonly dotsV2Supported?: boolean;
+  readonly dotsHighLowSupported?: boolean;
   readonly dotsIndividualPlayerCounts?: readonly number[];
   readonly dotsSpecialKinds?: readonly DotsSpecialKind[] | undefined;
   readonly presetStore?: DotPresetStore | undefined;
@@ -62,7 +64,7 @@ export function GameSettings({
   games = [], internalOnly = false, wolfV2Supported = false, churchyV2Supported = false, dotsV2Supported = false,
   dotsIndividualPlayerCounts = [4], dotsSpecialKinds, presetStore, existing = false, churchyV3Supported = false,
   churchyCustomNamesSupported = false, holeNumbers = [], defaultGroupNumber,
-  wolfHighLowSweepSupported = false, dotsManualSweepSupported = false,
+  wolfHighLowSweepSupported = false, wolfOrderSupported = false, dotsManualSweepSupported = false, dotsHighLowSupported = false,
   gameHandicapsSupported = false,
 }: GameSettingsProps) {
   const allowanceHint = useId();
@@ -225,7 +227,7 @@ export function GameSettings({
           ? 'Net comparisons use the explicitly linked Wolf game’s saved handicap rule. Edit that game separately; this does not change it.'
           : 'No net ball comparison in standalone Dots.'} All specials and calls qualify on personal gross scores, never SO.</small>}
         {matchGame && <section aria-label={`${draft.kind === 'wolf' ? 'Wolf' : draft.kind === 'match-play' ? 'Match Play' : 'Nassau'} setup`}>
-          <p>Configure before this round&apos;s first saved score. Setup and participant order lock once scoring starts.
+          <p>Configure before this round&apos;s first saved score. Setup locks once scoring starts.
             {draft.handicapRule === undefined && <> Legacy net uses captured CH off the lowest {draft.kind === 'nassau' || draft.kind === 'match-play' ? 'within each match' : 'of the four golfers'}.</>}</p>
           {draft.kind === 'wolf' ? <>
             <details><summary>Wolf rules</summary><p>Wolf tees last; choose a partner immediately after their drive, before the next drive, or pass all.
@@ -236,12 +238,11 @@ export function GameSettings({
               {draft.wolfVersion === 2 && <p>Final two holes: the lowest earned total after the opening 7 or 16 holes chooses Wolf, including explicitly linked Dots.
                 Ties use the next printed rotation. Saved selection survives later corrections.</p>}
             </details>
-            {(draft.wolfPlayers ?? []).map((id, index) => <label key={index}>Wolf P{index + 1}<select value={id} onChange={(event) => {
-              const ids = [...(draft.wolfPlayers ?? [])], other = ids.indexOf(event.target.value);
-              if (other >= 0) { ids[other] = id; ids[index] = event.target.value; onChange({ ...draft, wolfPlayers: ids }); }
-            }}>{groups.find((group) => group.number === draft.groupNumber)?.playerIds.map((playerId) =>
-              <option key={playerId} value={playerId}>{roster.find((entry) => entry.playerId === playerId)?.displayName ?? 'Golfer unavailable'}</option>)}</select></label>)}
-            <p>P1–P4 rotate from the saved group&apos;s starting hole.</p>
+            {draft.wolfOrderMode ? <>
+              <p>Choose the Wolf rotation on this group&apos;s first tee, before the Wolf declaration.</p>
+              {!wolfOrderSupported && <p>First-tee Wolf order is temporarily unavailable.</p>}
+            </> : <p>Saved Wolf order: {(draft.wolfPlayers ?? []).map((id) =>
+              roster.find((entry) => entry.playerId === id)?.displayName ?? 'Golfer unavailable').join(' → ')}. Unchanged.</p>}
             {draft.wolfVersion === 2 && <>
               <label><input type="checkbox" checked={draft.wolfHighLowSweep ?? false}
                 disabled={!wolfHighLowSweepSupported || legacyWolfSweep && !draft.wolfHighLowSweep}
@@ -301,6 +302,7 @@ export function GameSettings({
         </section>}
         {draft.kind === 'dots' && <DotsSettings draft={draft} groups={groups} players={roster} hidePlayingGroup
           v2Supported={dotsV2Supported}
+          highLowSupported={dotsHighLowSupported}
           manualSweepSupported={dotsManualSweepSupported}
           individualPlayerCounts={dotsIndividualPlayerCounts}
           {...(dotsSpecialKinds ? { supportedKinds: dotsSpecialKinds } : {})}

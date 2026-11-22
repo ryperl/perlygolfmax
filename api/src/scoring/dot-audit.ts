@@ -58,8 +58,10 @@ export function buildDotAwardAudit(
     if (!supportsDotAwardAudit(game)) return [];
     const previous = before.find((result) => result.gameId === game.id);
     const next = after.find((result) => result.gameId === game.id);
-    const previousAwards = previous?.dots?.awards ?? previous?.wolf?.awards ?? previous?.churchy?.awards ?? [];
-    const nextAwards = next?.dots?.awards ?? next?.wolf?.awards ?? next?.churchy?.awards ?? [];
+    const previousAwards = [...(previous?.dots?.awards ?? previous?.wolf?.awards ?? previous?.churchy?.awards ?? []),
+      ...(previous?.dotsHighLow?.awards ?? [])];
+    const nextAwards = [...(next?.dots?.awards ?? next?.wolf?.awards ?? next?.churchy?.awards ?? []),
+      ...(next?.dotsHighLow?.awards ?? [])];
     if (canonical(previousAwards) === canonical(nextAwards)) return [];
     const stringRules = [...previousAwards, ...nextAwards]
       .some((award) => award.kind === 'string' || award.kind === 'birdy-string');

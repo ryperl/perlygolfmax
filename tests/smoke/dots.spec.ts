@@ -241,12 +241,15 @@ test('Wolf High/Low Sweep is opt-in and gives one extra dot to each winning team
     await form.getByRole('button', { name: 'Save game', exact: true }).click();
     await expect(page.getByText('Game settings saved.', { exact: true })).toBeVisible();
     expect(fixture.counters().configurations[0]?.find((game) => game.kind === 'wolf')).toMatchObject({ version: 2, highLowSweep: true });
-    const wolfId = fixture.read().games?.results.find((game) => game.kind === 'wolf')?.wolf?.holes.find((hole) => hole.number === 1)?.wolfId;
+    const wolfId = dotsPlayers[0];
     const partnerId = dotsPlayers.find((id) => id !== wolfId);
     if (!wolfId || !partnerId) throw new Error('Missing fictional winning side');
     const winning = new Set([wolfId, partnerId]);
     await page.getByRole('button', { name: 'Enter scores', exact: true }).click();
     const entry = page.getByRole('form', { name: 'Group 1 hole 1 entry', exact: true });
+    for (const [index, label] of ['First Wolf', 'Second Wolf', 'Third Wolf', 'Fourth Wolf'].entries()) {
+      await entry.getByRole('combobox', { name: label, exact: true }).selectOption(dotsPlayers[index] ?? '');
+    }
     await entry.getByRole('combobox', { name: 'Wolf declaration', exact: true }).selectOption(`partner:${partnerId}`);
     for (const [index, playerId] of dotsPlayers.entries()) await entry.getByLabel(`Fictional golfer ${String(index + 1)} score`, { exact: true }).fill(winning.has(playerId) ? '3' : '4');
     await entry.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
@@ -515,6 +518,92 @@ test('Dots setup stays compact and selects all compatible specials without losin
     const game = fixture.counters().configurations[0]?.find((game) => game.kind === 'dots');
     expect(game?.specials.find((special) => special.kind === 'sandy')?.units).toBe(3);
     expect(fixture.counters().configWrites).toBe(1);
+    expect(fixture.counters().pageErrors).toEqual([]);
+  } finally { await fixture.close(); }
+});
+
+test('Modified Sixes explicitly selects SO for net High/Low while keeping touch setup and gross specials', async ({ page }, testInfo) => {
+  const fixture = await openDotsFixture(page, testInfo, 'setup-high-low');
+  try {
+    await page.setViewportSize({ width: 320, height: 900 });
+    await page.getByRole('button', { name: 'Games', exact: true }).click();
+    await page.getByRole('button', { name: 'Add game', exact: true }).click();
+    const editor = page.getByRole('form', { name: 'Game settings', exact: true });
+    await editor.getByRole('combobox', { name: 'Dots playing group', exact: true }).selectOption('1');
+    await editor.getByRole('combobox', { name: 'Dots mode', exact: true }).selectOption('rotating-3');
+    const enabled = editor.getByRole('checkbox', { name: 'Net High/Low', exact: true });
+    await enabled.focus();
+    await enabled.press('Space');
+    await expect(enabled).toBeChecked();
+    await expect(enabled).toBeFocused();
+    const handicap = editor.getByRole('combobox', { name: 'High/Low net strokes', exact: true });
+    await expect(handicap).toHaveValue('full-course-v1');
+    await handicap.selectOption('group-low-v1');
+    await expect(editor.getByText(/Specials still use gross scores/)).toBeVisible();
+    await narrowControls(page, editor);
+    await editor.getByRole('button', { name: 'Save game', exact: true }).click();
+    await expect(page.getByText('Game settings saved.', { exact: true })).toBeVisible();
+    expect(fixture.counters().configurations[0]?.find((game) => game.kind === 'dots')).toMatchObject({
+      version: 2, mode: 'rotating', rotationHoles: 3, highLow: { version: 1, handicapRule: 'group-low-v1' },
+    });
+    await page.getByRole('button', { name: 'Enter scores', exact: true }).click();
+    await expect(page.getByRole('combobox', { name: 'Dots P1', exact: true })).toBeVisible();
+    expect(fixture.counters().writes).toBe(0);
+    expect(fixture.counters().pageErrors).toEqual([]);
+  } finally { await fixture.close(); }
+});
+
+test('Modified Sixes saves first-tee order and net High/Low once with acknowledged combined standings', async ({ page }, testInfo) => {
+  const fixture = await openDotsFixture(page, testInfo, 'rotating-high-low');
+  try {
+    await page.setViewportSize({ width: 390, height: 900 });
+    const form = page.getByRole('form', { name: 'Group 1 hole 1 entry', exact: true });
+    for (const [index, id] of dotsPlayers.entries()) {
+      await form.getByRole('combobox', { name: `Dots P${String(index + 1)}`, exact: true }).selectOption(id);
+      await form.getByLabel(`Fictional golfer ${String(index + 1)} score`, { exact: true }).fill(index < 2 ? '3' : '5');
+    }
+    await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+    await expect(page.getByRole('form', { name: 'Group 1 hole 2 entry', exact: true })).toBeVisible();
+    const result = fixture.read().games?.results.find((game) => game.kind === 'dots');
+    expect(result?.dotsHighLow?.players.map((player) => player.totalPoints)).toEqual([2, 2, 0, 0]);
+    expect(result?.dots?.players.map((player) => player.totalPoints)).toEqual([0, 0, 0, 0]);
+    expect(result?.players.map((player) => player.totalPoints)).toEqual([2, 2, 0, 0]);
+    expect(fixture.counters().writes).toBe(4);
+    const reads = fixture.counters().roundReads;
+    await page.getByRole('button', { name: 'Games', exact: true }).click();
+    await openGameStandings(page, 'Fictional rotating Dots');
+    await expect(page.getByRole('table', { name: 'Saved High/Low and special dots', exact: true })).toBeVisible();
+    expect(fixture.counters().roundReads).toBe(reads);
+    expect(fixture.counters().pageErrors).toEqual([]);
+  } finally { await fixture.close(); }
+});
+
+test('Wolf chooses named rotation on the first played tee before declaring, then keeps the saved order', async ({ page }, testInfo) => {
+  const fixture = await openDotsFixture(page, testInfo, 'wolf-first-tee');
+  try {
+    await page.setViewportSize({ width: 320, height: 900 });
+    const form = page.getByRole('form', { name: 'Group 1 hole 5 entry', exact: true });
+    const first = form.getByRole('combobox', { name: 'First Wolf', exact: true });
+    await expect(first).toBeVisible();
+    await expect(form.getByRole('combobox', { name: 'Wolf declaration', exact: true })).toBeDisabled();
+    const order = [...dotsPlayers].reverse();
+    for (const [index, label] of ['First Wolf', 'Second Wolf', 'Third Wolf', 'Fourth Wolf'].entries()) {
+      await form.getByRole('combobox', { name: label, exact: true }).selectOption(order[index] ?? '');
+    }
+    await expect(form.getByText('Wolf: Fictional golfer 4 · Tees last', { exact: true })).toBeVisible();
+    await form.getByRole('combobox', { name: 'Wolf declaration', exact: true }).selectOption(`partner:${dotsPlayers[0] ?? ''}`);
+    await form.getByRole('button', { name: 'Par for blanks', exact: true }).click();
+    await narrowControls(page, form);
+    await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+    const next = page.getByRole('form', { name: 'Group 1 hole 6 entry', exact: true });
+    await expect(next).toBeVisible();
+    await expect(next.getByRole('combobox', { name: 'First Wolf', exact: true })).toHaveCount(0);
+    await expect(next.getByText(/Saved Wolf rotation: Fictional golfer 4 → Fictional golfer 3 → Fictional golfer 2 → Fictional golfer 1/)).toBeVisible();
+    await expect(next.getByText('Wolf: Fictional golfer 3 · Tees last', { exact: true })).toBeVisible();
+    expect(fixture.counters().requests[0]?.score.wolf?.[0]).toMatchObject({
+      number: 5, order: { playerIds: order }, choice: { mode: 'partner', partnerId: dotsPlayers[0] },
+    });
+    expect(fixture.counters().writes).toBe(4);
     expect(fixture.counters().pageErrors).toEqual([]);
   } finally { await fixture.close(); }
 });

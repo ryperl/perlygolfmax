@@ -477,7 +477,8 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
           const churchyPlayer = churchyGame ? round.games?.results.find((result) =>
             result.gameId === churchyGame.id)?.players.find((player) => player.playerId === playerId) : undefined;
           const groupLowGame = round.games?.configuration.games.some((game) =>
-            game.kind !== 'dots' && game.basis === 'net' && game.handicapRule === 'group-low-v1'
+            game.kind === 'dots' ? game.groupNumber === group.number && game.highLow?.handicapRule === 'group-low-v1'
+            : game.basis === 'net' && game.handicapRule === 'group-low-v1'
             && (game.kind === 'churchy' || game.kind === 'wolf' || game.kind === 'nassau' || game.kind === 'match-play'
               ? game.groupNumber === group.number : true));
           const relative = groupLowGame ? gameHandicap('group-low-v1', playerId,
