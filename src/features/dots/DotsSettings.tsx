@@ -10,6 +10,7 @@ import type { PlayerCourseHandicap } from '../../domain/scoring';
 import { dotsSpecialCatalog } from '../../domain/dots';
 import { formatMoney, parseMoney } from '../../domain/money';
 import { DotSpecialsSettings } from './DotSpecialsSettings';
+import { DotsGameDescription } from './DotsGameDescription';
 import { dotSpecialModeCompatible } from './dot-preset-options';
 import { dotsModeChange } from './dots-mode-change';
 import './dots-settings.css';
@@ -228,6 +229,8 @@ export function DotsSettings({ draft, groups, players, wolves, nines = [], nines
     {!manualSweepSupported && <small>Manual Sweep is temporarily unavailable in this app version.</small>}
     <h4>{mode === 'rotating' ? '4. Special dots' : 'Special dots'}</h4>
     <small>Qualifying scores are gross. Automatic dots are calculated from saved scores and selections.</small>
+    <DotsGameDescription specials={specials} mode={mode} manualSweep={manualSweep}
+      highLowVersion={mode === 'rotating' && draft.dotsHighLow ? updated ? 2 : 1 : undefined} />
     <details open={!updated}><summary>Choose special dots ({specials.length})</summary>
     <DotSpecialsSettings specials={specials} mode={specialsMode} manualSweep={manualSweep}
       {...(supportedKinds === undefined ? {} : { supportedKinds })}

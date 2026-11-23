@@ -7,6 +7,21 @@ import { InternalSettlement } from './InternalSettlement';
 import { dotsFixture } from './dots.test-support';
 
 describe('saved Dots awards and one internal settlement', () => {
+  it('explains saved game selections even when results are unavailable, without claiming new rules', () => {
+    const f = dotsFixture();
+    const game: DotsGameDefinition = { ...f.game, version: 2, mode: 'rotating', rotationHoles: 3,
+      highLow: { version: 1, handicapRule: 'group-low-v1' },
+      specials: [{ kind: 'long-drive', units: 1 }, { kind: 'blue-plate', units: 1 }] };
+    render(<DotsResults game={game} result={undefined} />);
+    expect(screen.getByText('How Dots works').closest('details')).not.toHaveAttribute('open');
+    fireEvent.click(screen.getByText('How Dots works'));
+    const help = screen.getByRole('region', { name: 'Dots game description' });
+    expect(help).toHaveTextContent('Automatic Category Sweep:');
+    expect(help).toHaveTextContent('This saved High/Low version has no automatic High/Low Sweep');
+    expect(help).not.toHaveTextContent('High 1 + Low 1 + Sweep 1 = 3 each');
+    expect(screen.getByText('Saved Dots results unavailable. Refresh to retry.')).toBeVisible();
+  });
+
   it('keeps transmitted High/Low, special and combined totals distinct and never calls pending base results complete', () => {
     const f = dotsFixture();
     const game: DotsGameDefinition = { ...f.game, version: 2, mode: 'rotating', rotationHoles: 3,
