@@ -19,7 +19,7 @@ Saved scoring locks starts and explicit handicap/circuit rules.
 | Wolf | Full CH / group SO, net balls | Group circuit |
 | Nassau | Full CH / group SO, net balls | Explicit circuit |
 | Match Play | Full CH / group SO, net balls | Group circuit |
-| Dots | Modified Sixes opt-in High/Low: Full CH / group SO | Group circuit |
+| Dots | New rotating High/Low: Full CH / group SO | Group circuit |
 
 The Stableford rows describe the two formats of one game kind, not additional
 game kinds. Linked Dots consumes the explicitly linked Wolf's saved comparisons;
@@ -30,15 +30,43 @@ Overall Stableford consumes the selected round game's legitimate points.
 Competition teams remain separate from playing groups; each member's SO uses
 their own saved playing group, even for cross-group Ball Drop teams.
 
-Modified Sixes may explicitly enable net High/Low alongside its gross specials.
-Partners change every three played holes using the acknowledged P1–P4 order.
+New version-3 Modified Sixes and Sixes may explicitly enable net High/Low
+alongside gross specials. Partners change every three or six played holes.
 High compares each pair's higher numeric ball; Low compares its lower ball.
 Each contest gives one dot to each winning teammate. Ties push with no carry,
-deduction, stake multiplier or automatic Sweep. A pickup loses High to an
+deduction or stake multiplier. Version-2 High/Low additionally awards one
+automatic **High/Low Sweep** dot to each teammate when the same pair wins both
+contests: High 1 + Low 1 + Sweep 1 = 3 each. Split wins, pushes, missing scores
+and unavailable lanes never earn this bonus. A pickup loses High to an
 all-numeric pair; its partner's numeric Low still competes. Missing numeric
 Low is unavailable, never a penalty score. Missing scores/order stay pending.
-Base and special dots remain separate sources and settle only once. Six-hole
-rotations and unmarked saved Modified Sixes remain specials-only.
+Base and special dots remain separate sources and settle only once. Existing
+version-2 games retain their saved semantics: six-hole rotations remain
+specials-only, and High/Low version 1 has no automatic sweep. Explicit unstarted
+version-2-to-3 upgrades are supported; started games and order receipts are never
+implicitly converted.
+
+## First teams and setup
+
+Setup explains the format and group, first-team method, applicable net rules,
+gross special dots and a review summary. Actual player positions are chosen in
+score entry on the group's first played hole, not assigned by the setup preview.
+
+- **Tee flip:** first + second versus third + fourth; subsequent blocks use
+  1+3/2+4, then 1+4/2+3.
+- **Approach ranking:** rank closest through farthest; closest + farthest versus
+  the middle two, then 1+3/2+4, then 1+2/3+4.
+
+Both methods preserve their three- or six-played-hole period and actual circuit.
+The conditional canonical first-card receipt fixes order and origin through raw
+edits, clears, corrections and retries. Missing order leaves results pending
+without blocking raw scoring; recovery after saved scoring is server-marked.
+
+**Manual Sweep** remains a separate scorer-declared bonus. **Category Sweep**
+remains the automatic same-golfer Long Drive/Blue Plate bonus. Neither replaces
+the new automatic High/Low Sweep, and scorers must not enter an automatic bonus
+again as a manual one. Individual round-only King bonuses remain separate from
+shared hole points and are already included in the displayed special total.
 
 ## Course Handicap and SO
 
@@ -140,6 +168,13 @@ requires the advertised `dotsHighLowVersion: 1`. Older affected requests must
 update before reading or publishing new definitions/results. Full and lean
 decoders retain separate transmitted base contests, special totals and combined
 standings; lean reconstruction never replaces a transmitted numerical value.
+
+New rotating version-3 games require the composite `dotsRules=3` and
+`dotsHighLow=2` negotiation, advertised Dots rules version 3 and High/Low
+capability 2. This binds both first-team methods and automatic High/Low Sweep
+calculations. Unaffected legacy projections retain their supported capability
+versions; affected old reads, writes and staged publications fail with 426
+before mutation. Original saved rules, scores, captures and audits are retained.
 
 First-tee Wolf order separately negotiates `wolfOrders=1`, with advertised
 `wolfOrderVersion: 1`. Affected old reads and score, game, correction and purse

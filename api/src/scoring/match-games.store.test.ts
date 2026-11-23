@@ -4,6 +4,7 @@ import { gameHandicapRoundScores } from '../../../src/contracts/game-handicaps.j
 import { gameCalculationRoundScores } from '../../../src/contracts/game-calculations.js';
 import { wolfOrderRoundScores } from '../../../src/contracts/wolf-orders.js';
 import { dotsHighLowRoundScores } from '../../../src/contracts/dots-high-low-rules.js';
+import { dotsRulesV3RoundScores } from '../../../src/contracts/dots-rules-v3.js';
 import type { NassauGameDefinition, MatchPlayGameDefinition, NassauHoleRecord } from '../../../src/domain/nassau.js';
 import type { WolfGameDefinition, WolfHoleRecord } from '../../../src/domain/wolf.js';
 import type { HoleScore, RoundScores } from '../../../src/domain/scoring.js';
@@ -91,7 +92,7 @@ describe('persisted Nassau and Wolf declarations', () => {
         const expectedEtag = etag(current, anchor);
         const first = await f.scores.write(actor, eventId, f.roundId, anchor, option.startHole, score, expectedEtag, identifier(28021));
         expect(isScoreWriteResult(first)).toBe(true);
-        expect(decodeRoundScores(leanRoundScores(first.round, false, false, true))).toEqual(dotsHighLowRoundScores(wolfOrderRoundScores(gameCalculationRoundScores(gameHandicapRoundScores(coexistenceRoundScores(first.round))))));
+        expect(decodeRoundScores(leanRoundScores(first.round, false, false, true))).toEqual(dotsHighLowRoundScores(wolfOrderRoundScores(gameCalculationRoundScores(gameHandicapRoundScores(coexistenceRoundScores(dotsRulesV3RoundScores(first.round)))))));
         const lean = leanScoreWriteResult(first, false, false, true);
         expect(isScoreWriteResult({ round: decodeRoundScores(lean.round), change: lean.change })).toBe(true);
         expect(lean.change).toEqual(first.change);

@@ -31,7 +31,8 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
   const failedCallConflict = issues.conflicts.some((issue) => issue.code === 'FAILED_CALL_SPECIAL');
   const hasFailedCall = declaration.calls.some((call) => dotsCallResult(call, score, par) === 'failure'
     && (call.murphyTarget !== 'birdie' || score?.kind !== 'strokes' || score.strokes > par));
-  const label = (kind: DotsSpecialKind) => specialLabels?.[kind] ?? dotsSpecialCatalog.find((special) => special.kind === kind)?.label ?? kind;
+  const label = (kind: DotsSpecialKind) => specialLabels?.[kind] ?? (kind === 'sweep' && game.sweepRule === 'manual-v1'
+    ? 'Manual Sweep' : dotsSpecialCatalog.find((special) => special.kind === kind)?.label ?? kind);
   const active = (kind: DotsSpecialKind) => (declaration.counts[kind] ?? 0) > 0
     || declaration.calls.some((call) => call.kind === kind);
   function blocked(kind: DotsSpecialKind): boolean {

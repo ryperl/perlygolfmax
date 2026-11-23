@@ -12,6 +12,9 @@ import { createPublicHandler } from '../public-access/handlers.js';
 import { createPurseHandler } from '../purse/handlers.js';
 import { privateWritePartBytes } from '../../../src/contracts/private-values.js';
 import { createCorrectionsHandler } from '../corrections/handlers.js';
+import { isRecord } from '../../../src/contracts/events.js';
+import type { RoundScores } from '../../../src/domain/scoring.js';
+import { murphyTransport, supportsDotsHighLow, supportsDotsRulesV3 } from './murphy-transport.js';
 
 const base = 'murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1&churchyNames=1&sweepRules=2&dotCoexistence=2&gameHandicaps=1&gameCalculations=2';
 const current = `${base}&wolfOrders=1&dotsHighLow=1`;
@@ -40,6 +43,7 @@ async function fixture() {
     ...(method === 'PUT' ? { headers: { 'Content-Type': 'application/json', 'Idempotency-Key': operation,
       ...(etag === null ? { 'If-None-Match': '*' } : { 'If-Match': etag }) }, body: { string: JSON.stringify(body) } } : {}),
   });
+
   const wolf: WolfGameDefinition = { id: identifier(33200), name: 'Fictional first-tee Wolf', kind: 'wolf', version: 2,
     basis: 'gross', stakeMinor: null, groupNumber: 1, playerIds: ids, allowPig: true, orderMode: 'first-tee-v1' };
   const dots: DotsGameDefinition = { id: identifier(33201), name: 'Fictional Net Modified Sixes', kind: 'dots', version: 2,
@@ -47,6 +51,193 @@ async function fixture() {
     highLow: { version: 1, handicapRule: 'full-course-v1' }, specials: [] };
   return { ...f, ids, api, publicApi, context, request, wolf, dots };
 }
+
+const v3Query = `${base}&wolfOrders=1&dotsHighLow=2&dotsRules=3`;
+
+  async function v3Fixture(orderMode: 'tee-flip' | 'approach' = 'tee-flip', rotationHoles: 3 | 6 = 3) {
+    const f = await fixture();
+    const dots: DotsGameDefinition = { ...f.dots, version: 3, orderMode, rotationHoles,
+      highLow: { version: 2, handicapRule: 'full-course-v1' } };
+    const configured = await f.scores.saveGames(creator, event.id, f.roundId, [dots], null, identifier(34000));
+    const gameEtag = configured.round.games?.configuration.etag ?? '';
+    const declaration = (number = 5, playerIds = f.ids) => ({
+      number, gameId: dots.id, gameEtag, rotation: { playerIds }, players: [], contests: [],
+    });
+    const etag = (round: RoundScores, playerId = f.ids[0]) =>
+      round.cards.find((card) => card.playerId === playerId)?.etag ?? null;
+    return { ...f, dots, configured, declaration, etag };
+  }
+
+  function acknowledgedRound(value: unknown): RoundScores {
+    if (!isRecord(value)) throw new Error('Missing fictional acknowledgement');
+    const round = decodeRoundScores(value.round);
+    if (!round) throw new Error('Invalid fictional round acknowledgement');
+    return round;
+  }
+
+  describe('rotating Dots v3 negotiated transactions', () => {
+    it('requires the complete composite marker and rejects malformed or duplicate versions', () => {
+      const request = (query: string) => new HttpRequest({ method: 'GET', url: `https://fictional.example.test/?${query}` });
+      for (const query of ['', 'dotsRules=3', 'dotsHighLow=2', 'dotsRules=3&dotsHighLow=1']) {
+        expect(supportsDotsRulesV3(request(query))).toBe(false);
+      }
+      expect(supportsDotsRulesV3(request('dotsRules=3&dotsHighLow=2'))).toBe(true);
+      for (const version of ['1', '2']) expect(supportsDotsHighLow(request(`dotsHighLow=${version}`))).toBe(true);
+      for (const query of ['dotsRules=2', 'dotsRules=', 'dotsRules=3&dotsRules=3',
+        'dotsRules=3&dotsRules=4', 'dotsHighLow=3', 'dotsHighLow=2&dotsHighLow=2']) {
+        expect(() => supportsDotsRulesV3(request(query))).toThrowError();
+      }
+    });
+
+    it('fences partial/old full and lean reads and all affected public/private writes without rows, receipts or grants changing', async () => {
+      const f = await v3Fixture();
+      const get = createScoringHandler(() => f.api, 'scores');
+      const publicGet = createPublicHandler(() => f.publicApi, 'scores');
+      const write = createScoringHandler(() => f.api, 'score-hole');
+      const publicWrite = createPublicHandler(() => f.publicApi, 'score-hole');
+      const games = createScoringHandler(() => f.api, 'round-games');
+      const kp = createScoringHandler(() => f.api, 'round-kp');
+      const staged = createPublicHandler(() => f.publicApi, 'score-game-hole');
+      const purse = createPurseHandler(() => ({ ...f.api, purse: f.purse }));
+      const rows = new Map(f.rows);
+      f.submit.mockClear();
+      for (const query of [current, `${base}&wolfOrders=1&dotsRules=3`, `${base}&wolfOrders=1&dotsHighLow=2`]) {
+        for (const format of ['', '&format=lean']) {
+          for (const handler of [get, publicGet]) expect(await handler(f.request('GET', undefined, query + format), f.context))
+            .toMatchObject({ status: 426, jsonBody: { code: 'DOTS_RULES_V3_CLIENT_UPDATE_REQUIRED' } });
+        }
+        for (const handler of [write, publicWrite]) expect(await handler(f.request('PUT', { score: { kind: 'strokes', strokes: 4 } }, query), f.context))
+          .toMatchObject({ status: 426 });
+        expect(await games(f.request('PUT', { games: [f.dots] }, query, f.configured.round.games?.configuration.etag ?? null), f.context))
+          .toMatchObject({ status: 426 });
+        expect(await kp(f.request('PUT', { privateCommit: {} }, query), f.context)).toMatchObject({ status: 426 });
+        expect(await staged(f.request('PUT', { privateUpload: {} }, query), f.context)).toMatchObject({ status: 426 });
+        expect(await purse(f.request('PUT', { plan: {}, resolutions: [] }, query), f.context)).toMatchObject({ status: 426 });
+      }
+      expect(f.rows).toEqual(rows);
+      expect(f.submit).not.toHaveBeenCalled();
+      for (const query of [`${v3Query}&dotsRules=3`, `${v3Query}&dotsHighLow=2`,
+        `${base}&wolfOrders=1&dotsHighLow=2&dotsRules=4`]) {
+        expect(await write(f.request('PUT', { score: { kind: 'strokes', strokes: 4 } }, query), f.context))
+          .toMatchObject({ status: 426 });
+      }
+      expect(f.rows).toEqual(rows);
+      expect(f.submit).not.toHaveBeenCalled();
+      for (const handler of [get, publicGet]) for (const format of ['', '&format=lean']) {
+        const result = await handler(f.request('GET', undefined, v3Query + format), f.context);
+        expect(result.status).toBe(200);
+        expect(decodeRoundScores(result.jsonBody)).toMatchObject({ dotsRulesVersions: [1, 2, 3], dotsHighLowVersion: 2 });
+      }
+    });
+
+    it('projects legacy metadata before older helpers and preserves unchanged legacy definitions', async () => {
+      const f = await fixture();
+      const configured = await f.scores.saveGames(creator, event.id, f.roundId, [f.dots], null, identifier(34001));
+      const get = createScoringHandler(() => f.api, 'scores');
+      for (const query of [current, v3Query]) for (const format of ['', '&format=lean']) {
+        const result = await get(f.request('GET', undefined, query + format), f.context);
+        expect(result.status).toBe(200);
+        const round = decodeRoundScores(result.jsonBody);
+        expect(round?.dotsRulesVersions).toEqual(query === current ? [1, 2] : [1, 2, 3]);
+        expect(round?.dotsHighLowVersion).toBe(query === current ? 1 : 2);
+        expect(round?.games?.configuration.games).toEqual([f.dots]);
+      }
+      const wrapper = murphyTransport({ nested: [configured.round] }, true, true, true, true, true, true, true, true, true, true, true, true);
+      expect(wrapper).toMatchObject({ nested: [{ dotsRulesVersions: [1, 2], dotsHighLowVersion: 1 }] });
+    });
+
+    it.each([
+      ['tee-flip', 3], ['tee-flip', 6], ['approach', 3], ['approach', 6],
+    ] as const)('saves %s order in %i-hole blocks, immutable staged retries and once-only High/Low/Sweep settlement', async (mode, length) => {
+      const f = await v3Fixture(mode, length);
+      const anchor = f.ids[0] ?? '';
+      const order = { ...f.declaration(), rotation: { playerIds: f.ids, recordedLate: true } };
+      const body = { score: { kind: 'unplayed', dots: [order] } };
+      const bytes = Buffer.from(JSON.stringify(body));
+      const upload = { id: identifier(34100), bytes: bytes.length, parts: Math.ceil(bytes.length / privateWritePartBytes),
+        sha256: createHash('sha256').update(bytes).digest('hex') };
+      const save = createPublicHandler(() => f.publicApi, 'score-game-hole');
+      const requestId = identifier(34101);
+      for (let index = 0; index < upload.parts; index++) {
+        expect(await save(f.request('PUT', { privateUpload: { ...upload, index,
+          content: bytes.subarray(index * privateWritePartBytes, (index + 1) * privateWritePartBytes).toString('base64') } },
+        v3Query, null, anchor, 5, requestId), f.context)).toMatchObject({ status: 200 });
+      }
+      const rows = new Map(f.rows);
+      f.submit.mockClear();
+      const commit = { privateCommit: upload };
+      expect(await save(f.request('PUT', commit, current, null, anchor, 5, requestId), f.context)).toMatchObject({ status: 426 });
+      expect(f.rows).toEqual(rows);
+      expect(f.submit).not.toHaveBeenCalled();
+      const result = await save(f.request('PUT', commit, v3Query, null, anchor, 5, requestId), f.context);
+      expect(result.status).toBe(200);
+      let round = acknowledgedRound(result.jsonBody);
+      expect(round.cards.find((card) => card.playerId === anchor)?.holes.find((hole) => hole.number === 5)?.score.dots?.[0]?.rotation)
+        .toEqual({ playerIds: f.ids });
+      const persisted = new Map(f.rows);
+      expect(await save(f.request('PUT', commit, v3Query, null, anchor, 5, requestId), f.context)).toMatchObject({ status: 200 });
+      expect(f.rows).toEqual(persisted);
+      const winners = mode === 'tee-flip' ? f.ids.slice(0, 2) : [f.ids[0], f.ids[3]];
+      for (const [index, playerId] of f.ids.entries()) {
+        round = (await f.scores.write(creator, event.id, f.roundId, playerId, 5,
+          { kind: 'strokes', strokes: winners.includes(playerId) ? 3 : 5 }, f.etag(round, playerId), identifier(34110 + index))).round;
+      }
+      const highLow = round.games?.results[0]?.dotsHighLow;
+      expect(highLow?.awards.map((award) => award.kind)).toEqual(['high', 'low', 'high-low-sweep']);
+      for (const award of highLow?.awards ?? []) expect(award.recipientIds).toEqual(winners);
+      expect(round.internalSettlements).toHaveLength(1);
+      expect(round.internalSettlements?.[0]?.players.map((player) => player.netMinor)).toEqual(
+        f.ids.map((id) => winners.includes(id) ? 600 : -600));
+      const history = await f.scores.history(creator, event.id, f.roundId, f.ids[3] ?? '');
+      expect(history.changes[0]?.dotAwardAudit?.[0]).toMatchObject({ version: 3, configuration: f.dots, after: highLow?.awards });
+      const nextHole = 5 + length;
+      const nextWinners = [f.ids[0], f.ids[2]];
+      for (const [index, playerId] of f.ids.entries()) {
+        round = (await f.scores.write(creator, event.id, f.roundId, playerId, nextHole,
+          { kind: 'strokes', strokes: nextWinners.includes(playerId) ? 3 : 5 }, f.etag(round, playerId), identifier(34130 + index))).round;
+      }
+      const nextAwards = round.games?.results[0]?.dotsHighLow?.awards.filter((award) => award.number === nextHole) ?? [];
+      expect(nextAwards).toHaveLength(3);
+      for (const award of nextAwards) expect(award.recipientIds).toEqual(nextWinners);
+      const audits = [...f.rows.values()].filter((row) => row.rowKey?.includes('score-change')).map((row) => row.content);
+      const capture = f.rows.get(`${event.id}|index-capture:${f.roundId}`);
+      const raw = await f.scores.write(creator, event.id, f.roundId, anchor, 5, { kind: 'strokes', strokes: 4 },
+        f.etag(round), identifier(34120));
+      const cleared = await f.scores.write(creator, event.id, f.roundId, anchor, 5, { kind: 'unplayed' },
+        f.etag(raw.round), identifier(34121));
+      expect(cleared.change.after.dots?.[0]?.rotation).toEqual({ playerIds: f.ids });
+      expect(f.rows.get(`${event.id}|index-capture:${f.roundId}`)).toEqual(capture);
+      expect([...f.rows.values()].filter((row) => row.rowKey?.includes('score-change')).slice(0, audits.length).map((row) => row.content)).toEqual(audits);
+      await expect(f.scores.saveGames(creator, event.id, f.roundId, [{ ...f.dots, orderMode: mode === 'tee-flip' ? 'approach' as const : 'tee-flip' as const }],
+        f.configured.round.games?.configuration.etag ?? null, identifier(34122))).rejects.toMatchObject({ code: 'MATCH_SETUP_LOCKED' });
+      await expect(f.scores.write(creator, event.id, f.roundId, anchor, 5, {
+        kind: 'unplayed', dots: [f.declaration(5, [...f.ids].reverse())],
+      }, f.etag(cleared.round), identifier(34123))).rejects.toMatchObject({ code: 'DOTS_ROTATION_CONFLICT' });
+    });
+
+    it('permits explicit unstarted v2 rotating upgrades only, never v1 or receipt-captured upgrades', async () => {
+      const f = await fixture();
+      const configured = await f.scores.saveGames(creator, event.id, f.roundId, [f.dots], null, identifier(34200));
+      const next: DotsGameDefinition = { ...f.dots, version: 3, orderMode: 'tee-flip', highLow: { version: 2, handicapRule: 'full-course-v1' } };
+      const handler = createPublicHandler(() => f.publicApi, 'games');
+      expect(await handler(f.request('PUT', { games: [next] }, v3Query, configured.round.games?.configuration.etag ?? null,
+        f.ids[0], 5, identifier(34201)), f.context)).toMatchObject({ status: 200 });
+      const g = await fixture();
+      const legacy: DotsGameDefinition = { id: g.dots.id, name: 'Fictional legacy Dots', kind: 'dots', version: 1,
+        mode: 'individual', groupNumber: 1, playerIds: g.ids, stakeMinor: 100, specials: [] };
+      const before = await g.scores.saveGames(creator, event.id, g.roundId, [legacy], null, identifier(34210));
+      await expect(g.scores.saveGames(creator, event.id, g.roundId, [next],
+        before.round.games?.configuration.etag ?? null, identifier(34211))).rejects.toMatchObject({ code: 'DOTS_REQUIRES_NEW_GAME' });
+      const h = await fixture();
+      const saved = await h.scores.saveGames(creator, event.id, h.roundId, [h.dots], null, identifier(34220));
+      await h.scores.write(creator, event.id, h.roundId, h.ids[0] ?? '', 5, { kind: 'unplayed', dots: [{
+        number: 5, gameId: h.dots.id, gameEtag: saved.round.games?.configuration.etag ?? '',
+        players: [], contests: [], rotation: { playerIds: h.ids },
+      }] }, null, identifier(34221));
+      await expect(h.scores.saveGames(creator, event.id, h.roundId, [next],
+        saved.round.games?.configuration.etag ?? null, identifier(34222))).rejects.toMatchObject({ code: 'MATCH_SETUP_LOCKED' });
+    });
+  });
 
 describe('first-tee Wolf and optional Modified Sixes protocols', () => {
   it.each(['wolf', 'dots'] as const)('fences old %s correction and HI-refresh publications before any staged/audit changes', async (kind) => {
@@ -245,5 +436,78 @@ describe('first-tee Wolf and optional Modified Sixes protocols', () => {
     const raw = await write(f.request('PUT', { score: { kind: 'strokes', strokes: 4 } }, current,
       last?.round.cards[0]?.etag ?? null), f.context);
     expect(raw.status).toBe(200);
+  });
+});
+
+describe('rotating Dots v3 recovery and correction boundaries', () => {
+  it('keeps missing order pending, permits raw scores, and recovers on the canonical earliest played hole with server-only late timing', async () => {
+    const f = await v3Fixture('approach', 6);
+    const anchor = f.ids[0] ?? '';
+    await f.scores.write(creator, event.id, f.roundId, f.ids[1] ?? '', 6, { kind: 'strokes', strokes: 4 }, null, identifier(34300));
+    const raw = await f.scores.write(creator, event.id, f.roundId, anchor, 5, { kind: 'strokes', strokes: 4 }, null, identifier(34301));
+    expect(raw.round.games?.results[0]?.dotsHighLow?.holes.find((hole) => hole.number === 5)?.status).toBe('pending');
+    expect(raw.round.games?.results[0]?.dots?.awards).toEqual([]);
+    await expect(f.scores.write(creator, event.id, f.roundId, anchor, 6,
+      { kind: 'unplayed', dots: [f.declaration(6)] }, f.etag(raw.round), identifier(34302)))
+      .rejects.toMatchObject({ code: 'DOTS_SETUP_CHANGED' });
+    const recovered = await f.scores.write(creator, event.id, f.roundId, anchor, 5,
+      { kind: 'strokes', strokes: 4, dots: [f.declaration()] }, f.etag(raw.round), identifier(34303));
+    expect(recovered.change.after.dots?.[0]?.rotation).toEqual({ playerIds: f.ids, recordedLate: true });
+    const capture = f.rows.get(`${event.id}|index-capture:${f.roundId}`);
+    const cleared = await f.scores.write(creator, event.id, f.roundId, anchor, 5,
+      { kind: 'unplayed', dots: [f.declaration()] },
+      f.etag(recovered.round), identifier(34304));
+    expect(cleared.change.after.dots?.[0]?.rotation).toEqual({ playerIds: f.ids, recordedLate: true });
+    expect(f.rows.get(`${event.id}|index-capture:${f.roundId}`)).toEqual(capture);
+    const g = await v3Fixture();
+    const other = g.input.rounds[0]?.groups[1]?.playerIds[0] ?? '';
+    await g.scores.write(creator, event.id, g.roundId, other, 5, { kind: 'strokes', strokes: 4 }, null, identifier(34310));
+    const independent = await g.scores.write(creator, event.id, g.roundId, g.ids[0] ?? '', 5,
+      { kind: 'unplayed', dots: [{ ...g.declaration(), rotation: { playerIds: g.ids, recordedLate: true } }] }, null, identifier(34311));
+    expect(independent.change.after.dots?.[0]?.rotation).toEqual({ playerIds: g.ids });
+  });
+
+  it('fences old correction/HI shortcuts before captures or audits, then publishes an idempotent corrected revision without rewriting raw receipts', async () => {
+    const f = await v3Fixture();
+    let round = f.configured.round;
+    for (const [index, playerId] of f.ids.entries()) {
+      round = (await f.scores.write(creator, event.id, f.roundId, playerId, 5, { kind: 'strokes', strokes: 4,
+        ...(index === 0 ? { dots: [f.declaration()] } : {}) }, f.etag(round, playerId), identifier(34400 + index))).round;
+    }
+    const model = await f.workspace.correctionModel(creator, event.id, f.roundId);
+    const body = { expected: { eventEtag: model.eventEtag, roundEtag: model.roundEtag, gamesEtag: model.gamesEtag ?? null,
+      inputRevision: model.inputRevision ?? null }, reason: 'Fictional v3 correction.',
+    correction: { teeProfileId: model.teeProfileId, groups: model.groups,
+      players: model.players.map((player) => ({ playerId: player.playerId,
+        handicapIndexValue: player.playerId === f.ids[0] ? '18' : player.handicapIndex?.value ?? null })) } };
+    const rows = new Map(f.rows);
+    const capture = f.rows.get(`${event.id}|index-capture:${f.roundId}`);
+    const cards = [...f.rows.values()].filter((row) => row.rowKey?.startsWith(`score-card:${f.roundId}`));
+    const receipts = [...f.rows.values()].filter((row) => row.rowKey?.includes('score-change'));
+    const handler = createCorrectionsHandler(() => ({ ...f.api, workspace: f.workspace }), 'write');
+    f.submit.mockClear();
+    const requestId = identifier(34410);
+    expect(await handler(f.request('PUT', body, current, null, f.ids[0], 5, requestId), f.context))
+      .toMatchObject({ status: 426, jsonBody: { code: 'DOTS_RULES_V3_CLIENT_UPDATE_REQUIRED' } });
+    const player = await f.players.get(creator, f.ids[0] ?? '');
+    await expect(f.workspace.refreshPlayerIndex(creator, event.id, player.id, player.currentIndex?.id ?? '',
+      model.eventEtag, identifier(34411), undefined, true, true, false)).rejects.toMatchObject({ status: 426 });
+    await expect(f.workspace.refreshIndices(creator, event.id, f.roundId, identifier(34412),
+      model.eventEtag, true, true, false)).rejects.toMatchObject({ status: 426 });
+    expect(f.rows).toEqual(rows);
+    expect(f.submit).not.toHaveBeenCalled();
+    const changed = await handler(f.request('PUT', body, v3Query, null, f.ids[0], 5, requestId), f.context);
+    expect(changed.status).toBe(200);
+    const correctedRows = new Map(f.rows);
+    expect(await handler(f.request('PUT', body, v3Query, null, f.ids[0], 5, requestId), f.context)).toMatchObject({ status: 200 });
+    expect(f.rows).toEqual(correctedRows);
+    expect(f.rows.get(`${event.id}|index-capture:${f.roundId}`)).toEqual(capture);
+    expect([...f.rows.values()].filter((row) => row.rowKey?.startsWith(`score-card:${f.roundId}`))).toEqual(cards);
+    expect([...f.rows.values()].filter((row) => row.rowKey?.includes('score-change'))).toEqual(receipts);
+    const next = await f.scores.get(creator, event.id, f.roundId);
+    expect(next.inputRevision).not.toBe(round.inputRevision);
+    expect(next.cards.find((card) => card.playerId === f.ids[0])?.holes.find((hole) => hole.number === 5)?.score.dots?.[0]?.rotation)
+      .toEqual({ playerIds: f.ids });
+    expect(next.games?.results[0]?.dotsHighLow?.awards.map((award) => award.kind)).toEqual(['low']);
   });
 });

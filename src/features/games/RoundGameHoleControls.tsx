@@ -1,14 +1,14 @@
 import { Fragment } from 'react';
 import type { NassauHoleRecord } from '../../domain/nassau';
 import type { HoleScore, RoundScores } from '../../domain/scoring';
-import { supportsDotsSpecials, supportsIndividualDotsPlayerCount, supportsRoundGame } from '../../domain/scoring';
+import { supportsDotsSpecials, supportsIndividualDotsPlayerCount, supportsRoundGame, supportsDotsGameRules } from '../../domain/scoring';
 import type { WolfHoleRecord } from '../../domain/wolf';
 import { wolfForHole, wolfOrder } from '../../domain/wolf';
 import { NassauHoleControls } from '../nassau';
 import { WolfHoleControls } from '../wolf';
 import type { DotsHoleRecord } from '../../domain/dots';
 import { dotsRotationContext } from '../../domain/dots';
-import { DotsEntryButton, DotsHoleControls, DotsRotationControls } from '../dots';
+import { DotsEntryButton, DotsHoleControls, DotsRotationControls, DotsHighLowPreview } from '../dots';
 import { groupStartingHole } from '../../domain/round-navigation';
 import type { ChurchySpecials, ChurchySpecialsV3 } from '../../domain/churchy';
 import { ChurcieEntryControls } from '../churchy';
@@ -35,7 +35,7 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
   const games = round.games?.configuration.games.filter((game) =>
     (game.kind === 'nassau' || game.kind === 'match-play' || game.kind === 'wolf' || game.kind === 'dots'
       || game.kind === 'churchy' && game.version === 3 && round.churchyEnabled === true) && game.groupNumber === groupNumber
-    && (placement !== 'before' || game.kind === 'wolf' || game.kind === 'churchy' || game.kind === 'dots' && game.version === 2)
+    && (placement !== 'before' || game.kind === 'wolf' || game.kind === 'churchy' || game.kind === 'dots' && game.mode === 'rotating')
     && (placement !== 'other' || game.kind !== 'wolf')
     && (!playerId || (game.kind === 'dots' || game.kind === 'churchy') && game.playerIds.includes(playerId))) ?? [];
   const etag = round.games?.configuration.etag;
@@ -106,19 +106,18 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
       const records = round.cards.find((card) => card.playerId === anchor)?.holes.flatMap((hole) => hole.score.dots ?? [])
         .filter((record) => record.gameId === game.id) ?? [];
       const staged = draft?.dots?.find((record) => record.gameId === game.id && record.number === holeNumber);
-      const rotation = game.version === 2 ? dotsRotationContext(game, round, staged
+      const rotation = game.mode === 'rotating' ? dotsRotationContext(game, round, staged
         ? [...records.filter((record) => record.number !== holeNumber), staged] : records) : undefined;
       const rotationLocked = records.some((record) => record.rotation !== undefined);
       const individualUnsupported = game.mode === 'individual' && !supportsIndividualDotsPlayerCount(round, game.playerIds.length);
       const dotsLocked = locked || !onSpecialDotsChange || individualUnsupported || !supportsDotsSpecials(round, game.specials)
-        || game.version === 2 && !round.dotsRulesVersions?.includes(2)
-        || game.version === 2 && game.highLow !== undefined && round.dotsHighLowVersion !== 1
+        || !supportsDotsGameRules(round, game)
         || game.sweepRule === 'manual-v1' && round.dotsManualSweep !== true;
-      if (placement === 'before' && game.version === 2 && rotation) {
+      if (placement === 'before' && game.mode === 'rotating' && rotation) {
         const record = staged ?? saved.dots?.find((record) => record.gameId === game.id && record.number === holeNumber)
           ?? { number: holeNumber, gameId: game.id, gameEtag: etag ?? '', players: [], contests: [] };
         return <fieldset key={game.id} disabled={dotsLocked}><legend>{game.name}</legend>
-          {!round.dotsRulesVersions?.includes(2) && <p>Rotating Dots edits are temporarily unavailable in this app version.</p>}
+          {!supportsDotsGameRules(round, game) && <p>Rotating Dots edits are temporarily unavailable in this app version.</p>}
           <DotsRotationControls game={game} holeNumber={holeNumber} record={record} rotation={rotation}
             locked={rotationLocked} players={round.cards}
             onChange={(record) => { onSpecialDotsChange?.([...(draft?.dots ?? []).filter((entry) => entry.gameId !== game.id),
@@ -150,8 +149,10 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
         disabled={dotsLocked} staged={staged?.players.some((player) => player.playerId === playerId) === true}>
         {controls}
       </DotsEntryButton> : <Fragment key={game.id}>
+        {placement === 'other' && game.highLow && <DotsHighLowPreview round={round} game={game} number={holeNumber}
+          playerScores={playerScores} record={staged} />}
         {individualUnsupported && <p>Individual Dots edits for this group size are temporarily unavailable in this app version.</p>}
-        {game.version === 2 && !round.dotsRulesVersions?.includes(2) && <p>Rotating Dots edits are temporarily unavailable in this app version.</p>}
+        {!supportsDotsGameRules(round, game) && <p>Rotating Dots edits are temporarily unavailable in this app version.</p>}
         {game.sweepRule === 'manual-v1' && round.dotsManualSweep !== true && <p>Manual Sweep edits are temporarily unavailable in this app version.</p>}
         {controls}
       </Fragment>;

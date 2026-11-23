@@ -55,12 +55,16 @@ describe('owner gross scoring network contracts', () => {
   it('validates explicit Dots rules capabilities while preserving legacy omission', () => {
     const saved = round();
     expect(isRoundScores(saved)).toBe(true);
-    for (const versions of [[], [1], [2], [1, 2]]) {
+    for (const versions of [[], [1], [2], [1, 2], [3], [1, 2, 3]]) {
       expect(isRoundScores({ ...saved, dotsRulesVersions: versions })).toBe(true);
     }
-    for (const versions of [null, true, [2, 2], [1, 3], ['2'], 2]) {
+    for (const versions of [null, true, [2, 2], [1, 4], ['2'], 2]) {
       expect(isRoundScores({ ...saved, dotsRulesVersions: versions })).toBe(false);
     }
+  });
+  it('validates both explicit High/Low generations without accepting unknown metadata', () => {
+    for (const version of [1, 2]) expect(isRoundScores({ ...round(), dotsHighLowVersion: version })).toBe(true);
+    for (const version of [0, 3, '2', null]) expect(isRoundScores({ ...round(), dotsHighLowVersion: version })).toBe(false);
   });
   describe('Churchy rules-version and saved declaration contracts', () => {
     function churchyRound(edit?: (specials: ChurchySpecials) => ChurchySpecials): RoundScores {

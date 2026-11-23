@@ -1,7 +1,7 @@
 import type { DotsGameDefinition, DotsHoleRecord, DotsRotationContext } from '../../domain/dots';
 
 export function DotsRotationControls({ game, holeNumber, record, rotation, locked, players, onChange }: {
-  readonly game: Extract<DotsGameDefinition, { readonly version: 2 }>;
+  readonly game: Extract<DotsGameDefinition, { readonly mode: 'rotating' }>;
   readonly holeNumber: number;
   readonly record: DotsHoleRecord;
   readonly rotation: DotsRotationContext;
@@ -14,6 +14,10 @@ export function DotsRotationControls({ game, holeNumber, record, rotation, locke
   const order = rotation.rotation?.playerIds ?? ['', '', '', ''];
   const complete = order.length === 4 && new Set(order).size === 4 && order.every((id) => game.playerIds.includes(id));
   const current = rotation.contexts.find((context) => context.number === holeNumber);
+  const approach = game.version === 3 && game.orderMode === 'approach';
+  const labels = approach ? ['Closest approach', 'Next closest approach', 'Next farthest approach', 'Farthest approach']
+    : game.version === 3 ? ['First in tee flip', 'Second in tee flip', 'Third in tee flip', 'Fourth in tee flip']
+      : ['Dots P1', 'Dots P2', 'Dots P3', 'Dots P4'];
   return <section aria-label={`${game.name} partner rotation`}>
     <h4>{game.rotationHoles === 3 ? 'Modified Sixes' : 'Sixes'} · {locked ? 'Current teams' : 'Set initial order'}</h4>
     {current?.status === 'ready' && <p>{locked ? 'Saved teams' : 'Partner preview'} · {current.sides.map((side) =>
@@ -21,10 +25,12 @@ export function DotsRotationControls({ game, holeNumber, record, rotation, locke
       {locked && rotation.rotation?.recordedLate && <small> · Order recovered late, marked by the server</small>}</p>}
     {locked ? current?.status !== 'ready' && <p role="alert">Current teams are unavailable. Refresh and review saved inputs.</p>
       : eligible ? <>
-        <p>Choose the first played hole&apos;s order. Save &amp; Next saves it with this hole; the order then locks.</p>
+        <p>{approach ? 'Rank your first-hole approaches from closest to farthest: closest + farthest play the middle two.'
+          : game.version === 3 ? 'Choose your first-tee flip order: first + second play third + fourth.'
+            : 'Choose the first played hole’s order.'} Save &amp; Next saves it with this hole; the order then locks.</p>
         {rotation.firstHole !== null && <p role="note">Scores already exist. Saving the recovered order is marked late by the server.</p>}
         <div className="dots-rotation-order">{[0, 1, 2, 3].map((index) => <label key={index}>
-          Dots P{index + 1}<select value={order[index] ?? ''} onChange={(event) => {
+          {labels[index]}<select value={order[index] ?? ''} onChange={(event) => {
             const next = [...order];
             const other = next.indexOf(event.target.value);
             if (event.target.value && other >= 0) next[other] = next[index] ?? '';

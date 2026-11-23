@@ -63,7 +63,7 @@ describe('rotating Dots score transaction authority', () => {
     const saved = await f.scores.write(f.actor, event.id, f.roundId, f.playerId, 12,
       parsed.score, null, requestId);
     expect(saved.change.after.dots).toEqual([first]);
-    expect(saved.round.dotsRulesVersions).toEqual([1, 2]);
+    expect(saved.round.dotsRulesVersions).toEqual([1, 2, 3]);
     expect(isRoundScores(saved.round)).toBe(true);
     expect(isScoreWriteResult(saved)).toBe(true);
     expect(saved.round.games?.results[0]?.dots?.awards[0]?.recipientIds).toEqual(order.slice(0, 2));

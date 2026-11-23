@@ -79,3 +79,6 @@
   .score-toolbar { gap: 2px; }
   .score-toolbar .score-action-short-label { font-size: .6875rem; }
 }
+.entry-net-score { margin: .25rem 0; color: var(--cp-text-muted); font-size: .8rem; }
+.entry-net-comparison { margin-block: .5rem; font-size: .85rem; }
+.entry-net-comparison p { margin: .2rem 0; }

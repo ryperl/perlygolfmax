@@ -48,6 +48,7 @@ import { buildDotAwardAudit, correctionAuditCards, supportsDotAwardAudit } from 
 import { requireGameCalculations } from '../../../src/contracts/game-calculations.js';
 import { requireWolfOrders } from '../../../src/contracts/wolf-orders.js';
 import { requireDotsHighLow } from '../../../src/contracts/dots-high-low-rules.js';
+import { requireDotsRulesV3 } from '../../../src/contracts/dots-rules-v3.js';
 import { publishedCourseHandicaps } from '../../../src/domain/playing-handicaps.js';
 import { calculateGameResults } from '../../../src/domain/stableford.js';
 import type { EventHandicapRefreshResult } from '../../../src/domain/player-handicap-update.js';
@@ -352,7 +353,7 @@ export class TableWorkspaceStore {
 
   async refreshPlayerIndex(
     identity: AccountIdentity, eventId: string, playerId: string, observationId: string,
-    etag: string, requestId: string, chargeRound?: () => Promise<void>, wolfOrders = true, dotsHighLow = true,
+    etag: string, requestId: string, chargeRound?: () => Promise<void>, wolfOrders = true, dotsHighLow = true, dotsRulesV3 = true,
   ): Promise<EventHandicapRefreshResult> {
     requireManager(identity, this.allowed);
     if (!isUuid(identity.tenantId) || !isUuid(identity.objectId)
@@ -362,11 +363,12 @@ export class TableWorkspaceStore {
     if (access.event.quickRound === true && access.event.quickRoundReady !== true) {
       throw new ApiError(403, 'PUBLIC_EVENT_NOT_AVAILABLE');
     }
-    if (!wolfOrders || !dotsHighLow) {
+    if (!wolfOrders || !dotsHighLow || !dotsRulesV3) {
       const currentWorkspace = await this.load(access.summary, false, chargeRound);
       for (const round of currentWorkspace.rounds.filter((round) => round.scoringStarted
         && round.players.some((player) => player.playerId === playerId))) {
         const games = await readGameConfiguration(this.table, eventId, round.id, configuredGameRounds(access.event.gameRoundIds));
+        requireDotsRulesV3(games?.games ?? [], dotsRulesV3);
         requireWolfOrders(games?.games ?? [], wolfOrders);
         requireDotsHighLow(games?.games ?? [], dotsHighLow);
       }
@@ -474,10 +476,11 @@ export class TableWorkspaceStore {
   }
 
   async correctRound(identity: AccountIdentity, eventId: string, roundId: string,
-    requestId: string, body: RoundCorrectionWriteRequest, gameCalculations = true, wolfOrders = true, dotsHighLow = true): Promise<RoundCorrectionWriteResult> {
+    requestId: string, body: RoundCorrectionWriteRequest, gameCalculations = true, wolfOrders = true, dotsHighLow = true, dotsRulesV3 = true): Promise<RoundCorrectionWriteResult> {
     if (!isUuid(requestId) || !isRoundCorrectionWriteRequest(body)) throw new ApiError(400, 'INVALID_ROUND_CORRECTION');
     const state = await this.correctionState(identity, eventId, roundId);
     requireWolfOrders(state.games?.games ?? [], wolfOrders);
+    requireDotsRulesV3(state.games?.games ?? [], dotsRulesV3);
     requireDotsHighLow(state.games?.games ?? [], dotsHighLow);
     const replayKey = `round-correction:${roundId}:${requestId}`;
     const replay = await optionalRow(this.table, eventId, replayKey);
@@ -657,12 +660,13 @@ export class TableWorkspaceStore {
     return true;
   }
 
-  async refreshIndices(identity: AccountIdentity, eventId: string, roundId: string, requestId: string, etag: string, wolfOrders = true, dotsHighLow = true): Promise<EventWorkspace> {
+  async refreshIndices(identity: AccountIdentity, eventId: string, roundId: string, requestId: string, etag: string, wolfOrders = true, dotsHighLow = true, dotsRulesV3 = true): Promise<EventWorkspace> {
     const access = await this.ownerAccess(identity, eventId);
     if (access.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     requireManager(identity, this.allowed);
-    if (!wolfOrders || !dotsHighLow) {
+    if (!wolfOrders || !dotsHighLow || !dotsRulesV3) {
       const games = await readGameConfiguration(this.table, eventId, roundId, configuredGameRounds(access.event.gameRoundIds));
+      requireDotsRulesV3(games?.games ?? [], dotsRulesV3);
       requireWolfOrders(games?.games ?? [], wolfOrders);
       requireDotsHighLow(games?.games ?? [], dotsHighLow);
     }

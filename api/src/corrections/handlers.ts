@@ -11,7 +11,8 @@ import type { TableWorkspaceStore } from '../setup/store.js';
 import { supportsGameCalculations } from '../scoring/murphy-transport.js';
 import { GameCalculationsClientUpdateRequired } from '../../../src/contracts/game-calculations.js';
 import { WolfOrdersClientUpdateRequired } from '../../../src/contracts/wolf-orders.js';
-import { supportsWolfOrders, supportsDotsHighLow } from '../scoring/murphy-transport.js';
+import { supportsWolfOrders, supportsDotsHighLow, supportsDotsRulesV3 } from '../scoring/murphy-transport.js';
+import { DotsRulesV3ClientUpdateRequired } from '../../../src/contracts/dots-rules-v3.js';
 import { DotsHighLowClientUpdateRequired } from '../../../src/contracts/dots-high-low-rules.js';
 
 export interface CorrectionsApi {
@@ -31,6 +32,7 @@ export function createCorrectionsHandler(resolveApi: () => CorrectionsApi, actio
       const gameCalculations = supportsGameCalculations(request);
       const wolfOrders = supportsWolfOrders(request);
       const dotsHighLow = supportsDotsHighLow(request);
+      const dotsRulesV3 = supportsDotsRulesV3(request);
       const api = resolveApi();
       const identity = await api.verify(request.headers.get('authorization'));
       await api.limiter.check(identity, action === 'write' ? 'setup-write' : 'setup-read');
@@ -43,11 +45,11 @@ export function createCorrectionsHandler(resolveApi: () => CorrectionsApi, actio
       const requestId = uuid(request.headers.get('Idempotency-Key'));
       const body = await readJson(request, 12 * 1024);
       if (!isRoundCorrectionWriteRequest(body)) throw new ApiError(400, 'INVALID_ROUND_CORRECTION');
-      const value = await api.workspace.correctRound(identity, eventId, roundId, requestId, body, gameCalculations, wolfOrders, dotsHighLow);
+      const value = await api.workspace.correctRound(identity, eventId, roundId, requestId, body, gameCalculations, wolfOrders, dotsHighLow, dotsRulesV3);
       return response(200, privateReadResponse(request, value));
     } catch (error) {
-      const status = error instanceof ApiError || error instanceof GameCalculationsClientUpdateRequired || error instanceof WolfOrdersClientUpdateRequired || error instanceof DotsHighLowClientUpdateRequired ? error.status : 503;
-      const code = error instanceof ApiError || error instanceof GameCalculationsClientUpdateRequired || error instanceof WolfOrdersClientUpdateRequired || error instanceof DotsHighLowClientUpdateRequired ? error.code : 'SERVICE_UNAVAILABLE';
+      const status = error instanceof ApiError || error instanceof GameCalculationsClientUpdateRequired || error instanceof WolfOrdersClientUpdateRequired || error instanceof DotsHighLowClientUpdateRequired || error instanceof DotsRulesV3ClientUpdateRequired ? error.status : 503;
+      const code = error instanceof ApiError || error instanceof GameCalculationsClientUpdateRequired || error instanceof WolfOrdersClientUpdateRequired || error instanceof DotsHighLowClientUpdateRequired || error instanceof DotsRulesV3ClientUpdateRequired ? error.code : 'SERVICE_UNAVAILABLE';
       if (status >= 500) context.error('Corrections API request failed', { code, action, status, invocationId: context.invocationId, ...failureDiagnostics(error) });
       else context.warn('Corrections API request rejected', { code, action, status, invocationId: context.invocationId });
       return response(status, { code });

@@ -6,3 +6,4 @@ export { DotsRotationControls } from './DotsRotationControls';
 export { DotsEntryButton } from './DotsEntryButton';
 export { DotsResults, DotSpecialReviewNotice } from './DotsResults';
 export { InternalSettlement } from './InternalSettlement';
+export { DotsHighLowPreview } from './DotsHighLowPreview';

@@ -47,8 +47,8 @@ describe('independent Sweep setup and manual entry', () => {
     expect(changed).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Use manual Sweep' }));
     expect(changed).toHaveBeenLastCalledWith({ dotsSweepRule: 'manual-v1', dotsLegacySweep: false });
-    expect(screen.getByLabelText('Sweep')).toBeChecked();
-    expect(screen.getByLabelText('Sweep units')).toHaveValue(2);
+    expect(screen.getByLabelText('Manual Sweep')).toBeChecked();
+    expect(screen.getByLabelText('Manual Sweep units')).toHaveValue(2);
     expect(screen.queryByLabelText('Sweep · Automatic')).not.toBeInTheDocument();
   });
 

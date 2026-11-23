@@ -296,14 +296,19 @@
   both automatic sources for the same match. Require `sweepRules=2`/capabilities,
   preserve legacy definitions/audits and immutable final-hole Wolf choices.
   Thief/full Sixes
-  match engines remain deferred except explicit Modified Sixes High/Low below.
+  match engines remain deferred except explicit rotating High/Low below.
   Dots cannot stack with Churchie.
 - Rotating Dots version 2 shares specials for Modified Sixes (three played
   holes) and Sixes (six). Opt-in Modified Sixes net High/Low uses full captured
   CH or whole-group SO, one dot per winning teammate per lane, ties push/no
   carry; specials stay gross. Keep base/special sources separate and settle
-  once. Require `dotsHighLow=1`/`dotsHighLowVersion: 1` before affected reads or
-  publications; unmarked games and Sixes stay specials-only. First-played-hole P1–P4
+  once. Legacy version-2 games require `dotsHighLow=1` and retain their
+  three-hole-only High/Low without automatic Sweep. New version-3 Sixes and
+  Modified Sixes use High/Low version 2, adding one automatic High/Low Sweep
+  dot per teammate only when the same pair wins both net contests, no carry or
+  multiplier. Require `dotsRules=3` plus `dotsHighLow=2` and explicit advertised
+  support before affected reads/publications; do not silently rescore old games.
+  First-played-hole P1–P4
   order cycles 12/34, 13/24, 14/23 from an acknowledged canonical group-first
   card receipt. Missing order is pending, never inferred fixed partners.
   Preserve the immutable order/origin on clears/raw-only edits and mark absent
@@ -312,6 +317,12 @@
   No retrospective reshuffle or implicit High/Low migration; explicit manual
   Sweep remains independent. Require explicit `dotsRulesVersions` support, keep legacy
   definitions/results unchanged and retain group/input/revision/audit checks.
+  New first teams use tee flip (12/34,13/24,14/23) or approach rank closest to
+  farthest (14/23,13/24,12/34), keeping the selected 3/6-hole period. Choose the
+  method in clear setup and actual names on the first tee/first played hole.
+  Preserve drafts, canonical immutable receipts and raw scoring on missing order.
+  Name Manual Sweep, High/Low Sweep and Category Sweep distinctly; show hole
+  stroke/net values and individual round-only bonuses without audit identities.
   New/changed declarations enforce same-source-golfer/whole-hole exclusions:
   Hogan/Seve, Pully with Dime/SuperDime, Hogan with Murphy/Chippy. Shared
   teammate awards may differ. Hogan/Seve with Walk warns but is allowed.

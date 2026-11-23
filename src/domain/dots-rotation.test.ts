@@ -20,6 +20,28 @@ function fixture(rotationHoles: 3 | 6 = 3, startingHole = 1) {
 const pairs = [[['A', 'B'], ['C', 'D']], [['A', 'C'], ['B', 'D']], [['A', 'D'], ['B', 'C']]];
 
 describe('saved rotating Dots contexts', () => {
+  it('keeps v3 King round-only and individual even when approach partners change', () => {
+    const f = fixture(6, 16);
+    const game: DotsGameDefinition = { id: f.game.id, name: f.game.name, groupNumber: 1,
+      playerIds: f.game.playerIds, stakeMinor: 100, kind: 'dots', mode: 'rotating', rotationHoles: 6, version: 3, orderMode: 'approach',
+      specials: [{ kind: 'king-of-the-hill', units: 1 }, { kind: 'blue-plate', units: 1 }, { kind: 'long-drive', units: 1 }] };
+    const round = { ...f.round, layout: f.round.layout.map((hole) => ({ ...hole, par: 5 })) };
+    const records: readonly DotsHoleRecord[] = round.layout.map((hole) => ({
+      number: hole.number, gameId: game.id, gameEtag: f.record.gameEtag, players: [],
+      contests: [{ kind: 'blue-plate', status: 'awarded', winnerId: 'A' },
+        { kind: 'long-drive', status: 'awarded', winnerId: 'A' }],
+      ...(hole.number === 16 ? { rotation: { playerIds: ids } } : {}),
+    }));
+    const result = calculateDots(game, round, records);
+    expect(result.status).toBe('complete');
+    expect(result.awards.filter((award) => award.kind === 'king-of-the-hill')
+      .map((award) => [award.number, award.recipientIds, award.dots, award.multiplier])).toEqual([
+      [null, ['A'], 1, 1], [null, ['A'], 1, 1],
+    ]);
+    const unfinished = { ...round, cards: round.cards.map((card) => ({ ...card, holes: card.holes.map((hole) =>
+      hole.number === 1 ? { ...hole, score: { kind: 'unplayed' as const } } : hole) })) };
+    expect(calculateDots(game, unfinished, records).awards.some((award) => award.kind === 'king-of-the-hill')).toBe(false);
+  });
   it.each([3, 6] as const)('uses explicit P1–P4, %i-hole blocks and x1, never participant-set order', (size) => {
     const { game, round, record } = fixture(size);
     const rotation = dotsRotationContext(game, round, [record]);

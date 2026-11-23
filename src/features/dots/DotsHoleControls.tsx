@@ -69,7 +69,7 @@ export function DotsHoleControls({ game, holeNumber, par, playerPars, etag, save
     }).conflicts.filter((issue) => issue.kinds.includes(contest.kind));
   }
   return <fieldset disabled={disabled}><legend>{game.name} specials · Hole {holeNumber}</legend>
-    {!selectedPlayerId && showRotation && game.version === 2 && rotation && <DotsRotationControls game={game} holeNumber={holeNumber}
+    {!selectedPlayerId && showRotation && game.mode === 'rotating' && rotation && <DotsRotationControls game={game} holeNumber={holeNumber}
       record={record} rotation={rotation} locked={rotationLocked} players={players}
       onChange={(value) => { onChange({ ...value, gameEtag: etag }); }} />}
     {selectedPlayerId && game.mode === 'rotating' && <p className="dots-entry-partner">{context?.status === 'ready'

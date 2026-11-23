@@ -9,7 +9,7 @@ export class DotsHighLowClientUpdateRequired extends Error {
 }
 
 export function requireDotsHighLow(games: readonly RoundGameDefinition[], supported: boolean): void {
-  if (!supported && games.some((game) => game.kind === 'dots' && game.version === 2 && game.highLow !== undefined)) {
+  if (!supported && games.some((game) => game.kind === 'dots' && game.highLow !== undefined)) {
     throw new DotsHighLowClientUpdateRequired();
   }
 }

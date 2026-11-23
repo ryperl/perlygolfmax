@@ -166,12 +166,12 @@ function validateRoundScores(value: unknown, lean = false): value is RoundScores
       || new Set(value.churchyRulesVersions).size !== value.churchyRulesVersions.length
       || value.churchyRulesVersions.length > 0 && value.churchyEnabled !== true)) return false;
   if (isRecord(value) && (value.internalGamesSupported !== undefined && typeof value.internalGamesSupported !== 'boolean'
-    || value.dotsHighLowVersion !== undefined && value.dotsHighLowVersion !== 1
+    || value.dotsHighLowVersion !== undefined && value.dotsHighLowVersion !== 1 && value.dotsHighLowVersion !== 2
     || value.dotsIndividualPlayerCounts !== undefined && (!Array.isArray(value.dotsIndividualPlayerCounts)
       || !value.dotsIndividualPlayerCounts.every((count: unknown) => count === 1 || count === 2 || count === 3 || count === 4)
       || new Set(value.dotsIndividualPlayerCounts).size !== value.dotsIndividualPlayerCounts.length)
     || value.dotsRulesVersions !== undefined && (!Array.isArray(value.dotsRulesVersions)
-      || !value.dotsRulesVersions.every((version: unknown) => version === 1 || version === 2)
+      || !value.dotsRulesVersions.every((version: unknown) => version === 1 || version === 2 || version === 3)
       || new Set(value.dotsRulesVersions).size !== value.dotsRulesVersions.length)
     || value.wolfRulesVersions !== undefined && (!Array.isArray(value.wolfRulesVersions)
       || !value.wolfRulesVersions.every((version: unknown) => version === 1 || version === 2)
@@ -194,7 +194,12 @@ function validateRoundScores(value: unknown, lean = false): value is RoundScores
   if (isRecord(value) && isRecord(value.games) && isRecord(value.games.configuration)
     && Array.isArray(value.games.configuration.games)
     && value.games.configuration.games.some((game: unknown) => isRecord(game) && game.kind === 'dots'
-      && game.highLow !== undefined) && value.dotsHighLowVersion !== 1) return false;
+      && isRecord(game.highLow) && (game.highLow.version === 2
+        ? value.dotsHighLowVersion !== 2 : value.dotsHighLowVersion !== 1 && value.dotsHighLowVersion !== 2))) return false;
+  if (isRecord(value) && isRecord(value.games) && isRecord(value.games.configuration)
+    && Array.isArray(value.games.configuration.games)
+    && value.games.configuration.games.some((game: unknown) => isRecord(game) && game.kind === 'dots' && game.version === 3)
+    && (value.dotsHighLowVersion !== 2 || !Array.isArray(value.dotsRulesVersions) || !value.dotsRulesVersions.includes(3))) return false;
   if (isRecord(value) && value.quickRound !== undefined && value.quickRound !== true) return false;
   if (isRecord(value) && (value.kpEnabled !== undefined && typeof value.kpEnabled !== 'boolean'
     || value.kpCaptureIdentity !== undefined && (typeof value.kpCaptureIdentity !== 'string' || value.kpCaptureIdentity.length === 0)

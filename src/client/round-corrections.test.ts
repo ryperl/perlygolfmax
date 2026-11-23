@@ -73,8 +73,8 @@ describe('round corrections client transport', () => {
     };
     expect(await client.save(eventId, roundId, request, fictionalId(88), signal)).toEqual(saved);
 
-    expect(send.mock.calls[0]?.[0]).toBe(`https://fictional.example.test/api/events/${eventId}/rounds/${roundId}/corrections?gameCalculations=2&wolfOrders=1&dotsHighLow=1`);
-    expect(send.mock.calls[1]?.[0]).toBe(`https://fictional.example.test/api/events/${eventId}/rounds/${roundId}/corrections?gameCalculations=2&wolfOrders=1&dotsHighLow=1`);
+    expect(send.mock.calls[0]?.[0]).toBe(`https://fictional.example.test/api/events/${eventId}/rounds/${roundId}/corrections?gameCalculations=2&wolfOrders=1&dotsHighLow=2&dotsRules=3`);
+    expect(send.mock.calls[1]?.[0]).toBe(`https://fictional.example.test/api/events/${eventId}/rounds/${roundId}/corrections?gameCalculations=2&wolfOrders=1&dotsHighLow=2&dotsRules=3`);
     const init = send.mock.calls[1]?.[1];
     const headers = new Headers(init?.headers);
     expect(headers.get('Idempotency-Key')).toBe(fictionalId(88));

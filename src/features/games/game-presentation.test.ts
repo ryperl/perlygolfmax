@@ -10,8 +10,8 @@ describe('shared game availability copy', () => {
     for (const name of ['Churchie', 'Churchy Game']) {
       expect(gameDisplayName({ ...game, name })).toBe('Churchie');
     }
-    expect(gameDisplayName({ ...game, version: 3, name: 'Churcie', orderMode: 'tee', specials: [] })).toBe('Churchie');
-    expect(gameDisplayName({ ...game, version: 3, name: 'Churchy Game', orderMode: 'tee', specials: [] })).toBe('Churchy Game');
+    expect(gameDisplayName({ ...game, version: 3 as const, name: 'Churcie', orderMode: 'tee' as const, specials: [] })).toBe('Churchie');
+    expect(gameDisplayName({ ...game, version: 3 as const, name: 'Churchy Game', orderMode: 'tee' as const, specials: [] })).toBe('Churchy Game');
     expect(gameDisplayName({ ...game, name: 'Churcie' })).toBe('Churcie');
     expect(gameDisplayName({ ...game, name: 'Fictional evening game' })).toBe('Fictional evening game');
   });

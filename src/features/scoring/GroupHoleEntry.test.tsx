@@ -41,6 +41,36 @@ function typeScore(index: number, value: string) {
 function pause(ms = 900) { act(() => { vi.advanceTimersByTime(ms); }); }
 afterEach(() => { vi.useRealTimers(); });
 describe('pure mobile group hole entry', () => {
+  it('shows hole-specific net preview without saving, then identifies acknowledged values and nonnumeric dispositions', () => {
+    const input = props();
+    const rows = input.rows.map((row, index) => ({ ...row, netGames: index === 0
+      ? [{ name: 'Fictional High/Low', strokesReceived: 1 }] : [] }));
+    const view = render(<ControlledEntry {...input} rows={rows} />);
+    const field = fields()[0];
+    if (!field) throw new Error('Missing fictional score field');
+    fireEvent.change(field, { target: { value: '6' } });
+    expect(screen.getByText('Preview · Receives 1 stroke · Net 5')).toBeVisible();
+    expect(input.onSave).not.toHaveBeenCalled();
+    view.rerender(<GroupHoleEntry {...input} rows={rows.map((row, index) => index !== 0 ? row : {
+      ...row, saved: { kind: 'strokes', strokes: 6 },
+    })} />);
+    expect(screen.getByText('Receives 1 stroke · Net 5')).toBeVisible();
+    expect(screen.queryByText(/Preview ·/)).not.toBeInTheDocument();
+    view.rerender(<GroupHoleEntry {...input} rows={rows.map((row, index) => index !== 0 ? row : {
+      ...row, saved: { kind: 'picked-up', reportedStrokes: 7 },
+    })} />);
+    expect(screen.getByText('Receives 1 stroke · Net —')).toBeVisible();
+  });
+  it('keeps missing allocation distinct from zero and labels plus-handicap strokes as given', () => {
+    const input = props();
+    render(<GroupHoleEntry {...input} rows={input.rows.slice(0, 2).map((row, index) => ({
+      ...row, saved: { kind: 'strokes', strokes: 5 }, netGames: [{
+        name: 'Fictional High/Low', strokesReceived: index === 0 ? null : -1,
+      }],
+    }))} />);
+    expect(screen.getByText('Stroke allocation unavailable · Net unavailable')).toBeVisible();
+    expect(screen.getByText('Gives 1 stroke · Net 6')).toBeVisible();
+  });
   it('fills only pristine blanks with each personal par in one keyboard-free action without saving', async () => {
     const input = props();
     const rows = input.rows.map((row, index) => ({ ...row, hole: { ...input.hole, par: index % 2 ? 3 : 5 } }));

@@ -86,7 +86,7 @@ describe('saved Dots awards and one internal settlement', () => {
     expect(screen.getByText(/Fictional golfer 1 \+ Fictional golfer 2 vs Fictional golfer 3 \+ Fictional golfer 4/)).toBeVisible();
     expect(screen.getAllByRole('cell', { name: '1' })).toHaveLength(4);
     expect(screen.queryByText('Saved award explanations and score evidence')).not.toBeInTheDocument();
-    expect(view.container).not.toHaveTextContent('King of the Hill');
+    expect(screen.getByRole('region', { name: 'Individual round bonuses' })).toHaveTextContent('Fictional golfer 1 · King of the Hill +1');
     expect(view.container).not.toHaveTextContent('private-award-id');
     expect(view.container).not.toHaveTextContent(id);
   });

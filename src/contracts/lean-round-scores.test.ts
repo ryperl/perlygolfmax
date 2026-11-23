@@ -12,12 +12,14 @@ import { calculateInternalGameResults, calculateInternalSettlements } from '../d
 import { isRecord } from './events.js';
 
 describe('lean routine round scores', () => {
-  it('strictly preserves separate High/Low, gross specials and combined totals without eager base evidence', () => {
+  it.each([[2, 'tee-flip', 3], [3, 'tee-flip', 3], [3, 'approach', 6]] as const)('strictly preserves v%i %s High/Low in %i-hole blocks without eager evidence', (version, orderMode, rotationHoles) => {
     const f = strokeGameFixture();
     const base = strokeGamesRound(f);
     const ids = base.groups[0]?.playerIds ?? [];
-    const game: DotsGameDefinition = { id: strokeGameId(990), name: 'Fictional Modified Sixes', kind: 'dots', version: 2,
-      mode: 'rotating', rotationHoles: 3, groupNumber: 1, playerIds: ids, specials: [], stakeMinor: 50,
+    const common = { id: strokeGameId(990), name: 'Fictional Modified Sixes', kind: 'dots' as const,
+      mode: 'rotating' as const, groupNumber: 1, playerIds: ids, specials: [], stakeMinor: 50 };
+    const game: DotsGameDefinition = version === 3 ? { ...common, version, orderMode, rotationHoles,
+      highLow: { version: 2, handicapRule: 'group-low-v1' } } : { ...common, version, rotationHoles: 3,
       highLow: { version: 1, handicapRule: 'group-low-v1' } };
     const cards: readonly Scorecard[] = base.cards.map((card, index) => ({ ...card, holes: card.holes.map((hole) => ({
       ...hole, score: { kind: 'strokes', strokes: index < 2 ? 3 : 5,
@@ -26,14 +28,25 @@ describe('lean routine round scores', () => {
     })) }));
     const context = { ...base, cards, teeStrokeAllocation: true };
     const results = [...calculateInternalGameResults([game], context).values()];
-    const round = { ...context, dotsHighLowVersion: 1 as const, dotsRulesVersions: [1, 2] as const,
+    const round = { ...context, dotsHighLowVersion: version === 3 ? 2 as const : 1 as const,
+      dotsRulesVersions: version === 3 ? [1, 2, 3] as const : [1, 2] as const,
       games: { configuration: { eventId: base.eventId, roundId: base.roundId, etag: 'fictional-game-revision', games: [game] }, results },
       internalSettlements: calculateInternalSettlements([game], results, context) };
     expect(isRoundScores(round)).toBe(true);
-    const wire = leanRoundScores(round, false, false, false, false, false, false, false, false, false, false, false, true);
+    if (version === 3) expect(() => leanRoundScores(round, false, false, false, false, false, false, false, false, false, false, false, true))
+      .toThrowError('Refresh before using rotating Dots order and High/Low rules.');
+    const wire = leanRoundScores(round, false, false, false, false, false, false, false, false, false, false, false, true, version === 3);
     expect(wire.round.games?.results[0]?.dotsHighLow).not.toHaveProperty('awards');
     expect(wire.round.games?.results[0]?.dotsHighLow).not.toHaveProperty('players');
     expect(decodeRoundScores(JSON.parse(JSON.stringify(wire)))).toEqual(round);
+    if (version === 3) {
+      const legacyRound = leanScoresFixture();
+      const change = { ...fictionalChange, dotAwardAudit: [{ gameId: game.id, kind: game.kind, version: game.version,
+        configuration: game, gameEtag: 'fictional-game-revision', inputRevision: null, before: [], after: [] }] };
+      expect(() => leanScoreWriteResult({ round: legacyRound, change },
+        false, false, false, false, false, false, false, false, false, false, false, true))
+        .toThrowError('Refresh before using rotating Dots order and High/Low rules.');
+    }
     expect(isRoundScores({ ...round, dotsHighLowVersion: undefined })).toBe(false);
     const view = wire.round.games;
     if (!view) throw new Error('Missing fictional games');

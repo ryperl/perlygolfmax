@@ -4,6 +4,7 @@ import { gameHandicapRoundScores } from '../../../src/contracts/game-handicaps.j
 import { gameCalculationRoundScores } from '../../../src/contracts/game-calculations.js';
 import { wolfOrderRoundScores } from '../../../src/contracts/wolf-orders.js';
 import { dotsHighLowRoundScores } from '../../../src/contracts/dots-high-low-rules.js';
+import { dotsRulesV3RoundScores } from '../../../src/contracts/dots-rules-v3.js';
 import { describe, expect, it } from 'vitest';
 import type { ChurchyGameDefinitionV3, ChurchySpecialsV3 } from '../../../src/domain/churchy.js';
 import { defaultChurchySpecialSelections } from '../../../src/domain/churchy.js';
@@ -279,7 +280,7 @@ describe('Churchie v3 authoritative public conditional transactions', () => {
     expect(saved.round.games?.results[0]?.churchy?.order).toEqual({ playerIds: f.game.playerIds });
     expect(isScoreWriteResult(saved)).toBe(true);
     expect(isRoundScores(saved.round)).toBe(true);
-    expect(decodeRoundScores(leanRoundScores(saved.round, false, false, true))).toEqual(dotsHighLowRoundScores(wolfOrderRoundScores(gameCalculationRoundScores(gameHandicapRoundScores(coexistenceRoundScores(saved.round))))));
+    expect(decodeRoundScores(leanRoundScores(saved.round, false, false, true))).toEqual(dotsHighLowRoundScores(wolfOrderRoundScores(gameCalculationRoundScores(gameHandicapRoundScores(coexistenceRoundScores(dotsRulesV3RoundScores(saved.round)))))));
     expect(f.row(`index-capture:${f.roundId}`)).toBeDefined();
     expect((await f.workspace.get(creator, event.id)).rounds[0]?.players).toHaveLength(8);
     expect((await f.scores.write(f.actor, event.id, f.roundId, f.playerId, start, score, null, identifier(24002))).change)

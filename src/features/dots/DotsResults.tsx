@@ -27,6 +27,7 @@ export function DotsResults({ game, result, highLow, players }: {
   const label = (kind: string) => dotsSpecialCatalog.find((special) => special.kind === kind)?.label ?? 'Special';
   const pending = result?.holes.filter((hole) => hole.status === 'pending').map((hole) => hole.number) ?? [];
   const unavailable = result?.holes.filter((hole) => hole.status === 'unavailable').map((hole) => hole.number) ?? [];
+  const roundBonuses = result?.awards.filter((award) => award.number === null) ?? [];
   const status = !game.highLow ? result?.status : !highLow || highLow.status === 'unavailable' || result?.status === 'unavailable'
     || players?.some((player) => player.status === 'unavailable')
     ? 'unavailable' : highLow.status === 'complete' && result?.status === 'complete' ? 'complete' : 'in-progress';
@@ -44,7 +45,7 @@ export function DotsResults({ game, result, highLow, players }: {
         : 'Partner order pending. No sharing is inferred.'}</p>}
       <div className="game-scroll" role="region" aria-label="Dots earned ledger" tabIndex={0}><table>
         <caption>{game.highLow ? 'Saved High/Low and special dots' : 'Saved special dots'}</caption><thead><tr><th scope="col">Golfer</th>
-          {game.highLow && <><th scope="col">High/Low</th><th scope="col">Specials</th></>}
+          {game.highLow && <><th scope="col">{game.highLow.version === 2 ? 'High/Low + auto Sweep' : 'High/Low'}</th><th scope="col">Specials</th></>}
           <th scope="col">Earned dots</th><th scope="col">Holes</th></tr></thead>
         <tbody>{result.players.map((player) => <tr key={player.playerId}><th scope="row">{player.displayName}</th>
           {game.highLow && <><td>{highLow?.players.find((entry) => entry.playerId === player.playerId)?.totalPoints ?? '—'}</td>
@@ -52,14 +53,25 @@ export function DotsResults({ game, result, highLow, players }: {
           <td>{game.highLow ? players?.find((entry) => entry.playerId === player.playerId)?.totalPoints ?? '—' : player.totalPoints ?? '—'}</td>
           <td>{(game.highLow ? players?.find((entry) => entry.playerId === player.playerId)?.holesScored : player.holesScored) ?? 0}/{player.totalHoles}</td></tr>)}</tbody>
       </table></div>
+      {roundBonuses.length > 0 && <section aria-label="Individual round bonuses">
+        <p>These round-only bonuses are already included in Specials, not in any hole score:</p>
+        {roundBonuses.map((award) => <p key={award.id}>{award.recipientIds.map(name).join(', ')}
+          {' · '}{award.kind === 'king-of-the-hill' ? 'King of the Hill' : label(award.kind)} +{award.dots}</p>)}
+      </section>}
       {game.highLow && <details><summary>Net High/Low holes</summary>
         <p>{game.highLow.handicapRule === 'group-low-v1' ? 'SO off the lowest player in your saved group.' : 'Full Course Handicap.'}
           {' '}One dot per winning teammate for each contest; ties push. Specials use gross scores.</p>
+        {game.highLow.version === 2 && <p>Automatic High/Low Sweep adds one per teammate for winning both contests.
+          Manual Sweep and Category Sweep remain separate.</p>}
         {!highLow ? <p>Saved High/Low results unavailable. Refresh to retry.</p>
           : highLow.holes.map((hole) => <p key={hole.number}>Hole {hole.number} · {hole.sides.map((side) => side.map(name).join(' + ')).join(' vs ')}
             {' · '}{hole.contests.map((contest) => `${contest.kind === 'high' ? 'High' : 'Low'}: ${
               contest.status === 'won' ? contest.winnerIds.map(name).join(' + ') : contest.status === 'tied' ? 'Push'
-                : contest.status === 'pending' ? 'Pending scores or order' : 'Unavailable'}`).join(' · ')}</p>)}
+                : contest.status === 'pending' ? 'Pending scores or order' : 'Unavailable'}`).join(' · ')}
+            {game.highLow?.version === 2 && ` · High/Low Sweep: ${highLow.awards.filter((award) =>
+              award.number === hole.number && award.kind === 'high-low-sweep').map((award) =>
+              `${award.recipientIds.map(name).join(' + ')} +${String(award.dots)} each`).join(', ')
+              || (hole.status === 'complete' ? 'None' : hole.status === 'pending' ? 'Pending' : 'Unavailable')}`}</p>)}
       </details>}
       {result.unawarded.map((entry, index) => <p key={`${entry.kind}:${String(index)}`}>Unawarded {label(entry.kind)}: {entry.units} units · Holes {entry.sourceHoles.join(', ')}.
         No rollover or retroactive winner.</p>)}

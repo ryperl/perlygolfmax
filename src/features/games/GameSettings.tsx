@@ -10,6 +10,7 @@ import type { RoundGameDefinition } from '../../domain/games';
 import { DotsPlayingGroupSelect, DotsSettings, DotSpecialsSettings } from '../dots';
 import type { DotPresetStore } from '../../client/dot-presets';
 import type { DotsSpecialKind } from '../../domain/dots';
+import type { PlayerCourseHandicap } from '../../domain/scoring';
 import { dotsSpecialCatalog } from '../../domain/dots';
 import { ChurcieOrderControls } from '../churchy';
 
@@ -41,6 +42,8 @@ interface GameSettingsProps {
   readonly holeNumbers?: readonly number[];
   readonly dotsV2Supported?: boolean;
   readonly dotsHighLowSupported?: boolean;
+  readonly dotsV3Supported?: boolean;
+  readonly courseHandicaps?: readonly PlayerCourseHandicap[];
   readonly dotsIndividualPlayerCounts?: readonly number[];
   readonly dotsSpecialKinds?: readonly DotsSpecialKind[] | undefined;
   readonly presetStore?: DotPresetStore | undefined;
@@ -65,6 +68,7 @@ export function GameSettings({
   dotsIndividualPlayerCounts = [4], dotsSpecialKinds, presetStore, existing = false, churchyV3Supported = false,
   churchyCustomNamesSupported = false, holeNumbers = [], defaultGroupNumber,
   wolfHighLowSweepSupported = false, wolfOrderSupported = false, dotsManualSweepSupported = false, dotsHighLowSupported = false,
+  dotsV3Supported = false, courseHandicaps = [],
   gameHandicapsSupported = false,
 }: GameSettingsProps) {
   const allowanceHint = useId();
@@ -303,6 +307,7 @@ export function GameSettings({
         {draft.kind === 'dots' && <DotsSettings draft={draft} groups={groups} players={roster} hidePlayingGroup
           v2Supported={dotsV2Supported}
           highLowSupported={dotsHighLowSupported}
+          v3Supported={dotsV3Supported} locked={setupLocked} handicaps={courseHandicaps} defaultStartingHole={numbers[0]} existing={existing}
           manualSweepSupported={dotsManualSweepSupported}
           individualPlayerCounts={dotsIndividualPlayerCounts}
           {...(dotsSpecialKinds ? { supportedKinds: dotsSpecialKinds } : {})}

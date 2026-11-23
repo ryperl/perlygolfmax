@@ -10,7 +10,7 @@ import type { RoundGameDefinition } from '../../domain/games';
 import type { ScoreLocation, ScoreView } from '../../domain/score-location';
 import { RoundGamesPanel, RoundGameHoleControls, canManageRoundGames } from '../games';
 import { RoundLeaderboard } from '../leaderboard';
-import { sameHoleScore, scorePermissions, supportsDotsSpecials, supportsIndividualDotsPlayerCount, supportsRoundGame } from '../../domain/scoring';
+import { sameHoleScore, scorePermissions, supportsDotsSpecials, supportsIndividualDotsPlayerCount, supportsRoundGame, supportsDotsGameRules } from '../../domain/scoring';
 import { scoreAccessKey, writablePlayerIds } from './score-access';
 import { scorecardHoles, scorecardTee } from '../../domain/tees';
 import { useOwnerScores } from './useOwnerScores';
@@ -194,7 +194,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
     if (!round || !hole || !playerId || busy || saving.current || !canEditGroup
       || !supportsRoundGame(round, patch.nassau !== undefined ? 'nassau' : patch.dots !== undefined ? 'dots' : 'wolf')) return;
     if (patch.dots?.some((record) => round.games?.configuration.games.some((game) =>
-      game.kind === 'dots' && game.id === record.gameId && (game.version === 2 && !round.dotsRulesVersions?.includes(2)
+      game.kind === 'dots' && game.id === record.gameId && (!supportsDotsGameRules(round, game)
         || !supportsDotsSpecials(round, game.specials)
         || game.mode === 'individual' && !supportsIndividualDotsPlayerCount(round, game.playerIds.length))))) return;
     const card = cardFor(round, playerId);
@@ -486,6 +486,11 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
               handicap: entry.courseHandicap ?? entry.unavailableReason ?? null })) ?? [], round.groups) : null;
           return {
             playerId, displayName: card.displayName, saved: savedHole(card, hole.number),
+            netGames: (round.games?.configuration.games ?? []).filter((game) =>
+              game.kind === 'dots' && game.highLow !== undefined && game.groupNumber === group.number
+              && game.playerIds.includes(playerId)).map((game) => ({ name: game.name,
+                strokesReceived: round.games?.results.find((result) => result.gameId === game.id)?.dotsHighLow?.players
+                  .find((player) => player.playerId === playerId)?.holes.find((entry) => entry.number === hole.number)?.strokesReceived ?? null })),
             grossProgress: savedGrossProgress(card, scorecardHoles(round, playerId)),
             ...(groupLowGame ? { strokesOff: typeof relative === 'number' ? relative : null }
               : churchyPlayer && churchyGame?.kind === 'churchy' && churchyGame.handicapRule === undefined

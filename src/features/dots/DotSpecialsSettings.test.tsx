@@ -27,7 +27,7 @@ describe('shared specials setup and presets', () => {
     const checkboxes = screen.getAllByRole('checkbox');
     for (const checkbox of checkboxes.filter((input) => !input.hasAttribute('disabled'))) expect(checkbox).toBeChecked();
     expect(screen.getByLabelText('Assassin · Automatic')).not.toBeChecked();
-    expect(screen.getByLabelText('Sweep')).toBeChecked();
+    expect(screen.getByLabelText('Manual Sweep')).toBeChecked();
     expect(screen.queryByLabelText('Sweep · Automatic')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Sandy units')).toHaveValue(7);
     expect(screen.getByLabelText('Other')).toBeChecked();

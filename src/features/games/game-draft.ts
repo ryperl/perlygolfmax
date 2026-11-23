@@ -21,7 +21,8 @@ export interface GameDraft {
   readonly wolfVersion?: 1 | 2;
   readonly stake?: string;
   readonly dotsMode?: DotsGameDefinition['mode'];
-  readonly dotsVersion?: 1 | 2;
+  readonly dotsVersion?: 1 | 2 | 3;
+  readonly dotsOrderMode?: 'tee-flip' | 'approach';
   readonly dotsRotationHoles?: 3 | 6;
   readonly dotsHighLow?: boolean;
   readonly dotsHighLowHandicapRule?: GameHandicapRule;
@@ -72,7 +73,8 @@ export function draftFromGame(game: RoundGameDefinition): GameDraft {
 
 function draftFromDefinition(game: RoundGameDefinition): GameDraft {
   if (game.kind === 'dots') return { ...newGameDraft(), id: game.id, name: game.name, kind: 'dots',
-    dotsVersion: game.version, ...(game.version === 2 ? { dotsRotationHoles: game.rotationHoles,
+    dotsVersion: game.version, ...(game.mode === 'rotating' ? { dotsRotationHoles: game.rotationHoles,
+      ...(game.version === 3 ? { dotsOrderMode: game.orderMode } : {}),
       ...(game.highLow ? { dotsHighLow: true, dotsHighLowHandicapRule: game.highLow.handicapRule } : {}) } : {}),
     groupNumber: game.groupNumber, dotsMode: game.mode, dotsPlayers: game.mode === 'fixed' ? game.partnerIds : game.playerIds, dotsPlayerIds: game.playerIds,
     dotsSpecials: game.specials, ...(game.sweepRule ? { dotsSweepRule: game.sweepRule } : {}),
@@ -154,8 +156,8 @@ export function setGameKind(draft: GameDraft, kind: NonNullable<GameDraft['kind'
   const reset = { ...setFormat(draft, undefined, rosterCount), name };
   if (kind === 'wolf') return { ...reset, kind, basis: 'net', wolfPlayers: [], allowPig: false, wolfVersion: 2, wolfHighLowSweep: false, wolfOrderMode: 'first-tee-v1', stake: '' };
   if (kind === 'dots') {
-    const { dotsSweepRule, dotsLegacySweep, dotsHighLow, dotsHighLowHandicapRule, ...fresh } = reset;
-    void dotsSweepRule; void dotsLegacySweep; void dotsHighLow; void dotsHighLowHandicapRule;
+    const { dotsSweepRule, dotsLegacySweep, dotsHighLow, dotsHighLowHandicapRule, dotsVersion, dotsOrderMode, ...fresh } = reset;
+    void dotsSweepRule; void dotsLegacySweep; void dotsHighLow; void dotsHighLowHandicapRule; void dotsVersion; void dotsOrderMode;
     return { ...fresh, kind, dotsMode: 'individual', dotsPlayers: [], dotsSpecials: [], stake: '' };
   }
   if (kind === 'nassau') return setNassauVariant({ ...reset, kind, basis: 'net',
@@ -248,14 +250,16 @@ export function buildGame(draft: GameDraft, playerIds: readonly string[] = []): 
   if (draft.kind === 'dots') {
     const stake = draft.stake?.trim() ? parseMoney(draft.stake) : null;
     if (draft.stake?.trim() && stake === null) return null;
-    if (draft.dotsVersion === 1 && draft.dotsMode === 'rotating' || draft.dotsVersion === 2 && draft.dotsMode !== 'rotating') return null;
-    const common = { id: draft.id, name: draft.name.trim(), kind: 'dots', version: draft.dotsMode === 'rotating' ? 2 : 1,
+    if (draft.dotsVersion === 1 && draft.dotsMode === 'rotating' || (draft.dotsVersion === 2 || draft.dotsVersion === 3) && draft.dotsMode !== 'rotating') return null;
+    const version = draft.dotsMode === 'rotating' ? draft.dotsVersion ?? 2 : 1;
+    const common = { id: draft.id, name: draft.name.trim(), kind: 'dots', version,
       groupNumber: draft.groupNumber, playerIds: draft.dotsPlayerIds ?? draft.dotsPlayers, specials: draft.dotsSpecials ?? [],
       ...(draft.dotsSweepRule === 'manual-v1' && draft.dotsSpecials?.some((special) => special.kind === 'sweep')
         ? { sweepRule: 'manual-v1' } : {}) };
-    if (draft.dotsHighLow && (draft.dotsMode !== 'rotating' || (draft.dotsRotationHoles ?? 3) !== 3)) return null;
+    if (draft.dotsHighLow && (draft.dotsMode !== 'rotating' || version !== 3 && (draft.dotsRotationHoles ?? 3) !== 3)) return null;
     const game = draft.dotsMode === 'rotating' ? { ...common, mode: 'rotating', rotationHoles: draft.dotsRotationHoles ?? 3, stakeMinor: stake,
-      ...(draft.dotsHighLow ? { highLow: { version: 1, handicapRule: draft.dotsHighLowHandicapRule ?? 'full-course-v1' } } : {}) }
+      ...(version === 3 ? { orderMode: draft.dotsOrderMode ?? 'tee-flip' } : {}),
+      ...(draft.dotsHighLow ? { highLow: { version: version === 3 ? 2 : 1, handicapRule: draft.dotsHighLowHandicapRule ?? 'full-course-v1' } } : {}) }
       : draft.dotsMode === 'linked' ? { ...common, mode: 'linked', linkedGameId: draft.linkedGameId }
       : draft.dotsMode === 'fixed' ? { ...common, mode: 'fixed', partnerIds: draft.dotsPlayers, stakeMinor: stake }
         : { ...common, mode: 'individual', stakeMinor: stake };

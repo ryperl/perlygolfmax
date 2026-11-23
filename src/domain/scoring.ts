@@ -5,7 +5,7 @@ import type { RoundGroup } from './setup.js';
 import type { GameChange, GameUnavailableReason, RoundGamesView, RoundGameKind } from './games.js';
 import type { NassauHoleRecord } from './nassau.js';
 import type { WolfHoleRecord } from './wolf.js';
-import type { DotsHoleRecord, DotsSpecialKind, DotsSpecialSelection } from './dots.js';
+import type { DotsGameDefinition, DotsHoleRecord, DotsSpecialKind, DotsSpecialSelection } from './dots.js';
 import { dotsSpecialCatalog } from './dots.js';
 import type { InternalGameSettlement } from './dot-settlement.js';
 import type { DotAwardAudit } from './dot-audit.js';
@@ -84,8 +84,8 @@ export interface RoundScores {
   readonly roundDifferentials?: readonly RoundDifferential[];
   readonly internalGamesSupported?: boolean;
   readonly wolfRulesVersions?: readonly (1 | 2)[];
-  readonly dotsRulesVersions?: readonly (1 | 2)[];
-  readonly dotsHighLowVersion?: 1;
+  readonly dotsRulesVersions?: readonly (1 | 2 | 3)[];
+  readonly dotsHighLowVersion?: 1 | 2;
   readonly dotsIndividualPlayerCounts?: readonly (1 | 2 | 3 | 4)[];
   readonly dotsSpecialKinds?: readonly DotsSpecialKind[];
   readonly churchyRulesVersions?: readonly (1 | 2 | 3)[];
@@ -124,6 +124,13 @@ export interface RoundScores {
 
 export function scorePermissions(round: RoundScores): ScorePermissions {
   return round.permissions ?? { role: 'viewer', writePlayerIds: [], canManageGames: false };
+}
+
+export function supportsDotsGameRules(round: RoundScores, game: DotsGameDefinition): boolean {
+  if (game.version === 1) return true;
+  if (!round.dotsRulesVersions?.includes(game.version)) return false;
+  return game.version === 3 ? round.dotsHighLowVersion === 2
+    : game.highLow === undefined || round.dotsHighLowVersion === 1 || round.dotsHighLowVersion === 2;
 }
 
 export function supportsIndividualDotsPlayerCount(round: RoundScores, count: number): boolean {

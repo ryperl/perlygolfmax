@@ -48,6 +48,10 @@ export interface DotsHighLowSettings {
   readonly version: 1;
   readonly handicapRule: GameHandicapRule;
 }
+export interface DotsHighLowSettingsV2 {
+  readonly version: 2;
+  readonly handicapRule: GameHandicapRule;
+}
 interface CommonDotsDefinition {
   readonly id: string; readonly name: string; readonly kind: 'dots';
   readonly groupNumber: number; readonly playerIds: readonly string[];
@@ -58,10 +62,13 @@ interface CommonDotsDefinition {
   readonly handicapAllowancePercent?: never;
 }
 export type DotsGameDefinition = CommonDotsDefinition & (
-  | { readonly version: 2; readonly mode: 'rotating'; readonly rotationHoles: 3 | 6;
+  | { readonly version: 3; readonly mode: 'rotating'; readonly rotationHoles: 3 | 6;
+      readonly orderMode: 'tee-flip' | 'approach'; readonly highLow?: DotsHighLowSettingsV2;
+      readonly stakeMinor: number | null; readonly partnerIds?: never; readonly linkedGameId?: never }
+  | { readonly version: 2; readonly mode: 'rotating'; readonly rotationHoles: 3 | 6; readonly orderMode?: never;
       readonly highLow?: DotsHighLowSettings;
       readonly stakeMinor: number | null; readonly partnerIds?: never; readonly linkedGameId?: never }
-  | ({ readonly version: 1; readonly rotationHoles?: never; readonly highLow?: never } & (
+  | ({ readonly version: 1; readonly rotationHoles?: never; readonly highLow?: never; readonly orderMode?: never } & (
   | { readonly mode: 'individual'; readonly stakeMinor: number | null; readonly partnerIds?: never; readonly linkedGameId?: never }
   | { readonly mode: 'fixed'; readonly partnerIds: readonly string[]; readonly stakeMinor: number | null; readonly linkedGameId?: never }
   | { readonly mode: 'linked'; readonly linkedGameId: string; readonly stakeMinor?: never; readonly partnerIds?: never })));
@@ -272,9 +279,14 @@ function dotsAutomaticWriteAwards(game: DotsGameDefinition | ChurchyGameDefiniti
     if (game.kind === 'churchy' && game.orderMode === 'tee' && first !== undefined) {
       receipts.push({ number: first, gameId: game.id, gameEtag: '', players: [], contests: [], rotation: { playerIds: game.playerIds } });
     }
-    return calculateDots({ id: game.id, name: game.name, groupNumber: game.groupNumber, playerIds: game.playerIds,
-      specials: automatic, kind: 'dots', version: 2, mode: 'rotating', stakeMinor: null,
-      rotationHoles: game.kind === 'dots' ? game.rotationHoles : 3 }, { ...round, layout }, receipts).awards
+    const definition: DotsGameDefinition = {
+      id: game.id, name: game.name, groupNumber: game.groupNumber, playerIds: game.playerIds,
+      specials: automatic, kind: 'dots', mode: 'rotating', stakeMinor: null,
+      rotationHoles: game.kind === 'dots' ? game.rotationHoles : 3,
+      ...(game.kind === 'dots' && game.version === 3
+        ? { version: 3, orderMode: game.orderMode } : { version: 2 }),
+    };
+    return calculateDots(definition, { ...round, layout }, receipts).awards
       .filter((award) => award.source === 'automatic');
   }
   return calculateDots({ id: game.id, name: game.name, groupNumber: game.groupNumber, playerIds: game.playerIds,
@@ -387,7 +399,7 @@ export function dotsRecordsMatchGame(
 ): boolean {
   if (!dotsDefinitionMatchesRound(game, round) || !unique(records.map((record) => record.number))) return false;
   const rotations = records.filter((record) => record.rotation !== undefined);
-  if (rotations.length > 1 || rotations.length && (game.version !== 2
+  if (rotations.length > 1 || rotations.length && (game.mode !== 'rotating'
     || dotsRotationContext(game, round, records).contexts.some((context) => context.status === 'unavailable'))) return false;
   const enabled = new Set(game.specials.map((special) => special.kind));
   const callIds: string[] = [];
@@ -400,7 +412,7 @@ export function dotsRecordsMatchGame(
       const prior = previous?.records.find((entry) => entry.number === record.number && entry.gameId === game.id)
         ?.players.find((entry) => entry.playerId === player.playerId);
       const unchanged = prior !== undefined && sameDotsPlayerDeclaration(player, prior);
-      if (game.version === 2 && dotsDeclarationIssues(player).conflicts.length && !unchanged) return false;
+      if (game.version !== 1 && dotsDeclarationIssues(player).conflicts.length && !unchanged) return false;
       const personal = round.playerLayouts?.find((entry) => entry.playerId === player.playerId)?.layout ?? round.layout;
       const par = personal.find((entry) => entry.number === record.number)?.par;
       const score = round.cards.find((card) => card.playerId === player.playerId)?.holes.find((entry) => entry.number === record.number)?.score;
@@ -457,7 +469,7 @@ export function calculateDots(
   contexts: readonly DotHoleContext[] = [], profile: DotsRulesProfile = 'dots',
 ): DotsResults {
   const issues: string[] = [];
-  const rotation = game.version === 2 ? dotsRotationContext(game, round, records) : undefined;
+  const rotation = game.mode === 'rotating' ? dotsRotationContext(game, round, records) : undefined;
   const effectiveContexts = rotation?.contexts ?? contexts;
   const valid = dotsDefinitionMatchesRound(game, round);
   const recordsValid = valid && dotsRecordsMatchGame(records, game, round, [], undefined, 'review');

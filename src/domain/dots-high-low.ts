@@ -41,7 +41,9 @@ export function calculateDotsHighLow(game: DotsGameDefinition, context: RoundGam
       number: hole.number, status, reason, sides: hole.sides,
       contests: (['high', 'low'] as const).map((kind) => ({ kind, status, winnerIds: [], aScore: null, bScore: null })),
     });
-    if (game.mode !== 'rotating' || game.rotationHoles !== 3 || !game.highLow) return unresolved('unavailable', 'invalid-high-low-game');
+    if (game.mode !== 'rotating' || !game.highLow || game.version === 2 && game.rotationHoles !== 3) {
+      return unresolved('unavailable', 'invalid-high-low-game');
+    }
     if (hole.status !== 'ready') return unresolved(hole.status, hole.reason ?? 'missing-dots-rotation');
     const players = game.playerIds.map((id) => input.players.find((player) => player.playerId === id));
     const scores = game.playerIds.map((id) => context.cards.find((card) => card.playerId === id)?.holes.find((entry) =>
@@ -80,10 +82,21 @@ export function calculateDotsHighLow(game: DotsGameDefinition, context: RoundGam
         scores: game.playerIds.flatMap((id, index) => {
           const personal = players[index]?.layout.find((entry) => entry.number === hole.number), score = scores[index];
           return personal ? [{ playerId: id, number: hole.number, strokes: score?.kind === 'strokes' ? score.strokes : null, par: personal.par }] : [];
-        }), reason: `Saved Modified Sixes ${kind}; one dot per winning teammate, no tie carry.`,
+        }), reason: `Saved ${game.rotationHoles === 3 ? 'Modified Sixes' : 'Sixes'} ${kind}; one dot per winning teammate, no tie carry.`,
       });
       return { kind, status: contest.status, winnerIds, aScore: contest.aScore, bScore: contest.bScore };
     });
+    const high = contests[0], low = contests[1];
+    if (game.highLow.version === 2 && high?.status === 'won' && low?.status === 'won'
+      && high.winnerIds.length === 2 && high.winnerIds.every((id) => low.winnerIds.includes(id))) {
+      awards.push({
+        id: `${game.id}:${String(hole.number)}:high-low:sweep`, number: hole.number,
+        kind: 'high-low-sweep', source: 'derived', earnedBy: null, recipientIds: high.winnerIds,
+        units: 1, count: 1, multiplier: 1, dots: 1, sourceHoles: [hole.number],
+        scores: awards.find((award) => award.number === hole.number && award.kind === 'high')?.scores ?? [],
+        reason: 'Both saved net High and Low won by the same partners; one extra dot, no carry or multiplier.',
+      });
+    }
     return { number: hole.number, status: contests.some((contest) => contest.status === 'unavailable') ? 'unavailable' : 'complete',
       sides: hole.sides, contests };
   });
@@ -97,7 +110,11 @@ export function calculateDotsHighLow(game: DotsGameDefinition, context: RoundGam
       return { number: hole.number, strokesReceived: own && player && typeof handicap === 'number'
         && hasStrokeAllocation({ holes: player.layout, strokeAllocation: player.strokeAllocation === true })
         ? handicapStrokesForHole(handicap, own.allocation, player.layout.length) : null,
-      points: hole.status === 'complete' ? hole.contests.filter((contest) => contest.winnerIds.includes(id)).length : null };
+      points: hole.status === 'complete' ? awards.filter((award) =>
+        award.number === hole.number && award.recipientIds.includes(id)).reduce((sum, award) => sum + award.dots, 0)
+        : game.version === 3 && hole.contests.some((contest) => contest.status === 'won' || contest.status === 'tied')
+          ? awards.filter((award) => award.number === hole.number && award.recipientIds.includes(id))
+            .reduce((sum, award) => sum + award.dots, 0) : null };
     });
     const subtotal = (front?: boolean) => {
       const known = points.filter((hole) => hole.points !== null && (front === undefined || (hole.number <= 9) === front));

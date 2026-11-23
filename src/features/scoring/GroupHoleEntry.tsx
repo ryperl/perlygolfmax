@@ -27,6 +27,7 @@ import type { ReactNode } from 'react';
 const scoreTypingPauseMs = 850;
 
 export interface GroupHoleEntryRow {
+  readonly netGames?: readonly { readonly name: string; readonly strokesReceived: number | null }[];
   readonly strokesOff?: number | null;
   readonly playerId: string;
   readonly displayName: string;
@@ -218,6 +219,18 @@ export function GroupHoleEntry({ groups, groupNumber, layout, hole, rows, busy, 
               onEdit(row.playerId, pickedUp ? numeric === undefined ? '' : String(numeric) : numeric === undefined ? 'X' : `X${String(numeric)}`);
             }}>X</button>
           </div>
+          {row.netGames?.map((game, index) => {
+            const received = game.strokesReceived;
+            const net = score?.kind === 'strokes' && received !== null ? BigInt(score.strokes) - BigInt(received) : null;
+            const exact = net !== null && net >= BigInt(Number.MIN_SAFE_INTEGER) && net <= BigInt(Number.MAX_SAFE_INTEGER);
+            return <p className="entry-net-score" key={`${game.name}:${String(index)}`}>
+              {(row.netGames?.length ?? 0) > 1 && `${game.name} · `}
+              {row.draft && 'Preview · '}
+              {received === null ? 'Stroke allocation unavailable' : received < 0 ? `Gives ${String(-received)} stroke${received === -1 ? '' : 's'}`
+                : `Receives ${String(received)} stroke${received === 1 ? '' : 's'}`}
+              {' · '}Net {exact ? String(net) : received === null || net !== null ? 'unavailable' : '—'}
+            </p>;
+          })}
           <div className="entry-player-actions" onFocusCapture={cancelMovement} onPointerDownCapture={cancelMovement}>
           {kpEligible && onKpEdit && <KpEntryButton name={row.displayName} disabled={disabled || kpClosed === true}
             value={row.draft?.kp !== undefined ? row.draft.kp : row.saved.kp} draft={row.draft?.kp !== undefined}

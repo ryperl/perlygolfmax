@@ -44,7 +44,8 @@ export function DotSpecialsSettings({ specials, mode, onChange, supportedKinds =
       const selected = specials.find((entry) => entry.kind === special.kind);
       const unsupported = !supportedKinds.includes(special.kind);
       const incompatible = unsupported || !dotSpecialModeCompatible(special.kind, mode, manualSweep);
-      const label = dotSpecialLabel(special.kind, context);
+      const label = context === 'dots' && manualSweep && special.kind === 'sweep' ? 'Manual Sweep'
+        : dotSpecialLabel(special.kind, context);
       const automatic = special.automatic && !(context === 'dots' && manualSweep && special.kind === 'sweep');
       const descriptionId = `${helpId}-${special.kind}`;
       return <div className="dots-special" key={special.kind}>

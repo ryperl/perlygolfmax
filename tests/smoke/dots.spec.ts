@@ -44,6 +44,78 @@ async function openGameStandings(page: Page, name: string) {
   })) await summary.click();
 }
 
+for (const size of [3, 6] as const) {
+  test(`updated ${String(size)}-hole Dots setup explains team method, SO and separate sweeps before saving`, async ({ page }, testInfo) => {
+    const fixture = await openDotsFixture(page, testInfo, 'setup-v3');
+    try {
+      await page.setViewportSize({ width: 320, height: 900 });
+      await page.getByRole('button', { name: 'Games', exact: true }).click();
+      await page.getByRole('button', { name: 'Add game', exact: true }).click();
+      const editor = page.getByRole('form', { name: 'Game settings', exact: true });
+      await editor.getByRole('combobox', { name: 'Dots playing group', exact: true }).selectOption('1');
+      await editor.getByRole('combobox', { name: 'Dots mode', exact: true }).selectOption(`rotating-${String(size)}`);
+      await editor.getByRole('combobox', { name: 'Choose first teams by', exact: true }).selectOption('approach');
+      await editor.getByRole('checkbox', { name: 'Net High/Low', exact: true }).check();
+      await editor.getByRole('combobox', { name: 'High/Low net strokes', exact: true }).selectOption('group-low-v1');
+      await editor.getByText('Choose special dots (0)', { exact: true }).click();
+      await editor.getByRole('checkbox', { name: 'Manual Sweep', exact: true }).check();
+      await expect(editor.getByText(/High 1 \+ Low 1 \+ Sweep 1 = 3 each/)).toBeVisible();
+      await expect(editor.getByText(/Manual Sweep is a separate agreed bonus/)).toBeVisible();
+      await expect(editor.getByRole('region', { name: 'Review Dots setup', exact: true })).toContainText(`every ${String(size)} played holes`);
+      await expect(editor.getByRole('combobox', { name: 'Closest approach', exact: true })).toHaveCount(0);
+      await narrowControls(page, editor);
+      await editor.getByRole('button', { name: 'Save game', exact: true }).click();
+      await expect(page.getByText('Game settings saved.', { exact: true })).toBeVisible();
+      expect(fixture.counters().configurations[0]?.find((game) => game.kind === 'dots')).toMatchObject({
+        version: 3, orderMode: 'approach', rotationHoles: size,
+        highLow: { version: 2, handicapRule: 'group-low-v1' }, sweepRule: 'manual-v1',
+      });
+      await page.getByRole('button', { name: 'Enter scores', exact: true }).click();
+      await expect(page.getByRole('combobox', { name: 'Closest approach', exact: true })).toBeVisible();
+      expect(fixture.counters().writes).toBe(0);
+      expect(fixture.counters().pageErrors).toEqual([]);
+    } finally { await fixture.close(); }
+  });
+}
+
+for (const scenario of ['rotating-v3-tee', 'rotating-v3-approach', 'rotating-v3-six'] as const) {
+  test(`${scenario} acknowledges first-hole order and automatic High/Low Sweep without manual entry`, async ({ page }, testInfo) => {
+    const fixture = await openDotsFixture(page, testInfo, scenario);
+    try {
+      await page.setViewportSize({ width: 390, height: 900 });
+      const form = page.getByRole('form', { name: 'Group 1 hole 4 entry', exact: true });
+      const approach = scenario === 'rotating-v3-approach';
+      const labels = approach ? ['Closest approach', 'Next closest approach', 'Next farthest approach', 'Farthest approach'] as const
+        : ['First in tee flip', 'Second in tee flip', 'Third in tee flip', 'Fourth in tee flip'] as const;
+      for (const [index, label] of labels.entries()) {
+        const choice = form.getByRole('combobox', { name: label, exact: true });
+        await choice.selectOption(dotsPlayers[index] ?? '');
+        expect((await choice.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+      }
+      const winners = approach ? [dotsPlayers[0], dotsPlayers[3]] : dotsPlayers.slice(0, 2);
+      for (const [index, id] of dotsPlayers.entries()) {
+        await form.getByLabel(`Fictional golfer ${String(index + 1)} score`, { exact: true }).fill(winners.includes(id) ? '3' : '5');
+      }
+      await expect(form.getByText('Preview · Receives 0 strokes · Net 3')).toHaveCount(2);
+      await expect(form.getByRole('region', { name: 'Fictional updated Dots net comparison', exact: true })).toContainText('Preview High/Low');
+      await expect(form.getByRole('region', { name: 'Fictional updated Dots net comparison', exact: true })).toContainText('Automatic High/Low Sweep');
+      expect(fixture.counters().writes).toBe(0);
+      await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
+      await expect(page.getByRole('form', { name: 'Group 1 hole 5 entry', exact: true })).toBeVisible();
+      const result = fixture.read().games?.results.find((game) => game.kind === 'dots');
+      expect(result?.players.map((player) => player.totalPoints)).toEqual(approach ? [3, 0, 0, 3] : [3, 3, 0, 0]);
+      expect(result?.dots?.players.map((player) => player.totalPoints)).toEqual([0, 0, 0, 0]);
+      expect(result?.dotsHighLow?.awards.filter((award) => award.kind === 'high-low-sweep')).toHaveLength(1);
+      await page.getByRole('combobox', { name: 'Jump to hole', exact: true }).selectOption(scenario === 'rotating-v3-six' ? '1' : '7');
+      await expect(page.getByText('Saved teams · Fictional golfer 1 + Fictional golfer 3 vs Fictional golfer 2 + Fictional golfer 4', { exact: true })).toBeVisible();
+      await expect(page.getByRole('combobox', { name: labels[0], exact: true })).toHaveCount(0);
+      expect(fixture.counters().writes).toBe(4);
+      expect(fixture.counters().pageErrors).toEqual([]);
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    } finally { await fixture.close(); }
+  });
+}
+
 test('Pully Murphy uses an explicit touch checkbox and saved personal gross score, retaining the call through raw correction', async ({ page }, testInfo) => {
   const fixture = await openDotsFixture(page, testInfo, 'pully-targets');
   try {
@@ -176,7 +248,7 @@ test('Dots common selects all available specials and a standalone manual Sweep w
     for (const checkbox of await specials.getByRole('checkbox').all()) {
       if (await checkbox.isEnabled()) await expect(checkbox).toBeChecked();
     }
-    await expect(form.getByLabel('Sweep', { exact: true })).toBeChecked();
+    await expect(form.getByLabel('Manual Sweep', { exact: true })).toBeChecked();
     await expect(form.getByLabel('Sweep · Automatic', { exact: true })).toHaveCount(0);
     await expect(form.getByLabel('Assassin · Automatic', { exact: true })).not.toBeChecked();
     await expect(form.getByLabel('Sandy units', { exact: true })).toHaveValue('3');
@@ -201,7 +273,7 @@ test('manual Sweep stays independent of High/Low through save retries and raw-sc
     const open = () => form.getByRole('button', { name: 'Dots for Fictional golfer 2 · Fictional current Dots', exact: true }).click();
     await open();
     const dialog = page.getByRole('dialog', { name: 'Dots · Fictional golfer 2', exact: true });
-    await dialog.getByRole('checkbox', { name: 'Sweep for Fictional golfer 2', exact: true }).check();
+    await dialog.getByRole('checkbox', { name: 'Manual Sweep for Fictional golfer 2', exact: true }).check();
     await dialog.getByRole('button', { name: 'Done', exact: true }).click();
     fixture.pauseNextFailure();
     await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
@@ -209,7 +281,7 @@ test('manual Sweep stays independent of High/Low through save retries and raw-sc
     fixture.releaseFailure();
     await expect(form.getByRole('button', { name: 'Save & Next Hole', exact: true })).toBeEnabled();
     await open();
-    await expect(dialog.getByRole('checkbox', { name: 'Sweep for Fictional golfer 2', exact: true })).toBeChecked();
+    await expect(dialog.getByRole('checkbox', { name: 'Manual Sweep for Fictional golfer 2', exact: true })).toBeChecked();
     await dialog.getByRole('button', { name: 'Done', exact: true }).click();
     await form.getByRole('button', { name: 'Save & Next Hole', exact: true }).click();
     await expect(page.getByRole('form', { name: 'Group 1 hole 2 entry', exact: true })).toBeVisible();

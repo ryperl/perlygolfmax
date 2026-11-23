@@ -260,6 +260,7 @@ export function sameGameDefinitions(left: readonly RoundGameDefinition[], right:
       return game.kind === 'dots' && other.kind === 'dots' && game.id === other.id && game.name === other.name
         && game.groupNumber === other.groupNumber && game.mode === other.mode && game.version === other.version
         && game.rotationHoles === other.rotationHoles
+        && game.orderMode === other.orderMode
         && game.highLow?.version === other.highLow?.version && game.highLow?.handicapRule === other.highLow?.handicapRule
         && game.stakeMinor === other.stakeMinor && game.linkedGameId === other.linkedGameId
         && game.playerIds.length === other.playerIds.length && game.playerIds.every((id, i) => id === other.playerIds[i])

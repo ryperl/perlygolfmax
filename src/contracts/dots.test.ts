@@ -25,6 +25,24 @@ const record: DotsHoleRecord = { number: 1, gameId: game.id, gameEtag: 'revision
   contests: [{ kind: 'kp', status: 'awarded', winnerId: A, secondId: B }] };
 
 describe('Dots network contracts', () => {
+  it.each([3, 6])('requires v3 order mode and High/Low v2 for %i-hole rotating games without legacy hybrids', (rotationHoles) => {
+    const rotating = { ...game, version: 3, mode: 'rotating', rotationHoles, orderMode: 'tee-flip',
+      highLow: { version: 2, handicapRule: 'full-course-v1' } };
+    expect(isDotsDefinition(rotating)).toBe(true);
+    expect(isRoundGameDefinitions([rotating])).toBe(true);
+    expect(isDotsDefinition({ ...rotating, orderMode: 'approach',
+      highLow: { version: 2, handicapRule: 'group-low-v1' } })).toBe(true);
+    const { highLow, ...specialsOnly } = rotating;
+    expect(highLow.version).toBe(2);
+    expect(isDotsDefinition(specialsOnly)).toBe(true);
+    for (const patch of [{ orderMode: undefined }, { orderMode: 'tee' }, { version: 2 }, { version: 1 },
+      { mode: 'individual' }, { mode: 'linked', linkedGameId }, { rotationHoles: 4 },
+      { highLow: { version: 1, handicapRule: 'full-course-v1' } },
+      { highLow: { version: 2, handicapRule: 'guess' } }, { highLow: { version: 2, handicapRule: 'full-course-v1', autoSweep: true } },
+    ]) expect(isDotsDefinition({ ...rotating, ...patch })).toBe(false);
+    expect(isDotsDefinition({ ...rotating, sweepRule: 'manual-v1',
+      specials: [{ kind: 'sweep', units: 2 }] })).toBe(true);
+  });
   it('requires canonical target markers and bounded Murphy stages independently of Dots mode/version', () => {
     const calls = [
       { id: callId, kind: 'paree', result: 'pending', pareeTarget: 'par' },

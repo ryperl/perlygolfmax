@@ -5,7 +5,7 @@ import type { DotPresetStore } from '../../client/dot-presets';
 import type { RoundGameDefinition } from '../../domain/games';
 import { changesSkinsCarryRules, maximumGamesPerRound, sameGameDefinitions, visibleGames } from '../../domain/games';
 import type { GameWriteResult, RoundScores } from '../../domain/scoring';
-import { scorePermissions, supportsDotsSpecials, supportsIndividualDotsPlayerCount, supportsRoundGame } from '../../domain/scoring';
+import { scorePermissions, supportsDotsSpecials, supportsIndividualDotsPlayerCount, supportsRoundGame, supportsDotsGameRules } from '../../domain/scoring';
 import type { GameDraft } from './game-draft';
 import { buildGame, defaultGameGroup, draftFromGame, newGameDraft, replaceGame, setGameKind } from './game-draft';
 import { GameResults } from './GameResults';
@@ -89,6 +89,8 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
       && (round.wolfHighLowSweep !== true || editingRound.wolfHighLowSweep !== true);
   const unsupportedWolfOrder = sweepDefinitions.some((game) => game.kind === 'wolf' && game.orderMode !== undefined)
     && (round.wolfOrderVersion !== 1 || editingRound.wolfOrderVersion !== 1);
+  const unsupportedDotsRules = sweepDefinitions.some((game) => game.kind === 'dots'
+    && (!supportsDotsGameRules(round, game) || !supportsDotsGameRules(editingRound, game)));
 
   useEffect(() => { dirtyCallback.current = onDirtyChange; }, [onDirtyChange]);
   useEffect(() => {
@@ -179,14 +181,11 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
       setMessage('Individual Dots for this group size is temporarily unavailable in this app version. Your draft is retained.');
       return;
     }
-    if (game?.kind === 'dots' && (previousGame?.kind === 'dots' && previousGame.version !== game.version
-      || game.version === 2 && (!round.dotsRulesVersions?.includes(2) || !editingRound.dotsRulesVersions?.includes(2)))) {
+    const explicitDotsUpgrade = previousGame?.kind === 'dots' && previousGame.version === 2
+      && game?.kind === 'dots' && game.version === 3 && !round.setupLocked && !editingRound.setupLocked;
+    if (game?.kind === 'dots' && (previousGame?.kind === 'dots' && previousGame.version !== game.version && !explicitDotsUpgrade
+      || !supportsDotsGameRules(round, game) || !supportsDotsGameRules(editingRound, game))) {
       setMessage('Rotating Dots is temporarily unavailable in this app version. Your draft is retained; saved games are unchanged.');
-      return;
-    }
-    if (game?.kind === 'dots' && game.highLow
-      && (round.dotsHighLowVersion !== 1 || editingRound.dotsHighLowVersion !== 1)) {
-      setMessage('Net High/Low is temporarily unavailable in this app version. Your draft is retained.');
       return;
     }
     if (game?.kind === 'dots' && (!supportsDotsSpecials(round, game.specials) || !supportsDotsSpecials(editingRound, game.specials))) {
@@ -401,7 +400,10 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
           wolfOrderSupported={round.wolfOrderVersion === 1 && editingRound.wolfOrderVersion === 1}
           dotsManualSweepSupported={round.dotsManualSweep === true && editingRound.dotsManualSweep === true}
           dotsV2Supported={round.dotsRulesVersions?.includes(2) === true && editingRound.dotsRulesVersions?.includes(2) === true}
-          dotsHighLowSupported={round.dotsHighLowVersion === 1 && editingRound.dotsHighLowVersion === 1}
+          dotsHighLowSupported={round.dotsHighLowVersion !== undefined && editingRound.dotsHighLowVersion !== undefined}
+          dotsV3Supported={round.dotsRulesVersions?.includes(3) === true && editingRound.dotsRulesVersions?.includes(3) === true
+            && round.dotsHighLowVersion === 2 && editingRound.dotsHighLowVersion === 2}
+          courseHandicaps={editingRound.courseHandicaps ?? []}
           dotsSpecialKinds={dotsSpecialCatalog.filter(({ kind }) => supportsDotsSpecials(round, [{ kind, units: 1 }])
             && supportsDotsSpecials(editingRound, [{ kind, units: 1 }])).map((special) => special.kind)}
           dotsIndividualPlayerCounts={([1, 2, 3, 4] as const).filter((count) =>
@@ -413,7 +415,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
           gameHandicapsSupported={round.gameHandicapRules === 1 && editingRound.gameHandicapRules === 1}
           setupLocked={round.setupLocked || editingRound.setupLocked}
           allowChurchyCreation={!editor.base.some((game) => game.id === editor.draft.id)}
-          saveDisabled={editor.conflict || unsupportedSweep || unsupportedWolfOrder} cancelDisabled={working} retry={editor.attempt !== null}
+          saveDisabled={editor.conflict || unsupportedSweep || unsupportedWolfOrder || unsupportedDotsRules} cancelDisabled={working} retry={editor.attempt !== null}
           onChange={change} onSave={() => { void save(); }} onCancel={() => {
             setEditor(null);
             setMessage(editor.attempt ? 'Closing editing does not undo an earlier save. Refresh to see the saved settings.' : '');

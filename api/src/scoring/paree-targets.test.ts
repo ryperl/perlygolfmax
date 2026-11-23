@@ -4,6 +4,7 @@ import { gameHandicapRoundScores } from '../../../src/contracts/game-handicaps.j
 import { gameCalculationRoundScores } from '../../../src/contracts/game-calculations.js';
 import { wolfOrderRoundScores } from '../../../src/contracts/wolf-orders.js';
 import { dotsHighLowRoundScores } from '../../../src/contracts/dots-high-low-rules.js';
+import { dotsRulesV3RoundScores } from '../../../src/contracts/dots-rules-v3.js';
 import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import type { ChurchyGameDefinitionV3, ChurchySpecialsV3 } from '../../../src/domain/churchy.js';
@@ -166,7 +167,7 @@ describe('authoritative Churchie Paree targets', () => {
           }
           const current = await f.scores.get(owner ? creator : f.actor, event.id, f.roundId);
           const text = JSON.stringify(lean ? leanRoundScores(current, murphy, paree, true)
-            : dotsHighLowRoundScores(wolfOrderRoundScores(gameCalculationRoundScores(gameHandicapRoundScores(coexistenceRoundScores(murphyRoundScores(current, murphy, paree)))))));
+            : dotsHighLowRoundScores(wolfOrderRoundScores(gameCalculationRoundScores(gameHandicapRoundScores(coexistenceRoundScores(murphyRoundScores(dotsRulesV3RoundScores(current), murphy, paree)))))));
           const hash = createHash('sha256').update(text).digest('hex'), parts = Math.ceil(text.length / privateReadPartCharacters);
           const handler = owner ? createScoringHandler(() => f.api, 'scores') : createPublicHandler(() => f.api, 'scores');
           for (let index = 0; index < parts; index++) {

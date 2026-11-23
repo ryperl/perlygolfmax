@@ -17,6 +17,7 @@ import { gameHandicapRoundScores } from './game-handicaps.js';
 import { gameCalculationRoundScores } from './game-calculations.js';
 import { wolfOrderRoundScores, requireWolfOrdersInValue } from './wolf-orders.js';
 import { dotsHighLowRoundScores, requireDotsHighLowInValue } from './dots-high-low-rules.js';
+import { dotsRulesV3RoundScores, requireDotsRulesV3InValue } from './dots-rules-v3.js';
 
 function without(value: object, ...keys: readonly string[]): Record<string, unknown> {
   return Object.fromEntries(Object.entries(value).filter(([name]) => !keys.includes(name)));
@@ -33,7 +34,8 @@ function leanWolf(value: WolfResults, game: WolfGameDefinition | undefined, roun
 }
 
 /** Omit evidence and duplicate derived views, never captured inputs or canonical write receipts. */
-export function leanRoundScores(input: RoundScores, murphyTargets = false, pareeTargets = false, stringRules = false, dotsCalls = false, categorySweeps = false, churchyNames = false, sweepRules = false, dotCoexistence = false, gameHandicaps = false, gameCalculations = false, wolfOrders = false, dotsHighLow = false) {
+export function leanRoundScores(input: RoundScores, murphyTargets = false, pareeTargets = false, stringRules = false, dotsCalls = false, categorySweeps = false, churchyNames = false, sweepRules = false, dotCoexistence = false, gameHandicaps = false, gameCalculations = false, wolfOrders = false, dotsHighLow = false, dotsRulesV3 = false) {
+  input = dotsRulesV3RoundScores(input, dotsRulesV3);
   input = dotsHighLowRoundScores(wolfOrderRoundScores(input, wolfOrders), dotsHighLow);
   input = gameCalculationRoundScores(input, gameCalculations);
   const round = gameHandicapRoundScores(coexistenceRoundScores(sweepRulesRoundScores(churchyNamesRoundScores(categorySweepRoundScores(stringRoundScores(murphyRoundScores(input, murphyTargets, pareeTargets, dotsCalls), stringRules), categorySweeps), churchyNames), sweepRules), dotCoexistence), gameHandicaps);
@@ -58,11 +60,12 @@ export function leanRoundScores(input: RoundScores, murphyTargets = false, paree
   };
 }
 
-export function leanScoreWriteResult(value: ScoreWriteResult, murphyTargets = false, pareeTargets = false, stringRules = false, dotsCalls = false, categorySweeps = false, churchyNames = false, sweepRules = false, dotCoexistence = false, gameHandicaps = false, gameCalculations = false, wolfOrders = false, dotsHighLow = false) {
+export function leanScoreWriteResult(value: ScoreWriteResult, murphyTargets = false, pareeTargets = false, stringRules = false, dotsCalls = false, categorySweeps = false, churchyNames = false, sweepRules = false, dotCoexistence = false, gameHandicaps = false, gameCalculations = false, wolfOrders = false, dotsHighLow = false, dotsRulesV3 = false) {
+  requireDotsRulesV3InValue(value.change, dotsRulesV3);
   requireWolfOrdersInValue(value.change, wolfOrders);
   requireDotsHighLowInValue(value.change, dotsHighLow);
   if (!sweepRules) requireSweepRulesInValue(value.change);
-  return { round: leanRoundScores(value.round, murphyTargets, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations, wolfOrders, dotsHighLow),
+  return { round: leanRoundScores(value.round, murphyTargets, pareeTargets, stringRules, dotsCalls, categorySweeps, churchyNames, sweepRules, dotCoexistence, gameHandicaps, gameCalculations, wolfOrders, dotsHighLow, dotsRulesV3),
     change: without(murphyScoreChange(value.change, murphyTargets, value.round, pareeTargets, dotsCalls), 'dotAwardAudit') };
 }
 
