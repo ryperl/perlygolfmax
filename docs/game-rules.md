@@ -68,6 +68,26 @@ the new automatic High/Low Sweep, and scorers must not enter an automatic bonus
 again as a manual one. Individual round-only King bonuses remain separate from
 shared hole points and are already included in the displayed special total.
 
+## Dots player description
+
+Dots setup and saved results include a collapsed **How Dots works** description.
+It follows the selected specials and distinguishes entered shot facts, calls and
+category winners from automatic saved-score awards. Players enter each earned
+special once; the app handles current-partner sharing and settlement.
+
+When both Long Drive and Blue Plate are enabled, the same golfer winning both
+on the same par-5 hole earns one automatic **Category Sweep** dot for themselves
+and each current teammate. Different winners, carried ownership and second
+qualifiers do not create or multiply the bonus. Players must not repeat it as
+Other or Manual Sweep.
+
+Birdie, Eagle, String, BirdyString, Assassin and King of the Hill are calculated
+when selected, using saved gross scores and declared facts. Net High/Low and its
+versioned automatic Sweep are explained separately; saved legacy High/Low
+without an automatic Sweep is not described as having one. Manual Sweep remains
+an explicitly entered, separate agreed bonus. The description changes no rules,
+saved scores, permissions or network reads.
+
 ## Course Handicap and SO
 
 `handicapRule: "full-course-v1"` uses full captured Course Handicap (CH) in stroke

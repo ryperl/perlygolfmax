@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { DotsSettings } from './DotsSettings';
 import type { DotsSetupDraft } from './DotsSettings';
@@ -7,6 +7,20 @@ import { dotsFixture } from './dots.test-support';
 import { dotsSpecialCatalog } from '../../domain/dots';
 
 describe('Dots special mode compatibility', () => {
+  it('explains the selected draft without saving or changing its special values', () => {
+    const f = dotsFixture(), onChange = vi.fn();
+    render(<DotsSettings draft={{ dotsMode: 'fixed', dotsSweepRule: 'manual-v1',
+      dotsSpecials: [{ kind: 'sweep', units: 3 }, { kind: 'birdie', units: 2 }] }}
+      groups={f.round.groups} players={f.round.cards} wolves={[]} manualSweepSupported onChange={onChange} />);
+    fireEvent.click(screen.getByText('How Dots works'));
+    const help = screen.getByRole('region', { name: 'Dots game description' });
+    const lists = within(help).getAllByRole('list');
+    expect(lists[0]).toHaveTextContent('Manual Sweep:');
+    expect(lists[1]).toHaveTextContent('Birdie:');
+    expect(screen.getByLabelText('Manual Sweep units')).toHaveValue(3);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('forwards advertised special kinds without changing unsupported loaded selections', () => {
     const f = dotsFixture(), onChange = vi.fn<(draft: DotsSetupDraft) => void>();
     const draft: DotsSetupDraft = { dotsMode: 'individual', dotsSpecials: [{ kind: 'other', units: 3 }] };
