@@ -22,6 +22,11 @@
 .quick-section-heading button { margin: 0; min-height: 44px; }
 .quick-player-choices { display: grid; gap: .5rem; }
 .quick-player-picker { display: grid; gap: .75rem; }
+.quick-new-player, .quick-new-player-form, .quick-new-player-form form { display: grid; gap: .75rem; min-width: 0; }
+.quick-new-player > button { justify-self: start; min-height: 44px; margin: 0; }
+.quick-new-player-form { padding: 1rem; border: 1px solid var(--cp-border-strong); border-radius: .625rem; background: var(--cp-surface); }
+.quick-new-player-form h3, .quick-new-player-form p { margin: 0; }
+.quick-new-player-form button { min-height: 44px; }
 .quick-golfer-options { grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); max-height: 22rem; overflow-y: auto; overscroll-behavior: contain; }
 .quick-golfer-options label { padding: .5rem .75rem; border: 1px solid var(--cp-border); border-radius: .625rem; background: var(--cp-surface); cursor: pointer; }
 .quick-golfer-options label:has(input:checked) { border-color: var(--cp-round-line); background: var(--cp-round-surface); }

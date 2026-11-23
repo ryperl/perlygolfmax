@@ -23,3 +23,12 @@ export interface QuickPage<T> {
   readonly continuationToken?: string;
 }
 
+export interface QuickPlayerPage extends QuickPage<QuickPlayer> {
+  readonly publicPlayerCreation?: boolean;
+}
+
+export interface PublicPlayerInput {
+  readonly displayName: string;
+  readonly handicapIndexValue: string;
+}
+

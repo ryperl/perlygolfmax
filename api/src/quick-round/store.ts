@@ -2,7 +2,8 @@ import { odata } from '@azure/data-tables';
 import type { TableClient } from '@azure/data-tables';
 import type { EventSetupInput } from '../../../src/domain/setup.js';
 import type { PublicScoreIdentity } from '../../../src/domain/public-access.js';
-import type { QuickCourse, QuickCourseVersion, QuickPage, QuickPlayer } from '../../../src/domain/quick-round.js';
+import type { QuickCourse, QuickCourseVersion, QuickPage, QuickPlayerPage } from '../../../src/domain/quick-round.js';
+import { TablePlayerCatalog } from '../catalog/players.js';
 import { isCourseCatalogEntry, isCourseId, isPlayerProfile, isVersionId } from '../../../src/contracts/catalog.js';
 import { isEventSetupInput } from '../../../src/contracts/setup.js';
 import { isEventRevision, isRecord, isUuid } from '../../../src/contracts/events.js';
@@ -26,14 +27,18 @@ export class TableQuickRoundStore {
     return { items, ...(result.continuationToken ? { continuationToken: result.continuationToken } : {}) };
   }
 
-  async players(cursor?: string): Promise<QuickPage<QuickPlayer>> {
+  async players(cursor?: string): Promise<QuickPlayerPage> {
     const result = await page(this.table, odata`PartitionKey eq ${'catalog:players'} and RowKey ge ${'player:'} and RowKey lt ${'player;'}`, cursor);
     const items = result.rows.map((row) => {
       const player = decode(row.content, isPlayerProfile);
       if (row.partitionKey !== 'catalog:players' || row.rowKey !== `player:${player.id}`) throw new ApiError(503, 'INVALID_STORED_CATALOG');
       return { id: player.id, displayName: player.displayName, handicapIndexValue: player.currentIndex?.value ?? null };
     });
-    return { items, ...(result.continuationToken ? { continuationToken: result.continuationToken } : {}) };
+    return { items, publicPlayerCreation: true, ...(result.continuationToken ? { continuationToken: result.continuationToken } : {}) };
+  }
+
+  async createPlayer(requestId: string, input: unknown) {
+    return new TablePlayerCatalog(this.table, () => false).createPublic(requestId, input);
   }
 
   async version(courseId: string, versionId: string): Promise<QuickCourseVersion> {

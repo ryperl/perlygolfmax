@@ -110,8 +110,13 @@ export interface IndexObservation {
   readonly effectiveDate: string;
   readonly source: string;
   readonly recordedAt: string;
-  readonly recordedBy: AccountIdentity;
+  readonly recordedBy: AccountIdentity | PublicPlayerCreationActor;
   readonly previousObservationId: string | null;
+}
+
+export interface PublicPlayerCreationActor {
+  readonly kind: 'public-player-creation';
+  readonly verified: false;
 }
 
 export interface ManualIndexInput {

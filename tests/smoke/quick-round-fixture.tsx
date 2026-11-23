@@ -7,6 +7,7 @@ import { createPublicServices } from '../../src/client/public-events';
 import { fictionalCapturedRound, fictionalGamesRound } from './games-fixture-data';
 import '../../src/app/styles.css';
 import { roundTee } from '../../src/domain/round-tee';
+import type { QuickPlayer } from '../../src/domain/quick-round';
 
 const players = Array.from({ length: 15 }, (_, index) => ({
   id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
@@ -16,6 +17,8 @@ let workspace: EventWorkspace | undefined;
 let interrupted = false;
 let archived = false;
 let setupInput: EventSetupInput | undefined;
+const playerCreations = new Map<string, { readonly payload: string; readonly player: QuickPlayer }>();
+let playerCreationInterrupted = false;
 const listedEvent = { id: '00000000-0000-4000-8000-000000000050', name: 'Fictional Quick round',
   role: 'viewer' as const, status: 'active' as const, quickRound: true as const, etag: 'quick-v1', createdAt: '2026-01-01T00:00:00Z' };
 function confirm(eventId: string, input: EventSetupInput): EventWorkspace {
@@ -37,7 +40,23 @@ function confirm(eventId: string, input: EventSetupInput): EventWorkspace {
 const quick: QuickRoundClient = {
   archive: () => { archived = true; return Promise.resolve(); },
   courses: () => Promise.resolve({ items: [{ id: fictionalCapturedRound.courseId, name: fictionalCapturedRound.course.name, latestVersionId: fictionalCapturedRound.courseVersionId }] }),
-  players: () => Promise.resolve({ items: players }),
+  players: () => Promise.resolve({ items: players, publicPlayerCreation: true }),
+  createPlayer: (input, requestId) => {
+    const payload = JSON.stringify(input);
+    const existing = playerCreations.get(requestId);
+    if (existing) {
+      if (existing.payload !== payload) return Promise.reject(new Error('Fictional changed creation request'));
+      return Promise.resolve(existing.player);
+    }
+    const player = { id: '00000000-0000-4000-8000-000000000099', ...input };
+    playerCreations.set(requestId, { payload, player });
+    players.push(player);
+    if (!playerCreationInterrupted) {
+      playerCreationInterrupted = true;
+      return Promise.reject(new Error('Fictional lost player creation acknowledgement'));
+    }
+    return Promise.resolve(player);
+  },
   version: () => Promise.resolve({ id: fictionalCapturedRound.courseVersionId, courseId: fictionalCapturedRound.courseId,
     data: { ...fictionalCapturedRound.course, teeProfiles: [fictionalCapturedRound.teeProfile] } }),
   create: (eventId, input) => {

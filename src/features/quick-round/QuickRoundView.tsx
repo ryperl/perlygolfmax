@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import type { QuickCourseVersion } from '../../domain/quick-round';
+import type { QuickCourseVersion, QuickPlayer } from '../../domain/quick-round';
+import { PublicPlayerForm } from './PublicPlayerForm';
 import type { QuickRoundClient } from '../../client/quick-round';
 import type { EventSetupInput, EventWorkspace } from '../../domain/setup';
 import type { RoundScores } from '../../domain/scoring';
@@ -13,6 +14,7 @@ import { QuickSetupFields } from './QuickSetupFields';
 import { useQuickDirectory } from './use-quick-directory';
 import './quick-round.css';
 import { QuickRoundArchive } from './QuickRoundArchive';
+import { roundTee } from '../../domain/round-tee';
 
 interface SaveAttempt {
   readonly input: EventSetupInput;
@@ -51,6 +53,8 @@ export function QuickRoundView({ client, scores, eventId: existingId, presetStor
     rounds: [{ id: crypto.randomUUID(), name: '', courseId: '', courseVersionId: '', teeProfileId: 0, groups: [] }],
   }));
   const [workspace, setWorkspace] = useState<EventWorkspace>();
+  const [createdPlayers, setCreatedPlayers] = useState<readonly QuickPlayer[]>([]);
+  const [playerFormOpen, setPlayerFormOpen] = useState(false);
   const [loading, setLoading] = useState(Boolean(existingId));
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [loadError, setLoadError] = useState('');
@@ -70,6 +74,7 @@ export function QuickRoundView({ client, scores, eventId: existingId, presetStor
   const [versionError, setVersionError] = useState('');
   const [versionAttempt, setVersionAttempt] = useState(0);
   const inFlight = useRef(false);
+  const creationRosterLocked = useRef(false);
   const operations = useRef(new Set<AbortController>());
   const setupRegion = useRef<HTMLDivElement>(null);
   const gamesRegion = useRef<HTMLDivElement>(null);
@@ -88,8 +93,8 @@ export function QuickRoundView({ client, scores, eventId: existingId, presetStor
   const problems = setupProblems(draft);
   const directoriesReady = Boolean(courses.items && players.items);
   const setupBlocked = loading || working || gameDirty || Boolean(attempt) || conflict || Boolean(nextAction);
-  const canStart = Boolean(workspace && !changed && !attempt && !conflict && !captureGap && !setupRefreshError && !gameDirty && !working && !loading && scoreRound);
-  const canSave = !loading && !working && !gameDirty && !conflict && !captureGap && !setupRefreshError && !nextAction
+  const canStart = Boolean(workspace && !changed && !attempt && !conflict && !captureGap && !setupRefreshError && !gameDirty && !working && !loading && !playerFormOpen && scoreRound);
+  const canSave = !loading && !working && !gameDirty && !conflict && !captureGap && !setupRefreshError && !nextAction && !playerFormOpen
     && Boolean(attempt || changed && version && directoriesReady && problems.length === 0);
   useEffect(() => {
     if (previousMode.current === gamesOpen) return;
@@ -116,6 +121,7 @@ export function QuickRoundView({ client, scores, eventId: existingId, presetStor
     void client.load(existingId, controller.signal).then((value) => {
       if (controller.signal.aborted) return;
       const saved = requireQuick(value, existingId);
+      if (saved.rounds[0]?.scoringStarted) creationRosterLocked.current = true;
       setWorkspace(saved);
       setDraft(inputFrom(saved));
     }).catch((failure: unknown) => { if (!controller.signal.aborted) setLoadError(failureMessage(failure)); })
@@ -142,6 +148,7 @@ export function QuickRoundView({ client, scores, eventId: existingId, presetStor
     void scores.load(eventId, savedRound.id, controller.signal).then(async (value) => {
       controller.signal.throwIfAborted();
       loaded = requireQuickScores(value, eventId, savedRound.id);
+      if (loaded.setupLocked) creationRosterLocked.current = true;
       let coherent = workspace;
       if (loaded.setupLocked && savedRound.scoringStarted !== true && loaded.courseHandicaps === undefined) {
         coherent = requireQuick(await client.load(eventId, controller.signal), eventId);
@@ -181,6 +188,7 @@ export function QuickRoundView({ client, scores, eventId: existingId, presetStor
         ? await client.save(eventId, pending.etag, pending.requestId, pending.input, controller.signal)
         : await client.create(eventId, pending.input, controller.signal), eventId);
       if (controller.signal.aborted) return;
+      if (value.rounds[0]?.scoringStarted) creationRosterLocked.current = true;
       setWorkspace(value);
       setSetupRefreshError('');
       if (!sameSetupInput(pending.input, inputFrom(value))) {
@@ -242,9 +250,32 @@ export function QuickRoundView({ client, scores, eventId: existingId, presetStor
       <p>Public round · anyone can edit setup and games.</p></header>
     {loading && <p role="status">Loading Quick round…</p>}
     {loadError && <><p role="alert">{loadError}</p><button onClick={() => { setLoadAttempt((value) => value + 1); }}>Retry opening round</button></>}
+    <PublicPlayerForm create={client.createPlayer}
+      available={players.publicPlayerCreation && Boolean(client.createPlayer) && directoriesReady && !loading && !loadError && !locked && !gamesOpen}
+      disabled={setupBlocked || !directoriesReady || captureGap || Boolean(loadError)}
+      onBlockingChange={setPlayerFormOpen} onCreated={(player) => {
+        setCreatedPlayers((current) => [...current.filter((entry) => entry.id !== player.id), player]);
+        if (locked || creationRosterLocked.current) {
+          setMessage('Player created in the shared directory. The round roster is locked; the player was not added to this round.');
+          return;
+        }
+        setDraft((current) => {
+          const firstRound = current.rounds[0];
+          if (!firstRound || current.playerIds.includes(player.id)) return current;
+          const profile = version?.data.teeProfiles.find((tee) => tee.id === firstRound.teeProfileId);
+          const startingHole = profile ? roundTee(profile, firstRound.roundSide)?.holes[0]?.number : undefined;
+          const available = firstRound.groups.find((group) => group.playerIds.length < 4);
+          const groups = available
+            ? firstRound.groups.map((group) => group.number === available.number ? { ...group, playerIds: [...group.playerIds, player.id] } : group)
+            : [...firstRound.groups, { number: Math.max(0, ...firstRound.groups.map((group) => group.number)) + 1, playerIds: [player.id],
+              ...(startingHole === undefined ? {} : { startingHole }) }];
+          return { ...current, playerIds: [...current.playerIds, player.id], rounds: [{ ...firstRound, groups }] };
+        });
+        setMessage('Player created and selected. Round setup is not saved yet.'); setReview(false);
+      }} />
     {!loading && !loadError && <>
       <div ref={setupRegion} tabIndex={-1} hidden={gamesOpen} className="quick-setup-content">
-      <button type="button" aria-expanded={full} onClick={() => { setFull((value) => !value); }}>{full ? 'Compact setup' : 'Open full setup'}</button>
+      <button type="button" disabled={playerFormOpen} aria-expanded={full} onClick={() => { setFull((value) => !value); }}>{full ? 'Compact setup' : 'Open full setup'}</button>
       {(!courses.items || !players.items) && <div>
         {(courses.loading || players.loading) && <p role="status">Loading all saved courses and golfers…</p>}
         {courses.error && <><p role="alert">Courses incomplete: {courses.error}</p><button disabled={courses.loading} onClick={courses.retry}>Retry courses</button>
@@ -254,7 +285,7 @@ export function QuickRoundView({ client, scores, eventId: existingId, presetStor
       </div>}
       {directoriesReady && !captureGap && <QuickSetupFields draft={draft} courses={courses.items ?? []}
         courseHandicaps={locked ? scoreRound?.courseHandicaps : undefined}
-        players={(players.items ?? []).map((player) => {
+        players={[...(players.items ?? []), ...createdPlayers.filter((player) => !players.items?.some((saved) => saved.id === player.id))].map((player) => {
           if (!locked) return player;
           const captured = savedRound?.players.find((entry) => entry.playerId === player.id);
           return { id: player.id, displayName: player.displayName,
@@ -262,7 +293,7 @@ export function QuickRoundView({ client, scores, eventId: existingId, presetStor
         })}
         profiles={version?.data.teeProfiles ?? (savedRound && savedRound.courseId === round?.courseId && savedRound.courseVersionId === round.courseVersionId
           ? [savedRound.teeProfile, ...(savedRound.playerTees ?? []).map((entry) => entry.profile)].filter((profile, index, list) => list.findIndex((entry) => entry.id === profile.id) === index) : [])}
-        locked={locked} disabled={setupBlocked} full={full} onChange={(value) => { setDraft(value); setMessage(''); setReview(false); }} />}
+        locked={locked} disabled={setupBlocked || playerFormOpen} full={full} onChange={(value) => { setDraft(value); setMessage(''); setReview(false); }} />}
       {round?.courseVersionId && !version && !versionError && <p role="status">Loading selected course tees…</p>}
       {versionError && <><p role="alert">{versionError}</p><button disabled={working} onClick={() => { setVersionAttempt((value) => value + 1); }}>Retry course tees</button></>}
       </div>
@@ -272,7 +303,7 @@ export function QuickRoundView({ client, scores, eventId: existingId, presetStor
       {changed && <p role="status">Unsaved setup</p>}
       {changed && directoriesReady && problems.length > 0 && <ul aria-label="Setup needs attention">{problems.map((problem) => <li key={problem}>{problem}</li>)}</ul>}
       {(workspace || attempt) && <div className="quick-actions" hidden={gamesOpen}>
-        {(workspace || attempt) && <button type="button" disabled={working || gameDirty} onClick={() => { void refresh(); }}>Refresh & review setup</button>}
+        {(workspace || attempt) && <button type="button" disabled={working || gameDirty || playerFormOpen} onClick={() => { void refresh(); }}>Refresh & review setup</button>}
         {review && <button type="button" disabled={working || gameDirty} onClick={() => {
           setAttempt(undefined); setConflict(false); setReview(false);
           setMessage('Draft reviewed against the latest setup. Save your changes when ready.');
@@ -344,7 +375,7 @@ export function QuickRoundView({ client, scores, eventId: existingId, presetStor
         {!gamesOpen && changed && <small>Both actions save the round before continuing.</small>}
       </section>
       {workspace && <QuickRoundArchive client={client} event={workspace.event}
-          disabled={working || gameDirty || changed || Boolean(attempt) || conflict || Boolean(setupRefreshError) || Boolean(nextAction)}
+          disabled={working || gameDirty || changed || Boolean(attempt) || conflict || Boolean(setupRefreshError) || Boolean(nextAction) || playerFormOpen}
           onBusyChange={setWorking}
           onArchived={() => { window.location.hash = '#events?choose=1'; }} onRefresh={() => { void refresh(); }} />}
     </>}

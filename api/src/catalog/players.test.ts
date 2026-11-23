@@ -5,6 +5,60 @@ import { creator, member } from '../../test/fixtures.js';
 const input = { value: '+1.2', effectiveDate: '2026-01-15', source: 'Fictional manual observation' };
 
 describe('audited reusable player catalog', () => {
+  it('atomically creates public shared players with private unverified server observations, never granting catalog management', async () => {
+    const f = catalogFixture();
+    const requestId = identifier(900);
+    const value = { displayName: 'Fictional Public Golfer', handicapIndexValue: '+0.2' };
+    const created = await f.players.createPublic(requestId, value);
+    expect(Object.keys(created).sort()).toEqual(['displayName', 'handicapIndexValue', 'id']);
+    expect(created.id).not.toBe(requestId);
+    const profile = await f.players.get(creator, created.id);
+    expect(profile.currentIndex).toMatchObject({
+      value: '+0.2', source: 'GHIN', recordedAt: profile.createdAt,
+      recordedBy: { kind: 'public-player-creation', verified: false }, previousObservationId: null,
+    });
+    expect(profile.currentIndex?.id).not.toBe(created.id);
+    expect((await f.players.history(creator, created.id)).observations).toEqual([profile.currentIndex]);
+    await expect(f.players.get(member, created.id)).rejects.toMatchObject({ status: 403 });
+    await expect(f.players.rename(member, created.id, 'Fictional Rename', profile.etag)).rejects.toMatchObject({ status: 403 });
+    await expect(f.players.history(member, created.id)).rejects.toMatchObject({ status: 403 });
+    const corrected = await f.players.observe(creator, created.id, identifier(901),
+      { ...input, effectiveDate: profile.currentIndex?.effectiveDate ?? '', value: '0' }, profile.etag);
+    expect(corrected.currentIndex?.previousObservationId).toBe(profile.currentIndex?.id);
+    await f.players.rename(creator, created.id, 'Fictional Later Name', corrected.etag);
+    expect(await f.players.createPublic(requestId, value)).toEqual(created);
+    expect((await f.players.get(creator, created.id)).displayName).toBe('Fictional Later Name');
+    await expect(f.players.createPublic(requestId, { ...value, handicapIndexValue: '3' })).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('converges public concurrent creates and lost acknowledgements without duplicate players or observations', async () => {
+    const f = catalogFixture();
+    const value = { displayName: 'Fictional Zero Golfer', handicapIndexValue: '0' };
+    f.submit.mockImplementationOnce((actions) => {
+      f.apply(actions); return Promise.reject(new Error('Fictional lost acknowledgement'));
+    });
+    await expect(f.players.createPublic(identifier(902), value)).rejects.toThrow('lost acknowledgement');
+    const count = f.rows.size;
+    const [first, second] = await Promise.all([f.players.createPublic(identifier(902), value), f.players.createPublic(identifier(902), value)]);
+    expect(first).toEqual(second);
+    expect(f.rows.size).toBe(count);
+    const concurrent = await Promise.all([f.players.createPublic(identifier(903), value), f.players.createPublic(identifier(903), value)]);
+    expect(concurrent[0]).toEqual(concurrent[1]);
+    expect(f.rows.size).toBe(count + 3);
+  });
+
+  it.each([
+    { displayName: 'Fictional Golfer', handicapIndexValue: '' },
+    { displayName: '', handicapIndexValue: '0' },
+    { displayName: 'Fictional Golfer', handicapIndexValue: '-1' },
+    { displayName: 'Fictional Golfer', handicapIndexValue: '0', id: identifier(200) },
+    { displayName: 'Fictional Golfer', handicapIndexValue: '0', recordedBy: creator },
+    { displayName: 'Fictional Golfer', handicapIndexValue: '0', observationId: identifier(999) },
+  ])('rejects invalid or nonallowlisted public creation without a write', async (value) => {
+    const f = catalogFixture();
+    await expect(f.players.createPublic(identifier(904), value)).rejects.toMatchObject({ status: 400 });
+    expect(f.submit).not.toHaveBeenCalled();
+  });
   it('creates a player and optional initial plus index in one transaction with server audit attribution', async () => {
     const f = catalogFixture();
     const player = await f.players.create(creator, identifier(200), 'Fictional Player A', input);

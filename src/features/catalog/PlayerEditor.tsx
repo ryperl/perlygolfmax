@@ -124,7 +124,8 @@ export function PlayerEditor({ client, player, onSaved, onBusy, onDirty, blocked
       <ol className="catalog-history">{history?.observations.map((observation) => <li key={observation.id}>
         <p><strong>{observation.value}</strong> — effective {observation.effectiveDate}; {observation.source}</p>
         <details className="catalog-technical"><summary>Observation details</summary>
-          <p>Recorded {observation.recordedAt}</p><p className="catalog-version">recorded by {observation.recordedBy.tenantId}/{observation.recordedBy.objectId}
+          <p>Recorded {observation.recordedAt}</p><p className="catalog-version">recorded by {'tenantId' in observation.recordedBy
+            ? `${observation.recordedBy.tenantId}/${observation.recordedBy.objectId}` : 'unverified public player creation'}
             {observation.previousObservationId ? `; previous audit entry ${observation.previousObservationId}` : ''}</p>
         </details>
       </li>)}</ol>

@@ -38,6 +38,7 @@ describe('fixed anonymous public namespace registration', () => {
     const quickRegistrations = vi.mocked(app.http).mock.calls.filter(([name]) => name.startsWith('quickRound-'));
     expect(quickRegistrations.map(([, options]) => ({ route: options.route, methods: options.methods, authLevel: options.authLevel })))
       .toEqual([
+        { route: 'public/players', methods: ['POST'], authLevel: 'anonymous' },
         { route: 'public/quick-rounds/courses', methods: ['GET'], authLevel: 'anonymous' },
         { route: 'public/quick-rounds/players', methods: ['GET'], authLevel: 'anonymous' },
         { route: 'public/quick-rounds/courses/{courseId}/versions/{versionId}', methods: ['GET'], authLevel: 'anonymous' },

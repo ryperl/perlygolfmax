@@ -73,6 +73,14 @@
 - Identity sign-in is not event admission. Verify access tokens, authoritative
   object permissions and owner-versus-global-creator grants on every operation.
 - Only the bootstrapped organizer manages global course/player catalogs.
+  The sole public catalog-write exception is create-only shared players with
+  required name and manually entered GHIN HI. No public profile edits, index
+  history, account fields or catalog administration. Server authors fresh IDs,
+  observation dates and unverified public-player attribution; bind immutable
+  retries to the allowlisted payload and charge durable site catalog-write quota.
+  Advertise `publicPlayerCreation` before enabling the two-field Quick setup
+  form. Preserve unconfirmed entries/retry identity and separate creation from
+  the conditional round save; never fabricate account/event authority.
   Keep catalogs compact with whole-directory search and focused editors.
   Retain page/cursor progress on interrupted reads; never call a loaded-page
   filter a complete search. Preserve import/creation drafts, publish approval,
@@ -94,7 +102,8 @@
   Keep catalog/event acknowledgements and retries separate, with explicit partial
   success and conflict review. Default manual HI metadata to local today/GHIN,
   never claim GHIN verification; quick entry exposes only HI. Old APIs require
-  explicit capability. No anonymous or ordinary-owner catalog authority.
+  explicit capability. No ordinary-owner catalog authority; anonymous access
+  is limited to the create-only exception above.
   Explicit owner corrections are event-local,
   conditional/idempotent/audited and retain the roster and captured course/version.
   Author changed HI observations on the server; never reuse an observation ID
@@ -134,7 +143,8 @@
   event checks, immutable retry/audit receipts, staged transports and durable
   site/event budgets. Hide incomplete creations from discovery. Preserve
   first-score whole-round captures and locks, drafts/confirmed saves on failures,
-  and explicit conflict review. No public catalog writes, corrections, purse/KP
+  and explicit conflict review. Except create-only players above, no public
+  catalog writes, corrections, purse/KP
   administration, archived-data reads, restore/delete or general organizer
   privileges are granted. Any visitor may archive a ready active Quick round
   after confirmation: exact event revision, immutable public-event receipt,

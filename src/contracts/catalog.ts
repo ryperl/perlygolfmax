@@ -144,7 +144,8 @@ export function isManualIndexInput(value: unknown): value is ManualIndexInput {
 export function isIndexObservation(value: unknown): value is IndexObservation {
   return isRecord(value) && isUuid(value.id) && isHandicapIndex(value.value) && isDateOnly(value.effectiveDate)
     && boundedText(value.source, 200) && instant(value.recordedAt) && isRecord(value.recordedBy)
-    && isUuid(value.recordedBy.tenantId) && isUuid(value.recordedBy.objectId)
+    && (isUuid(value.recordedBy.tenantId) && isUuid(value.recordedBy.objectId)
+      || Object.keys(value.recordedBy).length === 2 && value.recordedBy.kind === 'public-player-creation' && value.recordedBy.verified === false)
     && (value.previousObservationId === null || isUuid(value.previousObservationId));
 }
 

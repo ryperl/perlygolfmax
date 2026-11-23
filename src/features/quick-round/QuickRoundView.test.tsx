@@ -29,6 +29,111 @@ async function showGames() {
 }
 
 describe('public Quick round controller', () => {
+  it('keeps an uncertain shared-player attempt retryable across missing captured inputs and failed lock recovery', async () => {
+    const source = quickSource();
+    const page = await source.client.players(new AbortController().signal);
+    vi.mocked(source.client.players).mockResolvedValue({ ...page, publicPlayerCreation: true });
+    vi.mocked(source.client.load).mockResolvedValueOnce(source.workspace).mockRejectedValueOnce(new Error('Fictional capture recovery failed'));
+    const read = vi.mocked(source.scores.load).getMockImplementation();
+    if (!read) throw new Error('Missing fictional score reader');
+    let resolveScores: (() => void) | undefined;
+    vi.mocked(source.scores.load).mockImplementationOnce(async (...args) => {
+      const value = await read(...args);
+      return new Promise((resolve) => { resolveScores = () => { resolve({ ...value, setupLocked: true }); }; });
+    });
+    const player = { id: fictionalId(992), displayName: 'Fictional Capture Gap Newcomer', handicapIndexValue: '0' };
+    let rejectPlayer: (() => void) | undefined;
+    const createPlayer = vi.fn().mockImplementationOnce((_input, _id, signal: AbortSignal) => new Promise((_resolve, reject) => {
+      rejectPlayer = () => { expect(signal.aborted).toBe(false); reject(new Error('Fictional lost creation acknowledgement')); };
+    })).mockResolvedValueOnce(player);
+    render(<QuickRoundView client={{ ...source.client, createPlayer }} scores={source.scores} eventId={source.workspace.event.id} />);
+    await screen.findByRole('button', { name: 'New player' });
+    fireEvent.click(screen.getByRole('button', { name: 'New player' }));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: player.displayName } });
+    fireEvent.change(screen.getByLabelText('GHIN Handicap Index (as entered)'), { target: { value: '0' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create player' }));
+    await waitFor(() => { expect(resolveScores).toBeDefined(); expect(rejectPlayer).toBeDefined(); });
+    await act(() => Promise.resolve(resolveScores?.()));
+    await screen.findByText(/Fictional capture recovery failed/);
+    expect(screen.getByRole('dialog')).toBeVisible();
+    expect(screen.queryByRole('region', { name: 'Round golfers' })).not.toBeInTheDocument();
+    await act(() => Promise.resolve(rejectPlayer?.()));
+    expect(screen.getByLabelText('Name')).toHaveValue(player.displayName);
+    expect(screen.getByLabelText('GHIN Handicap Index (as entered)')).toHaveValue('0');
+    const retry = screen.getByRole('button', { name: 'Retry player creation' });
+    expect(retry).toBeEnabled();
+    fireEvent.click(retry);
+    await screen.findByText(/Player created.*roster.*locked/);
+    expect(createPlayer.mock.calls[1]?.[1]).toBe(createPlayer.mock.calls[0]?.[1]);
+    expect(createPlayer.mock.calls[1]?.[0]).toEqual(createPlayer.mock.calls[0]?.[0]);
+    expect(source.client.create).not.toHaveBeenCalled();
+    expect(source.client.save).not.toHaveBeenCalled();
+  });
+  it('retains an in-flight shared-player creation when saved scoring locks the round', async () => {
+    const source = quickSource();
+    const page = await source.client.players(new AbortController().signal);
+    vi.mocked(source.client.players).mockResolvedValue({ ...page, publicPlayerCreation: true });
+    const read = vi.mocked(source.scores.load).getMockImplementation();
+    if (!read) throw new Error('Missing fictional score reader');
+    let resolveScores: (() => void) | undefined;
+    vi.mocked(source.scores.load).mockImplementationOnce(async (...args) => {
+      const value = await read(...args);
+      return new Promise((resolve) => { resolveScores = () => { resolve({ ...value, setupLocked: true,
+        courseHandicaps: value.cards.map((card) => ({ playerId: card.playerId, courseHandicap: 8 })) }); }; });
+    });
+    const player = { id: fictionalId(991), displayName: 'Fictional Independent Newcomer', handicapIndexValue: '5.0' };
+    let resolvePlayer: (() => void) | undefined;
+    const createPlayer = vi.fn().mockImplementation((_input, _id, signal: AbortSignal) => new Promise((resolve) => {
+      resolvePlayer = () => { expect(signal.aborted).toBe(false); resolve(player); };
+    }));
+    render(<QuickRoundView client={{ ...source.client, createPlayer }} scores={source.scores} eventId={source.workspace.event.id} />);
+    await screen.findByRole('button', { name: 'New player' });
+    fireEvent.click(screen.getByRole('button', { name: 'New player' }));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: player.displayName } });
+    fireEvent.change(screen.getByLabelText('GHIN Handicap Index (as entered)'), { target: { value: player.handicapIndexValue } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create player' }));
+    await waitFor(() => { expect(resolveScores).toBeDefined(); expect(resolvePlayer).toBeDefined(); });
+    await act(() => Promise.resolve(resolveScores?.()));
+    expect(screen.getByRole('dialog')).toBeVisible();
+    expect(screen.getByLabelText('Name')).toHaveValue(player.displayName);
+    await act(() => Promise.resolve(resolvePlayer?.()));
+    expect(await screen.findByText(/Player created.*roster.*locked/)).toBeVisible();
+    expect(source.client.save).not.toHaveBeenCalled();
+    expect(source.client.create).not.toHaveBeenCalled();
+  });
+  it('selects a newly created shared player in the draft and never repeats creation after an uncertain round save', async () => {
+    const source = quickSource();
+    const page = await source.client.players(new AbortController().signal);
+    vi.mocked(source.client.players).mockResolvedValue({ ...page, publicPlayerCreation: true });
+    const player = { id: fictionalId(990), displayName: 'Fictional Shared Newcomer', handicapIndexValue: '+1' };
+    const createPlayer = vi.fn().mockResolvedValue(player);
+    vi.mocked(source.client.create).mockRejectedValueOnce(new Error('Fictional lost round acknowledgement'));
+    render(<QuickRoundView client={{ ...source.client, createPlayer }} scores={source.scores} />);
+    await choose();
+    fireEvent.click(screen.getByRole('button', { name: 'New player' }));
+    expect(screen.getByRole('button', { name: 'Open full setup' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: player.displayName } });
+    fireEvent.change(screen.getByLabelText('GHIN Handicap Index (as entered)'), { target: { value: '+1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create player' }));
+    await screen.findByText('Player created and selected. Round setup is not saved yet.');
+    expect(screen.getByLabelText(player.displayName, { exact: true })).toBeChecked();
+    expect(source.client.create).not.toHaveBeenCalled();
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Start scoring' })).toBeEnabled(); });
+    fireEvent.click(screen.getByRole('button', { name: 'Start scoring' }));
+    await screen.findByRole('button', { name: 'Retry Start scoring' });
+    expect(vi.mocked(source.client.create).mock.calls[0]?.[1].playerIds).toContain(player.id);
+    fireEvent.click(screen.getByRole('button', { name: 'Retry Start scoring' }));
+    await waitFor(() => { expect(source.client.create).toHaveBeenCalledTimes(2); });
+    expect(createPlayer).toHaveBeenCalledOnce();
+    expect(vi.mocked(source.client.create).mock.calls[1]?.[1]).toEqual(vi.mocked(source.client.create).mock.calls[0]?.[1]);
+  });
+
+  it('does not expose public creation for an older directory capability response', async () => {
+    const source = quickSource();
+    render(<QuickRoundView client={{ ...source.client, createPlayer: vi.fn() }} scores={source.scores} />);
+    await choose();
+    expect(screen.queryByRole('button', { name: 'New player' })).not.toBeInTheDocument();
+  });
   it('saves the shared start before games and preserves an explicit SO choice without another setup or score write', async () => {
     const source = quickSource(true);
     render(<QuickRoundView client={source.client} scores={source.scores} />);

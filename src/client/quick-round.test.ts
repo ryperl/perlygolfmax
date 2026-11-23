@@ -14,6 +14,30 @@ const json = (value: unknown, status = 200) => new Response(JSON.stringify(value
 const receipt = (requestId = eventId) => ({ eventId, requestId, workspaceEtag: workspace.etag });
 
 describe('anonymous Quick round transport', () => {
+  it('creates public players without identity and strictly validates inputs, capability and scalar acknowledgements', async () => {
+    const input = { displayName: 'Fictional Public Golfer', handicapIndexValue: '+0.5' };
+    const player = { id: fictionalId(970), ...input };
+    const send = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(json({ items: [], publicPlayerCreation: true }))
+      .mockResolvedValueOnce(json(player))
+      .mockResolvedValueOnce(json({ ...player, currentIndex: {} }))
+      .mockResolvedValueOnce(json({ items: [] }));
+    const client = createQuickRoundClient('https://fictional.example.test/api', send);
+    expect((await client.players(signal)).publicPlayerCreation).toBe(true);
+    if (!client.createPlayer) throw new Error('Missing public create adapter');
+    await expect(client.createPlayer(input, fictionalId(971), signal)).resolves.toEqual(player);
+    const [url, options] = send.mock.calls[1] ?? [];
+    expect(url).toBe('https://fictional.example.test/api/public/players');
+    expect(options).toMatchObject({ method: 'POST', body: JSON.stringify(input), credentials: 'omit', cache: 'no-store' });
+    const headers = new Headers(options?.headers);
+    expect(headers.get('Authorization')).toBeNull();
+    expect(headers.get('Idempotency-Key')).toBe(fictionalId(971));
+    expect(headers.get('If-Match')).toBeNull();
+    await expect(client.createPlayer(input, fictionalId(971), signal)).rejects.toThrow('not confirmed');
+    expect((await client.players(signal)).publicPlayerCreation).toBeUndefined();
+    await expect(client.createPlayer({ ...input, handicapIndexValue: '' }, fictionalId(971), signal)).rejects.toThrow('Nothing was sent');
+    expect(send).toHaveBeenCalledTimes(4);
+  });
   it('archives with an exact conditional retry identity and accepts only the matching minimal acknowledgement', async () => {
     const requestId = fictionalId(960);
     const send = vi.fn<typeof fetch>().mockImplementationOnce(() => Promise.resolve(json({ eventId, requestId, status: 'archived' })))

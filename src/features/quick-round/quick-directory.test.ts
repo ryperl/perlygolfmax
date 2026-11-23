@@ -4,6 +4,19 @@ import type { QuickDirectory } from './quick-directory';
 import type { QuickPage } from '../../domain/quick-round';
 
 describe('Quick round directory paging', () => {
+  it('retains explicit public-creation capability through interrupted pages but never infers it from an old page', async () => {
+    const signal = new AbortController().signal;
+    let progress: QuickDirectory<{ readonly id: string }> | undefined;
+    const remember = (value: QuickDirectory<{ readonly id: string }>) => { progress = value; };
+    const read = vi.fn().mockResolvedValueOnce({ items: [], publicPlayerCreation: true, continuationToken: 'next' })
+      .mockRejectedValueOnce(new Error('Fictional quota'))
+      .mockResolvedValueOnce({ items: [], publicPlayerCreation: true });
+    await expect(loadQuickDirectory(read, signal, remember)).rejects.toThrow('Fictional quota');
+    expect((await loadQuickDirectory(read, signal, remember, progress)).publicPlayerCreation).toBe(true);
+    const old = vi.fn().mockResolvedValueOnce({ items: [], publicPlayerCreation: true, continuationToken: 'next' })
+      .mockResolvedValueOnce({ items: [] });
+    expect((await loadQuickDirectory(old, signal, vi.fn())).publicPlayerCreation).toBe(false);
+  });
   it('resumes the failed cursor without re-reading completed pages', async () => {
     const read = vi.fn<(signal: AbortSignal, cursor?: string) => Promise<QuickPage<{ readonly id: string }>>>()
       .mockResolvedValueOnce({ items: [{ id: 'fictional-a' }], continuationToken: 'next' })

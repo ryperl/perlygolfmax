@@ -19,6 +19,34 @@ async function openFixture(page: Page, testInfo: TestInfo, hash: string) {
   } catch (error) { await server.close(); throw error; }
 }
 
+test('public shared-player creation retains lost acknowledgement and never repeats after round-save failure', async ({ page }, testInfo) => {
+  const server = await openFixture(page, testInfo, '#events?quick=1');
+  try {
+    await page.getByLabel('Round / event name').fill('Fictional shared-player outing');
+    await page.getByRole('combobox', { name: 'Course', exact: true }).selectOption('ghin:301:302');
+    await page.getByLabel('Default tee').selectOption('901');
+    await page.getByRole('button', { name: 'New player', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'New shared player' })).toBeFocused();
+    await expect(page.getByRole('dialog').getByRole('textbox')).toHaveCount(2);
+    await page.getByLabel('Name', { exact: true }).fill('Fictional Create Only');
+    await page.getByLabel('GHIN Handicap Index (as entered)', { exact: true }).fill('+0.5');
+    await page.getByRole('button', { name: 'Create player', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('Player creation is not confirmed');
+    await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Fictional Create Only');
+    await expect(page.getByLabel('GHIN Handicap Index (as entered)', { exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Retry player creation', exact: true }).click();
+    await expect(page.getByText('Player created and selected. Round setup is not saved yet.')).toBeVisible();
+    await page.getByRole('button', { name: 'Add golfers', exact: true }).click();
+    await expect(page.getByRole('checkbox', { name: 'Fictional Create Only', exact: true })).toBeChecked();
+    await expect(page.getByRole('checkbox')).toHaveCount(16);
+    await page.getByRole('button', { name: 'Done choosing golfers', exact: true }).click();
+    await page.getByRole('button', { name: 'Start scoring', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('Save is not confirmed');
+    await page.getByRole('button', { name: 'Retry Start scoring', exact: true }).click();
+    await expect(page.getByRole('form', { name: 'Group 1 hole 1 entry', exact: true })).toBeVisible();
+  } finally { await server.close(); }
+});
+
 test('a created Quick round can return from scoring to edit its unstarted roster', async ({ page }, testInfo) => {
   const server = await openFixture(page, testInfo, '#events?quick=1');
   try {

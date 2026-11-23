@@ -1,4 +1,4 @@
-import type { QuickCourse, QuickCourseVersion, QuickPage, QuickPlayer } from '../domain/quick-round.js';
+import type { PublicPlayerInput, QuickCourse, QuickCourseVersion, QuickPage, QuickPlayer, QuickPlayerPage } from '../domain/quick-round.js';
 import { boundedText, isCourseId, isCourseMetadata, isHandicapIndex, isTeeProfile, isVersionId } from './catalog.js';
 import { isRecord, isUuid } from './events.js';
 
@@ -15,6 +15,18 @@ export function isQuickPlayer(value: unknown): value is QuickPlayer {
   return isRecord(value) && keys(value, ['id', 'displayName', 'handicapIndexValue'])
     && isUuid(value.id) && boundedText(value.displayName)
     && (value.handicapIndexValue === null || isHandicapIndex(value.handicapIndexValue));
+}
+
+export function isPublicPlayerInput(value: unknown): value is PublicPlayerInput {
+  return isRecord(value) && keys(value, ['displayName', 'handicapIndexValue'])
+    && boundedText(value.displayName, 100) && value.displayName === value.displayName.trim()
+    && isHandicapIndex(value.handicapIndexValue);
+}
+
+export function isQuickPlayerPage(value: unknown): value is QuickPlayerPage {
+  return isRecord(value) && keys(value, ['items', 'continuationToken', 'publicPlayerCreation'])
+    && (value.publicPlayerCreation === undefined || typeof value.publicPlayerCreation === 'boolean')
+    && isQuickPage({ items: value.items, ...(value.continuationToken === undefined ? {} : { continuationToken: value.continuationToken }) }, isQuickPlayer);
 }
 
 export function isQuickPage<T>(value: unknown, item: (entry: unknown) => entry is T): value is QuickPage<T> {

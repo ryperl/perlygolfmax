@@ -1,8 +1,8 @@
 import { isEventRevision, isRecord, isUuid } from '../contracts/events';
 import { isCourseId, isVersionId } from '../contracts/catalog';
 import { isEventSetupInput, isEventWorkspace } from '../contracts/setup';
-import { isQuickCourse, isQuickCourseVersion, isQuickPage, isQuickPlayer } from '../contracts/quick-round';
-import type { QuickCourse, QuickCourseVersion, QuickPage, QuickPlayer } from '../domain/quick-round';
+import { isPublicPlayerInput, isQuickCourse, isQuickCourseVersion, isQuickPage, isQuickPlayer, isQuickPlayerPage } from '../contracts/quick-round';
+import type { PublicPlayerInput, QuickCourse, QuickCourseVersion, QuickPage, QuickPlayer, QuickPlayerPage } from '../domain/quick-round';
 import type { EventSetupInput, EventWorkspace } from '../domain/setup';
 import { maximumEventSetupBytes } from '../domain/setup';
 import { createPrivateRequest, readPrivateValue, writePrivateValue } from './private-request';
@@ -13,7 +13,8 @@ import { sameTeeSelections } from '../domain/tees';
 export interface QuickRoundClient {
   readonly archive?: (eventId: string, etag: string, requestId: string, signal: AbortSignal) => Promise<void>;
   readonly courses: (signal: AbortSignal, cursor?: string) => Promise<QuickPage<QuickCourse>>;
-  readonly players: (signal: AbortSignal, cursor?: string) => Promise<QuickPage<QuickPlayer>>;
+  readonly players: (signal: AbortSignal, cursor?: string) => Promise<QuickPlayerPage>;
+  readonly createPlayer?: (input: PublicPlayerInput, requestId: string, signal: AbortSignal) => Promise<QuickPlayer>;
   readonly version: (courseId: string, versionId: string, signal: AbortSignal) => Promise<QuickCourseVersion>;
   readonly create: (eventId: string, input: EventSetupInput, signal: AbortSignal) => Promise<EventWorkspace>;
   readonly load: (eventId: string, signal: AbortSignal) => Promise<EventWorkspace>;
@@ -21,6 +22,8 @@ export interface QuickRoundClient {
 }
 
 export function createQuickRoundClient(apiUrl: string, send: typeof fetch = fetch): QuickRoundClient {
+  const publicRequest = createPrivateRequest(`${apiUrl}/public`,
+    () => Promise.reject(new Error('Public player creation does not acquire account tokens.')), send, 4096, 'None');
   const request = createPrivateRequest(`${apiUrl}/public/quick-rounds`,
     () => Promise.reject(new Error('Quick rounds do not acquire account tokens.')), send, maximumEventSetupBytes, 'None');
   function id(value: string) {
@@ -76,6 +79,14 @@ export function createQuickRoundClient(apiUrl: string, send: typeof fetch = fetc
   }
   return {
     load,
+    async createPlayer(input, requestId, signal) {
+      if (!isPublicPlayerInput(input) || !isUuid(requestId)) throw new Error('Check the name and Handicap Index. Nothing was sent.');
+      const value = await publicRequest('players', signal, { method: 'POST', body: input, requestId });
+      if (!isQuickPlayer(value) || value.displayName !== input.displayName || value.handicapIndexValue !== input.handicapIndexValue) {
+        throw new Error('Player creation is not confirmed. Your entries are kept; retry to check the same creation.');
+      }
+      return value;
+    },
     async archive(eventId, etag, requestId, signal) {
       id(eventId);
       if (!isEventRevision(etag) || !isUuid(requestId)) throw new Error('Invalid Quick round archive request. Nothing was sent.');
@@ -94,7 +105,7 @@ export function createQuickRoundClient(apiUrl: string, send: typeof fetch = fetc
     },
     async players(signal, cursor) {
       const value = await request(pagePath('players', cursor), signal);
-      if (!isQuickPage(value, isQuickPlayer)) throw new Error('Invalid Quick round player selections.');
+      if (!isQuickPlayerPage(value)) throw new Error('Invalid Quick round player selections.');
       return value;
     },
     async version(courseId, versionId, signal) {

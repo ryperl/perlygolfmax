@@ -1,12 +1,16 @@
 import { odata } from '@azure/data-tables';
+import { randomUUID } from 'node:crypto';
 import type { TableClient, TransactionAction } from '@azure/data-tables';
 import type { IndexObservation, ManualIndexInput, PlayerCatalogPage, PlayerIndexHistory, PlayerProfile } from '../../../src/domain/catalog.js';
 import type { AccountIdentity } from '../../../src/domain/events.js';
 import type { EventRosterPlayer } from '../../../src/domain/setup.js';
 import { isIndexObservation, isManualIndexInput, isPlayerProfile } from '../../../src/contracts/catalog.js';
 import { isUuid } from '../../../src/contracts/events.js';
+import { isPublicPlayerInput, isQuickPlayer } from '../../../src/contracts/quick-round.js';
+import type { QuickPlayer } from '../../../src/domain/quick-round.js';
+import { defaultManualIndex } from '../../../src/domain/manual-index.js';
 import { ApiError } from '../errors.js';
-import { canonical, decode, isConflict, optionalRow, page, revision, transaction } from './entities.js';
+import { canonical, decode, digest, isConflict, optionalRow, page, revision, transaction } from './entities.js';
 import type { StoredRow } from './entities.js';
 import { requireManager } from './courses.js';
 import type { CatalogPermission } from './courses.js';
@@ -56,6 +60,44 @@ export interface IndexInput {
 
 export class TablePlayerCatalog {
   constructor(private readonly table: TableClient, private readonly allowed: CatalogPermission) {}
+
+  async createPublic(requestId: string, input: unknown): Promise<QuickPlayer> {
+    if (!isUuid(requestId) || !isPublicPlayerInput(input)) throw new ApiError(400, 'INVALID_PUBLIC_PLAYER');
+    const rowKey = `public-create:${requestId}`;
+    const requestDigest = digest(input);
+    const replay = async (): Promise<QuickPlayer | undefined> => {
+      const receipt = await optionalRow(this.table, partitionKey, rowKey);
+      if (!receipt) return undefined;
+      if (receipt.requestDigest !== requestDigest) throw new ApiError(409, 'PLAYER_REQUEST_CONFLICT');
+      return decode(receipt.content, isQuickPlayer);
+    };
+    const existing = await replay();
+    if (existing) return existing;
+    const id = randomUUID();
+    const observationId = randomUUID();
+    const now = new Date();
+    const createdAt = now.toISOString();
+    const currentIndex: IndexObservation = {
+      id: observationId, ...defaultManualIndex(input.handicapIndexValue, now),
+      recordedAt: createdAt, recordedBy: { kind: 'public-player-creation', verified: false }, previousObservationId: null,
+    };
+    const profile: PlayerProfile = { id, displayName: input.displayName, createdAt, currentIndex, etag: 'stored-revision' };
+    const result: QuickPlayer = { id, displayName: input.displayName, handicapIndexValue: input.handicapIndexValue };
+    try {
+      await this.table.submitTransaction([
+        ['create', { partitionKey, rowKey: playerKey(id), content: canonical(profile), lastObservationId: observationId }],
+        ['create', { partitionKey, rowKey: observationKey(id, observationId), content: canonical(currentIndex) }],
+        ['create', { partitionKey, rowKey, requestDigest, content: canonical(result), actor: canonical(currentIndex.recordedBy),
+          observationId, createdAt }],
+      ]);
+    } catch (error) {
+      if (!isConflict(error)) throw error;
+      const saved = await replay();
+      if (!saved) throw new ApiError(409, 'PLAYER_REQUEST_CONFLICT');
+      return saved;
+    }
+    return result;
+  }
 
   async list(identity: AccountIdentity, cursor?: string): Promise<PlayerCatalogPage> {
     requireManager(identity, this.allowed);
@@ -154,7 +196,7 @@ export class TablePlayerCatalog {
     if (!row) return false;
     const observation = decode(row.content, isIndexObservation);
     if (observation.id !== observationId || observation.value !== input.value || observation.effectiveDate !== input.effectiveDate
-      || observation.source !== input.source || observation.recordedBy.tenantId !== identity.tenantId
+      || observation.source !== input.source || !('tenantId' in observation.recordedBy) || observation.recordedBy.tenantId !== identity.tenantId
       || observation.recordedBy.objectId !== identity.objectId) throw new ApiError(409, 'INDEX_REQUEST_CONFLICT');
     return true;
   }

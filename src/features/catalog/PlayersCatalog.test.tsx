@@ -357,7 +357,7 @@ describe('manager player catalog', () => {
     await user.click(screen.getByRole('button', { name: 'History' }));
     expect(within(screen.getByRole('region', { name: 'Handicap history' })).getByRole('listitem')).toHaveTextContent(/\+1.2.*effective/);
     await user.click(screen.getByText('Observation details', { selector: 'summary' }));
-    expect(screen.getByText(/recorded by/)).toHaveTextContent(observation.recordedBy.objectId);
+    expect(screen.getByText(/recorded by/)).toHaveTextContent('objectId' in observation.recordedBy ? observation.recordedBy.objectId : 'unverified public player creation');
     await user.click(screen.getByRole('button', { name: 'Handicap' }));
     expect(screen.getByText(/Use The Group to also update unfinished rounds/)).toBeVisible();
     expect(screen.getByRole('checkbox', { name: /I confirm/ })).not.toBeChecked();

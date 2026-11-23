@@ -11,7 +11,7 @@ import { privateContent } from '../private-values.js';
 import { ApiError } from '../errors.js';
 import { isEventWorkspace } from '../../../src/contracts/setup.js';
 import { isGameWriteResult, isRoundScores } from '../../../src/contracts/scoring.js';
-import { isQuickCourse, isQuickCourseVersion, isQuickPage, isQuickPlayer } from '../../../src/contracts/quick-round.js';
+import { isQuickCourse, isQuickCourseVersion, isQuickPage, isQuickPlayerPage } from '../../../src/contracts/quick-round.js';
 import { stablefordPoints } from '../../../src/domain/stableford.js';
 import { TableQuickRoundStore } from './store.js';
 import { createQuickRoundHandler } from './handlers.js';
@@ -31,6 +31,23 @@ async function fixture() {
 }
 
 describe('public Quick round authority and persistence', () => {
+  it('reuses public-created shared players and captures their manually entered HI without granting roster unlock', async () => {
+    const f = await fixture();
+    const player = await f.quick.createPlayer(identifier(8400), { displayName: 'Fictional Shared Entrant', handicapIndexValue: '+0.5' });
+    const input = { ...f.input, playerIds: [player.id], rounds: f.input.rounds.map((round) => ({
+      ...round, groups: [{ number: 1, playerIds: [player.id] }],
+    })) };
+    const setup = await f.quick.create(f.id, input);
+    expect(setup.roster).toEqual([{ playerId: player.id, displayName: player.displayName, handicapIndexValue: '+0.5' }]);
+    expect(JSON.stringify(setup)).not.toMatch(/public-player-creation|recordedBy|previousObservationId/);
+    const saved = await f.scores.write(f.actor, f.id, f.roundId, player.id, 1,
+      { kind: 'strokes', strokes: 4 }, null, identifier(8401));
+    expect(saved.round.setupLocked).toBe(true);
+    const locked = await f.quick.load(f.id);
+    expect(locked.rounds[0]?.players[0]?.handicapIndexValue).toBe('+0.5');
+    await expect(f.quick.save(f.id, locked.etag, identifier(8402), f.input))
+      .rejects.toMatchObject({ code: 'ROUND_SCORING_STARTED' });
+  });
   it('shares the conditional one-foursome start across explicit net games and new Skins carries, then locks it with the first score', async () => {
     const f = await fixture();
     const input = { ...f.input, playerIds: f.input.playerIds.slice(0, 4), rounds: f.input.rounds.map((round) => ({
@@ -157,7 +174,7 @@ describe('public Quick round authority and persistence', () => {
     const courses = await f.quick.courses();
     const players = await f.quick.players();
     expect(isQuickPage(courses, isQuickCourse)).toBe(true);
-    expect(isQuickPage(players, isQuickPlayer)).toBe(true);
+    expect(isQuickPlayerPage(players)).toBe(true);
     expect(players.items).toHaveLength(50);
     expect(players.continuationToken).toBeDefined();
     const rest = await f.quick.players(players.continuationToken);
@@ -283,6 +300,38 @@ describe('public Quick round authority and persistence', () => {
 });
 
 describe('Quick round HTTP boundary', () => {
+  it('creates only allowlisted public players with a site budget, immutable retries and no event or account authority', async () => {
+    const f = await fixture();
+    const limiter = { check: vi.fn().mockResolvedValue(undefined) };
+    const context = new InvocationContext({ invocationId: 'fictional-public-player', logHandler: () => undefined });
+    const requestId = identifier(8070);
+    const body = { displayName: 'Fictional New Public Golfer', handicapIndexValue: '0' };
+    const invoke = (value: unknown = body, method = 'POST', key = requestId) =>
+      createQuickRoundHandler(() => ({ quickRounds: f.quick, limiter }), 'create-player')(new HttpRequest({
+        method, url: 'https://fictional.example.test/api/public/players',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
+        body: { string: JSON.stringify(value) },
+      }), context);
+    const result = await invoke();
+    expect(result.status).toBe(200);
+    expect(result.jsonBody).toMatchObject(body);
+    expect(JSON.stringify(result.jsonBody)).not.toMatch(/recordedBy|source|effectiveDate|observation|etag|tenantId/);
+    expect(limiter.check).toHaveBeenCalledExactlyOnceWith({ kind: 'public-browse' }, 'catalog-write');
+    expect((await invoke()).jsonBody).toEqual(result.jsonBody);
+    expect((await invoke({ ...body, handicapIndexValue: '+1' })).status).toBe(409);
+    expect((await invoke({ ...body, playerId: identifier(1) })).status).toBe(400);
+    expect((await invoke(body, 'PUT')).status).toBe(405);
+    expect((await invoke(body, 'POST', 'invalid')).status).toBe(400);
+    expect((await invoke({ ...body, displayName: 'x'.repeat(4096) })).status).toBe(413);
+    expect((await f.quick.players()).publicPlayerCreation).toBe(true);
+    const rows = new Map(f.rows);
+    limiter.check.mockRejectedValueOnce(new ApiError(429, 'REQUEST_LIMIT_EXCEEDED'));
+    expect((await invoke(body, 'POST', identifier(8071))).status).toBe(429);
+    expect(f.rows).toEqual(rows);
+    limiter.check.mockRejectedValueOnce(new Error('Fictional limit store unavailable'));
+    expect((await invoke(body, 'POST', identifier(8071))).status).toBe(503);
+    expect(f.rows).toEqual(rows);
+  });
   it('charges shared site/event archive budgets, requires an empty conditional request and returns no archived data', async () => {
     const f = await fixture();
     const saved = await f.quick.create(f.id, f.input);

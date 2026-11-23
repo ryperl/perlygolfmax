@@ -658,10 +658,39 @@ round scores, per-player hole writes, overall leaderboard and purse reads.
 Its Quick-round namespace additionally exposes allowlisted selection reads and
 Quick-only creation/setup writes. Ordinary-event game writes have only the
 separately approved pre-scoring internal-game scope; other public game changes
-require the stored Quick-round policy. There are no public global catalog
-writes, purse/access
+require the stored Quick-round policy. The create-only player exception below
+does not grant public global catalog edits, purse/access
 mutations, ordinary-event archive or audit history routes. Quick rounds have a
 separate public archive operation; private endpoints remain JWT-only.
+
+`POST /api/public/players` accepts exactly `displayName` (required, trimmed,
+at most 100 characters) and `handicapIndexValue` (required, existing HI syntax,
+including explicit plus and zero). It requires a UUID `Idempotency-Key`, no
+conditional existing-player revision and no account token. The 4 KiB handler
+ceiling and 12 KiB host ceiling are unchanged. Every attempt charges the existing
+durable site `public-browse` / `catalog-write` quota; missing service configuration
+or limit-store failure fails closed before mutation.
+
+One same-partition create-only transaction writes a fresh server player ID,
+fresh immutable observation ID, and digest-bound creation receipt. The server
+stamps actual recording time and manual effective date (server local today),
+source GHIN and distinct `{ kind: "public-player-creation", verified: false }`
+attribution, never an account, owner, member or event identity. This is manual
+entry, not GHIN lookup, verification or posting. Identical retries return the
+original scalar acknowledgement even after organizer edits; changed payload
+with the same key is 409. Responses contain only `id`, `displayName` and
+`handicapIndexValue`; observations, receipts and history remain private.
+
+Quick player selection pages advertise `publicPlayerCreation: true`. Missing
+or false capability disables the new action. The injected client and two-field
+form preserve entries and the exact attempt after unconfirmed creation; editing
+is held until retry confirms it or the visitor explicitly discards with a warning.
+A known pre-write rejection permits changes with a new identity only for a
+changed payload. Confirmed creation selects the player in the in-memory round
+draft, not a round save. Round failure retries only the conditional round write.
+Public creation never grants editing/deleting other profiles, private catalog
+reads/history, ordinary-event setup or scored-round roster changes.
+
 Public projections
 exclude raw Handicap Index observations and audit identities. The approved scalar
 display projection includes current roster HI and captured round HI (or explicit

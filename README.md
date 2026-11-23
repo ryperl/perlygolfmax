@@ -310,6 +310,18 @@ scalar HI or NH, never private profiles, observation provenance or histories.
 Whole-directory search waits for all bounded pages; interrupted reads retain
 their cursor and loaded progress.
 
+**New player** adds a reusable shared-directory player without sign-in using
+only **Name** and **GHIN Handicap Index (as entered)**. Both are required; zero
+and explicit plus values are supported. Entry is manual and unverified, not a
+GHIN lookup or posting. After confirmed creation the player is selected in your
+round draft; **the round is not saved yet**. Failed/unconfirmed creation keeps
+both fields and retries the same attempt. Unconfirmed fields cannot be changed
+until confirmed, or explicitly discarded with a warning that creation may
+already have happened. A round-save failure never creates the player again.
+The action is absent on older services without the advertised capability.
+Only new-player creation is public: profile edits, HI corrections and history
+remain protected organizer tools.
+
 Quick rounds are explicitly collaborative: **any visitor can edit their setup
 and games**. The public directory identifies them for editing; ordinary saved
 events do not acquire this policy. Expanded setup retains the same draft,
@@ -349,7 +361,8 @@ history. It removes the round from public discovery and stops public reads and
 writes. Unconfirmed archive attempts retain the same retry identity; conflicts
 require refresh/review. There is no public restore or permanent deletion action.
 
-Public Quick round management does not grant catalog writes, private audits,
+Apart from the explicit create-only player action, public Quick round management
+does not grant catalog writes, private audits,
 handicap corrections, purse management, KP administration or archived-data access.
 Public discovery excludes interrupted creations until setup publishes. Existing
 bounded staged transports, event/card revisions, idempotency receipts and durable

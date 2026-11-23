@@ -9,6 +9,20 @@ const player = fictionalPlayers[0];
 if (!player) throw new Error('Missing fictional player');
 
 describe('focused player editor', () => {
+  it('renders public-created observation history as unverified rather than inventing an account identity', async () => {
+    const client = fakeCatalog();
+    const observation = { id: fictionalId(520), value: '+0.5', effectiveDate: '2026-01-01', source: 'GHIN',
+      recordedAt: '2026-01-01T00:00:00Z', recordedBy: { kind: 'public-player-creation' as const, verified: false as const },
+      previousObservationId: null };
+    vi.mocked(client.history).mockResolvedValue({ observations: [observation] });
+    render(<PlayerEditor client={client} player={{ ...player, currentIndex: observation }} onSaved={vi.fn()} onBusy={vi.fn()}
+      onDirty={vi.fn()} blocked={false} onClose={vi.fn()} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'History' }));
+    await user.click(screen.getByText('Observation details', { selector: 'summary' }));
+    expect(screen.getByText(/recorded by/)).toHaveTextContent('unverified public player creation');
+    expect(screen.getByText(/recorded by/)).not.toHaveTextContent('undefined');
+  });
   it('keeps untouched defaults clean and saves HI with today/GHIN without requiring date or source editing', async () => {
     const client = fakeCatalog(), dirty = vi.fn(), user = userEvent.setup();
     render(<PlayerEditor client={client} player={player} onSaved={vi.fn()} onBusy={vi.fn()} onDirty={dirty} blocked={false} onClose={vi.fn()} />);

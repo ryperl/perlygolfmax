@@ -8,7 +8,7 @@ import { privateReadResponse } from '../private-transport.js';
 import type { RequestLimiter } from '../limits.js';
 import type { TableQuickRoundStore } from './store.js';
 
-export type QuickRoundAction = 'courses' | 'players' | 'version' | 'create' | 'workspace' | 'archive';
+export type QuickRoundAction = 'courses' | 'players' | 'create-player' | 'version' | 'create' | 'workspace' | 'archive';
 export interface QuickRoundApi {
   readonly limiter: RequestLimiter;
   readonly quickRounds?: TableQuickRoundStore;
@@ -19,6 +19,14 @@ export function createQuickRoundHandler(resolve: () => QuickRoundApi, action: Qu
     try {
       const { limiter, quickRounds: store } = resolve();
       if (!store) throw new ApiError(503, 'SERVICE_NOT_CONFIGURED');
+      if (action === 'create-player') {
+        if (request.method !== 'POST') return response(405, { code: 'METHOD_NOT_ALLOWED' });
+        await limiter.check({ kind: 'public-browse' }, 'catalog-write');
+        const requestId = request.headers.get('Idempotency-Key');
+        if (!isUuid(requestId) || request.headers.get('If-Match') !== null
+          || request.headers.get('If-None-Match') !== null) throw new ApiError(400, 'INVALID_REQUEST_ID');
+        return response(200, await store.createPlayer(requestId, await readJson(request)));
+      }
       const writing = action === 'create' || action === 'archive' || action === 'workspace' && request.method === 'PUT';
       if (request.method !== (writing ? 'PUT' : 'GET')) return response(405, { code: 'METHOD_NOT_ALLOWED' });
       await limiter.check({ kind: 'public-browse' }, action === 'archive' ? 'events-manage'

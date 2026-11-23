@@ -181,7 +181,8 @@ for (const item of publicRoutes) app.http(`publicAccess-${item.action}`, {
   route: item.route, methods: [item.method], authLevel: 'anonymous', handler: createPublicHandler(resolvePublicApi, item.action),
 });
 
-const quickRoutes: readonly { readonly action: QuickRoundAction; readonly route: string; readonly methods: ('GET' | 'PUT')[] }[] = [
+const quickRoutes: readonly { readonly action: QuickRoundAction; readonly route: string; readonly methods: ('GET' | 'PUT' | 'POST')[] }[] = [
+  { action: 'create-player', route: 'public/players', methods: ['POST'] },
   { action: 'courses', route: 'public/quick-rounds/courses', methods: ['GET'] },
   { action: 'players', route: 'public/quick-rounds/players', methods: ['GET'] },
   { action: 'version', route: 'public/quick-rounds/courses/{courseId}/versions/{versionId}', methods: ['GET'] },
