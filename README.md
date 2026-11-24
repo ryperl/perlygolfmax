@@ -387,10 +387,18 @@ discovery links, never shared course/player catalogs or unrelated events.
 It is irreversible, unlike Archive. This feature does not automatically delete
 any existing event.
 
-Interrupted deletions remain unavailable and can be resumed from **Unfinished
-deletions**. Completion is acknowledged only after cleanup; a minimal technical
-tombstone prevents an old request from recreating the event. This is application
-data deletion, not a claim that Azure platform logs or backups have been erased.
+One confirmation runs the whole cleanup. Each request does up to about four
+seconds of bounded cleanup on the server, so a typical event finishes in one or
+two requests. The page continues automatically, shows which step is running and
+how many event records have been removed, retries a brief failure twice, and
+waits out the organizer request limit instead of failing. Requests are spaced so
+even a very large event stays under that limit.
+
+Interrupted deletions remain unavailable and can be resumed with one click from
+**Unfinished deletions**. Completion is acknowledged only after cleanup; a
+minimal technical tombstone prevents an old request from recreating the event.
+This is application data deletion, not a claim that Azure platform logs or
+backups have been erased.
 No automatic expiry, retention schedule or new backup guarantee is introduced.
 
 Previously issued tester/admission links open their public event (or its saved

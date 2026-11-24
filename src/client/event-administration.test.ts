@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createEventAdministrationClient } from './event-administration';
+import { createEventAdministrationClient, RateLimitedError } from './event-administration';
 import { SessionExpiredError } from './events';
 
 const id = '00000000-0000-4000-8000-000000000001';
@@ -20,10 +20,12 @@ describe('Authenticated event administration client', () => {
     expect(send.mock.calls[0]?.[0]).toBe('https://fictional.example/api/organizer/quick-rounds?status=archived&cursor=fictional-current');
     await client.restore(event, requestId, signal());
     await client.deleteArchived(event, event.name, requestId, signal());
+    expect(send.mock.calls[2]?.[0]).toBe(`https://fictional.example/api/organizer/events/${id}/delete?progress=1`);
     expect(send.mock.calls[2]?.[1]).toMatchObject({ method: 'POST', credentials: 'omit', cache: 'no-store',
       headers: { Authorization: 'Bearer fictional-token', 'If-Match': event.etag, 'Idempotency-Key': requestId },
       body: JSON.stringify({ confirmation: event.name }) });
     expect(await client.continueDeletion(id, requestId, signal())).toEqual({ eventId: id, requestId, state: 'deleted' });
+    expect(send.mock.calls[3]?.[0]).toBe(`https://fictional.example/api/organizer/events/${id}/delete/continue?progress=1`);
     expect(send.mock.calls[3]?.[1]?.headers).not.toHaveProperty('If-Match');
   });
 
@@ -45,6 +47,7 @@ describe('Authenticated event administration client', () => {
     const client = createEventAdministrationClient('https://fictional.example/api', () => Promise.resolve('fictional-token'), send);
     await expect(client.listQuick(signal())).rejects.toBeInstanceOf(SessionExpiredError);
     send.mockResolvedValue(new Response(null, { status: 429 }));
+    await expect(client.continueDeletion(id, requestId, signal())).rejects.toBeInstanceOf(RateLimitedError);
     await expect(client.continueDeletion(id, requestId, signal())).rejects.toThrow('Wait a minute');
     send.mockResolvedValue(new Response(null, { status: 503 }));
     await expect(client.continueDeletion(id, requestId, signal())).rejects.toThrow('Retry the same operation');

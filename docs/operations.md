@@ -935,6 +935,12 @@ writes, restore and delayed retries before paginated cleanup removes event-owned
 rows, staged/private fragments, audit/capture data and external event locators.
 Shared player/course catalogs, unrelated events and shared request budgets remain.
 Partial failures are explicit and resumable, never acknowledged as completed.
+Each delete or continue request runs bounded cleanup steps until the event is
+gone or its budget is used (40 steps or about 4 seconds), re-reading the job
+before every step. The job row keeps a count of deleted event rows, committed in
+the same transaction as each delete page. Clients that add `?progress=1` receive
+`progress: { stage, removed }` with stage `links`, `records` or `finished`;
+other clients receive the original response shape, so the API can deploy first.
 A minimal nonbusiness tombstone prevents identifier reuse/resurrection; platform
 backup/log erasure is not claimed. No real event is deleted by deploying the
 feature, and no migration or automatic retention policy is introduced.

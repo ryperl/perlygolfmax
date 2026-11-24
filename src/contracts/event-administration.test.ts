@@ -26,6 +26,12 @@ describe('Event administration allowlisted contracts', () => {
     expect(isEventDeletionPage({ deletions: [{ ...pending, state: 'deleted' }] })).toBe(false);
     expect(isEventDeletionResult({ ...pending, confirmation: item.name })).toBe(false);
     expect(isEventDeletionResult({ ...pending, state: 'success' })).toBe(false);
+    expect(isEventDeletionResult({ ...pending, progress: { stage: 'records', removed: 50 } })).toBe(true);
+    expect(isEventDeletionResult({ ...pending, progress: { stage: 'finished', removed: 0 } })).toBe(true);
+    for (const progress of [{ stage: 'unknown', removed: 1 }, { stage: 'links', removed: -1 }, { stage: 'links', removed: 1.5 },
+      { stage: 'links' }, { stage: 'links', removed: 1, eventName: item.name }, 'records']) {
+      expect(isEventDeletionResult({ ...pending, progress })).toBe(false);
+    }
     expect(isEventRestoreResult({ eventId: id, requestId: id, status: 'active' })).toBe(true);
     expect(isEventRestoreResult({ eventId: id, requestId: 'invalid', status: 'active' })).toBe(false);
   });

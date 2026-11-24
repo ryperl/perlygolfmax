@@ -13,8 +13,8 @@ function fixture(organizer = true) {
   const limiter = { check: vi.fn().mockResolvedValue(undefined) };
   const api = { verify, limiter, administration: new TableEventAdministration(f.table,
     (identity) => identity.objectId === creator.objectId && identity.tenantId === creator.tenantId) };
-  function request(action: 'restore' | 'delete' | 'continue', body: unknown = {}, headers: Record<string, string> = {}) {
-    return new HttpRequest({ method: 'POST', url: `https://fictional.example/api/organizer/${action}`,
+  function request(action: 'restore' | 'delete' | 'continue', body: unknown = {}, headers: Record<string, string> = {}, query = '') {
+    return new HttpRequest({ method: 'POST', url: `https://fictional.example/api/organizer/${action}${query}`,
       params: { id: event.id }, headers: { Authorization: 'Bearer fictional', 'Content-Type': 'application/json',
         'If-Match': row.etag, 'Idempotency-Key': identifier(980), ...headers },
       body: { string: JSON.stringify(body) } });
@@ -54,5 +54,19 @@ describe('Event administration API authorization and request boundaries', () => 
     f.api.limiter.check.mockRejectedValue(new Error('Fictional durable budget unavailable'));
     expect((await handler(f.request('delete', { confirmation: event.name }), f.context)).status).toBe(503);
     expect(f.rows.get(`${event.id}|event`)?.status).toBe('archived');
+  });
+  it('returns deletion progress only when asked, so frontends from before progress keep their exact response shape', async () => {
+    const legacy = fixture();
+    const plain = await createEventAdministrationHandler(() => legacy.api, 'delete')(
+      legacy.request('delete', { confirmation: event.name }), legacy.context);
+    expect(plain.jsonBody).toEqual({ eventId: event.id, requestId: identifier(980), state: 'deleted' });
+    const current = fixture();
+    const detailed = await createEventAdministrationHandler(() => current.api, 'delete')(
+      current.request('delete', { confirmation: event.name }, {}, '?progress=1'), current.context);
+    expect(detailed.jsonBody).toEqual({ eventId: event.id, requestId: identifier(980), state: 'deleted',
+      progress: { stage: 'finished', removed: 0 } });
+    const resumed = await createEventAdministrationHandler(() => current.api, 'continue')(
+      current.request('continue', {}, {}, '?progress=1'), current.context);
+    expect(resumed.jsonBody).toEqual(detailed.jsonBody);
   });
 });

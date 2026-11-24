@@ -8,6 +8,9 @@ import type {
 import type { EventStatus } from '../domain/events';
 import { EventChangedError, SessionExpiredError } from './events';
 
+/** The API's per-minute request limit was reached. Waiting a minute and retrying is safe. */
+export class RateLimitedError extends Error {}
+
 export interface EventAdministrationClient {
   readonly listQuick: (signal: AbortSignal, cursor?: string, status?: EventStatus) => Promise<QuickRoundAdministrationPage>;
   readonly restore: (event: AdministrableEvent, requestId: string, signal: AbortSignal) => Promise<EventRestoreResult>;
@@ -32,9 +35,9 @@ export function createEventAdministrationClient(apiUrl: string, getToken: () => 
     });
     if (response.status === 401) throw new SessionExpiredError('Your session expired. Sign in again.');
     if (response.status === 409) throw new EventChangedError('The event changed or another operation is pending. Refresh the list before starting a new action; retry a pending deletion unchanged.');
+    if (response.status === 429) throw new RateLimitedError('Too many requests. Wait a minute, then retry the same operation.');
     if (!response.ok) throw new Error(response.status === 403 ? 'Only the organizer can manage these events.'
-      : response.status === 429 ? 'Too many requests. Wait a minute, then retry the same operation.'
-        : 'Event administration could not be confirmed. Retry the same operation.');
+      : 'Event administration could not be confirmed. Retry the same operation.');
     const value: unknown = await response.json();
     return value;
   }
@@ -74,7 +77,7 @@ export function createEventAdministrationClient(apiUrl: string, getToken: () => 
     },
     async deleteArchived(event, confirmation, requestId, signal) {
       if (event.status !== 'archived' || confirmation !== event.name) throw new Error('Type the exact archived event name to confirm deletion.');
-      return deletion(`events/${encodeURIComponent(event.id)}/delete`, event.id, requestId, signal, event.etag, confirmation);
+      return deletion(`events/${encodeURIComponent(event.id)}/delete?progress=1`, event.id, requestId, signal, event.etag, confirmation);
     },
     async listDeletions(signal, cursor) {
       const value = await request(`deletions${cursor ? `?${new URLSearchParams({ cursor }).toString()}` : ''}`, signal);
@@ -82,7 +85,7 @@ export function createEventAdministrationClient(apiUrl: string, getToken: () => 
       return value;
     },
     async continueDeletion(eventId, requestId, signal) {
-      return deletion(`events/${encodeURIComponent(eventId)}/delete/continue`, eventId, requestId, signal);
+      return deletion(`events/${encodeURIComponent(eventId)}/delete/continue?progress=1`, eventId, requestId, signal);
     },
   };
 }

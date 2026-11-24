@@ -4,6 +4,7 @@ import { identifier, memoryTable } from '../../test/catalog-fixtures.js';
 import { creator, event, member } from '../../test/fixtures.js';
 import { isRecord } from '../../../src/contracts/events.js';
 import { TableEventAdministration } from './store.js';
+import type { DeletionBudget } from './store.js';
 import { TableEventStore } from '../events/store.js';
 import { readEventAccess } from '../event-access.js';
 import { readPublicAccess } from '../public-access/authority.js';
@@ -15,7 +16,10 @@ import { TableScoreStore } from '../scoring/store.js';
 import { TableQuickRoundStore } from '../quick-round/store.js';
 import { publicFixture } from '../public-access/test-support.js';
 
-function fixture() {
+// One cleanup step per request, to test resuming between steps and partial failures.
+const oneStep: DeletionBudget = { maxSteps: 1, maxMilliseconds: Number.POSITIVE_INFINITY };
+
+function fixture(budget?: DeletionBudget, now?: () => number) {
   const f = memoryTable();
   // Match the additional authoritative header/locator predicates used by administration.
   f.list.mockImplementation((options) => {
@@ -47,7 +51,8 @@ function fixture() {
   });
   const saved = f.seed({ partitionKey: event.id, rowKey: 'event', ...event,
     status: 'archived', quickRound: true, quickRoundReady: true });
-  const store = new TableEventAdministration(f.table, (identity) => identity.objectId === creator.objectId && identity.tenantId === creator.tenantId);
+  const store = new TableEventAdministration(f.table,
+    (identity) => identity.objectId === creator.objectId && identity.tenantId === creator.tenantId, budget, now);
   return { ...f, saved, store };
 }
 const requestId = identifier(940);
@@ -136,7 +141,7 @@ describe('Organizer Quick round lifecycle persistence', () => {
   });
 
   it('purges every event row and admitted locator without touching shared catalogs, quotas or unrelated events; keeps only technical fences', async () => {
-    const f = fixture();
+    const f = fixture(oneStep);
     const unrelated = identifier(960);
     for (let index = 0; index < 107; index++) f.seed({ partitionKey: event.id, rowKey: `business:${String(index).padStart(3, '0')}`,
       content: 'Fictional score/capture/setup/purse/private fragment/invitation/audit data' });
@@ -155,7 +160,8 @@ describe('Organizer Quick round lifecycle persistence', () => {
     expect((await f.store.deleteArchived(creator, event.id, f.saved.etag, event.name, requestId)).state).toBe('deleting');
     const pending = await f.store.listDeletions(creator);
     expect(pending.deletions).toEqual([{ eventId: event.id, requestId, state: 'deleting' }]);
-    expect(await finish(f)).toEqual({ eventId: event.id, requestId, state: 'deleted' });
+    expect(await finish(f)).toEqual({ eventId: event.id, requestId, state: 'deleted',
+      progress: { stage: 'finished', removed: 108 } });
     const retained = [...f.rows.values()].filter((row) => row.partitionKey === event.id);
     expect(retained.map((row) => row.rowKey).sort()).toEqual(['event', 'event-write-fence']);
     expect(JSON.stringify(retained)).not.toContain(event.name);
@@ -171,7 +177,7 @@ describe('Organizer Quick round lifecycle persistence', () => {
   });
 
   it('fails closed on partial cleanup, resumes after failure and rejects create/status/restore/read and delayed staged resurrection', async () => {
-    const f = fixture();
+    const f = fixture(oneStep);
     f.seed({ partitionKey: event.id, rowKey: 'workspace', content: 'Fictional setup' });
     await f.store.deleteArchived(creator, event.id, f.saved.etag, event.name, requestId);
     await f.store.continueDeletion(creator, event.id, requestId);
@@ -232,7 +238,7 @@ describe('Organizer Quick round lifecycle persistence', () => {
   });
 
   it('resumes the exact delete request after the atomic claim commits but its response is lost', async () => {
-    const f = fixture();
+    const f = fixture(oneStep);
     f.seed({ partitionKey: event.id, rowKey: 'score:fictional', content: 'Fictional saved score' });
     f.submit.mockImplementationOnce((actions) => {
       f.apply(actions);
@@ -245,5 +251,46 @@ describe('Organizer Quick round lifecycle persistence', () => {
       .rejects.toMatchObject({ code: 'DELETE_REQUEST_CONFLICT' });
     expect((await f.store.deleteArchived(creator, event.id, f.saved.etag, event.name, requestId)).state).toBe('deleting');
     expect((await finish(f)).state).toBe('deleted');
+  });
+  it('finishes a typical event in one request with exact progress, keeping every safeguard of the step-by-step path', async () => {
+    const f = fixture();
+    for (let index = 0; index < 230; index++) f.seed({ partitionKey: event.id, rowKey: `business:${String(index).padStart(3, '0')}`,
+      content: 'Fictional score/capture/setup data' });
+    const shared = f.seed({ partitionKey: 'catalog:players', rowKey: 'player:fictional', content: 'Fictional shared player' });
+    const result = await f.store.deleteArchived(creator, event.id, f.saved.etag, event.name, requestId);
+    expect(result).toEqual({ eventId: event.id, requestId, state: 'deleted', progress: { stage: 'finished', removed: 230 } });
+    const retained = [...f.rows.values()].filter((row) => row.partitionKey === event.id);
+    expect(retained.map((row) => row.rowKey).sort()).toEqual(['event', 'event-write-fence']);
+    expect(f.rows.get('catalog:players|player:fictional')).toEqual(shared);
+    // Repeating the finished request is idempotent and reports the same totals.
+    expect(await f.store.continueDeletion(creator, event.id, requestId)).toEqual(result);
+  });
+
+  it('stops at its step or time budget with saved progress, and the next request continues from there', async () => {
+    let clock = 0;
+    const f = fixture({ maxSteps: 40, maxMilliseconds: 1_000 }, () => clock);
+    for (let index = 0; index < 120; index++) f.seed({ partitionKey: event.id, rowKey: `business:${String(index).padStart(3, '0')}`,
+      content: 'Fictional data' });
+    const submit = f.submit.getMockImplementation();
+    if (!submit) throw new Error('The fictional table must record transactions.');
+    // Each storage transaction "takes" 400 ms, so the 1 s budget runs out mid-cleanup.
+    f.submit.mockImplementation((actions) => { clock += 400; return submit(actions); });
+    const first = await f.store.deleteArchived(creator, event.id, f.saved.etag, event.name, requestId);
+    expect(first.state).toBe('deleting');
+    expect(first.progress?.stage).toMatch(/links|records/);
+    const second = await f.store.continueDeletion(creator, event.id, requestId);
+    expect(second.progress?.removed ?? 0).toBeGreaterThanOrEqual(first.progress?.removed ?? 0);
+    expect((await finish(f)).progress).toEqual({ stage: 'finished', removed: 120 });
+  });
+
+  it('caps the number of steps in one request even when every step is fast', async () => {
+    const f = fixture({ maxSteps: 2, maxMilliseconds: Number.POSITIVE_INFINITY });
+    for (let index = 0; index < 150; index++) f.seed({ partitionKey: event.id, rowKey: `business:${String(index).padStart(3, '0')}`,
+      content: 'Fictional data' });
+    const submitted = f.submit.mock.calls.length;
+    const result = await f.store.deleteArchived(creator, event.id, f.saved.etag, event.name, requestId);
+    // Claim transaction plus at most two cleanup steps.
+    expect(f.submit.mock.calls.length - submitted).toBeLessThanOrEqual(3);
+    expect(result.state).toBe('deleting');
   });
 });
