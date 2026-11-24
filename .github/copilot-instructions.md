@@ -33,6 +33,29 @@
 - Keep exports explicit, dependencies downward, and files responsibility-focused.
   Avoid generic repositories/services or placeholder modules for future features.
 
+## Code readability
+
+Write for a person reading the code for the first time, not only for agents.
+Much existing code is very dense; improve the code you touch, gradually.
+
+- One decision per line. Never stack ternaries; use early returns or a small
+  named function instead (for example `submitLabel()` returning a label).
+- Name things. Pull long inline expressions, conditions and magic numbers into
+  named helpers or constants (`removedSoFar(job)`, `spacingMs: 6_500`).
+- Keep functions single-purpose and short. Split a long function into a
+  coordinator and named steps rather than adding another branch.
+- Keep lines under about 120 characters. Do not chain several statements on one
+  line, and avoid comma-joined declarations such as `const a = 1, b = 2`.
+- Comment why, not what: the rule, limit, race or compatibility concern that
+  makes the code look the way it does. Add a short doc comment to exported
+  types, hooks and functions whose purpose is not obvious from the name.
+- Prefer plain control flow (`if`, `for`) over clever expressions when both
+  work. Readable beats short.
+- Tests follow the same rules: a test name says what must be true, and long
+  set-up gets a helper or a one-line comment explaining the scenario.
+- Tidy only what you are already changing. Do not mass-reformat files or mix
+  large style-only rewrites into a behavior change; propose those separately.
+
 ## Implementation and verification
 
 - Preserve strict TypeScript, readonly inputs, semantic HTML, keyboard access,
