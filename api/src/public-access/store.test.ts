@@ -14,7 +14,9 @@ describe('unsigned bounded active-event discovery', () => {
     const deletedId = identifier(5900);
     const archived = f.seed({ partitionKey: deletedId, rowKey: 'event', name: 'Fictional deletion target',
       createdAt: event.createdAt, status: 'archived', quickRound: true, quickRoundReady: true });
-    const administration = new TableEventAdministration(f.table, () => true);
+    // One step per request, so discovery can be checked while the deletion is half done.
+    const administration = new TableEventAdministration(f.table, () => true,
+      { maxSteps: 1, maxMilliseconds: Number.POSITIVE_INFINITY });
     const store = new TablePublicEventStore(f.table);
     const requestId = identifier(5901);
     let result = await administration.deleteArchived(creator, deletedId, archived.etag,

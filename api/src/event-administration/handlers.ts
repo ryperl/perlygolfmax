@@ -7,6 +7,17 @@ import { ApiError } from '../errors.js';
 import { failureDiagnostics } from '../diagnostics.js';
 import { readJson, response } from '../http.js';
 import type { TableEventAdministration } from './store.js';
+import type { EventDeletionResult } from '../../../src/domain/event-administration.js';
+
+/**
+ * Progress is opt-in (`?progress=1`). Older frontends reject unknown fields, and the API
+ * deploys before the frontend, so they must keep receiving the original response shape.
+ */
+function deletionResponse(result: EventDeletionResult, includeProgress: boolean): EventDeletionResult {
+  if (includeProgress) return result;
+  const { eventId, requestId, state } = result;
+  return { eventId, requestId, state };
+}
 
 export interface EventAdministrationApi {
   readonly verify: VerifyIdentity;
@@ -39,9 +50,11 @@ export function createEventAdministrationHandler(resolve: () => EventAdministrat
       await limiter.check({ kind: 'public-score', eventId }, 'events-manage');
       const body = await readJson(request);
       if (!isRecord(body) || Object.keys(body).some((key) => key !== 'confirmation')) throw new ApiError(400, 'INVALID_ADMINISTRATION_REQUEST');
+      const includeProgress = request.query.get('progress') === '1';
       if (action === 'continue') {
         if (Object.keys(body).length) throw new ApiError(400, 'INVALID_ADMINISTRATION_REQUEST');
-        return response(200, await administration.continueDeletion(identity, eventId, requestId));
+        const result = await administration.continueDeletion(identity, eventId, requestId);
+        return response(200, deletionResponse(result, includeProgress));
       }
       const expected = request.headers.get('If-Match');
       if (!isEventRevision(expected) || expected.includes(',')) throw new ApiError(400, 'EVENT_REVISION_REQUIRED');
@@ -50,7 +63,8 @@ export function createEventAdministrationHandler(resolve: () => EventAdministrat
         return response(200, await administration.restore(identity, eventId, expected, requestId));
       }
       if (typeof body.confirmation !== 'string' || body.confirmation.length > 100) throw new ApiError(400, 'EVENT_NAME_CONFIRMATION_REQUIRED');
-      return response(200, await administration.deleteArchived(identity, eventId, expected, body.confirmation, requestId));
+      const result = await administration.deleteArchived(identity, eventId, expected, body.confirmation, requestId);
+      return response(200, deletionResponse(result, includeProgress));
     } catch (error) {
       const status = error instanceof ApiError ? error.status : 503;
       const code = error instanceof ApiError ? error.code : 'SERVICE_UNAVAILABLE';

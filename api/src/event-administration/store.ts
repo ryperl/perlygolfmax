@@ -30,8 +30,34 @@ function jobPhase(row: StoredRow): Phase {
   return phase;
 }
 
+/**
+ * How much cleanup one deletion request may do. Several bounded steps per request keeps
+ * the organizer's browser from sending one request per 50-row page (requests are billed
+ * and limited to 10 organizer actions a minute), while staying well inside HTTP timeouts.
+ */
+export interface DeletionBudget {
+  readonly maxSteps: number;
+  readonly maxMilliseconds: number;
+}
+
+const defaultDeletionBudget: DeletionBudget = { maxSteps: 40, maxMilliseconds: 4_000 };
+
+/** Event rows deleted so far; jobs claimed before progress tracking start at zero. */
+function removedSoFar(job: StoredRow): number {
+  return typeof job.removed === 'number' && Number.isSafeInteger(job.removed) && job.removed >= 0 ? job.removed : 0;
+}
+
+function deletionResult(eventId: string, requestId: string, job: StoredRow, phase: Phase): EventDeletionResult {
+  const stage = phase === 'done' ? 'finished' : phase === 'rows' ? 'records' : 'links';
+  return {
+    eventId, requestId, state: phase === 'done' ? 'deleted' : 'deleting',
+    progress: { stage, removed: removedSoFar(job) },
+  };
+}
+
 export class TableEventAdministration {
-  constructor(private readonly table: TableClient, private readonly canManage: (identity: AccountIdentity) => boolean) {}
+  constructor(private readonly table: TableClient, private readonly canManage: (identity: AccountIdentity) => boolean,
+    private readonly budget: DeletionBudget = defaultDeletionBudget, private readonly now: () => number = Date.now) {}
 
   private manager(identity: AccountIdentity): void {
     if (!this.canManage(identity)) throw new ApiError(403, 'EVENT_ADMINISTRATION_FORBIDDEN');
@@ -139,14 +165,24 @@ export class TableEventAdministration {
       : [['create', tombstone]], 'DELETION_RETRY_REQUIRED');
   }
 
+  /** Runs bounded cleanup steps until the event is gone or this request's budget is used. */
   async continueDeletion(identity: AccountIdentity, eventId: string, requestId: string): Promise<EventDeletionResult> {
     this.manager(identity);
-    const job = await optionalRow(this.table, eventId, 'event');
-    if (!job || job.kind !== 'event-deletion') throw new ApiError(404, 'DELETION_NOT_FOUND');
-    const phase = jobPhase(job);
-    if (job.requestId !== requestId) throw new ApiError(409, 'DELETE_REQUEST_CONFLICT');
-    const result = (done: boolean): EventDeletionResult => ({ eventId, requestId, state: done ? 'deleted' : 'deleting' });
-    if (phase === 'done') return result(true);
+    const started = this.now();
+    for (let step = 0; ; step++) {
+      // Re-read the job every step: each step changes its revision, phase or cursor.
+      const job = await optionalRow(this.table, eventId, 'event');
+      if (!job || job.kind !== 'event-deletion') throw new ApiError(404, 'DELETION_NOT_FOUND');
+      const phase = jobPhase(job);
+      if (job.requestId !== requestId) throw new ApiError(409, 'DELETE_REQUEST_CONFLICT');
+      const budgetUsed = step >= this.budget.maxSteps || this.now() - started >= this.budget.maxMilliseconds;
+      if (phase === 'done' || budgetUsed) return deletionResult(eventId, requestId, job, phase);
+      await this.deletionStep(job, eventId, phase);
+    }
+  }
+
+  /** One bounded page of cleanup. Progress is saved with the step, so any step can be the last. */
+  private async deletionStep(job: StoredRow, eventId: string, phase: Exclude<Phase, 'done'>): Promise<void> {
     const cursor = typeof job.cursor === 'string' && job.cursor ? job.cursor : undefined;
     if (phase === 'admissions') {
       const batch = await page(this.table,
@@ -175,8 +211,10 @@ export class TableEventAdministration {
       const batch = await page(this.table, odata`PartitionKey eq ${eventId}`);
       const business = batch.rows.filter((row) => row.rowKey !== 'event' && row.rowKey !== fenceKey);
       if (business.length) {
+        // The removed count commits atomically with the deletes, so it never over- or under-counts.
+        const removed = removedSoFar(job) + business.length;
         await transaction(this.table, [
-          ['update', { partitionKey: eventId, rowKey: 'event', phase }, 'Merge', { etag: revision(job) }],
+          ['update', { partitionKey: eventId, rowKey: 'event', phase, removed }, 'Merge', { etag: revision(job) }],
           ...business.map((row): TransactionAction => {
             if (typeof row.rowKey !== 'string') throw new ApiError(503, 'INVALID_EVENT_ROW');
             return ['delete', { partitionKey: eventId, rowKey: row.rowKey }];
@@ -185,10 +223,8 @@ export class TableEventAdministration {
       } else {
         if (batch.continuationToken) throw new ApiError(503, 'DELETION_VERIFICATION_FAILED');
         await this.advance(job, 'done');
-        return result(true);
       }
     }
-    return result(false);
   }
 
   private async advance(job: StoredRow, phase: Phase, cursor?: string): Promise<void> {
@@ -196,7 +232,8 @@ export class TableEventAdministration {
     await transaction(this.table, [
       ['update', { partitionKey: job.partitionKey, rowKey: 'event', kind: 'event-deletion',
         status: phase === 'done' ? 'deleted' : 'deleting', phase, cursor: cursor ?? '',
-        requestId: job.requestId, fingerprint: job.fingerprint }, 'Replace', { etag: revision(job) }],
+        requestId: job.requestId, fingerprint: job.fingerprint, removed: removedSoFar(job) },
+      'Replace', { etag: revision(job) }],
     ], 'DELETION_RETRY_REQUIRED');
   }
 }

@@ -26,9 +26,17 @@ export function isEventRestoreResult(value: unknown): value is EventRestoreResul
     && isUuid(value.eventId) && isUuid(value.requestId) && value.status === 'active';
 }
 
+function isDeletionProgress(value: unknown): boolean {
+  if (!isRecord(value) || !keys(value, ['stage', 'removed'])) return false;
+  const knownStage = value.stage === 'links' || value.stage === 'records' || value.stage === 'finished';
+  return knownStage && Number.isSafeInteger(value.removed) && Number(value.removed) >= 0;
+}
+
 export function isEventDeletionResult(value: unknown): value is EventDeletionResult {
-  return isRecord(value) && keys(value, ['eventId', 'requestId', 'state'])
-    && isUuid(value.eventId) && isUuid(value.requestId) && (value.state === 'deleting' || value.state === 'deleted');
+  if (!isRecord(value) || !keys(value, ['eventId', 'requestId', 'state', 'progress'])) return false;
+  const knownState = value.state === 'deleting' || value.state === 'deleted';
+  const validProgress = value.progress === undefined || isDeletionProgress(value.progress);
+  return isUuid(value.eventId) && isUuid(value.requestId) && knownState && validProgress;
 }
 
 export function isEventDeletionPage(value: unknown): value is EventDeletionPage {

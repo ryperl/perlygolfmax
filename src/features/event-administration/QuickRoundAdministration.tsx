@@ -3,14 +3,17 @@ import type { EventAdministrationClient } from '../../client/event-administratio
 import type { AdministrableEvent, EventDeletionResult } from '../../domain/event-administration';
 import type { EventStatus } from '../../domain/events';
 import { ArchivedEventDeletion, PendingEventDeletion } from './ArchivedEventDeletion';
+import type { DeletionPacing } from './useDeletionRunner';
 import './event-administration.css';
 
 export interface QuickRoundAdministrationProps {
   readonly client: EventAdministrationClient;
   readonly onChanged?: () => void;
+  /** Tests shorten the pauses between automatic deletion requests. */
+  readonly deletionPacing?: DeletionPacing;
 }
 
-export function QuickRoundAdministration({ client, onChanged }: QuickRoundAdministrationProps) {
+export function QuickRoundAdministration({ client, onChanged, deletionPacing }: QuickRoundAdministrationProps) {
   const [status, setStatus] = useState<EventStatus>('active');
   const [events, setEvents] = useState<readonly AdministrableEvent[]>([]);
   const [cursor, setCursor] = useState<string>();
@@ -88,10 +91,11 @@ export function QuickRoundAdministration({ client, onChanged }: QuickRoundAdmini
     }
   }
 
-  function deleted(eventId: string) {
+  function deleted(eventId: string, removed?: number) {
     setEvents((current) => current.filter((event) => event.id !== eventId));
     setJobs((current) => current.filter((job) => job.eventId !== eventId));
-    setNotice('Event business data permanently deleted. Shared players and courses were kept.');
+    const count = removed === undefined ? '' : ` (${String(removed)} event records removed)`;
+    setNotice(`Event business data permanently deleted${count}. Shared players and courses were kept.`);
     title.current?.focus();
     onChanged?.();
   }
@@ -139,7 +143,7 @@ export function QuickRoundAdministration({ client, onChanged }: QuickRoundAdmini
             }}>Restore {event.name}</button>
             <ArchivedEventDeletion client={client} event={event} onDeleted={deleted} onBusyChange={setChildBusy}
               onDeletionStarted={() => { setDeleting((current) => current.includes(event.id) ? current : [...current, event.id]); }}
-              disabled={busy || childBusy} />
+              disabled={busy || childBusy} {...(deletionPacing ? { pacing: deletionPacing } : {})} />
           </div>}
       </li>)}
     </ul>
@@ -148,7 +152,8 @@ export function QuickRoundAdministration({ client, onChanged }: QuickRoundAdmini
     <h3>Unfinished deletions</h3>
     {!jobsLoaded && !jobsError && <button disabled={jobsBusy} onClick={() => { void loadJobs(); }}>Check unfinished deletions</button>}
     {jobsError && <p role="alert">{jobsError} <button disabled={jobsBusy} onClick={() => { void loadJobs(); }}>Retry unfinished deletions</button></p>}
-    <ul>{jobs.map((job) => <PendingEventDeletion key={job.eventId} client={client} job={job} onDeleted={deleted} />)}</ul>
+    <ul>{jobs.map((job) => <PendingEventDeletion key={job.eventId} client={client} job={job} onDeleted={deleted}
+      {...(deletionPacing ? { pacing: deletionPacing } : {})} />)}</ul>
     {jobsCursor && <button disabled={jobsBusy} onClick={() => { void loadJobs(); }}>Load more unfinished deletions</button>}
   </section>;
 }
