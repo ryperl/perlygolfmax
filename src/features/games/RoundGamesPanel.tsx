@@ -81,6 +81,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
   const editingRound = editor?.latest ?? editor?.context ?? round;
   const canManage = canManageRoundGames(round) && (!editor?.latest || canManageRoundGames(editor.latest));
   const disabled = busy || working || archived || !canManage;
+  const editorShown = editor !== null && canManage && (editor.draft.kind !== 'churchy' || round.churchyEnabled === true);
   const draftGame = editor ? buildGame(editor.draft, editor.roster.map((card) => card.playerId)) : null;
   const sweepDefinitions = [...(editor?.base ?? []), ...(draftGame ? [draftGame] : [])];
   const unsupportedSweep = sweepDefinitions.some((game) => game.kind === 'dots' && game.sweepRule === 'manual-v1')
@@ -377,8 +378,8 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
       {!editor && !archived && canManage && <button type="button" disabled={disabled || games.length >= maximumGamesPerRound}
         onClick={() => { open(); }}>Add game</button>}
       {games.length >= maximumGamesPerRound && <p>This round has reached the 16-game limit.</p>}
-      {message && <p role="status" className="game-notice">{message}</p>}
-      {editor && canManage && (editor.draft.kind !== 'churchy' || round.churchyEnabled === true) && <>
+      {message && !editorShown && <p role="status" className="game-notice">{message}</p>}
+      {editorShown && <>
         {editor.conflict && <div className="game-review">
           {editedGameChanged && <p>This game changed in the latest settings. Reviewing keeps your draft for this game and preserves other games.</p>}
           {editor.latest?.eventStatus === 'archived' && <p>The refreshed trip is archived. Your draft is retained, read-only.</p>}
@@ -388,7 +389,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
               onClick={review}>Review my game against latest settings</button>
           </div>
         </div>}
-        <GameSettings draft={editor.draft} disabled={disabled || editor.latest?.eventStatus === 'archived'}
+        <GameSettings draft={editor.draft} disabled={disabled || editor.latest?.eventStatus === 'archived'} notice={message}
           presetStore={presetStore}
           roster={editor.roster}
           churchyEnabled={round.churchyEnabled === true} groups={editingRound.groups}

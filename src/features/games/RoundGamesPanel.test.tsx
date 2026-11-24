@@ -346,6 +346,32 @@ describe('RoundGamesPanel', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Check the game name');
   });
 
+  it('shows save feedback directly above the Save button while editing, then back at the top after saving', async () => {
+    const scroll = vi.fn();
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView');
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scroll });
+    try {
+      setup();
+      click('Add game');
+      field('Game name', ' ');
+      click('Save game');
+      const notice = screen.getByRole('status');
+      expect(notice).toHaveTextContent('Check the game name');
+      const actions = screen.getByRole('button', { name: 'Save game' }).parentElement;
+      expect(notice.nextElementSibling).toBe(actions);
+      expect(notice.closest('form')).toBe(actions?.closest('form'));
+      expect(scroll).toHaveBeenCalledWith({ block: 'nearest', behavior: 'instant' });
+      field('Game name', 'Fictional fixed game');
+      click('Save game');
+      await saved();
+      expect(screen.queryByRole('button', { name: 'Save game' })).not.toBeInTheDocument();
+      expect(screen.getByRole('status').closest('form')).toBeNull();
+    } finally {
+      if (descriptor) Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', descriptor);
+      else Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+    }
+  });
+
   it.each(['', '0', '101', '1.2'])('rejects invalid visible net allowance %j', (value) => {
     const { onSave } = setup();
     click('Add game');

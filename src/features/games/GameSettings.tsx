@@ -1,5 +1,5 @@
 import type { FormEvent } from 'react';
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { maximumPointsRows, teamSize } from '../../domain/games';
 import type { RoundGameKind } from '../../domain/games';
 import type { GameDraft } from './game-draft';
@@ -49,6 +49,8 @@ interface GameSettingsProps {
   readonly presetStore?: DotPresetStore | undefined;
   readonly existing?: boolean;
   readonly gameHandicapsSupported?: boolean;
+  /** Save feedback, shown beside the Save button so it is seen where the scorer acted. */
+  readonly notice?: string;
 }
 
 function scoreLabel(value: number): string {
@@ -69,8 +71,13 @@ export function GameSettings({
   churchyCustomNamesSupported = false, holeNumbers = [], defaultGroupNumber,
   wolfHighLowSweepSupported = false, wolfOrderSupported = false, dotsManualSweepSupported = false, dotsHighLowSupported = false,
   dotsV3Supported = false, courseHandicaps = [],
-  gameHandicapsSupported = false,
+  gameHandicapsSupported = false, notice = '',
 }: GameSettingsProps) {
+  const noticeRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    const element = noticeRef.current;
+    if (notice && typeof element?.scrollIntoView === 'function') element.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+  }, [notice]);
   const allowanceHint = useId();
   const netHint = useId();
   const startHint = useId();
@@ -490,6 +497,7 @@ export function GameSettings({
       {draft.kind === 'churchy' && draft.churchyVersion === 3 && !churchyV3Supported
         && <p>Updated Churchie edits are temporarily unavailable in this app version. Saved games are unchanged.</p>}
       {draft.kind !== 'churchy' && supportedGameKinds === undefined && <p>Stroke Play, Wolf and Nassau setup are temporarily unavailable in this app version.</p>}
+      {notice && <p ref={noticeRef} role="status" className="game-notice">{notice}</p>}
       <div className="game-actions">
         <button type="submit" disabled={disabled || matchLocked || saveDisabled
           || draft.kind === 'dots' && draft.dotsMode === 'rotating' && !dotsV2Supported
