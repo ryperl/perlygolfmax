@@ -9,6 +9,10 @@ default; score entry is online-only, not an offline-capable tournament app.
 
 ## Local setup
 
+Moving to another machine? Start with the
+[machine handoff guide](docs/machine-handoff.md). It distinguishes Git source,
+unmerged branches, private configuration and fresh GitHub/Azure authentication.
+
 Use Node.js 22.14.0 (see `.nvmrc`) and npm 10.
 
 ```bash
