@@ -47,7 +47,8 @@ describe('public create-only player form', () => {
     await waitFor(() => { expect(onCreated).toHaveBeenCalledWith({ id: fictionalId(980), ...input }); });
     expect(create.mock.calls[0]?.[0]).toEqual(input);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(blocked).toHaveBeenLastCalledWith(false);
+    // The form reports "not blocking" from an effect after it closes, which can land a moment later on slow machines.
+    await waitFor(() => { expect(blocked).toHaveBeenLastCalledWith(false); });
   });
 
   it('keeps exact uncertain attempts through retry quota failure, warns on close/navigation, and confirms one creation', async () => {
