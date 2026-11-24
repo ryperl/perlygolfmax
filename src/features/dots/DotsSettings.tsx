@@ -9,6 +9,7 @@ import { dotsSpecialCatalog } from '../../domain/dots';
 import { formatMoney, parseMoney } from '../../domain/money';
 import { DotSpecialsSettings } from './DotSpecialsSettings';
 import { dotSpecialModeCompatible } from './dot-preset-options';
+import { dotsModeChange } from './dots-mode-change';
 import './dots-settings.css';
 
 export interface DotsSetupDraft {
@@ -93,22 +94,8 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
     <div className="dots-setup-fields">
     {!hidePlayingGroup && <DotsPlayingGroupSelect draft={draft} groups={groups} onChange={onChange} individualPlayerCounts={individualPlayerCounts} />}
     <label>Dots mode<select value={mode === 'rotating' ? `rotating-${String(draft.dotsRotationHoles ?? 3)}` : mode} onChange={(event) => {
-      const selectedMode = event.target.value;
-      if (smallGroup && selectedMode !== 'individual') return;
-      if ((selectedMode === 'rotating-3' || selectedMode === 'rotating-6') && v2Supported && (!existing || draft.dotsVersion !== 1)) {
-        if (updated && !v3Supported) return;
-        const nextVersion = v3Supported && (!existing || draft.dotsVersion !== 2) ? 3 : 2;
-        onChange({ dotsMode: 'rotating', dotsRotationHoles: selectedMode === 'rotating-3' ? 3 : 6,
-          ...(nextVersion === 3 ? { dotsVersion: 3, dotsOrderMode: draft.dotsOrderMode ?? 'tee-flip' } : {}),
-          ...(nextVersion !== 3 && selectedMode === 'rotating-6' && draft.dotsHighLow ? { dotsHighLow: false } : {}),
-          dotsSpecials: specials.filter((special) => compatible(special.kind, 'rotating')) });
-        return;
-      }
-      if ((selectedMode === 'individual' || selectedMode === 'fixed' || selectedMode === 'linked') && selectedMode !== mode) {
-        if (existing && (draft.dotsVersion === 2 || updated)) return;
-        onChange({ dotsMode: selectedMode, ...(!existing ? { dotsVersion: 1 } : {}), ...(draft.dotsHighLow ? { dotsHighLow: false } : {}),
-          dotsSpecials: specials.filter((special) => compatible(special.kind, selectedMode)) });
-      }
+      const patch = dotsModeChange(draft, event.target.value, { existing, smallGroup, v2Supported, v3Supported, compatible });
+      if (patch) onChange(patch);
     }}><option value="rotating-3" disabled={smallGroup || !v2Supported || existing && draft.dotsVersion === 1}>Modified Sixes · Change partners every 3 holes</option>
       <option value="rotating-6" disabled={smallGroup || !v2Supported || existing && draft.dotsVersion === 1}>Sixes · Change partners every 6 holes</option>
       <option value="individual" disabled={existing && (draft.dotsVersion === 2 || updated)}>Individual</option><option value="fixed" disabled={smallGroup || existing && (draft.dotsVersion === 2 || updated)}>Fixed partners</option>

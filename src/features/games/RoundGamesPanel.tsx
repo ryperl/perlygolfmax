@@ -7,7 +7,7 @@ import { changesSkinsCarryRules, maximumGamesPerRound, sameGameDefinitions, visi
 import type { GameWriteResult, RoundScores } from '../../domain/scoring';
 import { scorePermissions, supportsDotsSpecials, supportsIndividualDotsPlayerCount, supportsRoundGame, supportsDotsGameRules } from '../../domain/scoring';
 import type { GameDraft } from './game-draft';
-import { buildGame, defaultGameGroup, draftFromGame, newGameDraft, replaceGame, setGameKind } from './game-draft';
+import { buildGame, defaultGameGroup, dotsDraftProblem, draftFromGame, newGameDraft, replaceGame, setGameKind } from './game-draft';
 import { GameResults } from './GameResults';
 import { GameSettings } from './GameSettings';
 import { canManageAllRoundGames, canManageGame, canManageRoundGames } from './game-permissions';
@@ -249,7 +249,8 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
     if (!intended) {
       setMessage(editor.draft.kind === 'wolf' || editor.draft.kind === 'nassau' || editor.draft.kind === 'match-play'
         ? 'Check the game name, saved playing group, distinct participants and order. Enter USD dollars and cents, or choose No planned money.'
-        : editor.draft.kind === 'dots' ? 'Choose a saved playing group, compatible mode and enabled specials with positive whole units. Solo play is stats-only; otherwise use a valid optional USD rate with at most two decimal places.'
+        : editor.draft.kind === 'dots' ? (!game && dotsDraftProblem(editor.draft, editor.roster.map((card) => card.playerId)))
+          || 'Choose a saved playing group, compatible mode and enabled specials with positive whole units. Solo play is stats-only; otherwise use a valid optional USD rate with at most two decimal places.'
         : editor.draft.kind === 'churchy'
         ? 'Choose a complete saved foursome, order all four golfers, and enter USD dollars and cents per dot (zero or more). Choose one Churchie game per group.'
         : editor.draft.kind === 'stroke-play' ? 'Check the game name (1–100 characters) and gross or net score basis. Net uses 100% captured Course Handicap.'
