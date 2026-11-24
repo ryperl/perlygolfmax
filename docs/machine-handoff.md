@@ -68,17 +68,18 @@ commits. It excludes app checkpoint refs, ignored files and authentication state
 Copy it through an approved private channel and verify its recorded SHA-256.
 
 ```bash
-git clone /approved/transfer/perlygolfmax.bundle perlygolfmax
+git clone --branch ryperl/machine-handoff \
+  /approved/transfer/perlygolfmax.bundle perlygolfmax
 cd perlygolfmax
 git bundle verify /approved/transfer/perlygolfmax.bundle
 git remote set-url origin https://github.com/ryperl/perlygolfmax.git
 git fetch origin
-git switch ryperl-microsoft-perly-golf-foundation
 ```
 
-Inspect `git branch -a` and the manifest: the bundle's default checkout follows
-the source HEAD, not necessarily `main`. An offline bundle cannot tell you
-whether GitHub has newer commits until you fetch.
+Inspect `git branch -a` and the manifest. Selecting the handoff branch explicitly
+avoids a stale default checkout. The bundle preserves the old local `main`
+reference; fetch before treating it as current GitHub `main`. An offline bundle
+cannot tell you whether GitHub has newer commits until you fetch.
 
 ## Install and verify locally
 
