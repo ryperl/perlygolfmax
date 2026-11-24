@@ -76,7 +76,7 @@ describe('Dots special mode compatibility', () => {
     expect(onChange).not.toHaveBeenCalled();
     view.rerender(<Editor />);
     fireEvent.change(screen.getByLabelText('Dots mode'), { target: { value: 'rotating-3' } });
-    expect(onChange).toHaveBeenLastCalledWith({ dotsMode: 'rotating', dotsRotationHoles: 3, dotsSpecials: [{ kind: 'sandy', units: 3 }] });
+    expect(onChange).toHaveBeenLastCalledWith({ dotsMode: 'rotating', dotsRotationHoles: 3, dotsVersion: 2, dotsSpecials: [{ kind: 'sandy', units: 3 }] });
     expect(screen.getByLabelText('Assassin · Automatic')).toBeEnabled();
     expect(screen.getByLabelText('Sweep · Automatic')).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Select all' }));

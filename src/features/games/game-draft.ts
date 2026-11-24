@@ -332,6 +332,53 @@ export function buildGame(draft: GameDraft, playerIds: readonly string[] = []): 
   return isRoundGameDefinition(game) && gameTeamsMatchRoster(game, playerIds) ? game : null;
 }
 
+/**
+ * Explains why `buildGame` rejects a Dots draft, in the order a scorer would fix it.
+ * Returns null when no specific reason is known; callers then keep their general guidance.
+ */
+export function dotsDraftProblem(draft: GameDraft, playerIds: readonly string[]): string | null {
+  if (draft.kind !== 'dots') return null;
+  const name = draft.name.trim();
+  if (!name) return 'Enter a game name.';
+  if (draft.name.length > 256) return 'Use a game name of 256 characters or fewer.';
+  const mode = draft.dotsMode ?? 'individual';
+  const members = draft.dotsPlayerIds ?? draft.dotsPlayers ?? [];
+  if (draft.groupNumber === undefined || members.length === 0) return 'Choose a saved playing group.';
+  if (members.some((id) => !playerIds.includes(id)) || new Set(members).size !== members.length) {
+    return 'This playing group no longer matches the round. Choose the saved playing group again.';
+  }
+  if (mode !== 'individual' && members.length !== 4) return 'Partner and rotating Dots need a saved foursome. Choose Individual for smaller groups.';
+  if (draft.dotsVersion === 1 && mode === 'rotating' || (draft.dotsVersion === 2 || draft.dotsVersion === 3) && mode !== 'rotating') {
+    return 'Saved Dots rules cannot change mode. Keep the saved mode, or create a separate Dots game before scoring.';
+  }
+  const specials = draft.dotsSpecials ?? [];
+  if (specials.some((special) => !Number.isSafeInteger(special.units) || special.units < 1)) {
+    return 'Give each selected special a whole number of dots, 1 or more.';
+  }
+  if (new Set(specials.map((special) => special.kind)).size !== specials.length) return 'Each special can be selected only once.';
+  if (mode === 'individual' && specials.some((special) => special.kind === 'assassin')) {
+    return 'Assassin needs partners. Remove it, or choose a partner or rotating mode.';
+  }
+  if (mode !== 'linked' && specials.some((special) => special.kind === 'sweep') && draft.dotsSweepRule !== 'manual-v1') {
+    return 'This Sweep needs a linked Wolf game. Use manual Sweep, or remove it.';
+  }
+  if (draft.dotsHighLow && mode === 'rotating' && draft.dotsVersion !== 3 && (draft.dotsRotationHoles ?? 3) !== 3) {
+    return 'Under these saved rules, Net High/Low is available only for Modified Sixes (three-hole partners).';
+  }
+  if (mode === 'linked') return draft.linkedGameId ? null : 'Choose the earned Wolf game to link.';
+  const stake = draft.stake?.trim() ?? '';
+  const rate = stake ? parseMoney(stake) : null;
+  if (stake && rate === null) return 'Enter the USD rate as dollars and cents, like 1 or .50, or leave it blank for points only.';
+  if (mode === 'individual' && members.length === 1 && rate !== null && rate !== 0) return 'Solo Dots is stats only. Clear the USD rate.';
+  if (mode === 'fixed') {
+    const partners = draft.dotsPlayers ?? [];
+    if (partners.length !== 4 || new Set(partners).size !== 4 || partners.some((id) => !members.includes(id))) {
+      return 'Place all four golfers on the two fixed teams.';
+    }
+  }
+  return null;
+}
+
 export function replaceGame(
   base: readonly RoundGameDefinition[], game: RoundGameDefinition,
 ): readonly RoundGameDefinition[] | null {

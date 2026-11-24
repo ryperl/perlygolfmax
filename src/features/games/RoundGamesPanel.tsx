@@ -7,7 +7,7 @@ import { changesSkinsCarryRules, maximumGamesPerRound, sameGameDefinitions, visi
 import type { GameWriteResult, RoundScores } from '../../domain/scoring';
 import { scorePermissions, supportsDotsSpecials, supportsIndividualDotsPlayerCount, supportsRoundGame, supportsDotsGameRules } from '../../domain/scoring';
 import type { GameDraft } from './game-draft';
-import { buildGame, defaultGameGroup, draftFromGame, newGameDraft, replaceGame, setGameKind } from './game-draft';
+import { buildGame, defaultGameGroup, dotsDraftProblem, draftFromGame, newGameDraft, replaceGame, setGameKind } from './game-draft';
 import { GameResults } from './GameResults';
 import { GameSettings } from './GameSettings';
 import { canManageAllRoundGames, canManageGame, canManageRoundGames } from './game-permissions';
@@ -81,6 +81,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
   const editingRound = editor?.latest ?? editor?.context ?? round;
   const canManage = canManageRoundGames(round) && (!editor?.latest || canManageRoundGames(editor.latest));
   const disabled = busy || working || archived || !canManage;
+  const editorShown = editor !== null && canManage && (editor.draft.kind !== 'churchy' || round.churchyEnabled === true);
   const draftGame = editor ? buildGame(editor.draft, editor.roster.map((card) => card.playerId)) : null;
   const sweepDefinitions = [...(editor?.base ?? []), ...(draftGame ? [draftGame] : [])];
   const unsupportedSweep = sweepDefinitions.some((game) => game.kind === 'dots' && game.sweepRule === 'manual-v1')
@@ -249,7 +250,8 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
     if (!intended) {
       setMessage(editor.draft.kind === 'wolf' || editor.draft.kind === 'nassau' || editor.draft.kind === 'match-play'
         ? 'Check the game name, saved playing group, distinct participants and order. Enter USD dollars and cents, or choose No planned money.'
-        : editor.draft.kind === 'dots' ? 'Choose a saved playing group, compatible mode and enabled specials with positive whole units. Solo play is stats-only; otherwise use a valid optional USD rate with at most two decimal places.'
+        : editor.draft.kind === 'dots' ? (!game && dotsDraftProblem(editor.draft, editor.roster.map((card) => card.playerId)))
+          || 'Choose a saved playing group, compatible mode and enabled specials with positive whole units. Solo play is stats-only; otherwise use a valid optional USD rate with at most two decimal places.'
         : editor.draft.kind === 'churchy'
         ? 'Choose a complete saved foursome, order all four golfers, and enter USD dollars and cents per dot (zero or more). Choose one Churchie game per group.'
         : editor.draft.kind === 'stroke-play' ? 'Check the game name (1–100 characters) and gross or net score basis. Net uses 100% captured Course Handicap.'
@@ -376,8 +378,8 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
       {!editor && !archived && canManage && <button type="button" disabled={disabled || games.length >= maximumGamesPerRound}
         onClick={() => { open(); }}>Add game</button>}
       {games.length >= maximumGamesPerRound && <p>This round has reached the 16-game limit.</p>}
-      {message && <p role="status" className="game-notice">{message}</p>}
-      {editor && canManage && (editor.draft.kind !== 'churchy' || round.churchyEnabled === true) && <>
+      {message && !editorShown && <p role="status" className="game-notice">{message}</p>}
+      {editorShown && <>
         {editor.conflict && <div className="game-review">
           {editedGameChanged && <p>This game changed in the latest settings. Reviewing keeps your draft for this game and preserves other games.</p>}
           {editor.latest?.eventStatus === 'archived' && <p>The refreshed trip is archived. Your draft is retained, read-only.</p>}
@@ -387,7 +389,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
               onClick={review}>Review my game against latest settings</button>
           </div>
         </div>}
-        <GameSettings draft={editor.draft} disabled={disabled || editor.latest?.eventStatus === 'archived'}
+        <GameSettings draft={editor.draft} disabled={disabled || editor.latest?.eventStatus === 'archived'} notice={message}
           presetStore={presetStore}
           roster={editor.roster}
           churchyEnabled={round.churchyEnabled === true} groups={editingRound.groups}
