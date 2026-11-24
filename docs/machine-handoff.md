@@ -229,3 +229,58 @@ their approvals remain required for deployment work.
 - Recreate needed local configuration privately; verify it is ignored.
 - Transfer selected private evidence separately, only if needed for continuity.
 - Keep the old machine and private records until the new machine is verified.
+
+## Agent continuity addendum
+
+Read `docs/game-rules.md` before continuing scoring work, and the relevant
+sections of `docs/operations.md` before changing access or releasing.
+Contributor instructions summarize the system; verify claims against source.
+
+- **Branch roles:** continue application work from the current foundation
+  branch. The handoff branch adds documentation, not a new deployment. The
+  description and per-hole breakdown feature branches are preserved unmerged
+  work. Review notes accompany them; they are not proof of deployment or
+  approval to merge. Their older changes may already be integrated.
+- **Saved rules versus derived results:** never silently migrate game
+  definitions or rewrite raw cards, captures or original audit receipts.
+  Explicitly approved String and Category Sweep corrections do recalculate
+  existing derived results through negotiated compatibility. Earlier score
+  corrections also recalculate results while retaining immutable final-hole
+  Wolf choices and press receipts.
+- **Handicaps and specials:** group-wide SO is not a selected match-pair
+  handicap. Allocate the selected CH/SO using captured personal tees; do not
+  halve nine-hole CH twice. Dots/Churchie specials remain personal gross even
+  when base comparisons are net. Manual, Category and High/Low Sweep are
+  distinct sources, never interchangeable duplicate bonuses.
+- **Scale:** twelve golfers and five rounds describe the original trip, not
+  application ceilings. Playing groups remain at most four; retain actual
+  layout/team requirements, transport limits and request budgets.
+- **Public authority:** active-event scoring is public. Quick rounds also
+  permit collaborative setup under their stored policy. The capability-gated
+  shared-player exception is create-only, name/manual-HI only; it grants no
+  profile editing, catalog administration or verified GHIN status.
+- **Production uncertainty:** `deploy.yml` publishes frontend assets only.
+  That does not prove the live production site has no API or is a preview.
+  Inspect actual configuration before asserting either; do not push `main`
+  merely to investigate.
+- **Workflow concurrency:** TEST deployment runs queue; matching CI runs use
+  `cancel-in-progress: true`. Duration varies and is not a timing guarantee.
+  Keep one publisher, both validation/package gates, API-first publication,
+  exact-SHA asset verification and hosted readiness checks.
+- **Live data:** implementation and deployment approval do not authorize
+  editing real events. Previously reviewed live corrections were explicitly
+  left unapplied. Missing old-machine audit files do not authorize inventing
+  facts or repairing entries. Use separately approved, conditional workflows.
+- **Identity boundaries:** GitHub OIDC deployment identity, Azure runtime
+  identity, local developer and customer organizer are different principals.
+  Fresh sign-in does not establish every permission. Verify required access
+  without unapproved roles, settings changes or storage-key fallbacks.
+
+To obtain this document without a shared clipboard:
+
+```bash
+git fetch origin
+git show origin/ryperl/machine-handoff:docs/machine-handoff.md
+```
+
+This reads the handoff without checking out or merging its branch.
