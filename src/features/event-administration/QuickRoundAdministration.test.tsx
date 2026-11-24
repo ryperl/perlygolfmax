@@ -1,5 +1,6 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { RateLimitedError } from '../../client/event-administration';
 import type { EventAdministrationClient } from '../../client/event-administration';
@@ -202,6 +203,44 @@ describe('Organizer Quick round lifecycle UI', () => {
     expect(requestSignal?.aborted).toBe(true);
     await act(async () => { respond?.(); await Promise.resolve(); });
     expect(client.continueDeletion).toHaveBeenCalledOnce();
+  });
+
+  it('releases the busy lock when a deletion finishes, so other events can be managed without refreshing', async () => {
+    const user = userEvent.setup();
+    const client = fixture();
+    const second = { ...event, id: requestId, name: 'Fictional Second round' };
+    client.listQuick.mockResolvedValue({ events: [event, second] });
+    client.deleteArchived.mockResolvedValue({ eventId: id, requestId, state: 'deleted', progress: { stage: 'finished', removed: 4 } });
+    render(<QuickRoundAdministration client={client} deletionPacing={instant} />);
+    await user.click(screen.getByRole('button', { name: 'Archived Quick rounds' }));
+    await user.click(await screen.findByRole('button', { name: `Permanently delete ${event.name}` }));
+    await user.type(screen.getByRole('textbox', { name: `Type ${event.name} to confirm` }), event.name);
+    await user.click(screen.getByRole('button', { name: 'Permanently delete event' }));
+    expect(await screen.findByText(/business data permanently deleted \(4 event records removed\)/)).toBeVisible();
+    // The deleted event's panel is gone; everything else must be usable again.
+    expect(screen.getByRole('button', { name: `Permanently delete ${second.name}` })).toBeEnabled();
+    expect(screen.getByRole('button', { name: `Restore ${second.name}` })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Active Quick rounds' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Refresh Quick rounds' })).toBeEnabled();
+  });
+
+  it('tells its host it is no longer busy when it is removed mid-deletion or after finishing', async () => {
+    const user = userEvent.setup();
+    const client = fixture();
+    client.deleteArchived.mockResolvedValue({ eventId: id, requestId, state: 'deleted', progress: { stage: 'finished', removed: 2 } });
+    const busy = vi.fn();
+    function Host() {
+      const [present, setPresent] = useState(true);
+      return present ? <ArchivedEventDeletion client={client} event={event} pacing={instant} onBusyChange={busy}
+        onDeleted={() => { setPresent(false); }} /> : <p>Removed</p>;
+    }
+    render(<Host />);
+    await user.click(screen.getByRole('button', { name: `Permanently delete ${event.name}` }));
+    await user.type(screen.getByRole('textbox', { name: `Type ${event.name} to confirm` }), event.name);
+    await user.click(screen.getByRole('button', { name: 'Permanently delete event' }));
+    expect(await screen.findByText('Removed')).toBeVisible();
+    expect(busy).toHaveBeenCalledWith(true);
+    expect(busy).toHaveBeenLastCalledWith(false);
   });
 
   it('aborts superseded reads on unmount and never publishes their result', async () => {

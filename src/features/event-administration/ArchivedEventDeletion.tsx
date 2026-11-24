@@ -36,6 +36,9 @@ function ArchivedEventDeletionForm({ client, event, onDeleted, onBusyChange, onD
     else if (opened.current) button.current?.focus();
   }, [open]);
   useEffect(() => { onBusyChange?.(deletion.running); }, [deletion.running, onBusyChange]);
+  // A finished deletion removes this panel before its own "not running" update can be
+  // reported, so always release the host's busy lock on the way out.
+  useEffect(() => () => { onBusyChange?.(false); }, [onBusyChange]);
   if (event.status !== 'archived') return null;
 
   function start() {
