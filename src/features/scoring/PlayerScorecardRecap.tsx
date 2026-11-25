@@ -26,6 +26,7 @@ export function PlayerScorecardRecap({ round, card, gameId }: {
         <p>{tee?.name ?? round.teeName} / {tee?.category ?? round.teeCategory}{totalRating ? ` · Course rating ${String(totalRating.course)} · Slope ${String(totalRating.slope)}` : ''}
           {(round.playerTees?.length ?? 0) > 0 ? tee ? ' · personal tee' : ' · default tee' : ''}</p>
         {game && <p className="scorecard-game-context">{gameDisplayName(game.definition)} · {game.definition.kind === 'ball-drop' || game.definition.kind === 'skins' || game.definition.kind === 'churchy' || game.definition.kind === 'stroke-play' || game.definition.kind === 'wolf' || game.definition.kind === 'dots' || game.definition.kind === 'match-play' || game.definition.kind === 'nassau'
+          || game.definition.kind === 'nines'
           ? gameScoringLabel(game.definition) : `${game.definition.basis === 'net' ? 'Net' : 'Gross'} points`}</p>}
       </div>
       <p className="recap-total">{summary.complete ? 'Gross total' : 'Recorded total'}:

@@ -61,6 +61,7 @@ export function GameResults({ game, result, holeNumbers, players }: {
     <section className="game-results" aria-label={`${game.name} results`}>
       <h3>{game.name}</h3>
       <p>{gameScoringLabel(game)}</p>
+      {game.kind === 'nines' && <p className="game-hint">{ninesResultHint(result)}</p>}
       {game.kind === 'ball-drop' ? <p className="game-hint">Lowest two-ball score relative to each golfer&apos;s par, from different golfers. All four saved dispositions are required. Totals are provisional while holes are pending.</p>
         : game.kind === 'skins' ? <p className="game-hint">Skins wait for every golfer&apos;s saved disposition. Pickup and DNF are ineligible; zero means a resolved hole without a win.
           {' '}{result?.unawardedSkins ?? 0} unawarded · {result?.pendingSkins ?? holeNumbers.length} pending. Final tied skins stay unawarded.</p>
@@ -116,4 +117,13 @@ export function GameResults({ game, result, holeNumbers, players }: {
       </>}
     </section>
   );
+}
+
+/** Explains Nines scoring, or why it cannot score while the saved group no longer matches. */
+function ninesResultHint(result: RoundGameResult | undefined): string {
+  if (result?.nines?.status === 'stale-group') {
+    return 'This saved group no longer holds the same three golfers. Edit this game to choose the group again.';
+  }
+  return '5 / 3 / 1 points per hole; ties share their places. Pickup, X7 and DNF rank worst. '
+    + 'A hole scores once all three golfers have saved a score.';
 }

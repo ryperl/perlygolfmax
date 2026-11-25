@@ -27,7 +27,7 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
   const game = scorecardGame(round, gameId, group.playerIds);
   const games = visibleGames(round.games?.configuration.games ?? [], round.churchyEnabled).filter((game) =>
     (game.kind === 'nassau' || game.kind === 'match-play' ? game.groupNumber === group.number
-      : (game.kind !== 'churchy' && game.kind !== 'wolf' && game.kind !== 'dots') || group.playerIds.every((id) => game.playerIds.includes(id))));
+      : (game.kind !== 'churchy' && game.kind !== 'wolf' && game.kind !== 'dots' && game.kind !== 'nines') || group.playerIds.every((id) => game.playerIds.includes(id))));
   const cards = group.playerIds.map((id) => cardFor(round, id));
   const player = cards.find((card) => card.playerId === playerId);
   const layout = [...round.layout].sort((left, right) => left.number - right.number);

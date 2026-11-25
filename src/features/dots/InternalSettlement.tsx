@@ -2,14 +2,18 @@ import type { InternalGameSettlement } from '../../domain/dot-settlement';
 import { formatMoney } from '../../domain/money';
 import './internal-settlement.css';
 
-export function InternalSettlement({ settlement, gameNames = [], ranked = false, progress = [], sourceLabels = ['Base', 'Specials'], provisional = false }: {
+export function InternalSettlement({ settlement, gameNames = [], ranked = false, progress = [], sourceLabels = ['Base', 'Specials'], provisional = false,
+  unit = 'dots' }: {
   readonly settlement: InternalGameSettlement;
   readonly gameNames?: readonly string[];
   readonly ranked?: boolean;
   readonly progress?: readonly { readonly playerId: string; readonly label: string }[];
   readonly sourceLabels?: readonly [string, string];
   readonly provisional?: boolean;
+  /** What the game counts: Dots and Wolf earn dots; Nines earns points. */
+  readonly unit?: 'dots' | 'points';
 }) {
+  const singular = unit === 'dots' ? 'dot' : 'point';
   const money = (minor: number | null) => minor === null ? 'Unavailable' : minor > 0 ? `Due ${formatMoney(minor, 'USD')}`
     : minor < 0 ? `Owes ${formatMoney(-minor, 'USD')}` : formatMoney(0, 'USD');
   const name = (id: string) => settlement.players.find((player) => player.playerId === id)?.displayName ?? 'Golfer unavailable';
@@ -38,7 +42,7 @@ export function InternalSettlement({ settlement, gameNames = [], ranked = false,
                 : `${tied ? 'Tied position' : 'Position'} ${String(position)}`}>{position === null ? '—' : `${tied ? 'T' : ''}${String(position)}`}</span>}
               <span>
                 <span className="internal-settlement-name">{player.displayName}</span>
-                <span className="internal-settlement-points">{player.totalDots ?? '—'} dots</span>
+                <span className="internal-settlement-points">{player.totalDots ?? '—'} {unit}</span>
                 {(gameNames.length > 1 || player.baseDots !== 0 && player.specialDots !== 0)
                   && <small className="internal-settlement-source">{baseLabel} {player.baseDots ?? '—'} + {specialLabel} {player.specialDots ?? '—'}</small>}
                 {progressLabel && <small className="internal-settlement-source">{progressLabel}</small>}
@@ -47,7 +51,7 @@ export function InternalSettlement({ settlement, gameNames = [], ranked = false,
               <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m3 6 5 5 5-5" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
             </summary>
             <div className="internal-settlement-calculation">
-              <p>{pointsOnly ? 'Earned dots only; no money configured.' : `How calculated · One net amount across the ${settlement.players.length === 4 ? 'foursome' : `${String(settlement.players.length)} players`}.`}</p>
+              <p>{pointsOnly ? `Earned ${unit} only; no money configured.` : `How calculated · One net amount across the ${settlement.players.length === 4 ? 'foursome' : `${String(settlement.players.length)} players`}.`}</p>
               {!pointsOnly && settlement.status !== 'unavailable' && total !== null && player.totalDots !== null && settlement.stakeMinor !== null
                 && player.netMinor !== null && <p>({settlement.players.length} × {player.totalDots} − {String(total)}) × {formatMoney(settlement.stakeMinor, 'USD')}
                   {' = '}{money(player.netMinor)}</p>}
@@ -63,7 +67,7 @@ export function InternalSettlement({ settlement, gameNames = [], ranked = false,
     {!pointsOnly && <details className="internal-settlement-method"><summary>Rate and settlement method</summary>
       <p>{gameNames.length > 1 ? 'One combined settlement for these explicitly linked games.'
         : 'Independent game settlement; other unlinked games settle separately.'}</p>
-      <p>{settlement.stakeMinor === null ? 'Rate unavailable.' : `${formatMoney(settlement.stakeMinor, 'USD')} per dot difference against each other golfer.`}</p>
+      <p>{settlement.stakeMinor === null ? 'Rate unavailable.' : `${formatMoney(settlement.stakeMinor, 'USD')} per ${singular} difference against each other golfer.`}</p>
       <p>Total to settle: {settlement.totalToSettleMinor === null ? 'Unavailable' : formatMoney(settlement.totalToSettleMinor, 'USD')}
         {settlement.status !== 'complete' && ' · Provisional'}</p>
     </details>}

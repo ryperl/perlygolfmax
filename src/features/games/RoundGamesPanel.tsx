@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { ninesGroupMatches } from '../../domain/nines';
 import { needsUpdatedGameCalculations } from '../../contracts/game-calculations';
 import { EventChangedError } from '../../client/events';
 import type { DotPresetStore } from '../../client/dot-presets';
@@ -7,7 +8,7 @@ import { changesSkinsCarryRules, maximumGamesPerRound, sameGameDefinitions, visi
 import type { GameWriteResult, RoundScores } from '../../domain/scoring';
 import { scorePermissions, supportsDotsSpecials, supportsIndividualDotsPlayerCount, supportsRoundGame, supportsDotsGameRules } from '../../domain/scoring';
 import type { GameDraft } from './game-draft';
-import { buildGame, defaultGameGroup, dotsDraftProblem, draftFromGame, newGameDraft, replaceGame, setGameKind } from './game-draft';
+import { buildGame, defaultGameGroup, dotsDraftProblem, draftFromGame, newGameDraft, ninesDraftProblem, replaceGame, setGameKind } from './game-draft';
 import { GameResults } from './GameResults';
 import { GameSettings } from './GameSettings';
 import { canManageAllRoundGames, canManageGame, canManageRoundGames } from './game-permissions';
@@ -121,8 +122,9 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
       setMessage('Editing this game is temporarily unavailable in this app version. Your draft is retained.');
       return;
     }
-    if ((round.setupLocked || editingRound.setupLocked) && (editor.draft.kind === 'nassau' || editor.draft.kind === 'match-play' || editor.draft.kind === 'wolf' || editor.draft.kind === 'dots')) {
-      setMessage('Dots, Nassau, Match Play and Wolf must be configured before the first saved score. Other game settings remain editable.');
+    if ((round.setupLocked || editingRound.setupLocked) && (editor.draft.kind === 'nassau' || editor.draft.kind === 'match-play'
+      || editor.draft.kind === 'wolf' || editor.draft.kind === 'dots' || editor.draft.kind === 'nines')) {
+      setMessage('Dots, Nassau, Match Play, Wolf and Nines must be configured before the first saved score. Other game settings remain editable.');
       return;
     }
     if (editor.draft.kind === 'churchy' && round.churchyEnabled !== true) {
@@ -231,6 +233,10 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
         return;
       }
     }
+    if (game?.kind === 'nines' && !ninesGroupMatches(game, editingRound.groups)) {
+      setMessage('Nines needs the three golfers of one saved playing group. Choose the group again, or change the groups in round setup.');
+      return;
+    }
     if (game?.kind === 'dots' || game?.kind === 'wolf' || game?.kind === 'churchy') {
       const peers = editor.base.filter((entry) => entry.id !== game.id);
       if (peers.some((peer) => (peer.kind === 'churchy' || peer.kind === 'wolf' || peer.kind === 'dots')
@@ -254,6 +260,8 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
           || 'Choose a saved playing group, compatible mode and enabled specials with positive whole units. Solo play is stats-only; otherwise use a valid optional USD rate with at most two decimal places.'
         : editor.draft.kind === 'churchy'
         ? 'Choose a complete saved foursome, order all four golfers, and enter USD dollars and cents per dot (zero or more). Choose one Churchie game per group.'
+        : editor.draft.kind === 'nines' ? ninesDraftProblem(editor.draft, editor.roster.map((card) => card.playerId), editingRound.groups)
+          ?? 'Check the game name, the saved group of three and the stake per point.'
         : editor.draft.kind === 'stroke-play' ? 'Check the game name (1–100 characters) and gross or net score basis. Net uses 100% captured Course Handicap.'
         : editor.draft.kind === 'ball-drop' || editor.draft.kind === 'skins'
         ? 'Check the game name (1–100 characters), supported format, and complete four-person Ball Drop teams. Skins are individual; net always uses 100% Course Handicap.'
@@ -354,6 +362,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
       {games.length === 0 && <p>No games configured for this round.</p>}
       {round.internalSettlements?.map((settlement) => <InternalSettlement key={`${String(settlement.groupNumber)}:${settlement.gameIds.join(':')}`}
         settlement={settlement} sourceLabels={settlement.gameIds.length === 2 ? ['Wolf', 'Dots'] : ['Base', 'Specials']}
+        unit={games.some((entry) => entry.kind === 'nines' && settlement.gameIds.includes(entry.id)) ? 'points' : 'dots'}
         provisional={settlement.gameIds.some((id) => !round.games?.results.find((entry) => entry.gameId === id)
           ?.players.every((player) => player.status === 'complete'))}
         gameNames={settlement.gameIds.map((id) => {
@@ -373,7 +382,8 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
             && games.filter((entry) => entry.kind === 'churchy').length > 1 ? ` · Group ${String(game.groupNumber)}` : ''}</button>}
         {!supportsRoundGame(round, game.kind ?? 'stableford') && <p>Editing this game is temporarily unavailable in this app version.</p>}
       </div>)}
-      {round.setupLocked && games.some((game) => game.kind === 'nassau' || game.kind === 'match-play' || game.kind === 'wolf' || game.kind === 'dots')
+      {round.setupLocked && games.some((game) => game.kind === 'nassau' || game.kind === 'match-play' || game.kind === 'wolf'
+        || game.kind === 'dots' || game.kind === 'nines')
         && <p className="game-hint">Setup locked by saved scoring. Score entry retains hole declarations.</p>}
       {!editor && !archived && canManage && <button type="button" disabled={disabled || games.length >= maximumGamesPerRound}
         onClick={() => { open(); }}>Add game</button>}
