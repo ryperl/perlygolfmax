@@ -663,6 +663,15 @@ binding before converting that game to Ball Drop or Skins. Legacy Stableford
 definitions/results remain readable without migration and retain their existing
 points tables and allowances.
 
+### Nines
+
+**Nines** is a three-golfer game for one saved playing group of exactly three:
+5 / 3 / 1 points per hole, ties share their places (4/4/1, 5/2/2, 3/3/3), and a
+pickup, `X7` or DNF ranks worst. Choose gross, or net with full Course Handicap
+or strokes off the lowest golfer in the group. An optional stake per point
+settles the point differences once for the group; blank plays for points only.
+See [game rules](docs/game-rules.md#supported-games).
+
 ### Round Stroke Play, Match Play, Nassau and Wolf
 
 Stroke Play, Nassau and legacy Wolf version 1 use the shared round editor, captured

@@ -28,7 +28,7 @@ export function InternalSettlement({ settlement, gameNames = [], ranked = false,
     <h3>Group {settlement.groupNumber}{sources && ` · ${sources}`}{ranked && ' · Combined standings'}</h3>
     <p className="internal-settlement-status">{pointsOnly ? `${settlement.players.length === 1 ? 'Solo stats only · No money' : 'No money configured · Points-only'}${provisional ? ' · Provisional' : ''}` : settlement.status === 'complete' ? 'Planned settlement · Not paid'
       : settlement.status === 'unavailable' ? 'Settlement unavailable' : 'Provisional settlement · Not paid'}</p>
-    <div role="region" aria-label="Combined earned dots and planned money">
+    <div role="region" aria-label={`Combined earned ${unit} and planned money`}>
       <ol className="internal-settlement-list" aria-label={ranked ? 'Combined standings'
         : pointsOnly && settlement.players.length === 1 ? 'Solo earned dots' : 'Individual net settlement'}>
         {players.map((player) => {
