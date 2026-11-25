@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { runWithNinesSupport } from '../nines-negotiation.js';
 import { catalogFixture, identifier, manifest, tee } from '../../test/catalog-fixtures.js';
 import { creator, event, member } from '../../test/fixtures.js';
 import { TableScoreStore } from '../scoring/store.js';
@@ -97,7 +98,9 @@ describe('catalog-manager scoped event player Handicap Index refresh', () => {
     const current = await f.observe('18');
     const charge = vi.fn().mockResolvedValue(undefined);
     const expected = f.rows.get(`${event.id}|event`)?.etag ?? '';
-    const result = await f.workspace.refreshPlayerIndex(creator, event.id, f.first.id, current.id, expected, identifier(900), charge);
+    // A fully current browser (one that also understands Nines) skips the older-browser compatibility scan.
+    const result = await runWithNinesSupport(true, () => f.workspace.refreshPlayerIndex(creator, event.id, f.first.id,
+      current.id, expected, identifier(900), charge));
     expect(result).toMatchObject({ eventId: event.id, playerId: f.first.id,
       updatedRoundIds: [f.unfinished], completedRoundIds: [f.completed] });
     expect(result.etag).not.toBe(expected);

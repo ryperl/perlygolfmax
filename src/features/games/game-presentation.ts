@@ -31,6 +31,7 @@ export function gameScoringLabel(game: RoundGameDefinition): string {
   if (game.kind === 'match-play') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Match Play · One match with presses · ${game.variant.replaceAll('-', ' ')}`;
   if (game.kind === 'stroke-play') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Stroke Play · Lowest to personal par${game.basis === 'net' ? ` · ${netRule}` : ''}`;
   if (game.kind === 'churchy') return `Group ${String(game.groupNumber)} · Rotating partners · Earned dots`;
+  if (game.kind === 'nines') return ninesScoringLabel(game.basis, netRule, game.groupNumber);
   if (game.kind === 'ball-drop') return `Ball Drop · ${game.format === 'ball-drop-net-gross' ? '1 Net + 1 Gross'
     : game.format === 'ball-drop-two-net' ? '2 Net' : '2 Gross'} · 4-person teams · Lowest to par${game.basis === 'net' ? ` · ${netRule}` : ''}`;
   if (game.kind === 'skins') return `${game.basis === 'gross' ? 'Gross' : 'Net'} Skins · ${game.carryovers ? 'Carryovers on' : 'Carryovers off'}${game.basis === 'net' ? ` · ${netRule}` : ''}${game.carryovers && game.carryOrder ? ' · Shared starting-hole circuit' : ''}`;
@@ -40,4 +41,10 @@ export function gameScoringLabel(game: RoundGameDefinition): string {
     ? '2-man net Better Ball · ' : game.format === 'two-net-aggregate' ? '2-man net Aggregate · ' : '4-man 2-net Stableford · ';
   return `${format}${preset}${custom ? ' · Custom points' : ''} · ${game.basis === 'gross' ? 'Gross'
     : game.handicapRule === 'group-low-v1' ? `Net · ${netRule}` : `Net · ${String(game.handicapAllowancePercent)}% allowance`}`;
+}
+
+/** For example "Group 2 · Nines 5-3-1 · Net · SO off lowest in saved group". */
+function ninesScoringLabel(basis: 'gross' | 'net', netRule: string, groupNumber: number): string {
+  const scoring = basis === 'gross' ? 'Gross' : `Net · ${netRule}`;
+  return `Group ${String(groupNumber)} · Nines 5-3-1 · ${scoring}`;
 }

@@ -1,4 +1,5 @@
 import type { TableClient, TransactionAction } from '@azure/data-tables';
+import { clientSupportsNines, requireNinesSupport } from '../nines-negotiation.js';
 import { randomUUID } from 'node:crypto';
 import type { AccountIdentity, EventSummary } from '../../../src/domain/events.js';
 import type { ScoreActor } from '../../../src/domain/test-access.js';
@@ -363,12 +364,13 @@ export class TableWorkspaceStore {
     if (access.event.quickRound === true && access.event.quickRoundReady !== true) {
       throw new ApiError(403, 'PUBLIC_EVENT_NOT_AVAILABLE');
     }
-    if (!wolfOrders || !dotsHighLow || !dotsRulesV3) {
+    if (!wolfOrders || !dotsHighLow || !dotsRulesV3 || !clientSupportsNines()) {
       const currentWorkspace = await this.load(access.summary, false, chargeRound);
       for (const round of currentWorkspace.rounds.filter((round) => round.scoringStarted
         && round.players.some((player) => player.playerId === playerId))) {
         const games = await readGameConfiguration(this.table, eventId, round.id, configuredGameRounds(access.event.gameRoundIds));
         requireDotsRulesV3(games?.games ?? [], dotsRulesV3);
+        requireNinesSupport(games?.games ?? []);
         requireWolfOrders(games?.games ?? [], wolfOrders);
         requireDotsHighLow(games?.games ?? [], dotsHighLow);
       }
@@ -481,6 +483,7 @@ export class TableWorkspaceStore {
     const state = await this.correctionState(identity, eventId, roundId);
     requireWolfOrders(state.games?.games ?? [], wolfOrders);
     requireDotsRulesV3(state.games?.games ?? [], dotsRulesV3);
+    requireNinesSupport(state.games?.games ?? []);
     requireDotsHighLow(state.games?.games ?? [], dotsHighLow);
     const replayKey = `round-correction:${roundId}:${requestId}`;
     const replay = await optionalRow(this.table, eventId, replayKey);
@@ -664,9 +667,10 @@ export class TableWorkspaceStore {
     const access = await this.ownerAccess(identity, eventId);
     if (access.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     requireManager(identity, this.allowed);
-    if (!wolfOrders || !dotsHighLow || !dotsRulesV3) {
+    if (!wolfOrders || !dotsHighLow || !dotsRulesV3 || !clientSupportsNines()) {
       const games = await readGameConfiguration(this.table, eventId, roundId, configuredGameRounds(access.event.gameRoundIds));
       requireDotsRulesV3(games?.games ?? [], dotsRulesV3);
+      requireNinesSupport(games?.games ?? []);
       requireWolfOrders(games?.games ?? [], wolfOrders);
       requireDotsHighLow(games?.games ?? [], dotsHighLow);
     }
@@ -717,10 +721,25 @@ export class TableWorkspaceStore {
     return current;
   }
 
+  /**
+   * Older browsers cannot see Nines, so they may not change setup for an event that has it.
+   * Browsers that understand Nines skip this, so it costs them no reads.
+   */
+  async requireNinesClientForEvent(eventId: string): Promise<void> {
+    if (clientSupportsNines()) return;
+    const event = await optionalRow(this.table, eventId, 'event');
+    const roundIds = configuredGameRounds(event?.gameRoundIds);
+    for (const roundId of roundIds) {
+      const games = await readGameConfiguration(this.table, eventId, roundId, roundIds);
+      requireNinesSupport(games?.games ?? []);
+    }
+  }
+
   async receive(identity: AccountIdentity, id: string, body: unknown, etag: string) {
     const access = await this.ownerAccess(identity, id);
     if (access.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     requireManager(identity, this.allowed);
+    await this.requireNinesClientForEvent(id);
     // A client may retry all immutable parts after losing the final response.
     if (access.summary.etag !== etag) {
       const upload = isRecord(body) ? body.privateUpload ?? body.privateCommit : undefined;
@@ -748,6 +767,7 @@ export class TableWorkspaceStore {
       requireManager(identity, this.allowed);
     }
     if (access.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
+    await this.requireNinesClientForEvent(id);
     const receiptKey = publication ? `setup-receipt:${publication.id}` : undefined;
     const receipt = publication ? canonical({ identity, etag, sha256: publication.sha256, input }) : undefined;
     if (receiptKey) {

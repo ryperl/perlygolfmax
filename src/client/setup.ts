@@ -1,4 +1,5 @@
 import { isEventRevision, isUuid } from '../contracts/events';
+import { ninesQuery } from '../contracts/nines-negotiation';
 import { isEventSetupInput, isEventWorkspace } from '../contracts/setup';
 import type { EventSetupInput, EventWorkspace } from '../domain/setup';
 import { maximumEventSetupBytes, sameOverallCompetition } from '../domain/setup';
@@ -24,7 +25,7 @@ export function createSetupClient(apiUrl: string, getToken: () => Promise<string
     },
     async save(eventId, etag, input, signal) {
       if (!isUuid(eventId) || !isEventRevision(etag) || !isEventSetupInput(input)) throw new Error('Check setup: select at least 1 saved player, 1–8 rounds, an explicit course version and tee, and assign every player once to numbered groups (maximum 4 per group) with valid starting holes.');
-      const value = await writePrivateValue(setupRequest, `events/${encodeURIComponent(eventId)}/workspace`, signal, { method: 'PUT', body: input, etag }, maximumEventSetupBytes);
+      const value = await writePrivateValue(setupRequest, `events/${encodeURIComponent(eventId)}/workspace?${ninesQuery}`, signal, { method: 'PUT', body: input, etag }, maximumEventSetupBytes);
       if (!isEventWorkspace(value) || value.event.id !== eventId
         || input.startDate !== undefined && input.startDate !== (value.event.startDate ?? '')
         || input.endDate !== undefined && input.endDate !== (value.event.endDate ?? '')
@@ -47,7 +48,7 @@ export function createSetupClient(apiUrl: string, getToken: () => Promise<string
     },
     async refreshIndices(eventId, roundId, etag, requestId, signal) {
       if (!isUuid(eventId) || !isUuid(roundId) || !isEventRevision(etag) || !isUuid(requestId)) throw new Error('Invalid captured setup-input refresh request.');
-      const value = await request(`events/${encodeURIComponent(eventId)}/workspace/rounds/${encodeURIComponent(roundId)}/indices/refresh?wolfOrders=1&dotsHighLow=2&dotsRules=3`, signal, {
+      const value = await request(`events/${encodeURIComponent(eventId)}/workspace/rounds/${encodeURIComponent(roundId)}/indices/refresh?wolfOrders=1&dotsHighLow=2&dotsRules=3&nines=1`, signal, {
         method: 'POST', body: {}, etag, requestId,
       });
       if (!isEventWorkspace(value) || value.event.id !== eventId || !value.rounds.some((round) => round.id === roundId)) {

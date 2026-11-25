@@ -440,4 +440,16 @@ describe('purse projections, unavailable sources and funding', () => {
       code: 'source-unavailable', poolId: id(5000), detail: 'missing-handicap-index',
     });
   });
+
+  it('never funds a prize from a Nines game, even if a saved plan names one', () => {
+    const f = purseTestContext();
+    const source = f.pool.source;
+    if (source.kind !== 'round-game') throw new Error('Expected a round-game pool.');
+    const rounds = f.rounds.map((round) => round.roundId !== source.roundId || !round.games ? round : {
+      ...round, games: { ...round.games, configuration: { ...round.games.configuration,
+        games: round.games.configuration.games.map((game) => game.id !== source.gameId ? game : {
+          id: game.id, name: 'Fictional Nines', kind: 'nines' as const, version: 1 as const, basis: 'gross' as const,
+          groupNumber: 1, playerIds: round.cards.slice(0, 3).map((card) => card.playerId), stakeMinor: null }) } } });
+    expect(calculatePurse(withPool(f, f.pool), f.workspace, rounds).issues).toContainEqual({ code: 'missing-game', poolId: f.pool.id });
+  });
 });

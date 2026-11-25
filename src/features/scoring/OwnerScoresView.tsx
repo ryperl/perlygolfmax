@@ -480,7 +480,7 @@ function OwnerScoresController({ client, eventId, roundId, onSessionExpired, ove
             game.kind === 'dots' ? game.groupNumber === group.number && game.highLow?.handicapRule === 'group-low-v1'
             : game.basis === 'net' && game.handicapRule === 'group-low-v1'
             && (game.kind === 'churchy' || game.kind === 'wolf' || game.kind === 'nassau' || game.kind === 'match-play'
-              ? game.groupNumber === group.number : true));
+              || game.kind === 'nines' ? game.groupNumber === group.number : true));
           const relative = groupLowGame ? gameHandicap('group-low-v1', playerId,
             round.courseHandicaps?.map((entry) => ({ playerId: entry.playerId,
               handicap: entry.courseHandicap ?? entry.unavailableReason ?? null })) ?? [], round.groups) : null;

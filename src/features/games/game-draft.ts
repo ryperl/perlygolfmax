@@ -12,12 +12,18 @@ import type { ChurchySpecialKey } from '../../domain/churchy';
 import { defaultChurchySpecials, defaultChurchySpecialSelections } from '../../domain/churchy';
 import type { RoundGroup } from '../../domain/setup';
 import type { GameHandicapRule } from '../../domain/game-handicaps';
+import type { NinesGameDefinition } from '../../domain/nines';
+import { ninesPlayerCount } from '../../domain/nines';
+import { isNinesDefinition } from '../../contracts/nines';
 
 export interface GameDraft {
   readonly handicapRule?: GameHandicapRule;
   readonly carryOrder?: 'shared-group-v1';
   readonly playOrder?: 'shared-group-v1';
-  readonly kind?: 'stableford' | 'ball-drop' | 'skins' | 'churchy' | 'stroke-play' | 'wolf' | 'nassau' | 'match-play' | 'dots';
+  readonly kind?: 'stableford' | 'ball-drop' | 'skins' | 'churchy' | 'stroke-play' | 'wolf' | 'nassau' | 'match-play' | 'dots'
+    | 'nines';
+  /** The three golfers of the saved playing group a Nines game uses. */
+  readonly ninesPlayers?: readonly string[];
   readonly wolfVersion?: 1 | 2;
   readonly stake?: string;
   readonly dotsMode?: DotsGameDefinition['mode'];
@@ -72,6 +78,7 @@ export function draftFromGame(game: RoundGameDefinition): GameDraft {
 }
 
 function draftFromDefinition(game: RoundGameDefinition): GameDraft {
+  if (game.kind === 'nines') return ninesDraft(game);
   if (game.kind === 'dots') return { ...newGameDraft(), id: game.id, name: game.name, kind: 'dots',
     dotsVersion: game.version, ...(game.mode === 'rotating' ? { dotsRotationHoles: game.rotationHoles,
       ...(game.version === 3 ? { dotsOrderMode: game.orderMode } : {}),
@@ -107,6 +114,12 @@ function draftFromDefinition(game: RoundGameDefinition): GameDraft {
     allowanceConfigured: true,
     ...(isTeamGameDefinition(game) ? { format: game.format, teams: game.teams } : {}),
   };
+}
+
+function ninesDraft(game: NinesGameDefinition): GameDraft {
+  return { ...newGameDraft(), id: game.id, name: game.name, kind: 'nines', basis: game.basis,
+    groupNumber: game.groupNumber, ninesPlayers: game.playerIds,
+    stake: game.stakeMinor === null ? '' : moneyText(game.stakeMinor) };
 }
 
 export function newGameDraft(explicitRules = false): GameDraft {
@@ -151,10 +164,11 @@ export function setFormat(draft: GameDraft, format: CompetitionTeamFormat | unde
 export function setGameKind(draft: GameDraft, kind: NonNullable<GameDraft['kind']>, rosterCount: number): GameDraft {
   if ((draft.kind ?? 'stableford') === kind) return draft;
   const names = { stableford: 'Stableford', 'ball-drop': 'Ball Drop', skins: 'Skins', 'stroke-play': 'Stroke Play',
-    wolf: 'Wolf', dots: 'Dots', nassau: 'Nassau', 'match-play': 'Match Play', churchy: 'Churchie' };
+    wolf: 'Wolf', dots: 'Dots', nassau: 'Nassau', 'match-play': 'Match Play', churchy: 'Churchie', nines: 'Nines' };
   const name = draft.preserveName || draft.name !== names[draft.kind ?? 'stableford'] ? draft.name : names[kind];
   const reset = { ...setFormat(draft, undefined, rosterCount), name };
   if (kind === 'wolf') return { ...reset, kind, basis: 'net', wolfPlayers: [], allowPig: false, wolfVersion: 2, wolfHighLowSweep: false, wolfOrderMode: 'first-tee-v1', stake: '' };
+  if (kind === 'nines') return { ...reset, kind, basis: 'gross', ninesPlayers: [], stake: '' };
   if (kind === 'dots') {
     const { dotsSweepRule, dotsLegacySweep, dotsHighLow, dotsHighLowHandicapRule, dotsVersion, dotsOrderMode, ...fresh } = reset;
     void dotsSweepRule; void dotsLegacySweep; void dotsHighLow; void dotsHighLowHandicapRule; void dotsVersion; void dotsOrderMode;
@@ -179,6 +193,7 @@ export function defaultGameGroup(
   draft: GameDraft, groups: readonly RoundGroup[], dotsPlayerCounts: readonly number[] = [4],
   preferredGroupNumber = draft.kind === 'churchy' ? draft.churchyGroup ?? draft.groupNumber : draft.groupNumber ?? draft.churchyGroup,
 ): GameDraft {
+  if (draft.kind === 'nines') return defaultNinesGroup(draft, groups, preferredGroupNumber);
   if (draft.kind !== 'churchy' && draft.kind !== 'wolf' && draft.kind !== 'dots'
     && draft.kind !== 'nassau' && draft.kind !== 'match-play') return draft;
   const eligible = groups.filter((group) => draft.kind === 'churchy' || draft.kind === 'wolf'
@@ -191,6 +206,14 @@ export function defaultGameGroup(
   if (draft.kind === 'wolf') return { ...draft, groupNumber: group.number, wolfPlayers: group.playerIds };
   if (draft.kind === 'dots') return { ...draft, groupNumber: group.number, dotsPlayers: group.playerIds, dotsPlayerIds: group.playerIds };
   return { ...draft, groupNumber: group.number };
+}
+
+/** Nines needs a saved group of exactly three; prefer the group already chosen. */
+function defaultNinesGroup(draft: GameDraft, groups: readonly RoundGroup[], preferred: number | undefined): GameDraft {
+  const eligible = groups.filter((group) => group.playerIds.length === ninesPlayerCount);
+  const group = eligible.find((entry) => entry.number === preferred) ?? eligible[0];
+  if (!group) return draft;
+  return { ...draft, groupNumber: group.number, ninesPlayers: group.playerIds };
 }
 
 export function upgradeChurchyDraft(draft: GameDraft, startingHole = 1): GameDraft {
@@ -247,6 +270,7 @@ function integer(text: string): number | undefined {
 
 export function buildGame(draft: GameDraft, playerIds: readonly string[] = []): RoundGameDefinition | null {
   const rule = draft.handicapRule ? { handicapRule: draft.handicapRule } : {};
+  if (draft.kind === 'nines') return buildNinesGame(draft, playerIds);
   if (draft.kind === 'dots') {
     const stake = draft.stake?.trim() ? parseMoney(draft.stake) : null;
     if (draft.stake?.trim() && stake === null) return null;
@@ -330,6 +354,41 @@ export function buildGame(draft: GameDraft, playerIds: readonly string[] = []): 
   } : common;
   if (draft.format && teamDraftFeedback(draft, playerIds)) return null;
   return isRoundGameDefinition(game) && gameTeamsMatchRoster(game, playerIds) ? game : null;
+}
+
+function buildNinesGame(draft: GameDraft, playerIds: readonly string[]): NinesGameDefinition | null {
+  const stakeText = draft.stake?.trim() ?? '';
+  const stakeMinor = stakeText ? parseMoney(stakeText) : null;
+  if (stakeText && stakeMinor === null) return null;
+  // Gross needs no handicap rule; net always saves which rule it uses.
+  const rule = draft.basis === 'net' ? { handicapRule: draft.handicapRule ?? 'full-course-v1' } : {};
+  const game = { ...rule, id: draft.id, name: draft.name.trim(), kind: 'nines', version: 1, basis: draft.basis,
+    groupNumber: draft.groupNumber, playerIds: draft.ninesPlayers, stakeMinor };
+  if (!isNinesDefinition(game)) return null;
+  return game.playerIds.every((id) => playerIds.includes(id)) ? game : null;
+}
+
+/** Explains why a Nines draft cannot be saved yet, in the order a scorer would fix it. */
+export function ninesDraftProblem(draft: GameDraft, playerIds: readonly string[], groups: readonly RoundGroup[]): string | null {
+  if (draft.kind !== 'nines') return null;
+  if (!draft.name.trim()) return 'Enter a game name.';
+  if (!groups.some((group) => group.playerIds.length === ninesPlayerCount)) {
+    return 'Nines needs a saved playing group of exactly three golfers. Change the playing groups in round setup.';
+  }
+  const players = draft.ninesPlayers ?? [];
+  if (draft.groupNumber === undefined || players.length !== ninesPlayerCount) return 'Choose a saved playing group of three.';
+  const group = groups.find((entry) => entry.number === draft.groupNumber);
+  const groupStillMatches = group !== undefined && group.playerIds.length === ninesPlayerCount
+    && group.playerIds.every((id) => players.includes(id));
+  if (!groupStillMatches) return 'The golfers in this saved group have changed. Choose the group again.';
+  if (players.some((id) => !playerIds.includes(id))) {
+    return 'This playing group no longer matches the round. Choose the saved playing group again.';
+  }
+  const stakeText = draft.stake?.trim() ?? '';
+  if (stakeText && parseMoney(stakeText) === null) {
+    return 'Enter the stake per point as dollars and cents, like 1 or .25, or leave it blank for points only.';
+  }
+  return null;
 }
 
 /**

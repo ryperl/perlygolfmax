@@ -1,4 +1,6 @@
 import type { AccountIdentity } from './events.js';
+import type { NinesGameDefinition, NinesResults } from './nines.js';
+import { sameNinesDefinition } from './nines.js';
 import type { PublicScoreIdentity } from './public-access.js';
 import type { ChurchyGameDefinition, ChurchyResults } from './churchy.js';
 import type { WolfGameDefinition, WolfResults } from './wolf.js';
@@ -88,8 +90,9 @@ export interface StrokePlayGameDefinition extends StrokeGameDefinition {
 
 export type StablefordGameDefinition = IndividualGameDefinition | TeamGameDefinition;
 export type NewRoundGameDefinition = BallDropGameDefinition | SkinsGameDefinition | StrokePlayGameDefinition;
-export type RoundGameDefinition = StablefordGameDefinition | NewRoundGameDefinition | ChurchyGameDefinition | WolfGameDefinition | NassauGameDefinition | MatchPlayGameDefinition | DotsGameDefinition;
-export const roundGameKinds = ['stableford', 'ball-drop', 'skins', 'churchy', 'stroke-play', 'wolf', 'nassau', 'match-play', 'dots'] as const;
+export type RoundGameDefinition = StablefordGameDefinition | NewRoundGameDefinition | ChurchyGameDefinition | WolfGameDefinition
+  | NassauGameDefinition | MatchPlayGameDefinition | DotsGameDefinition | NinesGameDefinition;
+export const roundGameKinds = ['stableford', 'ball-drop', 'skins', 'churchy', 'stroke-play', 'wolf', 'nassau', 'match-play', 'dots', 'nines'] as const;
 export type RoundGameKind = (typeof roundGameKinds)[number];
 
 export function isStablefordGame(game: RoundGameDefinition): game is StablefordGameDefinition {
@@ -188,8 +191,9 @@ export interface GamePlayerResult {
 }
 
 export interface RoundGameResult {
-  readonly kind?: 'ball-drop' | 'skins' | 'churchy' | 'stroke-play' | 'wolf' | 'nassau' | 'match-play' | 'dots';
+  readonly kind?: 'ball-drop' | 'skins' | 'churchy' | 'stroke-play' | 'wolf' | 'nassau' | 'match-play' | 'dots' | 'nines';
   readonly churchy?: ChurchyResults;
+  readonly nines?: NinesResults;
   readonly wolf?: WolfResults;
   readonly nassau?: NassauResults;
   readonly dots?: DotsResults;
@@ -256,6 +260,9 @@ export function sameGameDefinitions(left: readonly RoundGameDefinition[], right:
     if (!other) return false;
     if (('handicapRule' in game ? game.handicapRule : undefined)
       !== ('handicapRule' in other ? other.handicapRule : undefined)) return false;
+    if (game.kind === 'nines' || other.kind === 'nines') {
+      return game.kind === 'nines' && other.kind === 'nines' && sameNinesDefinition(game, other);
+    }
     if (game.kind === 'dots' || other.kind === 'dots') {
       return game.kind === 'dots' && other.kind === 'dots' && game.id === other.id && game.name === other.name
         && game.groupNumber === other.groupNumber && game.mode === other.mode && game.version === other.version

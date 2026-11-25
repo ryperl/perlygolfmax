@@ -8,8 +8,9 @@ import { GameSettings } from './GameSettings';
 import { buildGame, defaultGameGroup, draftFromGame, newGameDraft, setGameKind } from './game-draft';
 import { gameScoringLabel } from './game-presentation';
 
-function fixture() {
-  const f = strokeGameFixture(18);
+/** Nines needs a saved group of exactly three; every other game here uses a foursome. */
+function fixture(kind: RoundGameKind = 'stableford') {
+  const f = strokeGameFixture(18, kind === 'nines' ? 3 : 4);
   return { ...f, groups: f.snapshot.groups.map((group) => ({ ...group, startingHole: 10 })) };
 }
 
@@ -20,7 +21,7 @@ function Harness({ kind = 'stableford', game, supported = true, locked = false, 
   readonly locked?: boolean;
   readonly save?: (game: RoundGameDefinition | null) => void;
 }) {
-  const f = fixture();
+  const f = fixture(game?.kind ?? kind);
   const [draft, change] = useState(() => game ? draftFromGame(game)
     : defaultGameGroup(setGameKind(newGameDraft(supported), kind, f.cards.length), f.groups));
   return <GameSettings draft={draft} roster={f.cards} groups={f.groups}

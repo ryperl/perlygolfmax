@@ -1,3 +1,4 @@
+import { isNinesDefinition, isNinesResult } from './nines.js';
 import type {
   GameChange, GameConfiguration, GamePlayerResult, GameTeamResult, RoundGameDefinition, RoundGamesView, StablefordGameDefinition,
 } from '../domain/games.js';
@@ -52,6 +53,7 @@ export function isRoundGameDefinition(value: unknown): value is RoundGameDefinit
   if (isRecord(value) && value.kind === 'wolf') return isWolfDefinition(value);
   if (isRecord(value) && (value.kind === 'nassau' || value.kind === 'match-play')) return isPressMatchDefinition(value);
   if (isRecord(value) && value.kind === 'churchy') return isChurchyDefinition(value);
+  if (isRecord(value) && value.kind === 'nines') return isNinesDefinition(value);
   if (isRecord(value) && (value.kind === 'ball-drop' || value.kind === 'skins' || value.kind === 'stroke-play')) {
     if (!isUuid(value.id) || !boundedText(value.name) || value.version !== 1
       || value.basis !== 'gross' && value.basis !== 'net') return false;
@@ -239,6 +241,11 @@ export function isRoundGamesView(value: unknown, context?: RoundGameScoringConte
     }
     if (game?.kind === 'churchy') {
       if (!isChurchyResult(result, game)) return false;
+      seen.add(result.gameId);
+      continue;
+    }
+    if (game?.kind === 'nines') {
+      if (!isNinesResult(result, game, context)) return false;
       seen.add(result.gameId);
       continue;
     }

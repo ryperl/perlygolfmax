@@ -353,7 +353,9 @@ function sourceFor(pool: PurseRankedPool, workspace: EventWorkspace, rounds: rea
   const results = saved.games?.results.filter((result) => result.gameId === source.gameId) ?? [];
   const game = definitions[0];
   const result = results[0];
-  if (!game || game.kind === 'churchy' || game.kind === 'nassau' || game.kind === 'match-play' || !result || definitions.length !== 1 || results.length !== 1) return blocked('missing-game');
+  // Nines settles its own stake; funding purse prizes from it is not part of version 1.
+  if (!game || game.kind === 'churchy' || game.kind === 'nassau' || game.kind === 'match-play' || game.kind === 'nines'
+    || !result || definitions.length !== 1 || results.length !== 1) return blocked('missing-game');
   const roster = snapshot.players.map((player) => player.playerId);
   if (game.kind === 'wolf' && !wolfGroupMatchesRound(game, saved)) return blocked('team-setup-required');
   const metricRoster = game.kind === 'wolf' ? game.playerIds : roster;

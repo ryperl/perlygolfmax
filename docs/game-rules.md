@@ -20,6 +20,7 @@ Saved scoring locks starts and explicit handicap/circuit rules.
 | Nassau | Full CH / group SO, net balls | Explicit circuit |
 | Match Play | Full CH / group SO, net balls | Group circuit |
 | Dots | New rotating High/Low: Full CH / group SO | Group circuit |
+| Nines | Full CH / group SO | Per hole, no carry |
 
 The Stableford rows describe the two formats of one game kind, not additional
 game kinds. Linked Dots consumes the explicitly linked Wolf's saved comparisons;
@@ -29,6 +30,20 @@ their existing full-handicap calculations. KP remains a distance competition.
 Overall Stableford consumes the selected round game's legitimate points.
 Competition teams remain separate from playing groups; each member's SO uses
 their own saved playing group, even for cross-group Ball Drop teams.
+
+**Nines** is played by one saved playing group of exactly three golfers. Each
+hole awards 9 points: 5 for the best score, 3 for second and 1 for the worst.
+Tied golfers share the points of the places they occupy, so every hole totals 9:
+4/4/1 when two tie for best, 5/2/2 when two tie for worst, 3/3/3 when all three
+tie. A pickup, `X7` or DNF ranks below every numeric score; several of them tie
+for last. A hole scores only once all three golfers have saved a disposition.
+Gross needs no handicap; net uses full captured CH or SO off the group's lowest
+captured CH, with personal tees. Missing net inputs are unavailable, never
+scratch. An optional stake per point settles once for the group with
+`(3 x points - total points) x stake`; blank plays for points only. Nines locks
+with the other money games after the first saved score, and stays unavailable
+if the saved group no longer holds the same three golfers. Linking Dots to Nines
+is not part of version 1.
 
 New version-3 Modified Sixes and Sixes may explicitly enable net High/Low
 alongside gross specials. Partners change every three or six played holes.
@@ -175,6 +190,11 @@ capability 2. This binds both first-team methods and automatic High/Low Sweep
 calculations. Unaffected legacy projections retain their supported capability
 versions; affected old reads, writes and staged publications fail with 426
 before mutation. Original saved rules, scores, captures and audits are retained.
+
+Nines negotiates `nines=1` on every request that also sends `dotsRules=3`.
+The API advertises the `nines` game kind only to those clients. Older clients
+reading or writing a round that contains Nines receive 426 before any change;
+rounds without Nines read exactly as before.
 
 First-tee Wolf order separately negotiates `wolfOrders=1`, with advertised
 `wolfOrderVersion: 1`. Affected old reads and score, game, correction and purse

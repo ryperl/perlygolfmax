@@ -4,6 +4,7 @@ import { purseTestId } from '../../domain/purse.test-support';
 import { samePursePlan } from '../../domain/purse';
 import type { PursePlan } from '../../domain/purse';
 import type { PressMatchGameDefinition } from '../../domain/nassau';
+import type { NinesGameDefinition } from '../../domain/nines';
 import { buildPurseDraft, draftFromPlan, newPool, reviewSelection, selectSource, sourceChoices } from './purse-draft';
 
 describe('purse draft builders', () => {
@@ -18,6 +19,17 @@ describe('purse draft builders', () => {
       automaticPresses: false, stakes: { currency: 'USD', frontMinor: 0, backMinor: 0, overallMinor: 0 } };
     const changed = { ...value, roundScores: [{ ...round, games: { ...round.games,
       configuration: { ...round.games.configuration, games: [...round.games.configuration.games, nassau] } } },
+    ...value.roundScores.slice(1)] };
+    expect(sourceChoices(changed)).toEqual(sourceChoices(value));
+  });
+  it('does not offer Nines as a prize source, because it settles its own stake', () => {
+    const value = fictionalPurse();
+    const round = value.roundScores[0];
+    if (!round?.games) throw new Error('Missing fictional games');
+    const nines: NinesGameDefinition = { id: purseTestId(9910), name: 'Fictional Nines', kind: 'nines', version: 1,
+      basis: 'gross', groupNumber: 1, playerIds: round.cards.slice(0, 3).map((card) => card.playerId), stakeMinor: null };
+    const changed = { ...value, roundScores: [{ ...round, games: { ...round.games,
+      configuration: { ...round.games.configuration, games: [...round.games.configuration.games, nines] } } },
     ...value.roundScores.slice(1)] };
     expect(sourceChoices(changed)).toEqual(sourceChoices(value));
   });

@@ -384,6 +384,11 @@ Much existing code is very dense; improve the code you touch, gradually.
   No legacy Wolf conversion, protected game-ID conversion, owner promotion,
   general setup, catalog, Ball Drop administration, purse or archive authority.
   Keep old tester projections unchanged and omit internal ledgers/declarations.
+- Nines is version 1 for one saved playing group of exactly three: 5/3/1 per
+  hole, tied places share points, pickup/X7/DNF ranks worst, a hole scores only
+  when all three have saved it. Gross, or net with full CH or group SO. Optional
+  stake per point settles once with N = 3. Negotiate `nines=1`; older clients
+  get 426 for rounds with Nines and never see it advertised. No Dots link yet.
 - Internal USD settlement is `(N*d_i - sum(d)) * rateMinor`, once per explicitly
   linked combination/group, with separate sources and actual participant count.
   N remains four for partnered games; solo never settles money.

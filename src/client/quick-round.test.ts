@@ -65,7 +65,8 @@ describe('anonymous Quick round transport', () => {
     expect(await client.create(eventId, input, signal)).toEqual(workspace);
     expect(await client.save(eventId, workspace.etag, operation, input, signal)).toEqual(workspace);
     const first = send.mock.calls[0];
-    expect(first?.[0]).toBe(`https://fictional.example.test/api/public/quick-rounds/${eventId}`);
+    expect(first?.[0]).toBe(`https://fictional.example.test/api/public/quick-rounds/${eventId}?nines=1`);
+    expect(send.mock.calls[2]?.[0]).toBe(`https://fictional.example.test/api/public/quick-rounds/${eventId}/workspace?nines=1`);
     expect(first?.[1]).toMatchObject({ method: 'PUT', credentials: 'omit', cache: 'no-store', body: JSON.stringify(input) });
     expect(new Headers(first?.[1]?.headers).get('If-None-Match')).toBe('*');
     expect(new Headers(first?.[1]?.headers).get('Idempotency-Key')).toBe(eventId);

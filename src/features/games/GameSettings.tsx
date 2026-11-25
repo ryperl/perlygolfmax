@@ -13,6 +13,7 @@ import type { DotsSpecialKind } from '../../domain/dots';
 import type { PlayerCourseHandicap } from '../../domain/scoring';
 import { dotsSpecialCatalog } from '../../domain/dots';
 import { ChurcieOrderControls } from '../churchy';
+import { NinesSettings } from './NinesSettings';
 
 interface GameSettingsProps {
   readonly draft: GameDraft;
@@ -84,7 +85,7 @@ export function GameSettings({
   const carryHint = useId();
   const stableford = draft.kind === undefined || draft.kind === 'stableford';
   const matchGame = draft.kind === 'nassau' || draft.kind === 'match-play' || draft.kind === 'wolf';
-  const matchLocked = (matchGame || draft.kind === 'dots') && setupLocked;
+  const matchLocked = (matchGame || draft.kind === 'dots' || draft.kind === 'nines') && setupLocked;
   const churchyLocked = setupLocked;
   const [teamQuery, setTeamQuery] = useState('');
   const [golferQuery, setGolferQuery] = useState('');
@@ -96,7 +97,7 @@ export function GameSettings({
   const start = numbers.indexOf(selectedChurchyGroup?.startingHole ?? numbers[0] ?? 0);
   const circuit = start < 0 ? [] : [...numbers.slice(start), ...numbers.slice(0, start)];
   const gameGroup = draft.kind === 'churchy' ? draft.churchyGroup : draft.groupNumber;
-  const startGroups = matchGame || draft.kind === 'churchy' || draft.kind === 'dots'
+  const startGroups = matchGame || draft.kind === 'churchy' || draft.kind === 'dots' || draft.kind === 'nines'
     ? groups.filter((group) => group.number === gameGroup) : groups;
   const legacyWolfSweep = games.some((game) => game.kind === 'dots' && game.mode === 'linked'
     && game.linkedGameId === draft.id && game.sweepRule === undefined
@@ -122,7 +123,8 @@ export function GameSettings({
           const kind = event.target.value;
           if ((!internalOnly && (kind === 'stableford' || kind === 'ball-drop' || kind === 'skins'))
             || (kind === 'wolf' && (existing || wolfV2Supported)
-              || !internalOnly && (kind === 'stroke-play' || kind === 'nassau' || kind === 'match-play' && !existing)) && supportedGameKinds?.includes(kind)
+              || !internalOnly && (kind === 'stroke-play' || kind === 'nassau' || kind === 'nines'
+                || kind === 'match-play' && !existing)) && supportedGameKinds?.includes(kind)
             || kind === 'dots' && supportedGameKinds?.includes('dots')
             || kind === 'churchy' && churchyEnabled && churchyV3Supported && allowChurchyCreation && !setupLocked) {
             onChange(defaultGameGroup(setGameKind(gameHandicapsSupported
@@ -133,7 +135,8 @@ export function GameSettings({
           {!internalOnly && <><option value="stableford">Stableford</option><option value="ball-drop">Ball Drop</option><option value="skins">Skins</option>
           <option value="stroke-play" disabled={!supportedGameKinds?.includes('stroke-play')}>Stroke Play</option>
           <option value="nassau" disabled={setupLocked || !supportedGameKinds?.includes('nassau')}>Nassau · Match play</option>
-          <option value="match-play" disabled={setupLocked || existing && draft.kind !== 'match-play' || !supportedGameKinds?.includes('match-play')}>Match Play · With presses</option></>}
+          <option value="match-play" disabled={setupLocked || existing && draft.kind !== 'match-play' || !supportedGameKinds?.includes('match-play')}>Match Play · With presses</option>
+          <option value="nines" disabled={setupLocked || !supportedGameKinds?.includes('nines')}>Nines · 9 points, 3 golfers</option></>}
           <option value="wolf" disabled={setupLocked || !supportedGameKinds?.includes('wolf') || !existing && !wolfV2Supported}>Wolf / PIG · Earned dots</option>
           <option value="dots" disabled={setupLocked || !supportedGameKinds?.includes('dots')}>Dots · Separate specials</option>
           {churchyEnabled && (draft.kind === 'churchy' || churchyV3Supported && allowChurchyCreation && !churchyLocked) && <option value="churchy">Churchie</option>}
@@ -143,6 +146,8 @@ export function GameSettings({
             onChange({ ...draft, name: event.target.value, preserveName: true });
           }} />
         </label>
+        {draft.kind === 'nines' && <NinesSettings draft={draft} groups={groups} playerIds={rosterIds}
+          playerName={(id) => roster.find((player) => player.playerId === id)?.displayName ?? 'Golfer'} onChange={onChange} />}
         {matchGame && <label>Playing group<select value={draft.groupNumber ?? ''} onChange={(event) => {
           const group = groups.find((entry) => entry.number === Number(event.target.value));
           if (group) onChange({ ...draft, groupNumber: group.number,
@@ -190,7 +195,8 @@ export function GameSettings({
             <option value="modified">Modified Stableford</option>
           </select>
         </label>}
-        {!matchGame && draft.kind !== 'dots' && draft.kind !== 'skins' && draft.kind !== 'churchy' && draft.kind !== 'stroke-play' && <label>Game format
+        {!matchGame && draft.kind !== 'dots' && draft.kind !== 'skins' && draft.kind !== 'churchy' && draft.kind !== 'stroke-play'
+          && draft.kind !== 'nines' && <label>Game format
           <select value={draft.format ?? 'individual'} onChange={(event) => {
             const value = event.target.value;
             if (value === 'individual' || value === 'two-net-better-ball' || value === 'two-net-aggregate' || value === 'four-two-net'
@@ -396,7 +402,7 @@ export function GameSettings({
           </select></label>
           <small id={carryHint}>New or changed carryovers require exactly one saved foursome in the entire round. Unchanged legacy carries are retained.</small>
         </div>}
-        {!stableford && !matchGame && draft.kind !== 'churchy' && draft.kind !== 'dots' && <p>Net uses the selected captured handicap rule. Numeric saved strokes only; pickup and DNF are ineligible.
+        {!stableford && !matchGame && draft.kind !== 'churchy' && draft.kind !== 'dots' && draft.kind !== 'nines' && <p>Net uses the selected captured handicap rule. Numeric saved strokes only; pickup and DNF are ineligible.
           {draft.kind === 'stroke-play' ? ' Lowest score relative to personal par ranks first. Totals remain partial until all holes have numeric scores; pickup or DNF makes a valid stroke total unavailable.'
             : draft.kind === 'skins' ? ' All golfers must save a disposition before a hole is awarded. Final unclaimed skins remain unawarded.'
             : ' The lowest valid two-ball combination counts, from two different golfers. Par is 0, birdie −1, bogey +1. Lowest team total wins.'}</p>}
@@ -505,7 +511,8 @@ export function GameSettings({
             && dotsPlayerCount > 0 && !dotsIndividualPlayerCounts.includes(dotsPlayerCount)
           || draft.kind === 'churchy' && draft.churchyVersion === 2 && !churchyV2Supported
           || draft.kind === 'churchy' && draft.churchyVersion === 3 && !churchyV3Supported
-          || draft.format !== undefined && !buildGame(draft, rosterIds)}>{retry ? 'Retry save' : 'Save game'}</button>
+          || draft.format !== undefined && !buildGame(draft, rosterIds)
+          || draft.kind === 'nines' && !buildGame(draft, rosterIds)}>{retry ? 'Retry save' : 'Save game'}</button>
         <button type="button" disabled={cancelDisabled} onClick={onCancel}>Cancel editing</button>
       </div>
     </form>

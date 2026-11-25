@@ -82,7 +82,7 @@ export function scorecardGame(round: RoundScores, gameId?: string | null, player
   const games = visibleGames(round.games?.configuration.games ?? [], round.churchyEnabled).filter((game) =>
     (game.kind === 'nassau' || game.kind === 'match-play' ? playerIds === undefined
       || playerIds.some((id) => game.sides.some((side) => side.playerIds.includes(id)))
-      : (game.kind !== 'churchy' && game.kind !== 'wolf' && game.kind !== 'dots') || playerIds === undefined
+      : (game.kind !== 'churchy' && game.kind !== 'wolf' && game.kind !== 'dots' && game.kind !== 'nines') || playerIds === undefined
         || playerIds.length > 0 && playerIds.every((id) => game.playerIds.includes(id))));
   const definition = games.find((game) => game.id === gameId) ?? games.find((game) => game.kind !== 'nassau') ?? games[0];
   if (!definition) return undefined;
