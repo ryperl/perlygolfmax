@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { requireNinesSupport } from './nines-negotiation.js';
 import type { HttpRequest } from '@azure/functions';
 import type { TableClient } from '@azure/data-tables';
 import type { ScoreActor } from '../../src/domain/test-access.js';
@@ -78,6 +79,8 @@ export async function receivePrivateWrite(table: TableClient, identity: ScoreAct
 
 /** Keep ordinary projections in one read; larger recomputed pages remain digest-bound. */
 export function privateReadResponse(request: HttpRequest, value: unknown): unknown {
+  // Checked here because large reads leave this function as text chunks the route wrapper cannot inspect.
+  requireNinesSupport(value);
   const text = JSON.stringify(value);
   const bytes = Buffer.byteLength(text, 'utf8');
   if (bytes > maximumPrivateValueBytes) throw new ApiError(413, 'PRIVATE_VALUE_TOO_LARGE');

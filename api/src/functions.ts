@@ -2,6 +2,7 @@ import { app } from '@azure/functions';
 import { TableClient } from '@azure/data-tables';
 import { DefaultAzureCredential } from '@azure/identity';
 import { readSettings } from './config.js';
+import { withNinesNegotiation } from './nines-negotiation.js';
 import { churchyEnabled } from './churchy/config.js';
 import { createHandler } from './events/handlers.js';
 import type { EventApi } from './events/handlers.js';
@@ -65,9 +66,9 @@ function resolveApi(): RuntimeApi {
   return api;
 }
 
-app.http('currentUser', { route: 'me', methods: ['GET'], authLevel: 'anonymous', handler: createHandler(resolveApi, 'me') });
-app.http('events', { route: 'events', methods: ['GET', 'POST'], authLevel: 'anonymous', handler: createHandler(resolveApi, 'events') });
-app.http('eventStatus', { route: 'events/{id}/status', methods: ['PATCH'], authLevel: 'anonymous', handler: createHandler(resolveApi, 'event-status') });
+app.http('currentUser', { route: 'me', methods: ['GET'], authLevel: 'anonymous', handler: withNinesNegotiation(createHandler(resolveApi, 'me')) });
+app.http('events', { route: 'events', methods: ['GET', 'POST'], authLevel: 'anonymous', handler: withNinesNegotiation(createHandler(resolveApi, 'events')) });
+app.http('eventStatus', { route: 'events/{id}/status', methods: ['PATCH'], authLevel: 'anonymous', handler: withNinesNegotiation(createHandler(resolveApi, 'event-status')) });
 registerEventAdministration(resolveApi);
 
 const catalogRoutes: readonly { readonly action: CatalogAction; readonly route: string; readonly methods: ('GET' | 'POST' | 'PUT' | 'PATCH')[] }[] = [
@@ -85,51 +86,51 @@ const catalogRoutes: readonly { readonly action: CatalogAction; readonly route: 
   { action: 'event-player-index-refresh', route: 'events/{id}/players/{playerId}/handicap-refresh', methods: ['POST'] },
 ];
 for (const item of catalogRoutes) {
-  app.http(`setup-${item.action}`, { route: item.route, methods: item.methods, authLevel: 'anonymous', handler: createCatalogHandler(resolveApi, item.action) });
+  app.http(`setup-${item.action}`, { route: item.route, methods: item.methods, authLevel: 'anonymous', handler: withNinesNegotiation(createCatalogHandler(resolveApi, item.action)) });
 }
 app.http('roundKp', {
   methods: ['PUT'], authLevel: 'anonymous', route: 'events/{id}/rounds/{roundId}/kp',
-  handler: createScoringHandler(resolveApi, 'round-kp'),
+  handler: withNinesNegotiation(createScoringHandler(resolveApi, 'round-kp')),
 });
 app.http('roundScores', {
   route: 'events/{id}/rounds/{roundId}/scores', methods: ['GET'], authLevel: 'anonymous',
-  handler: createScoringHandler(resolveApi, 'scores'),
+  handler: withNinesNegotiation(createScoringHandler(resolveApi, 'scores')),
 });
 app.http('scoreHole', {
   route: 'events/{id}/rounds/{roundId}/players/{playerId}/holes/{holeNumber}', methods: ['PUT'], authLevel: 'anonymous',
-  handler: createScoringHandler(resolveApi, 'score-hole'),
+  handler: withNinesNegotiation(createScoringHandler(resolveApi, 'score-hole')),
 });
 app.http('scoreGameHole', {
   route: 'events/{id}/rounds/{roundId}/players/{playerId}/holes/{holeNumber}/games', methods: ['PUT'], authLevel: 'anonymous',
-  handler: createScoringHandler(resolveApi, 'score-game-hole'),
+  handler: withNinesNegotiation(createScoringHandler(resolveApi, 'score-game-hole')),
 });
 app.http('scoreHistory', {
   route: 'events/{id}/rounds/{roundId}/players/{playerId}/score-history', methods: ['GET'], authLevel: 'anonymous',
-  handler: createScoringHandler(resolveApi, 'score-history'),
+  handler: withNinesNegotiation(createScoringHandler(resolveApi, 'score-history')),
 });
 app.http('roundGames', {
   route: 'events/{id}/rounds/{roundId}/games', methods: ['PUT'], authLevel: 'anonymous',
-  handler: createScoringHandler(resolveApi, 'round-games'),
+  handler: withNinesNegotiation(createScoringHandler(resolveApi, 'round-games')),
 });
 app.http('eventLeaderboard', {
   route: 'events/{id}/leaderboard', methods: ['GET'], authLevel: 'anonymous',
-  handler: createScoringHandler(resolveApi, 'event-leaderboard'),
+  handler: withNinesNegotiation(createScoringHandler(resolveApi, 'event-leaderboard')),
 });
 app.http('eventSkinsConfiguration', {
   route: 'events/{id}/event-skins', methods: ['PUT'], authLevel: 'anonymous',
-  handler: createScoringHandler(resolveApi, 'event-skins-config'),
+  handler: withNinesNegotiation(createScoringHandler(resolveApi, 'event-skins-config')),
 });
 app.http('roundCorrectionsModel', {
   route: 'events/{id}/rounds/{roundId}/corrections', methods: ['GET'], authLevel: 'anonymous',
-  handler: createCorrectionsHandler(resolveApi, 'model'),
+  handler: withNinesNegotiation(createCorrectionsHandler(resolveApi, 'model')),
 });
 app.http('roundCorrectionsWrite', {
   route: 'events/{id}/rounds/{roundId}/corrections', methods: ['PUT'], authLevel: 'anonymous',
-  handler: createCorrectionsHandler(resolveApi, 'write'),
+  handler: withNinesNegotiation(createCorrectionsHandler(resolveApi, 'write')),
 });
 app.http('eventPurse', {
   route: 'events/{id}/purse', methods: ['GET', 'PUT'], authLevel: 'anonymous',
-  handler: createPurseHandler(resolveApi),
+  handler: withNinesNegotiation(createPurseHandler(resolveApi)),
 });
 
 function resolveAdmissionApi(): AdmissionApi {
@@ -146,7 +147,7 @@ const admissionRoutes: readonly { readonly action: AdmissionAction; readonly suf
 ];
 for (const item of admissionRoutes) app.http(`playerAdmission-${item.action}`, {
   route: `events/{id}/admissions${item.suffix}`, methods: [item.method], authLevel: 'anonymous',
-  handler: createAdmissionHandler(resolveAdmissionApi, item.action),
+  handler: withNinesNegotiation(createAdmissionHandler(resolveAdmissionApi, item.action)),
 });
 
 const testerRoutes: readonly { readonly action: TesterAction; readonly route: string; readonly method: 'GET' | 'POST' | 'PUT' }[] = [
@@ -159,7 +160,7 @@ const testerRoutes: readonly { readonly action: TesterAction; readonly route: st
   { action: 'score-hole', route: 'tester/events/{id}/rounds/{roundId}/players/{playerId}/holes/{holeNumber}', method: 'PUT' },
 ];
 for (const item of testerRoutes) app.http(`testerAccess-${item.action}`, {
-  route: item.route, methods: [item.method], authLevel: 'anonymous', handler: createTesterHandler(resolveApi, item.action),
+  route: item.route, methods: [item.method], authLevel: 'anonymous', handler: withNinesNegotiation(createTesterHandler(resolveApi, item.action)),
 });
 
 const publicRoutes: readonly { readonly action: PublicAction; readonly route: string; readonly method: 'GET' | 'PUT' }[] = [
@@ -178,7 +179,7 @@ function resolvePublicApi(): PublicApi {
   return publicApi;
 }
 for (const item of publicRoutes) app.http(`publicAccess-${item.action}`, {
-  route: item.route, methods: [item.method], authLevel: 'anonymous', handler: createPublicHandler(resolvePublicApi, item.action),
+  route: item.route, methods: [item.method], authLevel: 'anonymous', handler: withNinesNegotiation(createPublicHandler(resolvePublicApi, item.action)),
 });
 
 const quickRoutes: readonly { readonly action: QuickRoundAction; readonly route: string; readonly methods: ('GET' | 'PUT' | 'POST')[] }[] = [
@@ -191,5 +192,5 @@ const quickRoutes: readonly { readonly action: QuickRoundAction; readonly route:
   { action: 'archive', route: 'public/quick-rounds/{id}/archive', methods: ['PUT'] },
 ];
 for (const item of quickRoutes) app.http(`quickRound-${item.action}`, {
-  route: item.route, methods: item.methods, authLevel: 'anonymous', handler: createQuickRoundHandler(resolvePublicApi, item.action),
+  route: item.route, methods: item.methods, authLevel: 'anonymous', handler: withNinesNegotiation(createQuickRoundHandler(resolvePublicApi, item.action)),
 });

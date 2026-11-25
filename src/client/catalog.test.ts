@@ -23,7 +23,7 @@ describe('catalog API client', () => {
     await expect(client.player(player.id, signal())).resolves.toEqual(player);
     await expect(client.refreshEventIndex(eventId, player.id, observationId, 'event-v1', operationId, signal())).resolves.toEqual(saved);
     expect(send.mock.calls.map(([path]) => path)).toEqual([
-      `${url}/catalog/players/${player.id}`, `${url}/events/${eventId}/players/${player.id}/handicap-refresh?wolfOrders=1&dotsHighLow=2&dotsRules=3`,
+      `${url}/catalog/players/${player.id}`, `${url}/events/${eventId}/players/${player.id}/handicap-refresh?wolfOrders=1&dotsHighLow=2&dotsRules=3&nines=1`,
     ]);
     expect(send.mock.calls[1]?.[1]).toMatchObject({ method: 'POST', cache: 'no-store', credentials: 'omit',
       body: JSON.stringify({ observationId }), headers: { Authorization: 'Bearer fictional-token',

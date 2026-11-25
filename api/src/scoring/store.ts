@@ -1,4 +1,5 @@
 import type { TableClient, TransactionAction } from '@azure/data-tables';
+import { clientSupportsNines, requireNinesSupport } from '../nines-negotiation.js';
 import type { PublicScoreIdentity } from '../../../src/domain/public-access.js';
 import type { AccountIdentity } from '../../../src/domain/events.js';
 import type { ScoreActor } from '../../../src/domain/test-access.js';
@@ -39,6 +40,7 @@ import { GameDeclarationConflictError, dotsRecordsFor, gameAnchorPlayerId, nassa
 import { nassauConfigurationIssues, validateNassauManualPress } from '../../../src/domain/nassau.js';
 import { nassauRecordsMatchGame } from '../../../src/contracts/nassau.js';
 import { wolfForHole, wolfGroupMatchesRound, wolfOrder } from '../../../src/domain/wolf.js';
+import { ninesGroupMatches } from '../../../src/domain/nines.js';
 import { requireWolfOrders, requireWolfOrdersInValue } from '../../../src/contracts/wolf-orders.js';
 import { requireDotsHighLow, requireDotsHighLowInValue } from '../../../src/contracts/dots-high-low-rules.js';
 import { requireDotsRulesV3, requireDotsRulesV3InValue } from '../../../src/contracts/dots-rules-v3.js';
@@ -129,6 +131,7 @@ async receiveKp(identity: AccountIdentity, eventId: string, roundId: string, bod
   requireWolfOrders(state.games?.games ?? [], wolfOrders);
   requireWolfOrdersInValue(body, wolfOrders);
   requireDotsRulesV3(state.games?.games ?? [], dotsRulesV3);
+  requireNinesSupport(state.games?.games ?? []);
   requireDotsHighLow(state.games?.games ?? [], dotsHighLow);
   requireDotsRulesV3InValue(body, dotsRulesV3);
   requireDotsHighLowInValue(body, dotsHighLow);
@@ -150,6 +153,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
   const state = await this.snapshot(identity, eventId, roundId, true);
   requireWolfOrders(state.games?.games ?? [], wolfOrders);
   requireDotsRulesV3(state.games?.games ?? [], dotsRulesV3);
+  requireNinesSupport(state.games?.games ?? []);
   requireDotsHighLow(state.games?.games ?? [], dotsHighLow);
   requireStringRules(state.games?.games ?? [], stringRules);
   requireCategorySweeps(state.games?.games ?? [], categorySweeps);
@@ -317,7 +321,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     const kpPot = access.testerLink || !kpProjection.kp ? undefined : await readKpPot(this.table, workspace.event.id, round.id, access.event.purseConfigured);
     const visibleGames = access.testerLink && games ? games.games.filter((game) =>
       game.kind !== 'wolf' && game.kind !== 'nassau' && game.kind !== 'match-play' && game.kind !== 'dots'
-      && !(game.kind === 'churchy' && game.version !== 1)) : games?.games;
+      && game.kind !== 'nines' && !(game.kind === 'churchy' && game.version !== 1)) : games?.games;
     const projection: RoundScores = {
       gameHandicapRules: 1,
       gameCalculationsVersion: 2,
@@ -341,6 +345,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
         dotsSpecialKinds: dotsSpecialCatalog.map((entry) => entry.kind),
         internalGamesSupported: true, pullyMurphyTargets: true as const } : {}),
       supportedGameKinds: roundGameKinds.filter((kind) => (kind !== 'churchy' || this.churchyEnabled())
+        && (kind !== 'nines' || clientSupportsNines() && !access.testerLink)
         && (!access.testerLink || kind !== 'wolf' && kind !== 'nassau' && kind !== 'match-play' && kind !== 'dots')),
       gameInputContext: { courseVersionId: capturedRound.courseVersionId, teeProfileId: capturedRound.teeProfile.id },
       teeStrokeAllocation: round.teeProfile.strokeAllocation,
@@ -472,6 +477,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     requireStringRules([...state.games?.games ?? [], ...games], stringRules);
     requireWolfOrders([...state.games?.games ?? [], ...games], wolfOrders);
     requireDotsRulesV3([...state.games?.games ?? [], ...games], dotsRulesV3);
+    requireNinesSupport([...state.games?.games ?? [], ...games]);
     requireDotsHighLow([...state.games?.games ?? [], ...games], dotsHighLow);
     requireCategorySweeps([...state.games?.games ?? [], ...games], categorySweeps);
     requireChurchyNames([...state.games?.games ?? [], ...games], churchyNames);
@@ -500,10 +506,12 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     validateInternalGameChanges(state.games?.games ?? [], games, state.round,
       state.publicAccess === true && state.event.quickRound !== true);
     const grant = this.writer(state, undefined, true, true);
-    const previousMatches = state.games?.games.filter((game) => game.kind === 'nassau' || game.kind === 'match-play' || game.kind === 'wolf' || game.kind === 'dots') ?? [];
+    // Money games lock once scoring starts, so stakes and opponents cannot change mid-round.
+    const lockedKinds: readonly string[] = ['nassau', 'match-play', 'wolf', 'dots', 'nines'];
+    const previousMatches = state.games?.games.filter((game) => lockedKinds.includes(game.kind ?? 'stableford')) ?? [];
     if (state.round.scoringStarted && (
       previousMatches.some((previous) => !games.some((game) => sameGameDefinitions([game], [previous])))
-      || games.some((game) => (game.kind === 'nassau' || game.kind === 'match-play' || game.kind === 'wolf' || game.kind === 'dots')
+      || games.some((game) => lockedKinds.includes(game.kind ?? 'stableford')
         && !previousMatches.some((previous) => sameGameDefinitions([game], [previous]))))) {
       throw new ApiError(409, 'MATCH_SETUP_LOCKED');
     }
@@ -516,6 +524,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       if (game.kind === 'wolf' && !wolfGroupMatchesRound(game, { layout: state.round.teeProfile.holes, groups: state.round.groups })) {
         throw new ApiError(400, 'INVALID_WOLF_GROUP');
       }
+      if (game.kind === 'nines' && !ninesGroupMatches(game, state.round.groups)) throw new ApiError(400, 'INVALID_NINES_GROUP');
     }
     const savedChurchy = state.games?.games.filter((game) => game.kind === 'churchy') ?? [];
     const nextChurchy = games.filter((game) => game.kind === 'churchy');
@@ -622,6 +631,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
       requireGameHandicapRules(current?.games ?? [], gameHandicaps);
       requireWolfOrders(current?.games ?? [], wolfOrders);
       requireDotsRulesV3(current?.games ?? [], dotsRulesV3);
+      requireNinesSupport(current?.games ?? []);
       requireDotsHighLow(current?.games ?? [], dotsHighLow);
     }
     if (isRecord(body) && isRoundGameDefinitions(body.games)) requireChurchyNames(body.games, churchyNames);
@@ -1054,6 +1064,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     requireWolfOrders(state.games?.games ?? [], wolfOrders);
     requireWolfOrdersInValue(body, wolfOrders);
     requireDotsRulesV3(state.games?.games ?? [], dotsRulesV3);
+    requireNinesSupport(state.games?.games ?? []);
     requireDotsHighLow(state.games?.games ?? [], dotsHighLow);
     requireDotsRulesV3InValue(body, dotsRulesV3);
     requireDotsHighLowInValue(body, dotsHighLow);

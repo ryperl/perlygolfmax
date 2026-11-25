@@ -1,4 +1,5 @@
 import type { TableClient, TransactionAction } from '@azure/data-tables';
+import { requireNinesSupport } from '../nines-negotiation.js';
 import { randomUUID } from 'node:crypto';
 import type { AccountIdentity, EventSummary } from '../../../src/domain/events.js';
 import type { ScoreActor } from '../../../src/domain/test-access.js';
@@ -369,6 +370,7 @@ export class TableWorkspaceStore {
         && round.players.some((player) => player.playerId === playerId))) {
         const games = await readGameConfiguration(this.table, eventId, round.id, configuredGameRounds(access.event.gameRoundIds));
         requireDotsRulesV3(games?.games ?? [], dotsRulesV3);
+        requireNinesSupport(games?.games ?? []);
         requireWolfOrders(games?.games ?? [], wolfOrders);
         requireDotsHighLow(games?.games ?? [], dotsHighLow);
       }
@@ -481,6 +483,7 @@ export class TableWorkspaceStore {
     const state = await this.correctionState(identity, eventId, roundId);
     requireWolfOrders(state.games?.games ?? [], wolfOrders);
     requireDotsRulesV3(state.games?.games ?? [], dotsRulesV3);
+    requireNinesSupport(state.games?.games ?? []);
     requireDotsHighLow(state.games?.games ?? [], dotsHighLow);
     const replayKey = `round-correction:${roundId}:${requestId}`;
     const replay = await optionalRow(this.table, eventId, replayKey);
@@ -667,6 +670,7 @@ export class TableWorkspaceStore {
     if (!wolfOrders || !dotsHighLow || !dotsRulesV3) {
       const games = await readGameConfiguration(this.table, eventId, roundId, configuredGameRounds(access.event.gameRoundIds));
       requireDotsRulesV3(games?.games ?? [], dotsRulesV3);
+      requireNinesSupport(games?.games ?? []);
       requireWolfOrders(games?.games ?? [], wolfOrders);
       requireDotsHighLow(games?.games ?? [], dotsHighLow);
     }

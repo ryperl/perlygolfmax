@@ -1,4 +1,5 @@
 import type { RoundGameDefinition, RoundGameResult } from './games.js';
+import { calculateNinesSettlement } from './nines.js';
 import type { DotsGameDefinition, DotsResults } from './dots.js';
 import { calculateDots } from './dots.js';
 import { calculateWolf } from './wolf.js';
@@ -84,6 +85,12 @@ export function calculateInternalSettlements(
 ): readonly InternalGameSettlement[] {
   const settlements: InternalGameSettlement[] = [];
   for (const game of games) {
+    if (game.kind === 'nines') {
+      const result = results.find((entry) => entry.gameId === game.id);
+      const name = (playerId: string) => context.cards.find((card) => card.playerId === playerId)?.displayName ?? 'Golfer unavailable';
+      settlements.push(calculateNinesSettlement(game, result, name));
+      continue;
+    }
     if (game.kind !== 'wolf' && game.kind !== 'dots' || game.kind === 'wolf' && game.version !== 2
       || game.kind === 'dots' && game.mode === 'linked') continue;
     const linked = game.kind === 'wolf' ? games.filter((candidate): candidate is DotsGameDefinition =>

@@ -1,4 +1,5 @@
 import type { TableClient } from '@azure/data-tables';
+import { requireNinesSupport } from '../nines-negotiation.js';
 import type { AccountIdentity } from '../../../src/domain/events.js';
 import type { PublicScoreIdentity } from '../../../src/domain/public-access.js';
 import type { PursePlan, PurseTieResolution } from '../../../src/domain/purse.js';
@@ -112,6 +113,7 @@ export class TablePurseStore {
       const state = await this.source(identity, eventId, chargeRead);
       for (const round of state.roundScores) {
         requireDotsRulesV3(round.games?.configuration.games ?? [], dotsRulesV3);
+        requireNinesSupport(round.games?.configuration.games ?? []);
         stringRoundScores(round, stringRules);
         categorySweepRoundScores(round, categorySweeps);
         requireChurchyNames(round.games?.configuration.games ?? [], churchyNames);
@@ -152,7 +154,10 @@ export class TablePurseStore {
     const access = await this.access(identity, eventId, true);
     if (access.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     const state = await this.source(identity, eventId, chargeRead);
-    for (const round of state.roundScores) requireDotsRulesV3(round.games?.configuration.games ?? [], dotsRulesV3);
+    for (const round of state.roundScores) {
+      requireDotsRulesV3(round.games?.configuration.games ?? [], dotsRulesV3);
+      requireNinesSupport(round.games?.configuration.games ?? []);
+    }
     if (!dotsCalls) for (const round of state.roundScores) murphyRoundScores(round, true, true, false);
     for (const round of state.roundScores) stringRoundScores(round, stringRules);
     for (const round of state.roundScores) categorySweepRoundScores(round, categorySweeps);

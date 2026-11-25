@@ -17,6 +17,8 @@ import { publishedCourseHandicaps } from './playing-handicaps.js';
 import { handicapStrokesForHole } from './handicap-strokes.js';
 import { gameHandicap } from './game-handicaps.js';
 import type { CapturedGameHandicap } from './game-handicaps.js';
+import { calculateNines, ninesHandicap } from './nines.js';
+import type { NinesGameDefinition, NinesPlayer } from './nines.js';
 export { handicapStrokesForHole } from './handicap-strokes.js';
 
 export function stablefordPoints(preset: StablefordPreset): StablefordPointsTable {
@@ -158,6 +160,15 @@ function playerResult(
   };
 }
 
+function ninesPlayers(game: NinesGameDefinition, round: RoundSnapshot,
+  captured: readonly CapturedGameHandicap[]): readonly NinesPlayer[] {
+  return round.players.map((player) => {
+    const tee = playerTee(round, player.playerId);
+    return { playerId: player.playerId, displayName: player.displayName, layout: tee.holes,
+      handicap: ninesHandicap(game, player.playerId, tee, captured, round.groups) };
+  });
+}
+
 export function calculateGameResults(
   games: readonly RoundGameDefinition[], round: RoundSnapshot, cards: readonly Scorecard[], stringRulesVersion: 1 | 2 = 2,
   dotsCategorySweepsVersion: 0 | 1 = 1,
@@ -189,6 +200,7 @@ export function calculateGameResults(
       }), cards, group?.playerIds.length === 4 && group.playerIds.every((id) => game.playerIds.includes(id)),
       round.groups, round.teeProfile.holes, stringRulesVersion);
     }
+    if (game.kind === 'nines') return calculateNines(game, ninesPlayers(game, round, captured), cards, round.groups);
     if (!isStablefordGame(game)) return calculateStrokeGameResults(game, round.players.map((player) => {
       const tee = playerTee(round, player.playerId);
       return { playerId: player.playerId, displayName: player.displayName, layout: tee.holes,

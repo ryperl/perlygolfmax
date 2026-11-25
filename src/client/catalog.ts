@@ -102,7 +102,7 @@ export function createCatalogClient(apiUrl: string, getToken: () => Promise<stri
     },
     async refreshEventIndex(eventId, playerId, observationId, etag, requestId, signal) {
       requireValid(isUuid(eventId) && isUuid(playerId) && isUuid(observationId) && isEventRevision(etag) && isUuid(requestId));
-      const value = await request(`events/${encodeURIComponent(eventId)}/players/${encodeURIComponent(playerId)}/handicap-refresh?wolfOrders=1&dotsHighLow=2&dotsRules=3`, signal, {
+      const value = await request(`events/${encodeURIComponent(eventId)}/players/${encodeURIComponent(playerId)}/handicap-refresh?wolfOrders=1&dotsHighLow=2&dotsRules=3&nines=1`, signal, {
         method: 'POST', body: { observationId }, etag, requestId,
       });
       if (!isEventHandicapRefreshResult(value) || value.eventId !== eventId || value.playerId !== playerId) {

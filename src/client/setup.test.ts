@@ -75,7 +75,7 @@ describe('event workspace client', () => {
     const requestId = fictionalId(250);
     const signal = new AbortController().signal;
     await expect(client.refreshIndices(fictionalEvent.id, round.id, fictionalWorkspace.etag, requestId, signal)).resolves.toEqual(fictionalWorkspace);
-    expect(send.mock.calls[0]?.[0]).toBe(`https://fictional.example.test/api/events/${fictionalEvent.id}/workspace/rounds/${round.id}/indices/refresh?wolfOrders=1&dotsHighLow=2&dotsRules=3`);
+    expect(send.mock.calls[0]?.[0]).toBe(`https://fictional.example.test/api/events/${fictionalEvent.id}/workspace/rounds/${round.id}/indices/refresh?wolfOrders=1&dotsHighLow=2&dotsRules=3&nines=1`);
     expect(send.mock.calls[0]?.[1]).toMatchObject({
       method: 'POST', body: '{}', signal, credentials: 'omit', cache: 'no-store',
       headers: { 'If-Match': fictionalWorkspace.etag, 'Idempotency-Key': requestId },

@@ -47,7 +47,7 @@ export function createSetupClient(apiUrl: string, getToken: () => Promise<string
     },
     async refreshIndices(eventId, roundId, etag, requestId, signal) {
       if (!isUuid(eventId) || !isUuid(roundId) || !isEventRevision(etag) || !isUuid(requestId)) throw new Error('Invalid captured setup-input refresh request.');
-      const value = await request(`events/${encodeURIComponent(eventId)}/workspace/rounds/${encodeURIComponent(roundId)}/indices/refresh?wolfOrders=1&dotsHighLow=2&dotsRules=3`, signal, {
+      const value = await request(`events/${encodeURIComponent(eventId)}/workspace/rounds/${encodeURIComponent(roundId)}/indices/refresh?wolfOrders=1&dotsHighLow=2&dotsRules=3&nines=1`, signal, {
         method: 'POST', body: {}, etag, requestId,
       });
       if (!isEventWorkspace(value) || value.event.id !== eventId || !value.rounds.some((round) => round.id === roundId)) {
