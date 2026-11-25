@@ -23,7 +23,9 @@ export function canManageGame(round: RoundScores, game: RoundGameDefinition): bo
   if (game.kind === 'dots' && !supportsDotsSpecials(round, game.specials)) return false;
   if (game.kind === 'dots' && game.sweepRule === 'manual-v1' && round.dotsManualSweep !== true) return false;
   if (game.kind === 'churchy' && (round.churchyEnabled !== true || game.version !== 1 && !round.churchyRulesVersions?.includes(game.version))) return false;
-  if (game.kind === 'dots' || game.kind === 'wolf' || game.kind === 'nassau' || game.kind === 'match-play') {
+  // Money games lock once scoring starts, matching the API's setup lock.
+  if (game.kind === 'dots' || game.kind === 'wolf' || game.kind === 'nassau' || game.kind === 'match-play'
+    || game.kind === 'nines') {
     if (round.setupLocked) return false;
   }
   if (canManageAllRoundGames(round)) return true;

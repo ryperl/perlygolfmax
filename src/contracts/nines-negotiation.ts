@@ -19,6 +19,6 @@ export function containsNinesGame(value: unknown): boolean {
 }
 
 /** Removes `nines` from advertised game kinds, for clients that do not understand it. */
-export function withoutNinesGameKind<T extends readonly string[]>(kinds: T): T {
-  return kinds.filter((kind) => kind !== 'nines') as unknown as T;
+export function withoutNinesGameKind<Kind extends string>(kinds: readonly Kind[]): readonly Exclude<Kind, 'nines'>[] {
+  return kinds.filter((kind): kind is Exclude<Kind, 'nines'> => kind !== 'nines');
 }
