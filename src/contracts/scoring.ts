@@ -369,7 +369,7 @@ function validateRoundScores(value: unknown, lean = false): value is RoundScores
     }
     if (!isRoundGamesView(value.games, context) || value.games.configuration.eventId !== value.eventId
       || value.games.configuration.roundId !== value.roundId
-      || value.games.results.some((result) => (!['churchy', 'wolf', 'nassau', 'match-play', 'dots'].includes(result.kind ?? '') && result.players.length !== cards.length) || result.players.some((player) => {
+      || value.games.results.some((result) => (!['churchy', 'wolf', 'nassau', 'match-play', 'dots', 'nines'].includes(result.kind ?? '') && result.players.length !== cards.length) || result.players.some((player) => {
         const card = cardsById.get(player.playerId);
         if (!card && result.kind === 'churchy') return false;
         return !card || card.displayName !== player.displayName || player.totalHoles !== count

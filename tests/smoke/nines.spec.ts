@@ -1,7 +1,7 @@
 import { expect, test } from './test';
 import { createServer } from 'vite';
 
-test('Nines can be set up, scored, ranked and settled on a narrow phone screen', async ({ page }, testInfo) => {
+test('Nines can be set up, scored, ranked and settled beside another group on a narrow phone screen', async ({ page }, testInfo) => {
   const server = await createServer({
     configFile: false, cacheDir: testInfo.outputPath('vite-cache'),
     server: { host: '127.0.0.1', port: 0, hmr: false }, esbuild: { jsx: 'automatic' },
@@ -27,7 +27,9 @@ test('Nines can be set up, scored, ranked and settled on a narrow phone screen',
     const editor = page.getByRole('form', { name: 'Game settings' });
     await editor.getByLabel('Game type').selectOption('nines');
     const setup = editor.getByRole('region', { name: 'Nines setup' });
-    await expect(setup.getByLabel('Playing group of three')).toHaveValue('1');
+    // Only the threesome (group 2) can play Nines; the foursome is not offered.
+    await expect(setup.getByLabel('Playing group of three')).toHaveValue('2');
+    await expect(setup.getByRole('option')).toHaveText(['Choose a saved group of three', 'Group 2']);
     await editor.getByLabel('Score basis').selectOption('net');
     await editor.getByLabel('Net handicap rule').selectOption('group-low-v1');
     await setup.getByLabel('Stake per point (USD)').fill('.25');
@@ -37,7 +39,7 @@ test('Nines can be set up, scored, ranked and settled on a narrow phone screen',
     await editor.getByRole('button', { name: 'Save game', exact: true }).click();
     await expect(page.getByText('Game settings saved.', { exact: true })).toBeVisible();
 
-    // Results: golfer 1 wins 17 holes but picks up on hole 5 (worst): 86 / 56 / 20 points.
+    // Results: golfer 5 wins 17 holes but picks up on hole 5 (worst): 86 / 56 / 20 points. Only the threesome is listed.
     await page.getByText('Nines · Game standings', { exact: true }).click();
     const results = page.getByRole('region', { name: 'Nines results', exact: true });
     await expect(results).toContainText('5 / 3 / 1 points per hole');

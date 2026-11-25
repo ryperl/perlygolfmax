@@ -702,6 +702,8 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     requireWolfOrders((state.games?.games ?? []).filter((game) => !state.testerLink || game.kind !== 'wolf'), wolfOrders);
     requireWolfOrdersInValue(score, wolfOrders);
     requireDotsRulesV3((state.games?.games ?? []).filter((game) => !state.testerLink || game.kind !== 'dots'), dotsRulesV3);
+    // Legacy tester links never see Nines, so their raw score writes stay available.
+    requireNinesSupport((state.games?.games ?? []).filter((game) => !state.testerLink || game.kind !== 'nines'));
     requireDotsHighLow((state.games?.games ?? []).filter((game) => !state.testerLink || game.kind !== 'dots'), dotsHighLow);
     requireDotsRulesV3InValue(score, dotsRulesV3);
     requireDotsHighLowInValue(score, dotsHighLow);

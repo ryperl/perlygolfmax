@@ -13,6 +13,7 @@ import { ninesQuery } from '../../../src/contracts/nines-negotiation.js';
 const olderBrowserQuery = 'murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1&churchyNames=1&sweepRules=2&dotCoexistence=2&gameHandicaps=1&gameCalculations=2&wolfOrders=1&dotsHighLow=2&dotsRules=3';
 const newerBrowserQuery = `${olderBrowserQuery}&${ninesQuery}`;
 import { createScoringHandler } from './handlers.js';
+import { TablePurseStore } from '../purse/store.js';
 
 async function fixture(playerCount: 3 | 4 = 3) {
   const f = await scoringFixture(playerCount);
@@ -89,5 +90,39 @@ describe('Nines through the API, without disturbing older browsers', () => {
       { kind: 'strokes', strokes: 4 }, null, identifier(31007)));
     await expect(f.saveAsNewClient([{ ...f.game, stakeMinor: 500 }], saved.round.games?.configuration.etag ?? null, 31008))
       .rejects.toMatchObject({ code: 'MATCH_SETUP_LOCKED' });
+  });
+
+  it('an older browser saving a hole score on a round with Nines is refused before anything is stored', async () => {
+    const f = await fixture();
+    await f.saveAsNewClient([f.game], null, 31010);
+    const before = new Map(f.rows);
+    await expect(runWithNinesSupport(false, () => f.scores.write(creator, event.id, f.roundId, f.ids[0] ?? '', 1,
+      { kind: 'strokes', strokes: 4 }, null, identifier(31011)))).rejects.toMatchObject({ status: 426 });
+    expect(new Map(f.rows)).toEqual(before);
+    // The same save from a browser that understands Nines goes through.
+    await runWithNinesSupport(true, () => f.scores.write(creator, event.id, f.roundId, f.ids[0] ?? '', 1,
+      { kind: 'strokes', strokes: 4 }, null, identifier(31012)));
+    expect(new Map(f.rows)).not.toEqual(before);
+  });
+
+  it('an older browser sending every earlier rules flag still cannot refresh handicaps on a round with Nines', async () => {
+    const f = await fixture();
+    await f.saveAsNewClient([f.game], null, 31013);
+    const workspace = await f.workspace.get(creator, event.id);
+    const before = new Map(f.rows);
+    // wolfOrders, dotsHighLow and dotsRulesV3 all supported, exactly like today's live site, but not Nines.
+    await expect(runWithNinesSupport(false, () => f.workspace.refreshIndices(creator, event.id, f.roundId,
+      identifier(31014), workspace.etag, true, true, true))).rejects.toMatchObject({ status: 426 });
+    expect(new Map(f.rows)).toEqual(before);
+  });
+
+  it('an older browser sending every earlier rules flag cannot start a purse change on an event with Nines', async () => {
+    const f = await fixture();
+    await f.saveAsNewClient([f.game], null, 31015);
+    const purse = new TablePurseStore(f.table, f.workspace, f.scores);
+    const before = new Map(f.rows);
+    await expect(runWithNinesSupport(false, () => purse.receive(creator, event.id, null, identifier(31016), {})))
+      .rejects.toMatchObject({ status: 426 });
+    expect(new Map(f.rows)).toEqual(before);
   });
 });

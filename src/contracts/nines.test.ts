@@ -6,6 +6,8 @@ import { calculateGameResults } from '../domain/stableford.js';
 import { strokeGameFixture, strokeGameId } from '../domain/stroke-games.test-support.js';
 import type { NinesGameDefinition } from '../domain/nines.js';
 import { roundGameKinds } from '../domain/games.js';
+import { matchGamesFixture } from '../domain/match-games.test-support.js';
+import { isRoundScores } from './scoring.js';
 
 function fixture() {
   const f = strokeGameFixture(9, 3);
@@ -61,5 +63,20 @@ describe('Nines negotiation helpers', () => {
 
   it('hides nines from advertised game kinds for older clients, keeping every other kind', () => {
     expect(withoutNinesGameKind(roundGameKinds)).toEqual(roundGameKinds.filter((kind) => kind !== 'nines'));
+  });
+});
+
+describe('Nines in a round with other playing groups', () => {
+  it('decodes a round with a foursome and a Nines threesome, where Nines lists only its own three golfers', () => {
+    // Seven golfers: group 1 is a foursome, group 2 the threesome playing Nines.
+    const f = matchGamesFixture(7);
+    expect(f.snapshot.groups.map((group) => group.playerIds.length)).toEqual([4, 3]);
+    const threesome = f.snapshot.groups[1]?.playerIds ?? [];
+    const game: NinesGameDefinition = { id: strokeGameId(1500), name: 'Nines', kind: 'nines', version: 1,
+      basis: 'gross', groupNumber: 2, playerIds: threesome, stakeMinor: null };
+    const round = f.round(f.cards, [game]);
+    expect(round.games?.results[0]?.players).toHaveLength(3);
+    expect(round.cards).toHaveLength(7);
+    expect(isRoundScores(round)).toBe(true);
   });
 });

@@ -14,12 +14,15 @@ import '../../src/features/scoring/scoring.css';
 const root = document.getElementById('nines-fixture');
 if (!root) throw new Error('Missing fictional Nines fixture root.');
 
-// Three golfers: golfer 1 shoots 3s, golfer 2 4s, golfer 3 5s, except golfer 1 picks up on hole 5.
-const fixture = strokeGameFixture(18, 3);
+// Seven golfers: group 1 is a foursome shooting 4s; group 2 is the Nines threesome. In group 2,
+// golfer 5 shoots 3s, golfer 6 4s, golfer 7 5s, except golfer 5 picks up on hole 5.
+const fixture = strokeGameFixture(18, 7);
+const foursome = Array.from({ length: 4 }, () => ({ kind: 'strokes' as const, strokes: 4 }));
 let cards: readonly Scorecard[] = fixture.cards;
 for (const hole of fixture.snapshot.teeProfile.holes) {
   const first = hole.number === 5 ? { kind: 'picked-up' as const } : { kind: 'strokes' as const, strokes: 3 };
-  cards = strokeGameCards(cards, hole.number, [first, { kind: 'strokes', strokes: 4 }, { kind: 'strokes', strokes: 5 }]);
+  cards = strokeGameCards(cards, hole.number,
+    [...foursome, first, { kind: 'strokes', strokes: 4 }, { kind: 'strokes', strokes: 5 }]);
 }
 
 function withGames(round: RoundScores, games: readonly RoundGameDefinition[], etag: string): RoundScores {
