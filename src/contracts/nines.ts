@@ -83,6 +83,17 @@ function isConsistentPlayer(value: unknown, holes: readonly NinesHole[], game: N
     && value.backPoints === pointsTotal(expectedHoles.filter((hole) => hole.number > 9));
 }
 
+/**
+ * A ready result lists each of the game's three golfers exactly once. A stale group may list fewer,
+ * because some of the saved golfers can have left the round, but never the same golfer twice.
+ */
+function hasExpectedGolfers(players: readonly GamePlayerResult[], game: NinesGameDefinition, ready: boolean): boolean {
+  const ids = players.map((player) => player.playerId);
+  if (new Set(ids).size !== ids.length) return false;
+  if (!ready) return true;
+  return ids.length === ninesPlayerCount && game.playerIds.every((id) => ids.includes(id));
+}
+
 /** Checks a Nines result. With the published round, it must equal an exact recalculation. */
 export function isNinesResult(value: unknown, game: NinesGameDefinition, round?: RoundGameScoringContext): value is RoundGameResult {
   if (!isRecord(value) || !hasExactKeys(value, ['gameId', 'kind', 'version', 'nines', 'players'])) return false;
@@ -95,6 +106,7 @@ export function isNinesResult(value: unknown, game: NinesGameDefinition, round?:
   const holes: readonly NinesHole[] = nines.holes;
   if (!Array.isArray(value.players) || value.players.length > ninesPlayerCount) return false;
   if (!value.players.every((player) => isConsistentPlayer(player, holes, game))) return false;
+  if (!hasExpectedGolfers(value.players, game, nines.status === 'ready')) return false;
   if (!round) return true;
   const names = new Map(value.players.flatMap((player: unknown) => isRecord(player)
     && typeof player.playerId === 'string' && typeof player.displayName === 'string'

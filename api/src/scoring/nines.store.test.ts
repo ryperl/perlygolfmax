@@ -134,4 +134,20 @@ describe('Nines through the API, without disturbing older browsers', () => {
       saved.round.games?.configuration.etag ?? null, identifier(31018)))).rejects.toMatchObject({ status: 426 });
     expect(new Map(f.rows)).toEqual(before);
   });
+
+  it('an older browser cannot change round setup for an event with Nines; a Nines-aware browser can', async () => {
+    const f = await fixture();
+    await f.saveAsNewClient([f.game], null, 31019);
+    const workspace = await f.workspace.get(creator, event.id);
+    const before = new Map(f.rows);
+    const renamed = { ...f.input, name: 'Renamed by an older browser' };
+    await expect(runWithNinesSupport(false, () => f.workspace.save(creator, event.id, renamed, workspace.etag)))
+      .rejects.toMatchObject({ status: 426 });
+    await expect(runWithNinesSupport(false, () => f.workspace.receive(creator, event.id, {}, workspace.etag)))
+      .rejects.toMatchObject({ status: 426 });
+    expect(new Map(f.rows)).toEqual(before);
+    const saved = await runWithNinesSupport(true, () => f.workspace.save(creator, event.id,
+      { ...f.input, name: 'Renamed by a current browser' }, workspace.etag));
+    expect(saved.event.name).toBe('Renamed by a current browser');
+  });
 });

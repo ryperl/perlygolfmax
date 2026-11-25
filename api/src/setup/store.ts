@@ -721,10 +721,25 @@ export class TableWorkspaceStore {
     return current;
   }
 
+  /**
+   * Older browsers cannot see Nines, so they may not change setup for an event that has it.
+   * Browsers that understand Nines skip this, so it costs them no reads.
+   */
+  async requireNinesClientForEvent(eventId: string): Promise<void> {
+    if (clientSupportsNines()) return;
+    const event = await optionalRow(this.table, eventId, 'event');
+    const roundIds = configuredGameRounds(event?.gameRoundIds);
+    for (const roundId of roundIds) {
+      const games = await readGameConfiguration(this.table, eventId, roundId, roundIds);
+      requireNinesSupport(games?.games ?? []);
+    }
+  }
+
   async receive(identity: AccountIdentity, id: string, body: unknown, etag: string) {
     const access = await this.ownerAccess(identity, id);
     if (access.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     requireManager(identity, this.allowed);
+    await this.requireNinesClientForEvent(id);
     // A client may retry all immutable parts after losing the final response.
     if (access.summary.etag !== etag) {
       const upload = isRecord(body) ? body.privateUpload ?? body.privateCommit : undefined;
@@ -752,6 +767,7 @@ export class TableWorkspaceStore {
       requireManager(identity, this.allowed);
     }
     if (access.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
+    await this.requireNinesClientForEvent(id);
     const receiptKey = publication ? `setup-receipt:${publication.id}` : undefined;
     const receipt = publication ? canonical({ identity, etag, sha256: publication.sha256, input }) : undefined;
     if (receiptKey) {

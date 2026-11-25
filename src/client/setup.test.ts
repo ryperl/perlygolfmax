@@ -146,7 +146,7 @@ describe('event workspace client', () => {
     await expect(client.load(fictionalEvent.id, signal)).resolves.toEqual(fictionalWorkspace);
     await expect(client.save(fictionalEvent.id, fictionalWorkspace.etag, fictionalSetup, signal)).resolves.toEqual(fictionalWorkspace);
     expect(send.mock.calls[1]).toEqual([
-      `https://fictional.example.test/api/events/${fictionalEvent.id}/workspace`,
+      `https://fictional.example.test/api/events/${fictionalEvent.id}/workspace?nines=1`,
       expect.objectContaining({ method: 'PUT', cache: 'no-store', credentials: 'omit',
         body: JSON.stringify(fictionalSetup) }),
     ]);

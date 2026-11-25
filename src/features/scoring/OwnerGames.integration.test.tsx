@@ -56,6 +56,38 @@ describe('games integrated with owner stroke entry', () => {
     expect(source.client.save).not.toHaveBeenCalled();
     expect(source.client.saveGames).not.toHaveBeenCalled();
   });
+  it('shows SO only for the Nines threesome, not for a foursome in another group', async () => {
+    // Seven golfers: a foursome in group 1, and a net strokes-off Nines threesome in group 2.
+    const f = strokeGameFixture(18, 7);
+    const indexes = ['11', '4', '8', '3', '12', '6', '9'];
+    const snapshot = { ...f.snapshot, players: f.snapshot.players.map((player, index) => ({
+      ...player, handicapIndex: { ...player.handicapIndex, value: indexes[index] ?? '0' },
+    })) };
+    const cards = f.cards.map((card) => ({ ...card, etag: null, updatedAt: null,
+      holes: card.holes.map((hole) => ({ ...hole, score: { kind: 'unplayed' as const } })) }));
+    const game: RoundGameDefinition = { id: f.ballDrop.id, name: 'Fictional Nines', kind: 'nines', version: 1,
+      basis: 'net', handicapRule: 'group-low-v1', groupNumber: 2, playerIds: snapshot.groups[1]?.playerIds ?? [], stakeMinor: null };
+    const base = strokeGamesRound({ ...f, snapshot, cards });
+    const round = { ...base, setupLocked: false, lastUpdatedAt: null, gameHandicapRules: 1 as const, teeStrokeAllocation: true,
+      courseHandicaps: publishedCourseHandicaps(snapshot), games: { configuration: {
+        eventId: base.eventId, roundId: base.roundId, etag: 'fictional-games', games: [game],
+      }, results: calculateGameResults([game], snapshot, cards) } };
+    const source = memoryScores(round);
+    render(<OwnerScoresView client={source.client} eventId={round.eventId} roundId={round.roundId} onSessionExpired={vi.fn()} />);
+    await screen.findByRole('heading', { name: 'Round scorecard' });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Enter scores' }));
+    for (const index of [1, 2, 3, 4]) {
+      const article = within(screen.getByRole('article', { name: `Fictional golfer ${String(index)} scorecard` }));
+      expect(article.queryByLabelText(/Strokes off the low player/)).not.toBeInTheDocument();
+    }
+    await user.selectOptions(screen.getByLabelText('View group'), '2');
+    // Group 2's Course Handicaps are 12, 6 and 9, so strokes off the low golfer are 6, 0 and 3.
+    for (const [index, strokesOff] of [[5, 6], [6, 0], [7, 3]] as const) {
+      const article = within(await screen.findByRole('article', { name: `Fictional golfer ${String(index)} scorecard` }));
+      expect(article.getByRole('heading')).toHaveTextContent(`SO ${String(strokesOff)}`);
+    }
+  });
   it('saves customized gross and net games on existing strokes without writing or changing the raw card', async () => {
     const view = mount();
     const originalCards = view.read().cards;

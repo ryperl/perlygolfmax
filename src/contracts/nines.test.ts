@@ -53,6 +53,24 @@ describe('Nines result contract', () => {
   });
 });
 
+describe('Nines result golfers', () => {
+  it('a ready result must list each of the three golfers exactly once; a stale group may list fewer', () => {
+    const { game, result } = fixture();
+    const players = result?.players ?? [];
+    const first = players[0];
+    if (!result || !first) throw new Error('Expected a calculated result.');
+    expect(isNinesResult({ ...result, players: [] }, game)).toBe(false);
+    expect(isNinesResult({ ...result, players: [first, first, first] }, game)).toBe(false);
+    expect(isNinesResult({ ...result, players: players.slice(0, 2) }, game)).toBe(false);
+    const stale = { ...result, nines: { ...result.nines, status: 'stale-group' as const,
+      holes: result.nines?.holes.map((hole) => ({ ...hole, status: 'unavailable' as const, points: [] })) ?? [] } };
+    const stalePlayers = players.slice(0, 2).map((player) => ({ ...player, holesScored: 0, status: 'unavailable' as const,
+      holes: player.holes.map((hole) => ({ ...hole, points: null })), frontPoints: null, backPoints: null, totalPoints: null }));
+    expect(isNinesResult({ ...stale, players: stalePlayers }, game)).toBe(true);
+    expect(isNinesResult({ ...stale, players: [stalePlayers[0], stalePlayers[0]] }, game)).toBe(false);
+  });
+});
+
 describe('Nines negotiation helpers', () => {
   it('finds Nines definitions or results anywhere in a response, and nothing else', () => {
     const { game, result } = fixture();

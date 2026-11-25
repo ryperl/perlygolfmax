@@ -1,4 +1,5 @@
 import { isEventRevision, isRecord, isUuid } from '../contracts/events';
+import { ninesQuery } from '../contracts/nines-negotiation';
 import { isCourseId, isVersionId } from '../contracts/catalog';
 import { isEventSetupInput, isEventWorkspace } from '../contracts/setup';
 import { isPublicPlayerInput, isQuickCourse, isQuickCourseVersion, isQuickPage, isQuickPlayer, isQuickPlayerPage } from '../contracts/quick-round';
@@ -46,7 +47,7 @@ export function createQuickRoundClient(apiUrl: string, send: typeof fetch = fetc
     if (!isUuid(requestId) || !isEventSetupInput(input) || input.rounds.length !== 1
       || input.overallCompetition !== undefined && input.overallCompetition !== null
       || etag !== null && !isEventRevision(etag)) throw new Error('Check the Quick round setup. Nothing was sent.');
-    const value = await writePrivateValue(request, `${eventId}${etag === null ? '' : '/workspace'}`, signal, {
+    const value = await writePrivateValue(request, `${eventId}${etag === null ? '' : '/workspace'}?${ninesQuery}`, signal, {
       method: 'PUT', body: input, requestId, ...(etag === null ? { createOnly: true } : { etag }),
     }, maximumEventSetupBytes);
     if (!isRecord(value) || value.eventId !== eventId || value.requestId !== requestId || !isEventRevision(value.workspaceEtag)) {

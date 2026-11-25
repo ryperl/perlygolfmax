@@ -58,6 +58,7 @@ export class TableQuickRoundStore {
     if (!isUuid(eventId) || !isUuid(requestId)) throw new ApiError(400, 'INVALID_REQUEST_ID');
     const existing = await optionalRow(this.table, eventId, 'event');
     if (etag !== null || existing) await this.load(eventId);
+    if (existing) await this.workspace.requireNinesClientForEvent(eventId);
     return receivePrivateWrite(this.table, { kind: 'public-score', eventId }, eventId,
       etag === null ? 'quick-create' : 'workspace', etag, requestId, body);
   }
