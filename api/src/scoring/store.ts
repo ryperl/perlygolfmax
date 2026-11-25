@@ -621,7 +621,9 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     // Parts are inactive. Check the head revision without repeatedly decoding a large configuration.
     // The final save validates the complete captured workspace and games again.
     const head = await optionalRow(this.table, eventId, gameConfigurationKey(roundId));
-    if ((!stringRules || !categorySweeps || !churchyNames || !sweepRules || !gameHandicaps || !wolfOrders || !dotsHighLow || !dotsRulesV3) && head) {
+    // Today's live site sends every earlier flag, so clients that did not ask for Nines must enter this check too.
+    if ((!stringRules || !categorySweeps || !churchyNames || !sweepRules || !gameHandicaps || !wolfOrders || !dotsHighLow || !dotsRulesV3
+      || !clientSupportsNines()) && head) {
       const current = await readGameConfiguration(this.table, eventId, roundId,
         configuredGameRounds(state.event.gameRoundIds), { row: head });
       requireStringRules(current?.games ?? [], stringRules);

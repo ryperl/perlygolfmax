@@ -18,6 +18,9 @@ export function NinesSettings({ draft, groups, playerIds, playerName, onChange }
   const eligibleGroups = groups.filter((group) => group.playerIds.length === ninesPlayerCount);
   const golfers = draft.ninesPlayers ?? [];
   const problem = ninesDraftProblem(draft, playerIds, groups);
+  // If round setup changed this group's golfers, show the placeholder so choosing the group again copies them.
+  const selectedGroup = eligibleGroups.find((group) => group.number === draft.groupNumber);
+  const selectionCurrent = selectedGroup !== undefined && sameGolfers(selectedGroup.playerIds, golfers);
 
   function chooseGroup(value: string) {
     const group = eligibleGroups.find((entry) => entry.number === Number(value));
@@ -26,12 +29,12 @@ export function NinesSettings({ draft, groups, playerIds, playerName, onChange }
 
   return <section aria-label="Nines setup">
     <label>Playing group of three
-      <select value={draft.groupNumber ?? ''} onChange={(event) => { chooseGroup(event.target.value); }}>
+      <select value={selectionCurrent ? selectedGroup.number : ''} onChange={(event) => { chooseGroup(event.target.value); }}>
         <option value="">Choose a saved group of three</option>
         {eligibleGroups.map((group) => <option key={group.number} value={group.number}>Group {group.number}</option>)}
       </select>
     </label>
-    {golfers.length === ninesPlayerCount && <p>{golfers.map(playerName).join(' · ')}</p>}
+    {selectionCurrent && <p>{golfers.map(playerName).join(' · ')}</p>}
     <label>Stake per point (USD)
       <input inputMode="decimal" value={draft.stake ?? ''} aria-describedby={stakeHint} placeholder="Points only"
         onChange={(event) => { onChange({ ...draft, stake: event.target.value }); }} />
@@ -41,4 +44,8 @@ export function NinesSettings({ draft, groups, playerIds, playerName, onChange }
       (4/4/1, 5/2/2, 3/3/3). A pickup, X7 or DNF ranks worst. A hole scores once all three have saved a score.</p>
     {problem && <p role="status">{problem}</p>}
   </section>;
+}
+
+function sameGolfers(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((id) => right.includes(id));
 }

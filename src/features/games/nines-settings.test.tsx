@@ -86,6 +86,41 @@ describe('Nines game setup', () => {
   });
 });
 
+describe('Nines after round setup changes the group', () => {
+  function EditSaved({ game, groups, roster, save }: {
+    readonly game: NinesGameDefinition;
+    readonly groups: ReturnType<typeof fixture>['groups'];
+    readonly roster: ReturnType<typeof fixture>['cards'];
+    readonly save: (game: RoundGameDefinition | null) => void;
+  }) {
+    const [draft, change] = useState(() => draftFromGame(game));
+    return <GameSettings draft={draft} roster={roster} groups={groups} supportedGameKinds={roundGameKinds} existing
+      gameHandicapsSupported holeNumbers={[]} disabled={false} saveDisabled={false} cancelDisabled={false} retry={false}
+      onChange={change} onSave={() => { save(buildGame(draft, roster.map((card) => card.playerId))); }} onCancel={vi.fn()} />;
+  }
+
+  it('asks to choose the group again, then takes its current golfers and keeps the basis and stake', async () => {
+    const user = userEvent.setup();
+    // Seven golfers in a foursome and a threesome. The saved game still names golfer 1 (now in the
+    // foursome) instead of the threesome's current third golfer.
+    const f = fixture([4, 3]);
+    const current = f.groups[1]?.playerIds ?? [];
+    const stale = [f.ids[0] ?? '', current[1] ?? '', current[2] ?? ''];
+    const saved: NinesGameDefinition = { id: strokeGameId(1500), name: 'Our Nines', kind: 'nines', version: 1,
+      basis: 'net', handicapRule: 'group-low-v1', groupNumber: 2, playerIds: stale, stakeMinor: 25 };
+    const save = vi.fn();
+    render(<EditSaved game={saved} groups={f.groups} roster={f.cards} save={save} />);
+    const setup = screen.getByRole('region', { name: 'Nines setup' });
+    const picker = within(setup).getByLabelText('Playing group of three');
+    expect(picker).toHaveValue('');
+    expect(within(setup).getByText(/golfers in this saved group have changed/)).toBeVisible();
+    await user.selectOptions(picker, '2');
+    expect(picker).toHaveValue('2');
+    await user.click(screen.getByRole('button', { name: 'Save game' }));
+    expect(save).toHaveBeenCalledWith({ ...saved, playerIds: current });
+  });
+});
+
 describe('Nines results and money', () => {
   it('shows points per hole with the Nines explanation', () => {
     const f = fixture();

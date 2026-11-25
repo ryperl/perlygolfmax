@@ -377,6 +377,10 @@ export function ninesDraftProblem(draft: GameDraft, playerIds: readonly string[]
   }
   const players = draft.ninesPlayers ?? [];
   if (draft.groupNumber === undefined || players.length !== ninesPlayerCount) return 'Choose a saved playing group of three.';
+  const group = groups.find((entry) => entry.number === draft.groupNumber);
+  const groupStillMatches = group !== undefined && group.playerIds.length === ninesPlayerCount
+    && group.playerIds.every((id) => players.includes(id));
+  if (!groupStillMatches) return 'The golfers in this saved group have changed. Choose the group again.';
   if (players.some((id) => !playerIds.includes(id))) {
     return 'This playing group no longer matches the round. Choose the saved playing group again.';
   }

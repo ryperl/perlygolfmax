@@ -125,4 +125,13 @@ describe('Nines through the API, without disturbing older browsers', () => {
       .rejects.toMatchObject({ status: 426 });
     expect(new Map(f.rows)).toEqual(before);
   });
+
+  it('an older browser sending every earlier rules flag cannot stage a large game upload on a round with Nines', async () => {
+    const f = await fixture();
+    const saved = await f.saveAsNewClient([f.game], null, 31017);
+    const before = new Map(f.rows);
+    await expect(runWithNinesSupport(false, () => f.scores.receiveGames(creator, event.id, f.roundId, {},
+      saved.round.games?.configuration.etag ?? null, identifier(31018)))).rejects.toMatchObject({ status: 426 });
+    expect(new Map(f.rows)).toEqual(before);
+  });
 });
