@@ -277,6 +277,16 @@ describe('Nines through the API, without disturbing older browsers', () => {
       await expect(f.saveAsNewClient([f.game, wrongGolfers], null, 33205)).rejects.toMatchObject({ status: 400 });
     });
 
+    it('refuses dropping manual Sweep from a linked game, which would make Sweep automatic', async () => {
+      const f = await fixture();
+      const manual: DotsGameDefinition = { ...linkedDots(f, [{ kind: 'sweep', units: 1 }]), sweepRule: 'manual-v1' };
+      const saved = await f.saveAsNewClient([f.game, manual], null, 33300);
+      const { sweepRule, ...automatic } = manual;
+      void sweepRule;
+      await expect(f.saveAsNewClient([f.game, automatic], saved.round.games?.configuration.etag ?? null, 33301))
+        .rejects.toMatchObject({ code: 'INVALID_DOTS_LINK' });
+    });
+
     it('refuses a link that uses partner-only specials', async () => {
       const f = await fixture();
       await expect(f.saveAsNewClient([f.game, linkedDots(f, [{ kind: 'assassin', units: 1 }])], null, 32006))

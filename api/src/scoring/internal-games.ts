@@ -38,7 +38,9 @@ function requireValidNinesLinks(before: readonly RoundGameDefinition[], after: r
     const linked = after.find((entry) => entry.id === game.linkedGameId);
     if (linked?.kind !== 'nines') continue;
     const previousDots = before.find((entry) => entry.id === game.id);
-    const dotsUnchanged = previousDots !== undefined && sameGameDefinitions([previousDots], [game]);
+    // sameGameDefinitions ignores sweepRule, and dropping manual-v1 would turn Sweep automatic.
+    const dotsUnchanged = previousDots?.kind === 'dots' && sameGameDefinitions([previousDots], [game])
+      && previousDots.sweepRule === game.sweepRule;
     const wasNines = before.find((entry) => entry.id === linked.id)?.kind === 'nines';
     if (dotsUnchanged && wasNines) continue;
     if (!linkedNinesGame(game, after, round.groups)) throw new ApiError(400, 'INVALID_DOTS_LINK');
