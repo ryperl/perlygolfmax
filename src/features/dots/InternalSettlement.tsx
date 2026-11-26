@@ -19,11 +19,12 @@ export function InternalSettlement({ settlement, gameNames = [], ranked = false,
   const money = (minor: number | null) => minor === null ? 'Unavailable' : minor > 0 ? `Due ${formatMoney(minor, 'USD')}`
     : minor < 0 ? `Owes ${formatMoney(-minor, 'USD')}` : formatMoney(0, 'USD');
   const name = (id: string) => settlement.players.find((player) => player.playerId === id)?.displayName ?? 'Golfer unavailable';
-  const initials = playerInitials(settlement.players);
   const pointsOnly = settlement.status === 'points-only';
   const sources = gameNames.join(' + ');
   const players = ranked ? [...settlement.players].sort((a, b) => a.totalDots === null ? b.totalDots === null ? 0 : 1
     : b.totalDots === null ? -1 : b.totalDots - a.totalDots) : settlement.players;
+  // Number golfers with identical names in the order shown, which is the ranked order when ranked.
+  const initials = playerInitials(players);
   const total = settlement.players.every((player) => player.totalDots !== null)
     ? settlement.players.reduce((sum, player) => sum + BigInt(player.totalDots ?? 0), 0n) : null;
   const [baseLabel, specialLabel] = sourceLabels;
