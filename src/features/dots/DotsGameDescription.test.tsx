@@ -87,4 +87,13 @@ describe('selected Dots game description', () => {
     expect(help).toHaveTextContent('Blue Plate on the same par-5 hole: one extra dot for that golfer.');
     expect(help).not.toHaveTextContent('teammate');
   });
+
+  it('describes Murphy as succeeding at the called par or birdie target or better', async () => {
+    const user = userEvent.setup();
+    render(<DotsGameDescription specials={[{ kind: 'murphy', units: 1 }]} mode="fixed" />);
+    await user.click(screen.getByText('How Dots works'));
+    const help = screen.getByRole('region', { name: 'Dots game description' });
+    expect(help).toHaveTextContent('a birdie makes a par call but a par misses a birdie call');
+    expect(help).not.toHaveTextContent('Called up-and-down, gross par or better');
+  });
 });

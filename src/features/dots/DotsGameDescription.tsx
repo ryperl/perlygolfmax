@@ -16,8 +16,15 @@ function enteredLabel(special: CatalogSpecial): string {
   return special.label;
 }
 
+// A Murphy is called for par or for birdie, and it succeeds at that target or better on the golfer's
+// personal par: a birdie makes a par call, but a par misses a birdie call.
+const murphyDescription = 'Called up-and-down for par or for birdie. It succeeds at the called score or better, '
+  + 'so a birdie makes a par call but a par misses a birdie call; failure awards opponents. '
+  + 'Older saved calls without a par or birdie target keep the outcome the scorer entered.';
+
 function enteredDescription(special: CatalogSpecial): string {
   if (special.kind === 'sweep') return manualSweepDescription;
+  if (special.kind === 'murphy') return murphyDescription;
   return special.description;
 }
 
