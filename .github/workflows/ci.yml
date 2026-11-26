@@ -1,10 +1,13 @@
 name: CI
 
+# Pull requests run CI once per push. A plain branch push does not, because a
+# push and its pull request have different refs and so never cancel each other
+# (two full runs per change). Merges are gated by the deploy workflows, which
+# call this one; use "Run workflow" for a branch that has no pull request yet.
 on:
   workflow_call:
   pull_request:
-  push:
-    branches-ignore: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
