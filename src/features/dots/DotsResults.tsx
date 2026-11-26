@@ -2,6 +2,7 @@ import type { DotSpecialReview, DotsGameDefinition, DotsResults as Results } fro
 import { dotsSpecialCatalog } from '../../domain/dots';
 import type { DotsHighLowResults } from '../../domain/dots-high-low';
 import type { GamePlayerResult } from '../../domain/games';
+import { ninesPlayerCount } from '../../domain/nines';
 import { DotsGameDescription } from './DotsGameDescription';
 
 export function DotSpecialReviewNotice({ reviews, players }: {
@@ -17,6 +18,12 @@ export function DotSpecialReviewNotice({ reviews, players }: {
       {review.playerId && ` · ${players.find((player) => player.playerId === review.playerId)?.displayName ?? 'Golfer unavailable'}`}
     </li>)}</ul>
   </div>;
+}
+
+// Results do not receive the round's other games. Linked Wolf needs four golfers,
+// so a linked three-golfer Dots game can only be linked to Nines.
+function isLinkedToNines(game: DotsGameDefinition): boolean {
+  return game.mode === 'linked' && game.playerIds.length === ninesPlayerCount;
 }
 
 export function DotsResults({ game, result, highLow, players }: {
@@ -36,7 +43,7 @@ export function DotsResults({ game, result, highLow, players }: {
     <h3>{game.name}</h3><p>{game.mode === 'individual' ? game.playerIds.length === 1 ? 'Solo stats only' : 'Individual' : game.mode === 'fixed' ? 'Fixed partners'
       : game.mode === 'rotating' ? game.rotationHoles === 3 ? 'Modified Sixes · 3-hole partners' : 'Sixes · 6-hole partners' : 'Linked sides'}</p>
     <DotsGameDescription specials={game.specials} mode={game.mode} manualSweep={game.sweepRule === 'manual-v1'}
-      highLowVersion={game.highLow?.version} />
+      highLowVersion={game.highLow?.version} linkedToNines={isLinkedToNines(game)} />
     {!result ? <p>Saved Dots results unavailable. Refresh to retry.</p> : <>
       {game.mode === 'fixed' && <p className="game-hint">{game.partnerIds.slice(0, 2).map(name).join(' + ')}
         {' vs '}{game.partnerIds.slice(2).map(name).join(' + ')} · Same partners all round</p>}

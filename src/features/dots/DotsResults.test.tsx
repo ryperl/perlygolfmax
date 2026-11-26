@@ -22,6 +22,19 @@ describe('saved Dots awards and one internal settlement', () => {
     expect(screen.getByText('Saved Dots results unavailable. Refresh to retry.')).toBeVisible();
   });
 
+  it('describes a linked three-golfer game as Nines Dots, not as a teammate game', () => {
+    const f = dotsFixture();
+    // Linked Wolf needs four golfers, so three linked golfers can only be a Nines link.
+    const game: DotsGameDefinition = { id: f.game.id, name: f.game.name, kind: 'dots', version: 1,
+      groupNumber: 1, playerIds: f.game.playerIds.slice(0, 3), mode: 'linked', linkedGameId: 'fictional-nines',
+      specials: [] };
+    render(<DotsResults game={game} result={undefined} />);
+    fireEvent.click(screen.getByText('How Dots works'));
+    const help = screen.getByRole('region', { name: 'Dots game description' });
+    expect(help).toHaveTextContent('Each golfer plays alone');
+    expect(help).not.toHaveTextContent('credits each current teammate');
+  });
+
   it('keeps transmitted High/Low, special and combined totals distinct and never calls pending base results complete', () => {
     const f = dotsFixture();
     const game: DotsGameDefinition = { ...f.game, version: 2, mode: 'rotating', rotationHoles: 3,

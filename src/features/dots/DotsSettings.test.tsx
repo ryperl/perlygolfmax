@@ -8,7 +8,8 @@ import { dotsSpecialCatalog } from '../../domain/dots';
 
 describe('Dots special mode compatibility', () => {
   it('explains the selected draft without saving or changing its special values', () => {
-    const f = dotsFixture(), onChange = vi.fn();
+    const f = dotsFixture();
+    const onChange = vi.fn();
     render(<DotsSettings draft={{ dotsMode: 'fixed', dotsSweepRule: 'manual-v1',
       dotsSpecials: [{ kind: 'sweep', units: 3 }, { kind: 'birdie', units: 2 }] }}
       groups={f.round.groups} players={f.round.cards} wolves={[]} manualSweepSupported onChange={onChange} />);

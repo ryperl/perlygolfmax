@@ -74,4 +74,17 @@ describe('selected Dots game description', () => {
     expect(help).not.toHaveTextContent('credits each current teammate');
     expect(within(help).queryByRole('button')).not.toBeInTheDocument();
   });
+
+  it('describes Nines-linked Dots as every golfer alone, with one Nines settlement', async () => {
+    const user = userEvent.setup();
+    render(<DotsGameDescription mode="linked" linkedToNines
+      specials={[{ kind: 'long-drive', units: 1 }, { kind: 'blue-plate', units: 1 }]} />);
+    await user.click(screen.getByText('How Dots works'));
+    const help = screen.getByRole('region', { name: 'Dots game description' });
+    expect(help).toHaveTextContent('Each golfer plays alone, so awards go to the earning golfer');
+    expect(help).toHaveTextContent('award both opponents');
+    expect(help).toHaveTextContent('combines Nines points and dots once at the Nines stake');
+    expect(help).toHaveTextContent('Blue Plate on the same par-5 hole: one extra dot for that golfer.');
+    expect(help).not.toHaveTextContent('teammate');
+  });
 });

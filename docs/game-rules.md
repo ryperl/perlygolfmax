@@ -99,6 +99,8 @@ Dots setup and saved results include a collapsed **How Dots works** description.
 It follows the selected specials and distinguishes entered shot facts, calls and
 category winners from automatic saved-score awards. Players enter each earned
 special once; the app handles current-partner sharing and settlement.
+Dots linked to Nines is described as every golfer playing alone, with one
+combined settlement at the Nines stake.
 
 When both Long Drive and Blue Plate are enabled, the same golfer winning both
 on the same par-5 hole earns one automatic **Category Sweep** dot for themselves
