@@ -388,7 +388,12 @@ Much existing code is very dense; improve the code you touch, gradually.
   hole, tied places share points, pickup/X7/DNF ranks worst, a hole scores only
   when all three have saved it. Gross, or net with full CH or group SO. Optional
   stake per point settles once with N = 3. Negotiate `nines=1`; older clients
-  get 426 for rounds with Nines and never see it advertised. No Dots link yet.
+  get 426 for rounds with Nines and never see it advertised. One Dots game may
+  link to Nines like Wolf v2: Nines points are the base, Dots keeps its own
+  specials/units, one combined settlement at the Nines stake, no Dots stake.
+  Every golfer plays alone: individual special rules, no Assassin/automatic
+  Sweep, Walk/Pickup award both opponents. Linked Dots requires `nines=2` and
+  `ninesLinkedDots`; `nines=1` clients get 426 for those rounds.
 - Internal USD settlement is `(N*d_i - sum(d)) * rateMinor`, once per explicitly
   linked combination/group, with separate sources and actual participant count.
   N remains four for partnered games; solo never settles money.

@@ -670,6 +670,12 @@ points tables and allowances.
 pickup, `X7` or DNF ranks worst. Choose gross, or net with full Course Handicap
 or strokes off the lowest golfer in the group. An optional stake per point
 settles the point differences once for the group; blank plays for points only.
+
+A Dots game can link to the Nines game, like Dots linked to Wolf. Choose
+**Link to Nines** in Dots setup for the same group of three. Each golfer plays
+alone, so specials follow individual Dots rules (no Assassin, no automatic
+Sweep). Nines points and Dots add up to one combined total, settled once at the
+Nines stake per point, and the leaderboard offers the combined standings.
 See [game rules](docs/game-rules.md#supported-games).
 
 ### Round Stroke Play, Match Play, Nassau and Wolf
