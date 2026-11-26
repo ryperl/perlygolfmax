@@ -1,11 +1,14 @@
 import type { WolfGameDefinition, WolfResults as Results } from '../../domain/wolf';
 import { WolfSoloProgress } from './WolfSoloProgress';
+import { PlayerName } from '../player-names';
+import { playerInitials } from '../../domain/player-initials';
 
 export function WolfResults({ game, result }: {
   readonly game: WolfGameDefinition;
   readonly result: Results | undefined;
 }) {
   const name = (id: string) => result?.players.find((player) => player.playerId === id)?.displayName ?? 'Golfer unavailable';
+  const initials = playerInitials(result?.players ?? []);
   return <section className={`game-results wolf-results${game.version === 2 ? ' wolf-results-earned' : ''}`} aria-label={`${game.name} results`}>
     <h3>{game.name}</h3>
     <p>{game.basis === 'gross' ? 'Gross' : game.handicapRule === 'full-course-v1'
@@ -17,7 +20,8 @@ export function WolfResults({ game, result }: {
         <caption>{game.version === 2 ? 'Saved earned base-game dots · Not transfers' : 'Saved zero-sum dot ledger'}</caption>
         <thead><tr><th scope="col">Golfer</th>{game.version === 1 && <><th scope="col">Won</th><th scope="col">Lost</th></>}
           <th scope="col">{game.version === 2 ? 'Earned dots' : 'Dot balance'}</th><th scope="col">Holes</th></tr></thead>
-        <tbody>{result.players.map((player) => <tr key={player.playerId}><th scope="row">{player.displayName}</th>
+        <tbody>{result.players.map((player) => <tr key={player.playerId}><th scope="row">
+          <PlayerName name={player.displayName} initials={initials.get(player.playerId)} /></th>
           {game.version === 1 && <><td>{player.dotsWon ?? '—'}</td><td>{player.dotsLost ?? '—'}</td></>}<td>{player.balance ?? '—'}</td>
           <td>{player.holesScored}/{player.totalHoles} · {player.status}</td></tr>)}</tbody>
       </table></div>

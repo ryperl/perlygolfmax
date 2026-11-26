@@ -10,6 +10,8 @@ import { gameResultTotal, gameResultUnit } from '../../domain/games';
 import { CourseHandicap } from './CourseHandicap';
 import { MatchPlayRows } from './MatchPlayScorecard';
 import { DotPointsCell } from './DotPointsCell';
+import { PlayerName } from '../player-names';
+import { playerInitials } from '../../domain/player-initials';
 import './scorecard-recap.css';
 
 function scoreMark(score: HoleScore | undefined, par: number) {
@@ -68,6 +70,7 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
   const ballDrop = game?.definition.kind === 'ball-drop';
   const matchPlay = game?.definition.kind === 'match-play' || game?.definition.kind === 'nassau';
   const teams = scorecardBallDropTeams(game, cards);
+  const initials = playerInitials(cards);
   return <section className="recap-nine">
     <h4>{label}</h4>
     <div className="recap-scroll" role="region" aria-label={`${label} scorecard`} tabIndex={0}>
@@ -94,12 +97,14 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
               && game.definition.sides.some((side) => side.playerIds.includes(card.playerId));
             return <Fragment key={card.playerId}>
               {mixed && <tr><th colSpan={layout.length + (showTotal ? 3 : 2)} scope="rowgroup">
-                {card.displayName} · {tee ? `${tee.name} / ${tee.category} · personal tee` : `${defaultTeeLabel ?? 'Common tee'} · default tee`}
+                <PlayerName name={card.displayName} initials={initials.get(card.playerId)} /> · {tee ? `${tee.name} / ${tee.category} · personal tee` : `${defaultTeeLabel ?? 'Common tee'} · default tee`}
               </th></tr>}
               {mixed && <CourseRows layout={playerLayout} fullLayout={playerFullLayout} showTotal={showTotal} prefix={`${card.displayName} · `} />}
               <tr className={`recap-score-row${game && !ballDrop && (!matchPlay || hasMatch) ? ' recap-has-game' : ''}`}>
               <th scope="row">{onPlayerSelect ? <button type="button" className="scorecard-player-link"
-                aria-label={`Open scorecard for ${card.displayName}`} onClick={() => { onPlayerSelect(card.playerId); }}>{card.displayName}</button> : card.displayName}
+                aria-label={`Open scorecard for ${card.displayName}`} onClick={() => { onPlayerSelect(card.playerId); }}>
+                  <PlayerName name={card.displayName} initials={initials.get(card.playerId)} /></button>
+                  : <PlayerName name={card.displayName} initials={initials.get(card.playerId)} />}
                 {courseHandicaps && <> <CourseHandicap className="scorecard-handicap"
                   value={courseHandicap} /></>}
                 {strokeHandicap.basis === 'SO' && <small className="scorecard-handicap"

@@ -1,5 +1,7 @@
 import type { InternalGameSettlement } from '../../domain/dot-settlement';
 import { formatMoney } from '../../domain/money';
+import { PlayerName } from '../player-names';
+import { playerInitials } from '../../domain/player-initials';
 import './internal-settlement.css';
 
 export function InternalSettlement({ settlement, gameNames = [], ranked = false, progress = [], sourceLabels = ['Base', 'Specials'], provisional = false,
@@ -21,6 +23,8 @@ export function InternalSettlement({ settlement, gameNames = [], ranked = false,
   const sources = gameNames.join(' + ');
   const players = ranked ? [...settlement.players].sort((a, b) => a.totalDots === null ? b.totalDots === null ? 0 : 1
     : b.totalDots === null ? -1 : b.totalDots - a.totalDots) : settlement.players;
+  // Number golfers with identical names in the order shown, which is the ranked order when ranked.
+  const initials = playerInitials(players);
   const total = settlement.players.every((player) => player.totalDots !== null)
     ? settlement.players.reduce((sum, player) => sum + BigInt(player.totalDots ?? 0), 0n) : null;
   const [baseLabel, specialLabel] = sourceLabels;
@@ -41,7 +45,8 @@ export function InternalSettlement({ settlement, gameNames = [], ranked = false,
               {ranked && <span className="internal-settlement-position" aria-label={position === null ? 'Unranked'
                 : `${tied ? 'Tied position' : 'Position'} ${String(position)}`}>{position === null ? '—' : `${tied ? 'T' : ''}${String(position)}`}</span>}
               <span>
-                <span className="internal-settlement-name">{player.displayName}</span>
+                <span className="internal-settlement-name">
+                  <PlayerName name={player.displayName} initials={initials.get(player.playerId)} /></span>
                 <span className="internal-settlement-points">{player.totalDots ?? '—'} {unit}</span>
                 {(gameNames.length > 1 || player.baseDots !== 0 && player.specialDots !== 0)
                   && <small className="internal-settlement-source">{baseLabel} {player.baseDots ?? '—'} + {specialLabel} {player.specialDots ?? '—'}</small>}

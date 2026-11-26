@@ -3,6 +3,8 @@ import type { EventPurseView } from '../../domain/purse-settings';
 import type { PurseCalculation, PursePlan } from '../../domain/purse';
 import { formatMoney } from './money';
 import { sourceChoices, sourceKey } from './purse-draft';
+import { PlayerName } from '../player-names';
+import { playerInitials } from '../../domain/player-initials';
 
 export interface PurseResultsProps {
   readonly value: EventPurseView;
@@ -13,6 +15,8 @@ export interface PurseResultsProps {
 
 export function PurseResults({ value, plan, calculation, draft = false }: PurseResultsProps) {
   const [query, setQuery] = useState('');
+  // Initials come from the whole roster so a golfer's short name stays the same while searching.
+  const initials = playerInitials(value.workspace.roster);
   const filtered = value.workspace.roster.filter((player) => player.displayName.toLowerCase().includes(query.toLowerCase()));
   const money = (minor: number | null) => formatMoney(minor, plan.currency);
   const metrics = [
@@ -69,7 +73,8 @@ export function PurseResults({ value, plan, calculation, draft = false }: PurseR
         <thead><tr><th scope="col">Golfer</th><th scope="col">Calculated</th><th scope="col">Projected</th><th scope="col">Cumulative winnings</th><th scope="col">Per-pool breakdown</th></tr></thead>
         <tbody>{filtered.map((player) => {
           const winnings = calculation.players.find((entry) => entry.playerId === player.playerId);
-          return <tr key={player.playerId}><th scope="row">{player.displayName}</th>
+          return <tr key={player.playerId}><th scope="row">
+            <PlayerName name={player.displayName} initials={initials.get(player.playerId)} /></th>
             <td>{money(winnings?.allocatedMinor ?? null)}</td><td>{money(winnings?.projectedMinor ?? null)}</td>
             <td>{money(winnings?.totalMinor ?? null)}</td>
             <td><ul>{plan.pools.map((pool) => {

@@ -4,6 +4,8 @@ import type { DotsHighLowResults } from '../../domain/dots-high-low';
 import type { GamePlayerResult } from '../../domain/games';
 import { ninesPlayerCount } from '../../domain/nines';
 import { DotsGameDescription } from './DotsGameDescription';
+import { PlayerName } from '../player-names';
+import { playerInitials } from '../../domain/player-initials';
 
 export function DotSpecialReviewNotice({ reviews, players }: {
   readonly reviews: readonly DotSpecialReview[] | undefined;
@@ -38,6 +40,7 @@ export function DotsResults({ game, result, highLow, players, stringRulesVersion
   readonly dotsCategorySweepsVersion?: 0 | 1 | undefined;
 }) {
   const name = (id: string) => result?.players.find((player) => player.playerId === id)?.displayName ?? 'Golfer unavailable';
+  const initials = playerInitials(result?.players ?? []);
   const label = (kind: string) => dotsSpecialCatalog.find((special) => special.kind === kind)?.label ?? 'Special';
   const pending = result?.holes.filter((hole) => hole.status === 'pending').map((hole) => hole.number) ?? [];
   const unavailable = result?.holes.filter((hole) => hole.status === 'unavailable').map((hole) => hole.number) ?? [];
@@ -64,7 +67,8 @@ export function DotsResults({ game, result, highLow, players, stringRulesVersion
         <caption>{game.highLow ? 'Saved High/Low and special dots' : 'Saved special dots'}</caption><thead><tr><th scope="col">Golfer</th>
           {game.highLow && <><th scope="col">{game.highLow.version === 2 ? 'High/Low + auto Sweep' : 'High/Low'}</th><th scope="col">Specials</th></>}
           <th scope="col">Earned dots</th><th scope="col">Holes</th></tr></thead>
-        <tbody>{result.players.map((player) => <tr key={player.playerId}><th scope="row">{player.displayName}</th>
+        <tbody>{result.players.map((player) => <tr key={player.playerId}><th scope="row">
+          <PlayerName name={player.displayName} initials={initials.get(player.playerId)} /></th>
           {game.highLow && <><td>{highLow?.players.find((entry) => entry.playerId === player.playerId)?.totalPoints ?? '—'}</td>
             <td>{player.totalPoints ?? '—'}</td></>}
           <td>{game.highLow ? players?.find((entry) => entry.playerId === player.playerId)?.totalPoints ?? '—' : player.totalPoints ?? '—'}</td>
