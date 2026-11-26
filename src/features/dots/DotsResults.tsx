@@ -26,10 +26,16 @@ function isLinkedToNines(game: DotsGameDefinition): boolean {
   return game.mode === 'linked' && game.playerIds.length === ninesPlayerCount;
 }
 
-export function DotsResults({ game, result, highLow, players }: {
+/**
+ * Saved results for one Dots game. The rule markers come from the round response; an absent marker means
+ * the round was scored with the legacy rule, matching how the contract decodes it.
+ */
+export function DotsResults({ game, result, highLow, players, stringRulesVersion, dotsCategorySweepsVersion }: {
   readonly game: DotsGameDefinition; readonly result: Results | undefined;
   readonly highLow?: DotsHighLowResults | undefined;
   readonly players?: readonly GamePlayerResult[] | undefined;
+  readonly stringRulesVersion?: 1 | 2 | undefined;
+  readonly dotsCategorySweepsVersion?: 0 | 1 | undefined;
 }) {
   const name = (id: string) => result?.players.find((player) => player.playerId === id)?.displayName ?? 'Golfer unavailable';
   const label = (kind: string) => dotsSpecialCatalog.find((special) => special.kind === kind)?.label ?? 'Special';
@@ -43,7 +49,8 @@ export function DotsResults({ game, result, highLow, players }: {
     <h3>{game.name}</h3><p>{game.mode === 'individual' ? game.playerIds.length === 1 ? 'Solo stats only' : 'Individual' : game.mode === 'fixed' ? 'Fixed partners'
       : game.mode === 'rotating' ? game.rotationHoles === 3 ? 'Modified Sixes · 3-hole partners' : 'Sixes · 6-hole partners' : 'Linked sides'}</p>
     <DotsGameDescription specials={game.specials} mode={game.mode} manualSweep={game.sweepRule === 'manual-v1'}
-      highLowVersion={game.highLow?.version} linkedToNines={isLinkedToNines(game)} />
+      highLowVersion={game.highLow?.version} linkedToNines={isLinkedToNines(game)}
+      legacyString={stringRulesVersion !== 2} categorySweeps={dotsCategorySweepsVersion === 1} />
     {!result ? <p>Saved Dots results unavailable. Refresh to retry.</p> : <>
       {game.mode === 'fixed' && <p className="game-hint">{game.partnerIds.slice(0, 2).map(name).join(' + ')}
         {' vs '}{game.partnerIds.slice(2).map(name).join(' + ')} · Same partners all round</p>}

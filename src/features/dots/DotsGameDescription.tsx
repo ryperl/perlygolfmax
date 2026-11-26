@@ -28,6 +28,21 @@ function calculatedLabel(special: CatalogSpecial): string {
   return special.label;
 }
 
+// Rounds saved before String rules version 2 count exact gross par only, and BirdyString does not
+// replace String. The saved totals follow those rules, so the help must too.
+const legacyStringDescriptions: Partial<Record<CatalogSpecial['kind'], string>> = {
+  string: 'Third consecutive personal gross exact par, and every subsequent exact-par hole. '
+    + 'This saved round uses the original String rule: birdies break the run and BirdyString does not replace it.',
+  'birdy-string': 'Third consecutive personal gross birdie or better, and every subsequent qualifying hole. '
+    + 'This saved round awards it alongside String rather than replacing String.',
+};
+
+function calculatedDescription(special: CatalogSpecial, legacyString: boolean): string {
+  const legacy = legacyStringDescriptions[special.kind];
+  if (legacyString && legacy !== undefined) return legacy;
+  return special.description;
+}
+
 function highLowSweepText(highLowVersion: 1 | 2): string {
   if (highLowVersion === 2) {
     return ' Automatic High/Low Sweep adds one more dot per teammate only when the same pair wins both.'
@@ -62,19 +77,25 @@ function sharingText(mode: DotsGameDefinition['mode'], linkedToNines: boolean): 
  * Collapsed player help for one Dots game. It follows the selected specials and separates what scorers
  * enter from what the app calculates, so automatic bonuses are not entered twice. It changes nothing.
  */
-export function DotsGameDescription({ specials, mode, manualSweep = false, highLowVersion, linkedToNines = false }: {
+export function DotsGameDescription({
+  specials, mode, manualSweep = false, highLowVersion, linkedToNines = false, legacyString = false, categorySweeps = true,
+}: {
   readonly specials: readonly DotsSpecialSelection[];
   readonly mode: DotsGameDefinition['mode'];
   readonly manualSweep?: boolean;
   readonly highLowVersion?: 1 | 2 | undefined;
   /** Nines golfers each play alone, so there are no teammates to share awards with. */
   readonly linkedToNines?: boolean;
+  /** The saved round predates String rules version 2: exact par only, no BirdyString replacement. */
+  readonly legacyString?: boolean;
+  /** False when the saved round predates automatic Category Sweep, so none is awarded. */
+  readonly categorySweeps?: boolean;
 }) {
   const enabled = new Set(specials.map((special) => special.kind));
   const selected = dotsSpecialCatalog.filter((special) => enabled.has(special.kind));
   const entered = selected.filter((special) => !isCalculated(special, manualSweep));
   const calculated = selected.filter((special) => isCalculated(special, manualSweep));
-  const categorySweep = enabled.has('long-drive') && enabled.has('blue-plate');
+  const categorySweep = categorySweeps && enabled.has('long-drive') && enabled.has('blue-plate');
   const playsAlone = mode === 'individual' || linkedToNines;
   const noAutomaticAwards = calculated.length === 0 && highLowVersion === undefined && !categorySweep;
 
@@ -96,7 +117,7 @@ export function DotsGameDescription({ specials, mode, manualSweep = false, highL
         Special score qualifications stay personal gross: SO changes net comparisons, not Birdie or String.
         Only selected specials earn their configured values.</p>
       {calculated.length > 0 && <ul>{calculated.map((special) => <li key={special.kind}>
-        <strong>{calculatedLabel(special)}: </strong>{special.description}
+        <strong>{calculatedLabel(special)}: </strong>{calculatedDescription(special, legacyString)}
       </li>)}</ul>}
       {categorySweep && <p>
         <strong>Automatic Category Sweep: </strong>The same golfer wins Long Drive and Blue Plate
