@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { RoundGameDefinition } from '../../domain/games';
 import type { GameDraft } from './game-draft';
 import { buildGame, dotsDraftProblem, newGameDraft, setGameKind } from './game-draft';
 
@@ -39,7 +40,7 @@ describe('dotsDraftProblem', () => {
     ['individual Assassin', { dotsSpecials: [{ kind: 'assassin', units: 1 }] }, 'Assassin needs partners'],
     ['standalone legacy Sweep', { dotsMode: 'fixed', dotsSpecials: [{ kind: 'sweep', units: 1 }] }, 'needs a linked Wolf game'],
     ['v2 six-hole High/Low', { dotsMode: 'rotating', dotsVersion: 2, dotsRotationHoles: 6, dotsHighLow: true }, 'only for Modified Sixes'],
-    ['unlinked', { dotsMode: 'linked' }, 'Choose the earned Wolf game to link.'],
+    ['unlinked', { dotsMode: 'linked' }, 'Choose the Wolf or Nines game to link.'],
     ['bad rate', { stake: '1.234' }, 'dollars and cents'],
     ['solo with rate', { dotsPlayers: [ids[0] ?? ''], dotsPlayerIds: [ids[0] ?? ''], stake: '1' }, 'Solo Dots is stats only'],
     ['incomplete fixed teams', { dotsMode: 'fixed', dotsPlayers: [ids[0] ?? '', ids[0] ?? '', ids[2] ?? '', ids[3] ?? ''] }, 'two fixed teams'],
@@ -47,6 +48,37 @@ describe('dotsDraftProblem', () => {
     const draft = dots(patch);
     expect(buildGame(draft, ids)).toBeNull();
     expect(dotsDraftProblem(draft, ids)).toContain(message);
+  });
+
+  describe('linked to Nines', () => {
+    const trio = ids.slice(0, 3);
+    const ninesId = '00000000-0000-4000-8000-000000000041';
+    const nines: RoundGameDefinition = { id: ninesId, name: 'Fictional Nines', kind: 'nines', version: 1, basis: 'gross',
+      groupNumber: 1, playerIds: trio, stakeMinor: 100 };
+    // A group of three linked to its Nines game: each golfer plays alone.
+    const linkedTrio = (patch: Partial<GameDraft> = {}) => dots({ dotsMode: 'linked', linkedGameId: ninesId,
+      dotsPlayers: trio, dotsPlayerIds: trio, ...patch });
+
+    it('accepts the group of three and builds a linked game without a stake', () => {
+      expect(dotsDraftProblem(linkedTrio(), ids, [nines])).toBeNull();
+      expect(buildGame(linkedTrio(), ids)).toMatchObject({ mode: 'linked', linkedGameId: ninesId, playerIds: trio });
+    });
+
+    it('asks to remove Assassin, because nobody has a partner', () => {
+      const draft = linkedTrio({ dotsSpecials: [{ kind: 'assassin', units: 1 }] });
+      expect(dotsDraftProblem(draft, ids, [nines])).toContain('Remove Assassin');
+    });
+
+    it('asks to use manual Sweep instead of the automatic Wolf Sweep', () => {
+      const draft = linkedTrio({ dotsSpecials: [{ kind: 'sweep', units: 1 }] });
+      expect(dotsDraftProblem(draft, ids, [nines])).toContain('Use manual Sweep');
+      expect(dotsDraftProblem({ ...draft, dotsSweepRule: 'manual-v1' }, ids, [nines])).toBeNull();
+    });
+
+    it('still needs a foursome for fixed partners', () => {
+      const draft = linkedTrio({ dotsMode: 'fixed' });
+      expect(dotsDraftProblem(draft, ids, [nines])).toContain('need a saved foursome');
+    });
   });
 
   it('asks for a playing group when none is chosen', () => {

@@ -6,6 +6,11 @@ export interface DotsModeChangeOptions {
   readonly existing: boolean;
   /** The selected playing group does not have exactly four golfers. */
   readonly smallGroup: boolean;
+  /**
+   * The selected group is three golfers with a Nines game that linked Dots may join.
+   * Only then may a group that is not a foursome choose linked mode.
+   */
+  readonly ninesLink?: boolean;
   readonly v2Supported: boolean;
   readonly v3Supported: boolean;
   readonly compatible: (kind: DotsSpecialKind, mode: DotsGameDefinition['mode']) => boolean;
@@ -16,11 +21,12 @@ export interface DotsModeChangeOptions {
  * Saved games keep their rules version; new rotating games use version 3 when supported, otherwise 2.
  */
 export function dotsModeChange(draft: DotsSetupDraft, selectedMode: string, options: DotsModeChangeOptions): DotsSetupDraft | null {
-  const { existing, smallGroup, v2Supported, v3Supported, compatible } = options;
+  const { existing, smallGroup, v2Supported, v3Supported, compatible, ninesLink = false } = options;
   const mode = draft.dotsMode ?? 'individual';
   const specials = draft.dotsSpecials ?? [];
   const updated = draft.dotsVersion === 3;
-  if (smallGroup && selectedMode !== 'individual') return null;
+  const ninesLinkChoice = selectedMode === 'linked' && ninesLink;
+  if (smallGroup && selectedMode !== 'individual' && !ninesLinkChoice) return null;
   if (selectedMode === 'rotating-3' || selectedMode === 'rotating-6') {
     if (!v2Supported || existing && draft.dotsVersion === 1 || updated && !v3Supported) return null;
     const nextVersion = v3Supported && (!existing || draft.dotsVersion !== 2) ? 3 : 2;
@@ -31,8 +37,10 @@ export function dotsModeChange(draft: DotsSetupDraft, selectedMode: string, opti
   }
   if ((selectedMode === 'individual' || selectedMode === 'fixed' || selectedMode === 'linked') && selectedMode !== mode) {
     if (existing && (draft.dotsVersion === 2 || updated)) return null;
+    // Nines golfers each play alone, so a Nines link keeps only the specials individual Dots allows.
+    const specialsMode = ninesLinkChoice ? 'individual' : selectedMode;
     return { dotsMode: selectedMode, ...(!existing ? { dotsVersion: 1 } : {}), ...(draft.dotsHighLow ? { dotsHighLow: false } : {}),
-      dotsSpecials: specials.filter((special) => compatible(special.kind, selectedMode)) };
+      dotsSpecials: specials.filter((special) => compatible(special.kind, specialsMode)) };
   }
   return null;
 }

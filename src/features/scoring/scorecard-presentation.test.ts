@@ -3,6 +3,7 @@ import { fictionalRoundScores } from '../../client/scoring.test-support';
 import { ballDropContribution, ballDropScoreText, cardTotalText, pointsTotalText, scorecardBallDropTeams, scorecardGame, scorecardGameWarnings, scorecardHandicapStrokes, scorecardStrokeHandicap, summarizeCard } from './scorecard-presentation';
 import { scorecardGamesFixture } from './scorecard-games.test-support';
 import { ballDropFormat, strokeGameFixture, strokeGamesRound } from '../../domain/stroke-games.test-support';
+import { ninesLinkedRound } from '../../domain/nines-linked.test-support';
 
 const card = fictionalRoundScores.cards[0];
 if (!card) throw new Error('Missing fictional card.');
@@ -24,6 +25,16 @@ describe('scorecard displayed totals', () => {
       games: [wolf, { ...dots, linkedGameId: '00000000-0000-4000-8000-000000000999' }] } } };
     expect(scorecardStrokeHandicap(scorecardGame(unrelated, dots.id), ids[0] ?? '', unrelated.courseHandicaps, unrelated.groups))
       .toEqual({ basis: 'CH', value: 11 });
+  });
+  it('gives Dots linked to net Nines the Nines strokes off the group low', () => {
+    const { round, nines, dots, a } = ninesLinkedRound();
+    const netNines = { ...nines, basis: 'net' as const, handicapRule: 'group-low-v1' as const };
+    const courseHandicaps = nines.playerIds.map((playerId, index) => ({ playerId, courseHandicap: [9, 4, 6][index] ?? null }));
+    const linked = { ...round, courseHandicaps, games: { configuration: { eventId: round.eventId, roundId: round.roundId,
+      etag: 'fictional', games: [netNines, dots] }, results: [] } };
+    expect(scorecardGame(linked, dots.id)?.linkedBase?.definition.id).toBe(nines.id);
+    expect(scorecardStrokeHandicap(scorecardGame(linked, dots.id), a, courseHandicaps, linked.groups))
+      .toEqual({ basis: 'SO', value: 5 });
   });
   describe('tee Course Handicap stroke allocation', () => {
     const layout = Array.from({ length: 18 }, (_, index) => ({

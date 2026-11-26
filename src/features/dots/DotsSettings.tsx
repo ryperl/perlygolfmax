@@ -2,6 +2,8 @@ import type { DotsGameDefinition, DotsSpecialKind, DotsSpecialSelection } from '
 import type { DotPresetStore } from '../../client/dot-presets';
 import type { RoundGroup } from '../../domain/setup';
 import type { WolfGameDefinition } from '../../domain/wolf';
+import type { NinesGameDefinition } from '../../domain/nines';
+import { ninesPlayerCount } from '../../domain/nines';
 import type { GameHandicapRule } from '../../domain/game-handicaps';
 import { gameHandicap } from '../../domain/game-handicaps';
 import type { PlayerCourseHandicap } from '../../domain/scoring';
@@ -34,14 +36,21 @@ interface DotsPlayingGroupProps {
   readonly groups: readonly RoundGroup[];
   readonly onChange: (patch: DotsSetupDraft) => void;
   readonly individualPlayerCounts?: readonly number[];
+  /** The API accepts Dots linked to a Nines group of three. */
+  readonly ninesLinkSupported?: boolean;
 }
 
-function supportsGroup(mode: DotsGameDefinition['mode'], size: number, individualPlayerCounts: readonly number[]) {
-  return mode === 'individual' ? size >= 1 && size <= 4 && individualPlayerCounts.includes(size) : size === 4;
+function supportsGroup(mode: DotsGameDefinition['mode'], size: number, individualPlayerCounts: readonly number[],
+  ninesLinkSupported = false) {
+  if (mode === 'individual') return size >= 1 && size <= 4 && individualPlayerCounts.includes(size);
+  if (mode === 'linked' && ninesLinkSupported && size === ninesPlayerCount) return true;
+  return size === 4;
 }
 
-export function DotsPlayingGroupSelect({ draft, groups, onChange, individualPlayerCounts = [4] }: DotsPlayingGroupProps) {
-  const eligible = (size: number) => supportsGroup(draft.dotsMode ?? 'individual', size, individualPlayerCounts);
+export function DotsPlayingGroupSelect({ draft, groups, onChange, individualPlayerCounts = [4],
+  ninesLinkSupported = false }: DotsPlayingGroupProps) {
+  const eligible = (size: number) => supportsGroup(draft.dotsMode ?? 'individual', size, individualPlayerCounts,
+    ninesLinkSupported);
   return <label>Dots playing group<select value={draft.groupNumber ?? ''} onChange={(event) => {
     const selected = groups.find((entry) => entry.number === Number(event.target.value));
     if (selected && eligible(selected.playerIds.length)) onChange({ groupNumber: selected.number,
@@ -53,13 +62,27 @@ export function DotsPlayingGroupSelect({ draft, groups, onChange, individualPlay
       Group {entry.number}{entry.playerIds.length === 4 ? '' : ` · ${String(entry.playerIds.length)} ${entry.playerIds.length === 1 ? 'player' : 'players'}`}</option>)}</select></label>;
 }
 
-export function DotsSettings({ draft, groups, players, wolves, onChange, v2Supported = false, individualPlayerCounts = [4],
+/** The shared money line shown under the linked game picker. */
+function linkedRateText(wolf: WolfGameDefinition | undefined, nines: NinesGameDefinition | undefined): string {
+  if (nines) {
+    const rate = nines.stakeMinor ? `${formatMoney(nines.stakeMinor, 'USD')} per point difference` : 'No money configured';
+    return `Nines: each golfer plays alone · ${rate}`;
+  }
+  const rate = wolf?.stakeMinor == null ? 'No money configured' : `${formatMoney(wolf.stakeMinor, 'USD')} per dot difference`;
+  return `Wolf sides and multiplier · Shared rate: ${rate}`;
+}
+
+export function DotsSettings({ draft, groups, players, wolves, nines = [], ninesLinkSupported = false, onChange,
+  v2Supported = false, individualPlayerCounts = [4],
   supportedKinds, presetStore, hidePlayingGroup = false, manualSweepSupported = false, highLowSupported = false,
   v3Supported = false, locked = false, handicaps = [], defaultStartingHole, existing = true }: {
   readonly draft: DotsSetupDraft;
   readonly groups: readonly RoundGroup[];
   readonly players: readonly { readonly playerId: string; readonly displayName: string }[];
   readonly wolves: readonly WolfGameDefinition[];
+  /** Nines games in the round; a group of three may link Dots to its Nines game. */
+  readonly nines?: readonly NinesGameDefinition[];
+  readonly ninesLinkSupported?: boolean;
   readonly onChange: (patch: DotsSetupDraft) => void;
   readonly v2Supported?: boolean;
   readonly individualPlayerCounts?: readonly number[];
@@ -75,11 +98,18 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
   readonly existing?: boolean;
 }) {
   const group = groups.find((entry) => entry.number === draft.groupNumber);
-  const linked = wolves.find((game) => game.id === draft.linkedGameId);
+  const linkedWolf = wolves.find((game) => game.id === draft.linkedGameId);
+  const linkedNines = nines.find((game) => game.id === draft.linkedGameId);
   const specials = draft.dotsSpecials ?? [];
   const mode = draft.dotsMode ?? 'individual';
   const solo = mode === 'individual' && group?.playerIds.length === 1;
   const smallGroup = group !== undefined && group.playerIds.length !== 4;
+  const groupNines = ninesLinkSupported ? nines.filter((game) => game.groupNumber === draft.groupNumber) : [];
+  const ninesTrio = group?.playerIds.length === ninesPlayerCount && groupNines.length > 0;
+  const linkTargets = [...wolves.filter((game) => game.version === 2 && game.groupNumber === draft.groupNumber), ...groupNines];
+  // Nines golfers each play alone, so a Nines link follows individual Dots rules for specials.
+  const linkedToNines = mode === 'linked' && (linkedNines !== undefined || ninesTrio);
+  const specialsMode = linkedToNines ? 'individual' : mode;
   const legacySweep = draft.dotsLegacySweep === true && draft.dotsSweepRule !== 'manual-v1';
   const manualSweep = draft.dotsSweepRule === 'manual-v1' || manualSweepSupported && !legacySweep;
   const compatible = (kind: DotsSpecialKind, mode: DotsGameDefinition['mode']) => dotSpecialModeCompatible(kind, mode, manualSweep);
@@ -92,18 +122,21 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
   return <section className="dots-settings" aria-label="Dots setup">
     <h4>1. Game format</h4>
     <div className="dots-setup-fields">
-    {!hidePlayingGroup && <DotsPlayingGroupSelect draft={draft} groups={groups} onChange={onChange} individualPlayerCounts={individualPlayerCounts} />}
+    {!hidePlayingGroup && <DotsPlayingGroupSelect draft={draft} groups={groups} onChange={onChange}
+      individualPlayerCounts={individualPlayerCounts} ninesLinkSupported={ninesLinkSupported} />}
     <label>Dots mode<select value={mode === 'rotating' ? `rotating-${String(draft.dotsRotationHoles ?? 3)}` : mode} onChange={(event) => {
-      const patch = dotsModeChange(draft, event.target.value, { existing, smallGroup, v2Supported, v3Supported, compatible });
+      const patch = dotsModeChange(draft, event.target.value,
+        { existing, smallGroup, ninesLink: ninesTrio, v2Supported, v3Supported, compatible });
       if (patch) onChange(patch);
     }}><option value="rotating-3" disabled={smallGroup || !v2Supported || existing && draft.dotsVersion === 1}>Modified Sixes · Change partners every 3 holes</option>
       <option value="rotating-6" disabled={smallGroup || !v2Supported || existing && draft.dotsVersion === 1}>Sixes · Change partners every 6 holes</option>
       <option value="individual" disabled={existing && (draft.dotsVersion === 2 || updated)}>Individual</option><option value="fixed" disabled={smallGroup || existing && (draft.dotsVersion === 2 || updated)}>Fixed partners</option>
-      <option value="linked" disabled={smallGroup || existing && (draft.dotsVersion === 2 || updated)}>Link to earned Wolf</option></select></label>
+      <option value="linked" disabled={smallGroup && !ninesTrio || existing && (draft.dotsVersion === 2 || updated)}>
+        {ninesTrio ? 'Link to Nines' : 'Link to earned Wolf'}</option></select></label>
     </div>
     {mode === 'individual' && smallGroup && !supportsGroup(mode, group.playerIds.length, individualPlayerCounts)
       && <p role="alert">Individual Dots for this group size is temporarily unavailable in this app version. Your draft is retained.</p>}
-    {smallGroup && <small>Partner modes require four players.</small>}
+    {smallGroup && <small>Partner modes require four players.{ninesTrio && ' A group of three may link to its Nines game.'}</small>}
     {mode === 'rotating' && <section aria-label="First teams">
       <h4>2. First teams</h4>
       {updated ? <>
@@ -163,11 +196,17 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
     {!v2Supported && <small>Rotating Dots is temporarily unavailable in this app version.</small>}
     <small>Changing mode clears incompatible specials.</small>
     {draft.dotsMode === 'linked' ? <>
-      <label>Linked game<select value={draft.linkedGameId ?? ''} onChange={(event) => { onChange({ linkedGameId: event.target.value }); }}>
-        <option value="">Choose compatible Wolf game</option>{wolves.filter((game) => game.version === 2 && game.groupNumber === draft.groupNumber).map((game) =>
-          <option key={game.id} value={game.id}>{game.name}</option>)}</select></label>
-      <p className="dots-linked-rate">Wolf sides and multiplier · Shared rate: {linked?.stakeMinor == null
-        ? 'No money configured' : `${formatMoney(linked.stakeMinor, 'USD')} per dot difference`}</p>
+      <label>Linked game<select value={draft.linkedGameId ?? ''} onChange={(event) => {
+        const linkedGameId = event.target.value;
+        if (!nines.some((game) => game.id === linkedGameId)) {
+          onChange({ linkedGameId });
+          return;
+        }
+        onChange({ linkedGameId, dotsSpecials: specials.filter((special) => compatible(special.kind, 'individual')) });
+      }}>
+        <option value="">{groupNines.length > 0 ? 'Choose compatible Wolf or Nines game' : 'Choose compatible Wolf game'}</option>
+        {linkTargets.map((game) => <option key={game.id} value={game.id}>{game.name}</option>)}</select></label>
+      {(linkedWolf || linkedNines || !ninesTrio) && <p className="dots-linked-rate">{linkedRateText(linkedWolf, linkedNines)}</p>}
     </> : solo ? <>
       <p>Solo stats only · No money or opponent payments.</p>
       {draft.stake?.trim() && Number(draft.stake) !== 0 && <button type="button" onClick={() => { onChange({ stake: '' }); }}>Clear planned rate for solo play</button>}
@@ -190,7 +229,7 @@ export function DotsSettings({ draft, groups, players, wolves, onChange, v2Suppo
     <h4>{mode === 'rotating' ? '4. Special dots' : 'Special dots'}</h4>
     <small>Qualifying scores are gross. Automatic dots are calculated from saved scores and selections.</small>
     <details open={!updated}><summary>Choose special dots ({specials.length})</summary>
-    <DotSpecialsSettings specials={specials} mode={mode} manualSweep={manualSweep}
+    <DotSpecialsSettings specials={specials} mode={specialsMode} manualSweep={manualSweep}
       {...(supportedKinds === undefined ? {} : { supportedKinds })}
       {...(presetStore === undefined ? {} : { presetStore })}
       onChange={(dotsSpecials) => { onChange({ dotsSpecials,

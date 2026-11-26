@@ -7,6 +7,37 @@ import { DotsRotationControls } from './DotsRotationControls';
 import { coexistenceMessage } from './coexistence-message';
 import './dots-entry.css';
 
+type NameOf = (playerId: string) => string;
+
+/** Linked sides where nobody has a partner: every Nines golfer plays alone on every hole. */
+function everyoneAlone(context: DotHoleContext): boolean {
+  return context.sides.length > 2 && context.sides.every((side) => side.length === 1);
+}
+
+/** The selected golfer's linked side for this hole, as one line of score-entry text. */
+function linkedPartnerText(context: DotHoleContext | undefined, teammates: readonly string[], name: NameOf,
+  contextLabel: string, contextPreview: boolean): string {
+  if (context?.status !== 'ready') return `Partners pending saved ${contextLabel} choice`;
+  if (everyoneAlone(context)) return `Plays alone · ${contextLabel}`;
+  const multiplier = `×${String(context.multiplier)}`;
+  if (teammates.length === 0) return `Solo · ${multiplier}`;
+  const label = teammates.length === 1 ? 'Partner' : 'Teammates';
+  const preview = contextPreview ? ' · Unsaved partner preview' : '';
+  return `${label}: ${teammates.map(name).join(' + ')} · ${multiplier}${preview}`;
+}
+
+/** Every linked side for this hole, as one line of group score-entry text. */
+function linkedSidesText(context: DotHoleContext | undefined, name: NameOf, contextLabel: string,
+  contextPreview: boolean): string {
+  if (context?.status !== 'ready') {
+    return `Linked sides are pending saved ${contextLabel} choices. Results use the authoritative saved context.`;
+  }
+  if (everyoneAlone(context)) return `Each golfer plays alone · ${context.sides.flat().map(name).join(' · ')}`;
+  const preview = contextPreview ? ' · Unsaved partner preview' : '';
+  const sides = context.sides.map((side) => side.map(name).join(' + ')).join(' vs ');
+  return `${sides} · ×${String(context.multiplier)}${preview}`;
+}
+
 export function DotsHoleControls({ game, holeNumber, par, playerPars, etag, saved, draft, players, context, disabled, onChange,
   playerId: selectedPlayerId, groupOnly = false, rotation, rotationLocked = false, specialLabels, contextLabel = 'Wolf',
   contextPreview = false, allowMurphyPresses = false, scoreDerivedMurphy = false, scoreDerivedParee = false, scoreDerivedPullyMurphy = false, playerScores, showRotation = true, coexistenceRules = false }: {
@@ -79,13 +110,9 @@ export function DotsHoleControls({ game, holeNumber, par, playerPars, etag, save
     {selectedPlayerId && game.mode === 'fixed' && <p className="dots-entry-partner">
       Fixed partner: {teammates.map(name).join(' + ')} · All round
     </p>}
-    {selectedPlayerId && game.mode === 'linked' && <p className="dots-entry-partner">{context?.status !== 'ready'
-      ? `Partners pending saved ${contextLabel} choice`
-      : teammates.length === 0 ? `Solo · ×${String(context.multiplier)}`
-        : `${teammates.length === 1 ? 'Partner' : 'Teammates'}: ${teammates.map(name).join(' + ')} · ×${String(context.multiplier)}${contextPreview ? ' · Unsaved partner preview' : ''}`}</p>}
-    {!selectedPlayerId && game.mode === 'linked' && <p>{context?.status === 'ready'
-      ? `${context.sides.map((side) => side.map(name).join(' + ')).join(' vs ')} · ×${String(context.multiplier)}${contextPreview ? ' · Unsaved partner preview' : ''}`
-      : `Linked sides are pending saved ${contextLabel} choices. Results use the authoritative saved context.`}</p>}
+    {selectedPlayerId && game.mode === 'linked' && <p className="dots-entry-partner">
+      {linkedPartnerText(context, teammates, name, contextLabel, contextPreview)}</p>}
+    {!selectedPlayerId && game.mode === 'linked' && <p>{linkedSidesText(context, name, contextLabel, contextPreview)}</p>}
     {!groupOnly && game.playerIds.filter((playerId) => !selectedPlayerId || selectedPlayerId === playerId).map((playerId) => {
       const declaration = record.players.find((entry) => entry.playerId === playerId) ?? { playerId, counts: {}, calls: [] };
       const controls = <DotsPlayerControls game={game} declaration={declaration} name={name(playerId)}

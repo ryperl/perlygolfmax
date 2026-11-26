@@ -50,6 +50,8 @@ interface GameSettingsProps {
   readonly presetStore?: DotPresetStore | undefined;
   readonly existing?: boolean;
   readonly gameHandicapsSupported?: boolean;
+  /** The API accepts Dots linked to Nines (`ninesLinkedDots` on the round). */
+  readonly ninesLinkedDotsSupported?: boolean;
   /** Save feedback, shown beside the Save button so it is seen where the scorer acted. */
   readonly notice?: string;
 }
@@ -72,7 +74,7 @@ export function GameSettings({
   churchyCustomNamesSupported = false, holeNumbers = [], defaultGroupNumber,
   wolfHighLowSweepSupported = false, wolfOrderSupported = false, dotsManualSweepSupported = false, dotsHighLowSupported = false,
   dotsV3Supported = false, courseHandicaps = [],
-  gameHandicapsSupported = false, notice = '',
+  gameHandicapsSupported = false, ninesLinkedDotsSupported = false, notice = '',
 }: GameSettingsProps) {
   const noticeRef = useRef<HTMLParagraphElement>(null);
   useEffect(() => {
@@ -175,7 +177,8 @@ export function GameSettings({
           <small id={startHint}>Front remains holes 1–9, Back remains 10–18; each bet follows actual played order.</small>
         </div>}
         {draft.kind === 'dots' && <DotsPlayingGroupSelect draft={draft} groups={groups}
-          individualPlayerCounts={dotsIndividualPlayerCounts} onChange={(patch) => { onChange({ ...draft, ...patch }); }} />}
+          individualPlayerCounts={dotsIndividualPlayerCounts} ninesLinkSupported={ninesLinkedDotsSupported}
+          onChange={(patch) => { onChange({ ...draft, ...patch }); }} />}
         {draft.kind === 'churchy' && <label>Churchie playing group<select value={draft.churchyGroup ?? ''} disabled={churchyLocked} onChange={(event) => {
           const group = groups.find((entry) => entry.number === Number(event.target.value));
           if (group?.playerIds.length === 4) onChange({ ...draft, churchyGroup: group.number, churchyPlayers: group.playerIds });
@@ -325,7 +328,9 @@ export function GameSettings({
           individualPlayerCounts={dotsIndividualPlayerCounts}
           {...(dotsSpecialKinds ? { supportedKinds: dotsSpecialKinds } : {})}
           {...(presetStore ? { presetStore } : {})}
-          wolves={games.filter((game) => game.kind === 'wolf')} onChange={(patch) => { onChange({ ...draft, ...patch }); }} />}
+          wolves={games.filter((game) => game.kind === 'wolf')}
+          nines={games.filter((game) => game.kind === 'nines')} ninesLinkSupported={ninesLinkedDotsSupported}
+          onChange={(patch) => { onChange({ ...draft, ...patch }); }} />}
         {draft.kind === 'churchy' && <section aria-label="Churchie setup">
           {draft.churchyGroup && <h3>Group {draft.churchyGroup} · Churchie</h3>}
           {draft.churchyVersion === 3 && <>
