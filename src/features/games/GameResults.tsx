@@ -6,6 +6,8 @@ import { ChurchyResults } from '../churchy';
 import { NassauResults } from '../nassau';
 import { WolfResults } from '../wolf';
 import { DotsResults } from '../dots';
+import { PlayerName } from '../player-names';
+import { playerInitials } from '../../domain/player-initials';
 
 function progress(player: GamePlayerResult | GameTeamResult): string {
   return player.status === 'unavailable'
@@ -38,6 +40,8 @@ export function GameResults({ game, result, holeNumbers, players }: {
   const teamGame = isTeamGameDefinition(game);
   const unit = gameResultUnit(game);
   const rows = teamGame ? result?.teams ?? [] : result?.players ?? [];
+  // Team rows keep their team names; only individual golfers shorten to initials.
+  const initials = playerInitials(result?.players ?? []);
   const matching = rows.filter((player) => `${player.displayName} ${'playerIds' in player
     ? player.playerIds.map((id) => result?.players.find((member) => member.playerId === id)?.displayName ?? '').join(' ') : ''}`
     .toLowerCase().includes(query.trim().toLowerCase()));
@@ -92,7 +96,8 @@ export function GameResults({ game, result, holeNumbers, players }: {
               {game.kind === 'stroke-play' && <th scope="col">To par</th>}
             </tr></thead>
             <tbody>{matching.slice(page * pageSize, (page + 1) * pageSize).map((player) => <tr key={'teamId' in player ? player.teamId : player.playerId}>
-              <th scope="row"><span className="game-player-name">{player.displayName}</span>
+              <th scope="row"><span className="game-player-name">{'teamId' in player ? player.displayName
+                : <PlayerName name={player.displayName} initials={initials.get(player.playerId)} />}</span>
                 {'playerIds' in player && <small className="game-player-meta">{player.playerIds.map((id) =>
                   result.players.find((member) => member.playerId === id)?.displayName ?? 'Golfer unavailable').join(' · ')}</small>}
                 {game.basis === 'net' && 'playingHandicap' in player && <small className="game-player-meta">Playing handicap {player.playingHandicap === null ? '—' : handicap(player.playingHandicap)}</small>}

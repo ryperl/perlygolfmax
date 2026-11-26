@@ -1,5 +1,7 @@
 import type { InternalGameSettlement } from '../../domain/dot-settlement';
 import { formatMoney } from '../../domain/money';
+import { PlayerName } from '../player-names';
+import { playerInitials } from '../../domain/player-initials';
 import './internal-settlement.css';
 
 export function InternalSettlement({ settlement, gameNames = [], ranked = false, progress = [], sourceLabels = ['Base', 'Specials'], provisional = false,
@@ -17,6 +19,7 @@ export function InternalSettlement({ settlement, gameNames = [], ranked = false,
   const money = (minor: number | null) => minor === null ? 'Unavailable' : minor > 0 ? `Due ${formatMoney(minor, 'USD')}`
     : minor < 0 ? `Owes ${formatMoney(-minor, 'USD')}` : formatMoney(0, 'USD');
   const name = (id: string) => settlement.players.find((player) => player.playerId === id)?.displayName ?? 'Golfer unavailable';
+  const initials = playerInitials(settlement.players);
   const pointsOnly = settlement.status === 'points-only';
   const sources = gameNames.join(' + ');
   const players = ranked ? [...settlement.players].sort((a, b) => a.totalDots === null ? b.totalDots === null ? 0 : 1
@@ -41,7 +44,8 @@ export function InternalSettlement({ settlement, gameNames = [], ranked = false,
               {ranked && <span className="internal-settlement-position" aria-label={position === null ? 'Unranked'
                 : `${tied ? 'Tied position' : 'Position'} ${String(position)}`}>{position === null ? '—' : `${tied ? 'T' : ''}${String(position)}`}</span>}
               <span>
-                <span className="internal-settlement-name">{player.displayName}</span>
+                <span className="internal-settlement-name">
+                  <PlayerName name={player.displayName} initials={initials.get(player.playerId)} /></span>
                 <span className="internal-settlement-points">{player.totalDots ?? '—'} {unit}</span>
                 {(gameNames.length > 1 || player.baseDots !== 0 && player.specialDots !== 0)
                   && <small className="internal-settlement-source">{baseLabel} {player.baseDots ?? '—'} + {specialLabel} {player.specialDots ?? '—'}</small>}

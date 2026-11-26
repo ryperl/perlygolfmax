@@ -1,0 +1,6 @@
+/* Compact views keep the full name for screen readers but show initials such as RP. */
+@media (max-width: 600px) {
+  .player-name-full { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  /* The empty alternative text keeps screen readers from announcing the initials after the full name. */
+  .player-name::after { content: attr(data-initials); content: attr(data-initials) / ''; }
+}

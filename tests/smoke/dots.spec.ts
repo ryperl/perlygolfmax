@@ -382,6 +382,12 @@ test('existing Dots cards recalculate inclusive String and exclusive Birdie Stri
     await page.getByRole('button', { name: 'Scorecards', exact: true }).click();
     const detail = page.getByRole('button', { name: 'Fictional golfer 1, hole 3 dots: 1. Show breakdown', exact: true });
     await expect(detail).toBeVisible();
+    // On a narrow screen the scorecard shows initials while the row keeps the full name for screen readers.
+    const nameCell = page.locator('.recap-score-row [data-initials]').first();
+    await expect(nameCell).toHaveAttribute('data-initials', 'F1');
+    expect(await nameCell.evaluate((element) => getComputedStyle(element, '::after').content)).toContain('F1');
+    expect((await nameCell.locator('.player-name-full').boundingBox())?.width).toBeLessThanOrEqual(1);
+    await expect(page.getByRole('rowheader', { name: /^Fictional golfer 1/ }).first()).toBeVisible();
     const readsBeforeDetail = fixture.counters().roundReads;
     const targetBounds = await detail.boundingBox();
     expect(targetBounds?.height).toBeGreaterThanOrEqual(44);

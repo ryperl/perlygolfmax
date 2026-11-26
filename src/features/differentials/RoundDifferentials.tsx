@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { RoundDifferential } from '../../domain/round-differential';
 import { differentialExplanation, formatDifferential } from './presentation';
+import { PlayerName } from '../player-names';
+import { playerInitials } from '../../domain/player-initials';
 import './differentials.css';
 
 export interface DifferentialPlayer {
@@ -68,6 +70,7 @@ function DifferentialHeading({ name, wide, compact }: {
 export function RoundDifferentials({ values, players }: RoundDifferentialsProps) {
   const descriptionId = useId();
   const byPlayer = new Map(values.map((value) => [value.playerId, value]));
+  const initials = playerInitials(players);
   return <section className="round-differentials" aria-label="Round differentials">
     <p id={descriptionId} className="differential-explanation">{differentialExplanation}</p>
     <table aria-describedby={descriptionId}>
@@ -84,7 +87,7 @@ export function RoundDifferentials({ values, players }: RoundDifferentialsProps)
       <tbody>{players.map((player) => {
         const value = byPlayer.get(player.playerId);
         return <tr key={player.playerId}>
-          <th scope="row">{player.displayName}</th>
+          <th scope="row"><PlayerName name={player.displayName} initials={initials.get(player.playerId)} /></th>
           <td>{value?.status === 'available' ? value.adjustedGross : <span aria-label="Adjusted gross unavailable">—</span>}</td>
           <td>{value?.status === 'available' ? formatDifferential(value.differentialTenths)
             : <span className="differential-state" aria-label="Estimated differential unavailable">—</span>}</td>

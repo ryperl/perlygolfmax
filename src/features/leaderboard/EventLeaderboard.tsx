@@ -1,5 +1,7 @@
 import type { EventStandingCell, EventStandingReason, EventStandingStatus } from '../../domain/event-leaderboard';
 import type { OverallResultsDisplay } from '../../domain/public-leaderboard';
+import { PlayerName } from '../player-names';
+import { playerInitials } from '../../domain/player-initials';
 import './leaderboard.css';
 
 const reasons: Readonly<Record<EventStandingReason, string>> = {
@@ -44,6 +46,7 @@ export function EventLeaderboard({ value }: { readonly value: OverallResultsDisp
     {workspace.event.role === 'owner' && <a href={`#events?event=${encodeURIComponent(workspace.event.id)}`}>Open event setup</a>}
   </section>;
   const stroke = competition.kind === 'stroke-play';
+  const initials = playerInitials(standings.players);
   return <section className="overall-leaderboard">
     <a href={`#overview?event=${encodeURIComponent(workspace.event.id)}`}>Back to event overview</a>
     <h1>{workspace.event.name} — Overall leaderboard</h1>
@@ -67,7 +70,7 @@ export function EventLeaderboard({ value }: { readonly value: OverallResultsDisp
           {standings.rounds.map((round) => <th scope="col" key={round.roundId}>{round.roundName}</th>)}
           <th scope="col">Cumulative result</th></tr></thead>
         <tbody>{standings.players.map((player) => <tr key={player.playerId}>
-          <th scope="row">{player.displayName}</th><td>{player.rankLabel ?? 'Not ranked'}</td>
+          <th scope="row"><PlayerName name={player.displayName} initials={initials.get(player.playerId)} /></th><td>{player.rankLabel ?? 'Not ranked'}</td>
           {standings.rounds.map((round) => {
             const cell = player.cells.find((entry) => entry.roundId === round.roundId);
             return <td key={round.roundId}>{cell ? <Result cell={cell} stroke={stroke} /> : 'Round unavailable'}</td>;
