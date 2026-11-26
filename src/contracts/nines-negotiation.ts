@@ -22,12 +22,36 @@ export function containsNinesGame(value: unknown): boolean {
   return Object.values(value).some(containsNinesGame);
 }
 
-/** True when a value holds a Dots game linked to Nines (the only linked Dots with three golfers). */
+interface GameScan {
+  readonly ninesIds: Set<unknown>;
+  readonly linkedTargets: unknown[];
+  threeGolferLink: boolean;
+}
+
+function scanGames(value: unknown, scan: GameScan): void {
+  if (Array.isArray(value)) {
+    for (const entry of value) scanGames(entry, scan);
+    return;
+  }
+  if (!isRecord(value)) return;
+  if (value.kind === 'nines') scan.ninesIds.add(value.id);
+  if (value.kind === 'dots' && value.mode === 'linked') {
+    scan.linkedTargets.push(value.linkedGameId);
+    // Wolf needs four golfers, so a three-golfer linked Dots can only be a Nines link.
+    if (Array.isArray(value.playerIds) && value.playerIds.length === 3) scan.threeGolferLink = true;
+  }
+  for (const entry of Object.values(value)) scanGames(entry, scan);
+}
+
+/**
+ * True when a value holds a Dots game linked to Nines: its linked game ID names a Nines game in the
+ * same value, whatever its golfer count (so stale or invalid links are covered too), or it has the
+ * three golfers only a Nines link can have.
+ */
 export function containsNinesLinkedDots(value: unknown): boolean {
-  if (Array.isArray(value)) return value.some(containsNinesLinkedDots);
-  if (!isRecord(value)) return false;
-  if (value.kind === 'dots' && value.mode === 'linked' && Array.isArray(value.playerIds) && value.playerIds.length === 3) return true;
-  return Object.values(value).some(containsNinesLinkedDots);
+  const scan: GameScan = { ninesIds: new Set(), linkedTargets: [], threeGolferLink: false };
+  scanGames(value, scan);
+  return scan.threeGolferLink || scan.linkedTargets.some((target) => scan.ninesIds.has(target));
 }
 
 /** Removes `nines` from advertised game kinds, for clients that do not understand it. */

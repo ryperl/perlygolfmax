@@ -24,6 +24,37 @@ export function definitionCards(round: RoundSnapshot): readonly Scorecard[] {
     holes: [], etag: null, updatedAt: null }));
 }
 
+const internalKinds: readonly (RoundGameDefinition['kind'])[] = ['dots', 'wolf', 'churchy', 'nines'];
+
+/** True for the games that share sides or money with linked Dots, including Nines. */
+function isInternalKind(game: RoundGameDefinition | undefined): boolean {
+  return game !== undefined && internalKinds.includes(game.kind);
+}
+
+/**
+ * A saved Wolf, Dots, Churchie or Nines game keeps its kind (Wolf to Nines needs a new game), and an
+ * existing game cannot become Wolf, Dots or Churchie. Other games may still be switched to Nines.
+ */
+function changesInternalKind(previous: RoundGameDefinition, game: RoundGameDefinition): boolean {
+  if (previous.kind === game.kind) return false;
+  if (isInternalKind(previous)) return true;
+  return game.kind === 'dots' || game.kind === 'wolf' || game.kind === 'churchy';
+}
+
+/**
+ * Every Dots game linked to Nines must still be a valid link, even when only the Nines side changed
+ * (for example a saved Wolf ID now holding a Nines definition). Such Dots peers are otherwise skipped
+ * as unchanged.
+ */
+function requireValidNinesLinks(after: readonly RoundGameDefinition[], round: RoundSnapshot): void {
+  for (const game of after) {
+    if (game.kind !== 'dots' || game.mode !== 'linked') continue;
+    const linked = after.find((entry) => entry.id === game.linkedGameId);
+    if (linked?.kind !== 'nines') continue;
+    if (!linkedNinesGame(game, after, round.groups)) throw new ApiError(400, 'INVALID_DOTS_LINK');
+  }
+}
+
 export function validateInternalGameChanges(
   before: readonly RoundGameDefinition[], after: readonly RoundGameDefinition[], round: RoundSnapshot,
   publicOnly: boolean,
@@ -55,6 +86,9 @@ export function validateInternalGameChanges(
       if (round.scoringStarted) throw new ApiError(409, 'MATCH_SETUP_LOCKED');
     }
     if (previous && sameGameDefinitions([previous], [game])) continue;
+    if (previous && changesInternalKind(previous, game)) {
+      throw new ApiError(400, 'INTERNAL_GAME_REQUIRES_NEW_GAME');
+    }
     if (game.kind === 'dots' || game.kind === 'wolf' || game.kind === 'churchy') {
       if (previous && previous.kind !== game.kind) throw new ApiError(400, 'INTERNAL_GAME_REQUIRES_NEW_GAME');
       affected.add(game.groupNumber);
@@ -73,6 +107,7 @@ export function validateInternalGameChanges(
   if (publicOnly && round.scoringStarted && !sameGameDefinitions(before, after)) {
     throw new ApiError(409, 'MATCH_SETUP_LOCKED');
   }
+  requireValidNinesLinks(after, round);
   for (const groupNumber of affected) {
     const peers = after.filter((game) => (game.kind === 'dots' || game.kind === 'wolf' || game.kind === 'churchy')
       && game.groupNumber === groupNumber);

@@ -221,6 +221,21 @@ describe('Nines through the API, without disturbing older browsers', () => {
       expect(saved.change.after).toEqual({ kind: 'strokes', strokes: 4 });
     });
 
+    it('refuses turning a saved Wolf game into Nines, which would strand its linked Dots game', async () => {
+      const f = await fixture(4);
+      const wolf: RoundGameDefinition = { id: identifier(33100), name: 'Fictional Wolf', kind: 'wolf', version: 2,
+        basis: 'gross', groupNumber: 1, playerIds: f.ids, allowPig: true, stakeMinor: 50 };
+      const dots: DotsGameDefinition = { id: identifier(33101), name: 'Fictional linked Dots', kind: 'dots', version: 1,
+        groupNumber: 1, playerIds: f.ids, mode: 'linked', linkedGameId: wolf.id, specials: [{ kind: 'walk', units: 1 }] };
+      const saved = await f.saveAsNewClient([wolf, dots], null, 33102);
+      const before = new Map(f.rows);
+      // Same ID, now Nines for three of the four golfers; the four-golfer Dots link is left unchanged.
+      const nines = { ...f.game, id: wolf.id };
+      await expect(f.saveAsNewClient([nines, dots], saved.round.games?.configuration.etag ?? null, 33103))
+        .rejects.toMatchObject({ code: 'INTERNAL_GAME_REQUIRES_NEW_GAME' });
+      expect(new Map(f.rows)).toEqual(before);
+    });
+
     it('refuses a link that uses partner-only specials', async () => {
       const f = await fixture();
       await expect(f.saveAsNewClient([f.game, linkedDots(f, [{ kind: 'assassin', units: 1 }])], null, 32006))
