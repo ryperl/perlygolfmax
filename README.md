@@ -1718,9 +1718,12 @@ or registry availability there.
 
 ## Continuous integration and deployment
 
-Pull requests and branch pushes run locked installation, public-lockfile
+Each push to a pull request runs CI once: locked installation, public-lockfile
 checks, strict type checking, lint, named unit/component suites, production
-build, and Chromium desktop/mobile plus iPhone WebKit smoke tests. CI has
+build, and Chromium desktop/mobile plus iPhone WebKit smoke tests. Pushing a
+branch without a pull request runs no checks; use **Run workflow** on the CI
+workflow for that. Merges to the TEST and production branches run the same CI
+as the gate of their deployment workflows. CI has
 read-only repository permissions and uses no production secrets. It uses ordinary
 `pull_request`, not privileged `pull_request_target`.
 
