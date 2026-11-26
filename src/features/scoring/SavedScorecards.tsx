@@ -108,6 +108,7 @@ export function SavedScorecards({ round, groupNumber, busy, onGroupChange, onEnt
         <p className="scorecard-incomplete">{game ? '* Incomplete total.' : '* Incomplete recorded total.'}</p>}
     </>}
     {game?.definition.kind === 'churchy' && <ChurchyResults game={game.definition} result={game.result} />}
-    {game?.definition.kind === 'dots' && <DotsResults game={game.definition} result={game.result?.dots} />}
+    {game?.definition.kind === 'dots' && <DotsResults game={game.definition} result={game.result?.dots}
+      stringRulesVersion={round.stringRulesVersion} dotsCategorySweepsVersion={round.dotsCategorySweepsVersion} />}
   </section>;
 }
