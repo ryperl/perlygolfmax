@@ -1,4 +1,4 @@
-import { dotsCoexistenceWriteIssues, dotsSpecialCatalog } from '../../domain/dots';
+import { dotsCoexistenceWriteIssues, dotsSpecialCatalog, isEmptyDotsDeclaration, sameDotsPlayerDeclaration } from '../../domain/dots';
 import type { DotsContest, DotsGameDefinition, DotsHoleRecord, DotsPlayerDeclaration, DotsRotationContext, DotsSpecialKind } from '../../domain/dots';
 import type { DotHoleContext } from '../../domain/dot-context';
 import type { HoleScore } from '../../domain/scoring';
@@ -36,6 +36,27 @@ function linkedSidesText(context: DotHoleContext | undefined, name: NameOf, cont
   const preview = contextPreview ? ' · Unsaved partner preview' : '';
   const sides = context.sides.map((side) => side.map(name).join(' + ')).join(' vs ');
   return `${sides} · ×${String(context.multiplier)}${preview}`;
+}
+
+/**
+ * Replaces one golfer's declaration in a hole record, keeping the other golfers in their saved order.
+ * An edit that returns the golfer to their saved claims restores the saved declaration exactly, so the
+ * hole compares as unchanged. A golfer left with no claims and nothing saved is dropped from the record.
+ */
+function playersAfterEdit(players: readonly DotsPlayerDeclaration[], edited: DotsPlayerDeclaration,
+  savedPlayers: readonly DotsPlayerDeclaration[]): readonly DotsPlayerDeclaration[] {
+  const saved = savedPlayers.find((entry) => entry.playerId === edited.playerId);
+  const others = players.filter((entry) => entry.playerId !== edited.playerId);
+  if (saved && sameDotsPlayerDeclaration(edited, saved)) return replacePlayer(players, saved);
+  if (!saved && isEmptyDotsDeclaration(edited)) return others;
+  return replacePlayer(players, edited);
+}
+
+function replacePlayer(players: readonly DotsPlayerDeclaration[],
+  player: DotsPlayerDeclaration): readonly DotsPlayerDeclaration[] {
+  const index = players.findIndex((entry) => entry.playerId === player.playerId);
+  if (index === -1) return [...players, player];
+  return players.map((entry, position) => position === index ? player : entry);
 }
 
 export function DotsHoleControls({ game, holeNumber, par, playerPars, etag, saved, draft, players, context, disabled, onChange,
@@ -84,7 +105,7 @@ export function DotsHoleControls({ game, holeNumber, par, playerPars, etag, save
   if (groupOnly && !selectedPlayerId && (game.mode !== 'rotating' || !showRotation) && game.mode !== 'linked'
     && eligibleContests.length === 0 && !clearable && !hasSelections(saved)) return null;
   function changePlayer(player: DotsPlayerDeclaration) {
-    onChange({ ...record, gameEtag: etag, players: [...record.players.filter((entry) => entry.playerId !== player.playerId), player] });
+    onChange({ ...record, gameEtag: etag, players: playersAfterEdit(record.players, player, saved?.players ?? []) });
   }
   function changeContest(contest: DotsContest) {
     onChange({ ...record, gameEtag: etag, contests: [...record.contests.filter((entry) => entry.kind !== contest.kind), contest] });

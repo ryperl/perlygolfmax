@@ -214,7 +214,7 @@ describe('separate Dots hole declarations', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: `Dime for ${name}` }));
     expect(screen.getByRole('checkbox', { name: `SuperDime for ${name}` })).toBeEnabled();
     fireEvent.click(screen.getByRole('checkbox', { name: `SuperDime for ${name}` }));
-    expect(onChange.mock.lastCall?.[0].players[0]?.counts).toEqual({ dime: 0, 'super-dime': 1 });
+    expect(onChange.mock.lastCall?.[0].players[0]?.counts).toEqual({ 'super-dime': 1 });
     expect(saved.players[0]?.counts.dime).toBe(1);
     expect(screen.queryByRole('button', { name: /Save/ })).not.toBeInTheDocument();
   });
@@ -244,7 +244,7 @@ describe('separate Dots hole declarations', () => {
     fireEvent.change(screen.getByLabelText(`Sandy count · ${f.cards[1]?.displayName ?? ''}`), { target: { value: '1' } });
     fireEvent.change(screen.getByLabelText(`Dime count · ${f.cards[0]?.displayName ?? ''}`), { target: { value: '1' } });
     fireEvent.change(screen.getByLabelText(`SuperDime count · ${f.cards[0]?.displayName ?? ''}`), { target: { value: '1' } });
-    expect(onChange.mock.lastCall?.[0].players.find((player) => player.playerId === ids[0])?.counts).toMatchObject({ dime: 0, 'super-dime': 1 });
+    expect(onChange.mock.lastCall?.[0].players.find((player) => player.playerId === ids[0])?.counts).toEqual({ 'super-dime': 1 });
     expect(onChange.mock.lastCall?.[0].players.find((player) => player.playerId === ids[1])?.counts.sandy).toBe(1);
     expect(screen.getByLabelText('KP result')).toHaveValue('');
     fireEvent.change(screen.getByLabelText('KP result'), { target: { value: 'none' } });
@@ -264,5 +264,58 @@ describe('separate Dots hole declarations', () => {
     view.rerender(<DotsHoleControls game={game} players={f.f.cards} holeNumber={1} par={3} etag="fictional"
       saved={undefined} draft={undefined} disabled onChange={onChange} />);
     expect(screen.getByLabelText('KP result')).toBeDisabled();
+  });
+
+  describe('cleared specials leave no zero counts', () => {
+    // One golfer edits a par-three hole; `saved` is what the server already holds for it.
+    function golferEditor(saved: DotsHoleRecord | undefined) {
+      const f = dotsFixture();
+      const playerId = f.ids[0] ?? '';
+      const name = f.f.cards[0]?.displayName ?? '';
+      const onChange = vi.fn<(record: DotsHoleRecord) => void>();
+      function Editor() {
+        const [draft, setDraft] = useState<DotsHoleRecord>();
+        return <DotsHoleControls game={f.game} players={f.f.cards} holeNumber={1} par={3} etag="fictional"
+          saved={saved} draft={draft} playerId={playerId} disabled={false}
+          onChange={(record) => { setDraft(record); onChange(record); }} />;
+      }
+      const lastRecord = () => onChange.mock.lastCall?.[0];
+      return { f, playerId, name, Editor, lastRecord };
+    }
+
+    it('drops a golfer who ticks and unticks a special on a hole with nothing saved', () => {
+      const { name, Editor, lastRecord } = golferEditor(undefined);
+      render(<Editor />);
+      fireEvent.click(screen.getByRole('checkbox', { name: `Dime for ${name}` }));
+      fireEvent.click(screen.getByRole('checkbox', { name: `Dime for ${name}` }));
+      expect(lastRecord()?.players).toEqual([]);
+    });
+
+    it('restores an older saved declaration exactly, zero counts and golfer order included', () => {
+      const f = dotsFixture();
+      const [first, second] = f.ids;
+      if (!first || !second) throw new Error('Missing fictional golfers');
+      const saved: DotsHoleRecord = { number: 1, gameId: f.game.id, gameEtag: 'fictional', contests: [], players: [
+        { playerId: first, counts: { dime: 0, sandy: 1 }, calls: [] },
+        { playerId: second, counts: { sandy: 1 }, calls: [] },
+      ] };
+      const { name, Editor, lastRecord } = golferEditor(saved);
+      render(<Editor />);
+      fireEvent.click(screen.getByRole('checkbox', { name: `SuperDime for ${name}` }));
+      expect(lastRecord()?.players[0]).toEqual({ playerId: first, counts: { sandy: 1, 'super-dime': 1 }, calls: [] });
+      fireEvent.click(screen.getByRole('checkbox', { name: `SuperDime for ${name}` }));
+      expect(lastRecord()?.players).toEqual(saved.players);
+    });
+
+    it('keeps an emptied golfer whose saved claims are being cleared', () => {
+      const f = dotsFixture();
+      const playerId = f.ids[0] ?? '';
+      const saved: DotsHoleRecord = { number: 1, gameId: f.game.id, gameEtag: 'fictional', contests: [],
+        players: [{ playerId, counts: { dime: 1 }, calls: [] }] };
+      const { name, Editor, lastRecord } = golferEditor(saved);
+      render(<Editor />);
+      fireEvent.click(screen.getByRole('checkbox', { name: `Dime for ${name}` }));
+      expect(lastRecord()?.players).toEqual([{ playerId, counts: {}, calls: [] }]);
+    });
   });
 });

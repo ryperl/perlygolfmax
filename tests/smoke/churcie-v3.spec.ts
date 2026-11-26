@@ -254,7 +254,7 @@ test('Churchie blocks failed-call combinations before saving and preserves expli
     expect(fixture.counters().writes).toBe(4);
     const canonical = fixture.counters().requests.find((request) => request.score.churchy !== undefined)?.score.churchy;
     expect(canonical).toMatchObject({ version: 3, players: [{
-      playerId: churciePlayers[1], counts: { sandy: 0 },
+      playerId: churciePlayers[1], counts: {},
       calls: [{ kind: 'paree', result: 'failure' }, { kind: 'murphy', result: 'failure', murphyPresses: 2 }],
     }] });
     expect(fixture.counters().pageErrors).toEqual([]);

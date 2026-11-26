@@ -136,9 +136,36 @@ export interface DotsDeclarationIssue {
   readonly kinds: readonly DotsSpecialKind[];
 }
 
+/**
+ * Removes zero counts. A zero count means "not claimed", so a cleared special leaves no key behind.
+ * Negative or non-integer counts are kept so the entry controls can still flag them as invalid.
+ */
+export function withoutZeroCounts(declaration: DotsPlayerDeclaration): DotsPlayerDeclaration {
+  const claimed = Object.entries(declaration.counts).filter(([, count]) => count !== 0);
+  return { ...declaration, counts: Object.fromEntries(claimed) };
+}
+
+/** True when the golfer claims nothing on the hole: no counts above zero and no calls. */
+export function isEmptyDotsDeclaration(declaration: DotsPlayerDeclaration): boolean {
+  return declaration.calls.length === 0 && Object.values(declaration.counts).every((count) => count === 0);
+}
+
+/** True when a hole record holds no declarations, contests or partner order. */
+export function isEmptyDotsRecord(record: {
+  readonly players: readonly unknown[]; readonly contests: readonly unknown[]; readonly rotation?: unknown;
+}): boolean {
+  return record.players.length === 0 && record.contests.length === 0 && record.rotation === undefined;
+}
+
+/**
+ * Compares two declarations by meaning. Zero counts are ignored, because older saves store a cleared
+ * special as `0` and that claims the same as no key at all.
+ */
 export function sameDotsPlayerDeclaration(left: DotsPlayerDeclaration | undefined, right: DotsPlayerDeclaration | undefined): boolean {
+  const claimedCounts = (player: DotsPlayerDeclaration) => Object.entries(withoutZeroCounts(player).counts)
+    .sort(([a], [b]) => a.localeCompare(b));
   const key = (player: DotsPlayerDeclaration | undefined) => player && JSON.stringify({
-    playerId: player.playerId, counts: Object.entries(player.counts).sort(([a], [b]) => a.localeCompare(b)),
+    playerId: player.playerId, counts: claimedCounts(player),
     calls: player.calls.map((call) => [call.id, call.kind, call.result, call.murphyPresses ?? null,
       call.murphyTarget ?? null, call.pareeTarget ?? null, call.pullyMurphyTarget ?? null]),
   });
