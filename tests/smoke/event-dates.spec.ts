@@ -6,7 +6,7 @@ test('public date order waits for every directory page and recovers a quota page
   const server = await createServer({
     configFile: false, cacheDir: testInfo.outputPath('vite-cache'),
     server: { host: '127.0.0.1', port: 0, hmr: false }, esbuild: { jsx: 'automatic' },
-    optimizeDeps: { noDiscovery: true, include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'] },
+    optimizeDeps: { noDiscovery: true, include: ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'] },
     logLevel: 'error',
   });
   const event: EventSummary = { id: '00000000-0000-4000-8000-000000000001', name: 'Fictional Later',

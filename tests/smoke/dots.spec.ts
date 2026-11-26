@@ -379,6 +379,26 @@ test('existing Dots cards recalculate inclusive String and exclusive Birdie Stri
     expect(third?.awards.filter((award) => award.earnedBy === dotsPlayers[0]).map((award) => award.kind)).toEqual(['string']);
     expect(third?.awards.filter((award) => award.earnedBy === dotsPlayers[1]).map((award) => award.kind))
       .toEqual(['eagle', 'birdy-string']);
+    await page.getByRole('button', { name: 'Scorecards', exact: true }).click();
+    const detail = page.getByRole('button', { name: 'Fictional golfer 1, hole 3 dots: 1. Show breakdown', exact: true });
+    await expect(detail).toBeVisible();
+    const readsBeforeDetail = fixture.counters().roundReads;
+    const targetBounds = await detail.boundingBox();
+    expect(targetBounds?.height).toBeGreaterThanOrEqual(44);
+    await detail.click();
+    const popup = page.getByRole('dialog', { name: 'Fictional golfer 1 · Hole 3 dots', exact: true });
+    await expect(popup).toContainText('Base 0 · Specials 1 · Total 1');
+    await expect(popup).toContainText('String');
+    const bounds = await popup.boundingBox();
+    const viewport = page.viewportSize();
+    if (!bounds || !viewport) throw new Error('Missing dot breakdown viewport');
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width);
+    expect(bounds.y + bounds.height).toBeLessThanOrEqual(viewport.height);
+    await popup.getByRole('button', { name: 'Close dot breakdown', exact: true }).click();
+    await expect(detail).toBeFocused();
+    expect(fixture.counters().roundReads).toBe(readsBeforeDetail);
+    expect(fixture.counters().writes).toBe(0);
     await page.getByRole('button', { name: 'Games', exact: true }).click();
     await openGameStandings(page, 'Fictional current Dots');
     const ledger = page.getByRole('region', { name: 'Fictional current Dots results', exact: true });
