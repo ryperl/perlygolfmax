@@ -1,4 +1,6 @@
 import type { RoundGameDefinition, RoundGameResult } from './games.js';
+import type { DotHoleContext } from './dot-context.js';
+import { linkedNinesGame, ninesDotsContexts, unavailableLinkedContexts } from './linked-dots.js';
 import { calculateNinesSettlement } from './nines.js';
 import type { DotsGameDefinition, DotsResults } from './dots.js';
 import { calculateDots } from './dots.js';
@@ -69,9 +71,13 @@ export function calculateInternalGameResults(
       && linked.playerIds.length === game.playerIds.length && linked.playerIds.every((id) => game.playerIds.includes(id))
       && games.filter((candidate) => candidate.kind === 'dots' && candidate.mode === 'linked'
         && candidate.linkedGameId === linked.id).length === 1 && !hasConflictingSweep(games, linked.id);
-    const contexts = game.mode !== 'linked' ? undefined : compatible ? output.get(linked.id)?.wolf?.contexts
-      : context.layout.map((hole) => ({ number: hole.number, status: 'unavailable' as const, sides: [],
-        multiplier: 1 as const, reason: 'Linked game is missing, incompatible or duplicated.' }));
+    const holeNumbers = context.layout.map((hole) => hole.number);
+    const nines = linkedNinesGame(game, games, context.groups);
+    let contexts: readonly DotHoleContext[] | undefined;
+    if (game.mode !== 'linked') contexts = undefined;
+    else if (compatible) contexts = output.get(linked.id)?.wolf?.contexts;
+    else if (nines) contexts = ninesDotsContexts(nines, holeNumbers);
+    else contexts = unavailableLinkedContexts(holeNumbers);
     const dots = calculateDots(game, round, dotsRecordsFor(game, context.groups, context.cards), contexts);
     const highLow = game.highLow ? calculateDotsHighLow(game, context, dotsRecordsFor(game, context.groups, context.cards)) : undefined;
     output.set(game.id, { gameId: game.id, kind: 'dots', version: game.version, dots,
@@ -88,7 +94,12 @@ export function calculateInternalSettlements(
     if (game.kind === 'nines') {
       const result = results.find((entry) => entry.gameId === game.id);
       const name = (playerId: string) => context.cards.find((card) => card.playerId === playerId)?.displayName ?? 'Golfer unavailable';
-      settlements.push(calculateNinesSettlement(game, result, name));
+      const links = games.filter((candidate): candidate is DotsGameDefinition =>
+        candidate.kind === 'dots' && candidate.mode === 'linked' && candidate.linkedGameId === game.id);
+      const dots = links.length === 1 ? links[0] : undefined;
+      const linked = dots ? { game: dots, result: results.find((entry) => entry.gameId === dots.id),
+        valid: linkedNinesGame(dots, games, context.groups) !== undefined } : undefined;
+      settlements.push(calculateNinesSettlement(game, result, name, linked, links.length > 1));
       continue;
     }
     if (game.kind !== 'wolf' && game.kind !== 'dots' || game.kind === 'wolf' && game.version !== 2

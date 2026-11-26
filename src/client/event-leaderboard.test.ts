@@ -51,7 +51,7 @@ describe('overall leaderboard transport', () => {
     const signal = new AbortController().signal;
     expect(await client.load(result.workspace.event.id, signal)).toEqual(result);
     expect(send.mock.calls[0]).toEqual([
-      `https://fictional.example.test/api/events/${result.workspace.event.id}/leaderboard?murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1&churchyNames=1&sweepRules=2&dotCoexistence=2&gameHandicaps=1&gameCalculations=2&wolfOrders=1&dotsHighLow=2&dotsRules=3&nines=1`,
+      `https://fictional.example.test/api/events/${result.workspace.event.id}/leaderboard?murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1&churchyNames=1&sweepRules=2&dotCoexistence=2&gameHandicaps=1&gameCalculations=2&wolfOrders=1&dotsHighLow=2&dotsRules=3&nines=2`,
       expect.objectContaining({ signal, cache: 'no-store', credentials: 'omit', headers: { Authorization: 'Bearer fictional' } }),
     ]);
   });

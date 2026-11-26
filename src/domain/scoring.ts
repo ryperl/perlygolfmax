@@ -70,6 +70,8 @@ export interface RoundScores {
   readonly dotsCoexistenceRulesVersion?: 2;
   readonly churchyCustomNames?: true;
   readonly dotsManualSweep?: true;
+  /** The API can save and score Dots linked to Nines. */
+  readonly ninesLinkedDots?: true;
   readonly wolfHighLowSweep?: true;
   readonly wolfOrderVersion?: 1;
   readonly sweepRulesVersion?: 2;

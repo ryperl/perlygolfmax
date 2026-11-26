@@ -75,7 +75,7 @@ describe('event workspace client', () => {
     const requestId = fictionalId(250);
     const signal = new AbortController().signal;
     await expect(client.refreshIndices(fictionalEvent.id, round.id, fictionalWorkspace.etag, requestId, signal)).resolves.toEqual(fictionalWorkspace);
-    expect(send.mock.calls[0]?.[0]).toBe(`https://fictional.example.test/api/events/${fictionalEvent.id}/workspace/rounds/${round.id}/indices/refresh?wolfOrders=1&dotsHighLow=2&dotsRules=3&nines=1`);
+    expect(send.mock.calls[0]?.[0]).toBe(`https://fictional.example.test/api/events/${fictionalEvent.id}/workspace/rounds/${round.id}/indices/refresh?wolfOrders=1&dotsHighLow=2&dotsRules=3&nines=2`);
     expect(send.mock.calls[0]?.[1]).toMatchObject({
       method: 'POST', body: '{}', signal, credentials: 'omit', cache: 'no-store',
       headers: { 'If-Match': fictionalWorkspace.etag, 'Idempotency-Key': requestId },
@@ -146,7 +146,7 @@ describe('event workspace client', () => {
     await expect(client.load(fictionalEvent.id, signal)).resolves.toEqual(fictionalWorkspace);
     await expect(client.save(fictionalEvent.id, fictionalWorkspace.etag, fictionalSetup, signal)).resolves.toEqual(fictionalWorkspace);
     expect(send.mock.calls[1]).toEqual([
-      `https://fictional.example.test/api/events/${fictionalEvent.id}/workspace?nines=1`,
+      `https://fictional.example.test/api/events/${fictionalEvent.id}/workspace?nines=2`,
       expect.objectContaining({ method: 'PUT', cache: 'no-store', credentials: 'omit',
         body: JSON.stringify(fictionalSetup) }),
     ]);

@@ -1,7 +1,9 @@
 import { HttpRequest, InvocationContext } from '@azure/functions';
 import { describe, expect, it, vi } from 'vitest';
 import type { NinesGameDefinition } from '../../../src/domain/nines.js';
+import type { DotsGameDefinition } from '../../../src/domain/dots.js';
 import { roundGameKinds } from '../../../src/domain/games.js';
+import type { RoundGameDefinition } from '../../../src/domain/games.js';
 import { isRecord } from '../../../src/contracts/events.js';
 import { scoringFixture } from '../../test/scoring-fixtures.js';
 import { identifier } from '../../test/catalog-fixtures.js';
@@ -29,9 +31,9 @@ async function fixture(playerCount: 3 | 4 = 3) {
       params: { id: event.id, roundId: f.roundId } });
     return withNinesNegotiation(createScoringHandler(() => api, 'scores'))(request, context);
   }
-  const saveAsNewClient = (games: readonly NinesGameDefinition[], etag: string | null, operation: number) =>
+  const saveAsNewClient = (games: readonly RoundGameDefinition[], etag: string | null, operation: number) =>
     runWithNinesSupport(true, () => f.scores.saveGames(creator, event.id, f.roundId, games, etag, identifier(operation)));
-  return { ...f, ids, game, read, saveAsNewClient };
+  return { ...f, ids, game, api, read, saveAsNewClient };
 }
 
 function body(result: Awaited<ReturnType<Awaited<ReturnType<typeof fixture>>['read']>>): Record<string, unknown> {
@@ -149,5 +151,58 @@ describe('Nines through the API, without disturbing older browsers', () => {
     const saved = await runWithNinesSupport(true, () => f.workspace.save(creator, event.id,
       { ...f.input, name: 'Renamed by a current browser' }, workspace.etag));
     expect(saved.event.name).toBe('Renamed by a current browser');
+  });
+
+  describe('Dots linked to Nines', () => {
+    function linkedDots(f: Awaited<ReturnType<typeof fixture>>, specials: DotsGameDefinition['specials'] = [{ kind: 'walk', units: 1 }]) {
+      const dots: DotsGameDefinition = { id: identifier(32000), name: 'Fictional linked Dots', kind: 'dots', version: 1,
+        groupNumber: 1, playerIds: f.game.playerIds, mode: 'linked', linkedGameId: f.game.id, specials };
+      return dots;
+    }
+
+    it('saves the link, scores a Walk for both opponents and settles once at the Nines stake', async () => {
+      const f = await fixture();
+      const dots = linkedDots(f);
+      const saved = await f.saveAsNewClient([f.game, dots], null, 32001);
+      const etag = saved.round.games?.configuration.etag ?? '';
+      const [a = '', b = '', c = ''] = f.ids;
+      const walk = { number: 1, gameId: dots.id, gameEtag: etag, contests: [],
+        players: [{ playerId: a, counts: { walk: 1 }, calls: [] }] };
+      await runWithNinesSupport(2, () => f.scores.write(creator, event.id, f.roundId, a, 1,
+        { kind: 'strokes', strokes: 4, dots: [walk] }, null, identifier(32002)));
+      // The others save hole 1 too, so the hole (and A's zero) is no longer pending.
+      for (const [index, playerId] of [b, c].entries()) {
+        await runWithNinesSupport(2, () => f.scores.write(creator, event.id, f.roundId, playerId, 1,
+          { kind: 'strokes', strokes: 4 }, null, identifier(32010 + index)));
+      }
+      const round = await runWithNinesSupport(2, () => f.scores.get(creator, event.id, f.roundId));
+      const result = round.games?.results.find((entry) => entry.gameId === dots.id);
+      expect(result?.dots?.awards.find((award) => award.kind === 'walk')?.recipientIds).toEqual([b, c]);
+      const settlement = round.internalSettlements?.find((entry) => entry.gameIds[0] === f.game.id);
+      expect(settlement?.gameIds).toEqual([f.game.id, dots.id]);
+      expect(settlement?.players.map((player) => player.specialDots)).toEqual([0, 1, 1]);
+    });
+
+    it('the site that predates linked Dots (nines=1) still reads plain Nines, but must refresh for a linked round', async () => {
+      const f = await fixture();
+      const plain = await f.saveAsNewClient([f.game], null, 32003);
+      const etag = plain.round.games?.configuration.etag ?? null;
+      // A level-1 site may not add the link, but still reads the plain Nines round.
+      await expect(runWithNinesSupport(1, () => f.scores.saveGames(creator, event.id, f.roundId, [f.game, linkedDots(f)],
+        etag, identifier(32004)))).rejects.toMatchObject({ status: 426 });
+      expect((await f.read(true)).status).toBe(200);
+      await f.saveAsNewClient([f.game, linkedDots(f)], etag, 32005);
+      const request = new HttpRequest({ method: 'GET',
+        url: `https://fictional.example.test/api/scores?${olderBrowserQuery}&nines=1`, params: { id: event.id, roundId: f.roundId } });
+      const levelOne = await withNinesNegotiation(createScoringHandler(() => f.api, 'scores'))(request,
+        new InvocationContext({ invocationId: 'fictional-level-one', logHandler: () => undefined }));
+      expect(levelOne.status).toBe(426);
+    });
+
+    it('refuses a link that uses partner-only specials', async () => {
+      const f = await fixture();
+      await expect(f.saveAsNewClient([f.game, linkedDots(f, [{ kind: 'assassin', units: 1 }])], null, 32006))
+        .rejects.toMatchObject({ code: 'INVALID_DOTS_LINK' });
+    });
   });
 });

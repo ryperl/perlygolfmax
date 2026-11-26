@@ -1,5 +1,7 @@
 import type { TableClient, TransactionAction } from '@azure/data-tables';
-import { clientSupportsNines, requireNinesSupport } from '../nines-negotiation.js';
+import { linkedNinesGame, ninesDotsContexts } from '../../../src/domain/linked-dots.js';
+import type { DotHoleContext } from '../../../src/domain/dot-context.js';
+import { clientSupportsAllNinesRules, clientSupportsNines, requireNinesSupport } from '../nines-negotiation.js';
 import type { PublicScoreIdentity } from '../../../src/domain/public-access.js';
 import type { AccountIdentity } from '../../../src/domain/events.js';
 import type { ScoreActor } from '../../../src/domain/test-access.js';
@@ -7,7 +9,8 @@ import type { EventWorkspace, RoundPlayerSnapshot, RoundSnapshot } from '../../.
 import type { GameWriteResult, HoleScore, RoundScores, Scorecard, ScoreChange, ScoreHistoryPage, ScoreWriteResult } from '../../../src/domain/scoring.js';
 import { createHash } from 'node:crypto';
 import { retainMurphyTargets } from './murphy-write.js';
-import type { GameChange, GameConfiguration, RoundGameDefinition } from '../../../src/domain/games.js';
+import type { GameChange, GameConfiguration, RoundGameDefinition, RoundGameResult } from '../../../src/domain/games.js';
+import type { DotsGameDefinition } from '../../../src/domain/dots.js';
 import { gameTeamsMatchRoster, isStablefordGame, sameGameDefinitions, roundGameKinds } from '../../../src/domain/games.js';
 import { maximumPrivateWriteBytes } from '../../../src/contracts/private-values.js';
 import { calculateGameResults } from '../../../src/domain/stableford.js';
@@ -105,6 +108,18 @@ function projectChange(change: ScoreChange, includeAudit = true): ScoreChange {
     ...(includeAudit && change.dotAwardAudit ? { dotAwardAudit: change.dotAwardAudit } : {}),
     recordedBy: scoreActor(change.recordedBy),
   };
+}
+
+/**
+ * The sides a linked Dots declaration is checked against: Wolf's saved pairs (unchanged), or, for
+ * Nines, every golfer alone. Unlinked Dots needs none.
+ */
+function linkedDotsWriteContexts(game: DotsGameDefinition, games: readonly RoundGameDefinition[],
+  results: readonly RoundGameResult[], round: RoundSnapshot): readonly DotHoleContext[] {
+  if (game.mode !== 'linked') return [];
+  const nines = linkedNinesGame(game, games, round.groups);
+  if (nines) return ninesDotsContexts(nines, round.teeProfile.holes.map((hole) => hole.number));
+  return results.find((result) => result.gameId === game.linkedGameId)?.wolf?.contexts ?? [];
 }
 
 export class TableScoreStore {
@@ -341,7 +356,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
         wolfOrderVersion: 1 as const,
         dotsHighLowVersion: 2 as const,
         dotsIndividualPlayerCounts: [1, 2, 3, 4] as const,
-        dotsManualSweep: true as const, wolfHighLowSweep: true as const,
+        dotsManualSweep: true as const, wolfHighLowSweep: true as const, ninesLinkedDots: true as const,
         dotsSpecialKinds: dotsSpecialCatalog.map((entry) => entry.kind),
         internalGamesSupported: true, pullyMurphyTargets: true as const } : {}),
       supportedGameKinds: roundGameKinds.filter((kind) => (kind !== 'churchy' || this.churchyEnabled())
@@ -623,7 +638,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
     const head = await optionalRow(this.table, eventId, gameConfigurationKey(roundId));
     // Today's live site sends every earlier flag, so clients that did not ask for Nines must enter this check too.
     if ((!stringRules || !categorySweeps || !churchyNames || !sweepRules || !gameHandicaps || !wolfOrders || !dotsHighLow || !dotsRulesV3
-      || !clientSupportsNines()) && head) {
+      || !clientSupportsAllNinesRules()) && head) {
       const current = await readGameConfiguration(this.table, eventId, roundId,
         configuredGameRounds(state.event.gameRoundIds), { row: head });
       requireStringRules(current?.games ?? [], stringRules);
@@ -879,8 +894,7 @@ async saveKp(identity: AccountIdentity, eventId: string, roundId: string, select
         if (game?.kind !== 'dots') throw new ApiError(409, 'DOTS_SETUP_CHANGED');
         const records = nextCards.find((entry) => entry.playerId === playerId)?.holes
           .flatMap((hole) => hole.score.dots?.filter((item) => item.gameId === game.id) ?? []) ?? [];
-        const contexts = game.mode === 'linked'
-          ? results.find((result) => result.gameId === game.linkedGameId)?.wolf?.contexts ?? [] : [];
+        const contexts = linkedDotsWriteContexts(game, state.games?.games ?? [], results, state.round);
         if (!dotsRecordsMatchGame(records, game, dotRound(state.round, nextCards), contexts,
           { records: dotsRecordsFor(game, state.round.groups, cards), round: dotRound(state.round, cards) })) {
           throw new ApiError(409, 'DOTS_SETUP_CHANGED');

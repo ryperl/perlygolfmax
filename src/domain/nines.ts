@@ -12,6 +12,7 @@ import type { CapturedGameHandicap, GameHandicapSettings } from './game-handicap
 import { gameHandicap } from './game-handicaps.js';
 import type { GamePlayerResult, GameScoreBasis, GameUnavailableReason, RoundGameResult } from './games.js';
 import { calculateDotSettlement } from './dot-settlement.js';
+import type { DotsGameDefinition } from './dots.js';
 import type { InternalGameSettlement } from './dot-settlement.js';
 import { handicapStrokesForHole } from './handicap-strokes.js';
 import type { HoleScore, Scorecard } from './scoring.js';
@@ -240,21 +241,37 @@ export function calculateNinesFromScores(game: NinesGameDefinition, round: Round
   return calculateNines(game, players, round.cards, round.groups);
 }
 
+/** A Dots game linked to this Nines game: its specials join the Nines points in one settlement. */
+export interface NinesLinkedDots {
+  readonly game: DotsGameDefinition;
+  readonly result: RoundGameResult | undefined;
+  /** False when the link no longer matches the Nines group or uses specials that need partners. */
+  readonly valid: boolean;
+}
+
 /**
- * Settles a Nines stake once for the group, with the shared exact-cents formula
- * `(3 * points - total points) * stake`. Blank or zero stake plays for points only.
+ * Settles a Nines stake once for the group with the shared exact-cents formula
+ * `(3 * total - sum of totals) * stake`, where each golfer's total is their Nines points plus any
+ * linked Dots specials. Blank or zero stake plays for points only.
  */
 export function calculateNinesSettlement(game: NinesGameDefinition, result: RoundGameResult | undefined,
-  displayName: (playerId: string) => string): InternalGameSettlement {
+  displayName: (playerId: string) => string, linked?: NinesLinkedDots, duplicateLinks = false): InternalGameSettlement {
+  const specialDots = (playerId: string): number | null => {
+    if (!linked) return 0;
+    return linked.result?.dots?.players.find((player) => player.playerId === playerId)?.totalPoints ?? null;
+  };
   const players = game.playerIds.map((playerId) => ({
     playerId,
     displayName: displayName(playerId),
     baseDots: result?.players.find((player) => player.playerId === playerId)?.totalPoints ?? null,
-    specialDots: 0,
+    specialDots: specialDots(playerId),
   }));
-  const unavailable = !result || result.nines?.status !== 'ready'
+  const ninesUnavailable = !result || result.nines?.status !== 'ready'
     || result.players.some((player) => player.status === 'unavailable');
-  const complete = !unavailable && result.players.every((player) => player.status === 'complete');
-  return calculateDotSettlement({ groupNumber: game.groupNumber, gameIds: [game.id], stakeMinor: game.stakeMinor,
-    complete, unavailable, players });
+  const dotsUnavailable = linked !== undefined && (!linked.valid || !linked.result || linked.result.dots?.status === 'unavailable');
+  const unavailable = ninesUnavailable || dotsUnavailable || duplicateLinks;
+  const ninesComplete = result?.players.every((player) => player.status === 'complete') ?? false;
+  const dotsComplete = !linked || linked.result?.dots?.status === 'complete';
+  return calculateDotSettlement({ groupNumber: game.groupNumber, gameIds: linked ? [game.id, linked.game.id] : [game.id],
+    stakeMinor: game.stakeMinor, complete: !unavailable && ninesComplete && dotsComplete, unavailable, players });
 }

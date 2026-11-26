@@ -16,7 +16,7 @@ export function createRoundCorrectionsClient(apiUrl: string, getToken: () => Pro
   const request = createPrivateRequest(apiUrl, getToken, send, maximumGameConfigurationBytes);
   function path(eventId: string, roundId: string) {
     if (!isUuid(eventId) || !isUuid(roundId)) throw new Error('Invalid correction target identifiers.');
-    return `events/${encodeURIComponent(eventId)}/rounds/${encodeURIComponent(roundId)}/corrections?gameCalculations=2&wolfOrders=1&dotsHighLow=2&dotsRules=3&nines=1`;
+    return `events/${encodeURIComponent(eventId)}/rounds/${encodeURIComponent(roundId)}/corrections?gameCalculations=2&wolfOrders=1&dotsHighLow=2&dotsRules=3&nines=2`;
   }
   return {
     async load(eventId, roundId, signal) {

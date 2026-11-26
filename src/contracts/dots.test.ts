@@ -68,7 +68,8 @@ describe('Dots network contracts', () => {
       expect(isDotsDefinition({ ...game, playerIds, mode: 'rotating', version: 2, rotationHoles: 3 })).toBe(false);
       const { stakeMinor: omitted, ...base } = game;
       void omitted;
-      expect(isDotsDefinition({ ...base, playerIds, mode: 'linked', linkedGameId })).toBe(false);
+      // A threesome may link to Nines; one or two golfers can never link.
+      expect(isDotsDefinition({ ...base, playerIds, mode: 'linked', linkedGameId })).toBe(count === 3);
     }
   });
   it('rejects empty, oversized and duplicate individual participant lists', () => {

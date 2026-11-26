@@ -7,6 +7,7 @@ import { dotsDefinitionMatchesRound } from '../../../src/contracts/dots.js';
 import { ApiError } from '../errors.js';
 import { isPublicInternalGameDefinition, preservesProtectedGameDefinitions } from '../../../src/domain/internal-game-management.js';
 import { hasConflictingSweep } from '../../../src/domain/internal-games.js';
+import { linkedNinesGame } from '../../../src/domain/linked-dots.js';
 
 export function isPublicInternalGame(game: RoundGameDefinition): boolean {
   return isPublicInternalGameDefinition(game);
@@ -84,6 +85,11 @@ export function validateInternalGameChanges(
     for (const game of peers) {
       if (game.kind !== 'dots') continue;
       const linked = game.mode === 'linked' ? after.find((entry) => entry.id === game.linkedGameId) : undefined;
+      // Dots linked to Nines is checked separately: three golfers who each play alone.
+      if (game.mode === 'linked' && linked?.kind === 'nines') {
+        if (!linkedNinesGame(game, after, round.groups)) throw new ApiError(400, 'INVALID_DOTS_LINK');
+        continue;
+      }
       if (game.mode === 'linked' && (linked?.kind !== 'wolf' || linked.version !== 2
         || linked.groupNumber !== game.groupNumber || linked.playerIds.length !== game.playerIds.length
         || !linked.playerIds.every((id) => game.playerIds.includes(id))

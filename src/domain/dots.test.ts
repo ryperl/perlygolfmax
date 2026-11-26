@@ -555,7 +555,8 @@ describe('independent Dots earning and declarations', () => {
       .toEqual(count === 1 ? undefined : playerIds.slice(1));
     if (count < 4) {
       expect(dotsDefinitionMatchesRound({ ...fixed(f.game), playerIds, partnerIds: playerIds }, round)).toBe(false);
-      expect(dotsDefinitionMatchesRound({ ...linked(f.game), playerIds }, round)).toBe(false);
+      // A threesome may link to Nines (each golfer alone); one or two golfers can never link.
+      expect(dotsDefinitionMatchesRound({ ...linked(f.game), playerIds }, round)).toBe(count === 3);
       expect(dotsDefinitionMatchesRound({ id: game.id, name: game.name, kind: 'dots', version: 2,
         mode: 'rotating', rotationHoles: 3, groupNumber: 1, playerIds, stakeMinor: null, specials: [] }, round)).toBe(false);
     }
