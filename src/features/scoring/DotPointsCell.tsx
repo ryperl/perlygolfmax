@@ -130,8 +130,10 @@ export function DotPointsCell({ game, card, number, text, description, players }
   // Refreshed results can add or remove lines while the popover is open, so place it again after every render
   // rather than only on opening; otherwise a taller breakdown can run past the bottom of the screen.
   useLayoutEffect(() => {
+    // Closed cells skip measuring so a scorecard full of them never forces a layout pass on render.
+    if (!open || !popup.current) return;
     const anchor = trigger.current?.getBoundingClientRect();
-    if (open && anchor && popup.current) placePopover(popup.current, anchor);
+    if (anchor) placePopover(popup.current, anchor);
   });
   const closeAndRefocus = () => {
     setOpen(false);
