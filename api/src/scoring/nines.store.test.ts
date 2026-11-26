@@ -16,6 +16,7 @@ const olderBrowserQuery = 'murphy=score-v1&paree=score-v1&stringRules=2&dotsCall
 const newerBrowserQuery = `${olderBrowserQuery}&${ninesQuery}`;
 import { createScoringHandler } from './handlers.js';
 import { TablePurseStore } from '../purse/store.js';
+import { testerFixture } from '../test-access/test-support.js';
 
 async function fixture(playerCount: 3 | 4 = 3) {
   const f = await scoringFixture(playerCount);
@@ -197,6 +198,27 @@ describe('Nines through the API, without disturbing older browsers', () => {
       const levelOne = await withNinesNegotiation(createScoringHandler(() => f.api, 'scores'))(request,
         new InvocationContext({ invocationId: 'fictional-level-one', logHandler: () => undefined }));
       expect(levelOne.status).toBe(426);
+    });
+
+    it('a legacy tester link, which sees neither game, still saves raw scores in a linked round', async () => {
+      const f = await testerFixture();
+      // Make group 2 a threesome for Nines; the eighth golfer plays alone in group 3.
+      const ids = f.input.playerIds;
+      const groups = [{ number: 1, playerIds: ids.slice(0, 4) }, { number: 2, playerIds: ids.slice(4, 7) },
+        { number: 3, playerIds: ids.slice(7) }];
+      const input = { ...f.input, rounds: f.input.rounds.map((round) => ({ ...round, groups })) };
+      await f.workspace.save(creator, event.id, input, (await f.workspace.get(creator, event.id)).etag);
+      const trio = ids.slice(4, 7);
+      const nines: NinesGameDefinition = { id: identifier(33000), name: 'Fictional Nines', kind: 'nines', version: 1,
+        basis: 'gross', groupNumber: 2, playerIds: trio, stakeMinor: 100 };
+      const dots: DotsGameDefinition = { id: identifier(33001), name: 'Fictional linked Dots', kind: 'dots', version: 1,
+        groupNumber: 2, playerIds: trio, mode: 'linked', linkedGameId: nines.id, specials: [{ kind: 'walk', units: 1 }] };
+      await runWithNinesSupport(2, () => f.scores.saveGames(creator, event.id, f.roundId, [nines, dots], null,
+        identifier(33002)));
+      // The tester's older browser sends no nines level at all.
+      const saved = await runWithNinesSupport(false, () => f.scores.write(f.actor, event.id, f.roundId, f.playerId, 1,
+        { kind: 'strokes', strokes: 4 }, null, identifier(33003)));
+      expect(saved.change.after).toEqual({ kind: 'strokes', strokes: 4 });
     });
 
     it('refuses a link that uses partner-only specials', async () => {
