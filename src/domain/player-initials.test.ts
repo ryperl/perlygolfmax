@@ -23,6 +23,8 @@ describe('player initials for compact views', () => {
 
   it('numbers golfers with identical names in the order shown', () => {
     expect(shortNames('Rory Pine', 'Rory Pine', 'Alex Quill')).toEqual(['RPine1', 'RPine2', 'AQ']);
+    // Rob Pine1 already owns RPine1, so the second identical Rory Pine skips to RPine3.
+    expect(shortNames('Rory Pine', 'Rory Pine', 'Rob Pine1')).toEqual(['RPine2', 'RPine3', 'RPine1']);
   });
 
   it('keeps numbered fictional golfers distinct and handles accented letters', () => {

@@ -47,15 +47,28 @@ export function playerInitials(players: readonly NamedPlayer[]): ReadonlyMap<str
   return shortNames;
 }
 
-/** Golfers with identical names can never be told apart by letters, so number them in the order shown. */
+/**
+ * Golfers with identical names can never be told apart by letters, so number them in the order shown. A number
+ * already taken by another golfer's short name (Rob Pine1 is RPine1) is skipped so every name stays unique.
+ */
 function numberRemainingClashes(players: readonly NamedPlayer[], shortNames: Map<string, string>) {
   const clashing = clashingIds(shortNames);
-  const seen = new Map<string, number>();
+  const taken = new Set<string>();
+  for (const [playerId, short] of shortNames) {
+    if (!clashing.has(playerId)) taken.add(short);
+  }
+  const lastNumber = new Map<string, number>();
   for (const player of players) {
     if (!clashing.has(player.playerId)) continue;
-    const short = shortNames.get(player.playerId) ?? '';
-    const position = (seen.get(short) ?? 0) + 1;
-    seen.set(short, position);
-    shortNames.set(player.playerId, `${short}${String(position)}`);
+    const base = shortNames.get(player.playerId) ?? '';
+    let position = lastNumber.get(base) ?? 0;
+    let candidate: string;
+    do {
+      position += 1;
+      candidate = `${base}${String(position)}`;
+    } while (taken.has(candidate));
+    lastNumber.set(base, position);
+    taken.add(candidate);
+    shortNames.set(player.playerId, candidate);
   }
 }
