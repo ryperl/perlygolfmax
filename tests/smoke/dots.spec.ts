@@ -380,7 +380,7 @@ test('existing Dots cards recalculate inclusive String and exclusive Birdie Stri
     expect(third?.awards.filter((award) => award.earnedBy === dotsPlayers[1]).map((award) => award.kind))
       .toEqual(['eagle', 'birdy-string']);
     await page.getByRole('button', { name: 'Scorecards', exact: true }).click();
-    const detail = page.getByRole('button', { name: 'Fictional golfer 1, hole 3 dot breakdown', exact: true });
+    const detail = page.getByRole('button', { name: 'Fictional golfer 1, hole 3 dots: 1. Show breakdown', exact: true });
     await expect(detail).toBeVisible();
     const readsBeforeDetail = fixture.counters().roundReads;
     const targetBounds = await detail.boundingBox();

@@ -142,7 +142,8 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
                 return <td key={hole.number} aria-label={`${card.displayName}, hole ${String(hole.number)} game ${unit}: ${description}`}>
                   {game.definition.kind === 'dots' || game.definition.kind === 'wolf' || game.definition.kind === 'churchy'
                     ? <DotPointsCell key={`${game.definition.id}:${card.playerId}:${String(hole.number)}`} game={game} card={card}
-                      number={hole.number} text={available ? points ?? '—' : '—'} players={matchPlayers} />
+                      number={hole.number} text={available ? points ?? '—' : '—'} description={description}
+                      players={matchPlayers} />
                     : available ? points ?? '—' : '—'}
                 </td>;
               })}

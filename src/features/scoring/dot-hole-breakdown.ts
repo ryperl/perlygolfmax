@@ -3,6 +3,7 @@ import type { DotAward } from '../../domain/dot-context';
 import type { RoundGameResult } from '../../domain/games';
 import type { WolfGameDefinition } from '../../domain/wolf';
 import type { DotsGameDefinition } from '../../domain/dots';
+import type { ChurchyAward } from '../../domain/churchy';
 import type { ScorecardGame } from './scorecard-presentation';
 import { dotsSpecialCatalog } from '../../domain/dots';
 
@@ -72,6 +73,13 @@ function awardLabel(kind: string, mode?: WolfMode): string {
   return dotsSpecialCatalog.find((special) => special.kind === kind)?.label ?? kind;
 }
 
+/** Manual and automatic Sweep share a kind; name the source so they read apart from Category Sweep. */
+function dotsAwardLabel(award: DotAward, mode?: WolfMode): string {
+  if (award.kind !== 'sweep') return awardLabel(award.kind, mode);
+  if (award.source === 'manual') return 'Manual Sweep';
+  return 'High/Low Sweep';
+}
+
 function golferName(players: Players, playerId: string): string {
   return players.find((player) => player.playerId === playerId)?.displayName ?? 'Golfer unavailable';
 }
@@ -101,7 +109,7 @@ function addAwards(draft: Draft, target: HoleTarget, awards: readonly DotAward[]
     if (award.number !== target.number || !award.recipientIds.includes(target.playerId)) continue;
     const missedCall = award.reason.includes('call: failure') ? ' · missed call' : '';
     const source = award.earnedBy ? golferName(target.players, award.earnedBy) : null;
-    draft.entries.push({ label: `${awardLabel(award.kind, mode)}${missedCall}`, dots: award.dots, source, lane });
+    draft.entries.push({ label: `${dotsAwardLabel(award, mode)}${missedCall}`, dots: award.dots, source, lane });
   }
 }
 
@@ -181,6 +189,18 @@ function addWolf(draft: Draft, target: HoleTarget, definition: WolfGameDefinitio
   }
 }
 
+const churchyCallLabels: ReadonlySet<string> = new Set(['Paree', 'Murphy', 'Pully Murphy']);
+
+/**
+ * Churchie v1/v2 mark a failed call as missed. Churchie v3 saves every award as made, so a failed call shows up
+ * as a call award that went to the opponents instead of the golfer who called it.
+ */
+function isMissedChurchyCall(award: ChurchyAward): boolean {
+  if (award.outcome === 'missed') return true;
+  if (!churchyCallLabels.has(award.special) || award.playerId === null) return false;
+  return !award.winners.includes(award.playerId);
+}
+
 function addChurchy(draft: Draft, target: HoleTarget, result?: RoundGameResult) {
   const hole = result?.churchy?.holes.find((entry) => entry.number === target.number);
   // Churchie reports a partly decided hole as partial; until every input is saved it is still pending.
@@ -194,7 +214,7 @@ function addChurchy(draft: Draft, target: HoleTarget, result?: RoundGameResult) 
   }
   for (const award of hole.specials) {
     if (!award.winners.includes(target.playerId) || award.dots === 0) continue;
-    const missedCall = award.outcome === 'missed' ? ' · missed call' : '';
+    const missedCall = isMissedChurchyCall(award) ? ' · missed call' : '';
     const source = award.playerId ? golferName(target.players, award.playerId) : null;
     draft.entries.push({ label: `${award.special}${missedCall}`, dots: award.dots, lane: 'specials', source });
   }

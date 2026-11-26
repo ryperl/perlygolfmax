@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import type { RefObject } from 'react';
+import type { FocusEvent, RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import type { Scorecard } from '../../domain/scoring';
 import type { ScorecardGame } from './scorecard-presentation';
@@ -18,6 +18,23 @@ function placePopover(popup: HTMLDivElement, anchor: DOMRect) {
   const top = fitsBelow ? anchor.bottom + popoverGap : Math.max(popoverMargin, anchor.top - bounds.height - popoverGap);
   popup.style.left = `${String(left)}px`;
   popup.style.top = `${String(top)}px`;
+}
+
+/**
+ * After a dismissal that did not hand focus to another control (a tap on plain scorecard text, a scroll or a
+ * resize), focus would fall back to the page body. Put it back on the cell so keyboard navigation resumes there.
+ * The check waits a task because a tap moves focus only after its pointerdown handlers have run.
+ */
+function useFocusRestore(trigger: RefObject<HTMLButtonElement | null>) {
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => () => { window.clearTimeout(timer.current); }, []);
+  return useCallback(() => {
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      const focusLost = document.activeElement === null || document.activeElement === document.body;
+      if (focusLost) trigger.current?.focus({ preventScroll: true });
+    }, 0);
+  }, [trigger]);
 }
 
 /**
@@ -90,32 +107,44 @@ function BreakdownBody({ value }: { readonly value: DotHoleBreakdown }) {
  * A scorecard dot cell that keeps its saved value visible and opens a small breakdown popover on tap.
  * The breakdown uses only results already on the page; it never reads audits or makes a request.
  */
-export function DotPointsCell({ game, card, number, text, players }: {
+export function DotPointsCell({ game, card, number, text, description, players }: {
   readonly game: ScorecardGame;
   readonly card: Scorecard;
   readonly number: number;
   readonly text: number | string;
+  /** The saved value or its pending/unavailable state, announced with the button's name. */
+  readonly description: string;
   readonly players: readonly Pick<Scorecard, 'playerId' | 'displayName'>[];
 }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const popup = useRef<HTMLDivElement>(null);
   const id = useId();
-  const close = useCallback(() => { setOpen(false); }, []);
+  const restoreFocus = useFocusRestore(trigger);
+  const close = useCallback(() => {
+    setOpen(false);
+    restoreFocus();
+  }, [restoreFocus]);
   useDismissablePopover(open, close, trigger, popup);
   const value = open ? dotHoleBreakdown(game, card.playerId, number, players) : undefined;
   const closeAndRefocus = () => {
     setOpen(false);
     trigger.current?.focus({ preventScroll: true });
   };
+  // Focus moving back to the cell is left to the cell's own click, which toggles the popover closed.
+  const closeOnBlur = (event: FocusEvent<HTMLDivElement>) => {
+    const next = event.relatedTarget;
+    if (event.currentTarget.contains(next) || next === trigger.current) return;
+    close();
+  };
 
   return <>
     <button type="button" ref={trigger} className="scorecard-dot-detail" aria-haspopup="dialog" aria-expanded={open}
-      aria-controls={open ? id : undefined} aria-label={`${card.displayName}, hole ${String(number)} dot breakdown`}
+      aria-controls={open ? id : undefined} aria-label={`${card.displayName}, hole ${String(number)} dots: ${description}. Show breakdown`}
       onClick={() => { setOpen((current) => !current); }}>{text}</button>
     {open && value && createPortal(<div ref={popup} id={id} role="dialog" tabIndex={-1}
       aria-label={`${card.displayName} · Hole ${String(number)} dots`} className="scorecard-dot-popover"
-      onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
+      onBlur={closeOnBlur}>
       <header>
         <strong>Hole {number} · {card.displayName}</strong>
         <button type="button" aria-label="Close dot breakdown" onClick={closeAndRefocus}>×</button>

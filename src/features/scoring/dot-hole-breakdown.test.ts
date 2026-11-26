@@ -90,6 +90,23 @@ describe('saved per-hole dot breakdown', () => {
     expect(partner.entries).toContainEqual({ label: 'Sandy', dots: 1, source: f.cards[0]?.displayName, lane: 'specials' });
   });
 
+  it('names manual and automatic Sweep awards apart', () => {
+    const f = rotatingHighLowFixture();
+    const { a } = requireIds(f.ids);
+    const saved = f.result;
+    const dots = saved?.dots;
+    const sandy = dots?.holes.find((hole) => hole.number === 1)?.awards[0];
+    if (!saved || !dots || !sandy) throw new Error('Missing fictional Sandy award');
+    // Reuse the saved Sandy as a template for one scorer-declared and one derived Sweep on the same hole.
+    const sweeps = [{ ...sandy, kind: 'sweep' as const, source: 'manual' as const },
+      { ...sandy, kind: 'sweep' as const, source: 'derived' as const }];
+    const holes = dots.holes.map((hole) => hole.number === 1 ? { ...hole, awards: [...hole.awards, ...sweeps] } : hole);
+    const result = { ...saved, dots: { ...dots, holes } };
+    const detail = dotHoleBreakdown({ definition: f.game, result }, a, 1, f.cards);
+    expect(detail.entries.filter((entry) => entry.lane === 'specials').map((entry) => entry.label))
+      .toEqual(['Sandy', 'Manual Sweep', 'High/Low Sweep']);
+  });
+
   it('refuses a rotating High/Low breakdown when the High/Low results are missing', () => {
     const f = rotatingHighLowFixture();
     const { a } = requireIds(f.ids);
@@ -116,6 +133,24 @@ describe('saved per-hole dot breakdown', () => {
     expect(detail.specials).not.toBeNull();
     expect(detail.total).toBe((detail.base ?? 0) + (detail.specials ?? 0));
     expect(JSON.stringify(detail)).not.toMatch(/recordedBy|tenantId|objectId|gameEtag/);
+  });
+
+  it('marks a failed Churchie v3 call that awarded the opponents, but not their own calls or a Walk', () => {
+    const modern = churchyV3Fixture(18, 1, 'tee');
+    const result = calculateGameResults([modern.game], modern.snapshot, modern.cards)[0];
+    const [a, b, c] = modern.game.playerIds;
+    if (!result?.churchy || !a || !b || !c) throw new Error('Missing fictional Churchie results');
+    // Churchie v3 saves every award as made; the opposing caller's failed Murphy went to a and b.
+    const specials = [
+      { special: 'Murphy', playerId: c, outcome: 'made' as const, winners: [a, b], dots: 1 },
+      { special: 'Paree', playerId: a, outcome: 'made' as const, winners: [a, b], dots: 1 },
+      { special: 'Walk', playerId: c, outcome: 'made' as const, winners: [a, b], dots: 1 },
+    ];
+    const holes = result.churchy.holes.map((hole) => hole.number === 1 ? { ...hole, specials } : hole);
+    const game = { definition: modern.game, result: { ...result, churchy: { ...result.churchy, holes } } };
+    const detail = dotHoleBreakdown(game, a, 1, modern.cards);
+    expect(detail.entries.filter((entry) => entry.lane === 'specials').map((entry) => entry.label))
+      .toEqual(['Murphy · missed call', 'Paree', 'Walk']);
   });
 
   it('preserves legacy signed Wolf transfers, known zero and pending or missing results', () => {
