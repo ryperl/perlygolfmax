@@ -9,6 +9,7 @@ import { gameDisplayName, gameUnavailableMessage } from '../games';
 import { gameResultTotal, gameResultUnit } from '../../domain/games';
 import { CourseHandicap } from './CourseHandicap';
 import { MatchPlayRows } from './MatchPlayScorecard';
+import { DotPointsCell } from './DotPointsCell';
 import './scorecard-recap.css';
 
 function scoreMark(score: HoleScore | undefined, par: number) {
@@ -139,7 +140,10 @@ export function ScorecardNine({ label, subtotal, layout, fullLayout, cards, game
                 const points = holePoints.get(hole.number);
                 const description = !available ? 'unavailable' : typeof points === 'number' ? String(points) : 'pending';
                 return <td key={hole.number} aria-label={`${card.displayName}, hole ${String(hole.number)} game ${unit}: ${description}`}>
-                  {available ? points ?? '—' : '—'}
+                  {game.definition.kind === 'dots' || game.definition.kind === 'wolf' || game.definition.kind === 'churchy'
+                    ? <DotPointsCell key={`${game.definition.id}:${card.playerId}:${String(hole.number)}`} game={game} card={card}
+                      number={hole.number} text={available ? points ?? '—' : '—'} players={matchPlayers} />
+                    : available ? points ?? '—' : '—'}
                 </td>;
               })}
               <td className="recap-subtotal">{pointsTotalText(!available ? null : player.strokeGame
