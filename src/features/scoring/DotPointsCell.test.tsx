@@ -77,6 +77,21 @@ describe('existing dot cell details', () => {
     await new Promise((resolve) => { window.setTimeout(resolve, 0); });
     expect(other).toHaveFocus();
   });
+
+  it('places an open breakdown again when refreshed results make it taller', async () => {
+    const user = userEvent.setup();
+    const props = openableProps();
+    const view = render(<DotPointsCell {...props} />);
+    const button = screen.getByRole('button', { name: /Show breakdown/ });
+    vi.spyOn(button, 'getBoundingClientRect').mockReturnValue(new DOMRect(20, 400, 44, 44));
+    await user.click(button);
+    const popup = screen.getByRole('dialog');
+    expect(popup.style.top).toBe('452px');
+    // The refreshed breakdown no longer fits below the cell in jsdom's 768px-tall window, so it moves up.
+    vi.spyOn(popup, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 200, 500));
+    view.rerender(<DotPointsCell {...props} text={1} />);
+    expect(popup.style.top).toBe('12px');
+  });
 });
 
 /** A complete fictional Churchie hole-1 cell for golfer 1. */

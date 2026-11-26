@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { FocusEvent, RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import type { Scorecard } from '../../domain/scoring';
@@ -127,6 +127,12 @@ export function DotPointsCell({ game, card, number, text, description, players }
   }, [restoreFocus]);
   useDismissablePopover(open, close, trigger, popup);
   const value = open ? dotHoleBreakdown(game, card.playerId, number, players) : undefined;
+  // Refreshed results can add or remove lines while the popover is open, so place it again after every render
+  // rather than only on opening; otherwise a taller breakdown can run past the bottom of the screen.
+  useLayoutEffect(() => {
+    const anchor = trigger.current?.getBoundingClientRect();
+    if (open && anchor && popup.current) placePopover(popup.current, anchor);
+  });
   const closeAndRefocus = () => {
     setOpen(false);
     trigger.current?.focus({ preventScroll: true });
