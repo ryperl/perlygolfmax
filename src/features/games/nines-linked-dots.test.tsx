@@ -9,7 +9,7 @@ import { ninesLinkedRound } from '../../domain/nines-linked.test-support';
 import type { RoundScores } from '../../domain/scoring';
 import { gameResult } from '../../client/scoring.test-support';
 import { DotsHoleControls } from '../dots';
-import { buildGame, newGameDraft } from './game-draft';
+import { buildGame, draftFromGame, newGameDraft } from './game-draft';
 import { GameSettings } from './GameSettings';
 import { RoundGamesPanel } from './index';
 import type { RoundGamesPanelProps } from './index';
@@ -96,5 +96,25 @@ describe('Dots linked to Nines', () => {
       saved={undefined} draft={undefined} disabled={false} onChange={vi.fn()} context={context} contextLabel="Nines" />);
     expect(screen.getByText('Plays alone · Nines')).toBeVisible();
     expect(screen.queryByText(/Partner/u)).not.toBeInTheDocument();
+  });
+
+  it('closes game types a saved game cannot switch to, and says to add a separate game', () => {
+    const { round, nines } = ninesLinkedRound();
+    const wolf: RoundGameDefinition = { id: '00000000-0000-4000-8000-000000000777', name: 'Fictional Wolf',
+      kind: 'wolf', version: 2, basis: 'gross', groupNumber: 1, playerIds: nines.playerIds, allowPig: true, stakeMinor: 50 };
+    const renderSaved = (game: RoundGameDefinition) => render(<GameSettings draft={draftFromGame(game)} existing
+      games={[game]} roster={round.cards} groups={round.groups} supportedGameKinds={roundGameKinds} wolfV2Supported
+      holeNumbers={[]} disabled={false} saveDisabled={false} cancelDisabled={false} retry={false}
+      onChange={vi.fn()} onSave={vi.fn()} onCancel={vi.fn()} />);
+    const view = renderSaved(wolf);
+    expect(screen.getByRole('option', { name: /^Nines/u })).toBeDisabled();
+    expect(screen.getByRole('option', { name: /^Dots/u })).toBeDisabled();
+    expect(screen.getByRole('option', { name: 'Stableford' })).toBeEnabled();
+    expect(screen.getByText('To play Nines, Wolf, Dots or Churchie instead, add a separate game.')).toBeVisible();
+    view.unmount();
+    renderSaved(nines);
+    expect(screen.getByRole('option', { name: /^Wolf/u })).toBeDisabled();
+    expect(screen.getByRole('option', { name: /^Dots/u })).toBeDisabled();
+    expect(screen.getByRole('option', { name: 'Stroke Play' })).toBeEnabled();
   });
 });

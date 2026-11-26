@@ -17,6 +17,8 @@ const newerBrowserQuery = `${olderBrowserQuery}&${ninesQuery}`;
 import { createScoringHandler } from './handlers.js';
 import { TablePurseStore } from '../purse/store.js';
 import { testerFixture } from '../test-access/test-support.js';
+import { stablefordPoints } from '../../../src/domain/stableford.js';
+import { linkedNinesGame } from '../../../src/domain/linked-dots.js';
 
 async function fixture(playerCount: 3 | 4 = 3) {
   const f = await scoringFixture(playerCount);
@@ -234,6 +236,45 @@ describe('Nines through the API, without disturbing older browsers', () => {
       await expect(f.saveAsNewClient([nines, dots], saved.round.games?.configuration.etag ?? null, 33103))
         .rejects.toMatchObject({ code: 'INTERNAL_GAME_REQUIRES_NEW_GAME' });
       expect(new Map(f.rows)).toEqual(before);
+    });
+
+    it('a pair left stale by moving golfers does not block other edits, and can be repaired one game at a time', async () => {
+      const f = await fixture(4);
+      const [a = '', b = '', c = '', d = ''] = f.ids;
+      // Start with a threesome and a single, then save Nines with linked Dots for the threesome.
+      const regroup = async (groups: readonly { readonly number: number; readonly playerIds: readonly string[] }[]) => {
+        const input = { ...f.input, rounds: f.input.rounds.map((round) => ({ ...round, groups })) };
+        await runWithNinesSupport(2, async () => f.workspace.save(creator, event.id, input,
+          (await f.workspace.get(creator, event.id)).etag));
+      };
+      await regroup([{ number: 1, playerIds: [a, b, c] }, { number: 2, playerIds: [d] }]);
+      const dots = linkedDots(f);
+      let etag = (await f.saveAsNewClient([f.game, dots], null, 33200)).round.games?.configuration.etag ?? null;
+      // Golfer D swaps in for C before scoring: the saved pair now names the wrong golfers.
+      await regroup([{ number: 1, playerIds: [a, b, d] }, { number: 2, playerIds: [c] }]);
+      const stableford: RoundGameDefinition = { id: identifier(33201), name: 'Fictional Stableford', preset: 'standard',
+        basis: 'gross', handicapAllowancePercent: 95, points: stablefordPoints('standard') };
+      etag = (await f.saveAsNewClient([f.game, dots, stableford], etag, 33202)).round.games?.configuration.etag ?? null;
+      // Repair Nines first, then the Dots game linked to it.
+      const nines = { ...f.game, playerIds: [a, b, d] };
+      etag = (await f.saveAsNewClient([nines, dots, stableford], etag, 33203)).round.games?.configuration.etag ?? null;
+      const repaired = { ...dots, playerIds: [a, b, d] };
+      const saved = await f.saveAsNewClient([nines, repaired, stableford], etag, 33204);
+      const settlement = saved.round.internalSettlements?.find((entry) => entry.gameIds[0] === nines.id);
+      expect(settlement?.gameIds).toEqual([nines.id, repaired.id]);
+      expect(linkedNinesGame(repaired, saved.round.games?.configuration.games ?? [], saved.round.groups)).toEqual(nines);
+    });
+
+    it('still refuses a new Dots game linked to a Nines game with other golfers', async () => {
+      const f = await fixture(4);
+      const [a = '', b = '', c = '', d = ''] = f.ids;
+      const groups = [{ number: 1, playerIds: [a, b, c] }, { number: 2, playerIds: [d] }];
+      const input = { ...f.input, rounds: f.input.rounds.map((round) => ({ ...round, groups })) };
+      await runWithNinesSupport(2, async () => f.workspace.save(creator, event.id, input,
+        (await f.workspace.get(creator, event.id)).etag));
+      // Golfer D is not in the Nines threesome.
+      const wrongGolfers: DotsGameDefinition = { ...linkedDots(f), groupNumber: 2, playerIds: [d] };
+      await expect(f.saveAsNewClient([f.game, wrongGolfers], null, 33205)).rejects.toMatchObject({ status: 400 });
     });
 
     it('refuses a link that uses partner-only specials', async () => {

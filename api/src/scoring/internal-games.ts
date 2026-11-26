@@ -5,7 +5,8 @@ import type { Scorecard } from '../../../src/domain/scoring.js';
 import type { DotRoundInput } from '../../../src/domain/dot-context.js';
 import { dotsDefinitionMatchesRound } from '../../../src/contracts/dots.js';
 import { ApiError } from '../errors.js';
-import { isPublicInternalGameDefinition, preservesProtectedGameDefinitions } from '../../../src/domain/internal-game-management.js';
+import { isPublicInternalGameDefinition, preservesProtectedGameDefinitions, savedGameKindChangeAllowed }
+  from '../../../src/domain/internal-game-management.js';
 import { hasConflictingSweep } from '../../../src/domain/internal-games.js';
 import { linkedNinesGame } from '../../../src/domain/linked-dots.js';
 
@@ -24,33 +25,22 @@ export function definitionCards(round: RoundSnapshot): readonly Scorecard[] {
     holes: [], etag: null, updatedAt: null }));
 }
 
-const internalKinds: readonly (RoundGameDefinition['kind'])[] = ['dots', 'wolf', 'churchy', 'nines'];
-
-/** True for the games that share sides or money with linked Dots, including Nines. */
-function isInternalKind(game: RoundGameDefinition | undefined): boolean {
-  return game !== undefined && internalKinds.includes(game.kind);
-}
-
 /**
- * A saved Wolf, Dots, Churchie or Nines game keeps its kind (Wolf to Nines needs a new game), and an
- * existing game cannot become Wolf, Dots or Churchie. Other games may still be switched to Nines.
+ * A Dots game linked to Nines must be a valid link when this save creates or changes the Dots game, or
+ * when its target only now became a Nines game. A pair left stale by a later group change stays saved
+ * (its results are unavailable) so unrelated edits still work, and it can be repaired one game at a
+ * time: Nines first, then the Dots game.
  */
-function changesInternalKind(previous: RoundGameDefinition, game: RoundGameDefinition): boolean {
-  if (previous.kind === game.kind) return false;
-  if (isInternalKind(previous)) return true;
-  return game.kind === 'dots' || game.kind === 'wolf' || game.kind === 'churchy';
-}
-
-/**
- * Every Dots game linked to Nines must still be a valid link, even when only the Nines side changed
- * (for example a saved Wolf ID now holding a Nines definition). Such Dots peers are otherwise skipped
- * as unchanged.
- */
-function requireValidNinesLinks(after: readonly RoundGameDefinition[], round: RoundSnapshot): void {
+function requireValidNinesLinks(before: readonly RoundGameDefinition[], after: readonly RoundGameDefinition[],
+  round: RoundSnapshot): void {
   for (const game of after) {
     if (game.kind !== 'dots' || game.mode !== 'linked') continue;
     const linked = after.find((entry) => entry.id === game.linkedGameId);
     if (linked?.kind !== 'nines') continue;
+    const previousDots = before.find((entry) => entry.id === game.id);
+    const dotsUnchanged = previousDots !== undefined && sameGameDefinitions([previousDots], [game]);
+    const wasNines = before.find((entry) => entry.id === linked.id)?.kind === 'nines';
+    if (dotsUnchanged && wasNines) continue;
     if (!linkedNinesGame(game, after, round.groups)) throw new ApiError(400, 'INVALID_DOTS_LINK');
   }
 }
@@ -86,7 +76,7 @@ export function validateInternalGameChanges(
       if (round.scoringStarted) throw new ApiError(409, 'MATCH_SETUP_LOCKED');
     }
     if (previous && sameGameDefinitions([previous], [game])) continue;
-    if (previous && changesInternalKind(previous, game)) {
+    if (previous && !savedGameKindChangeAllowed(previous.kind ?? 'stableford', game.kind ?? 'stableford')) {
       throw new ApiError(400, 'INTERNAL_GAME_REQUIRES_NEW_GAME');
     }
     if (game.kind === 'dots' || game.kind === 'wolf' || game.kind === 'churchy') {
@@ -107,7 +97,7 @@ export function validateInternalGameChanges(
   if (publicOnly && round.scoringStarted && !sameGameDefinitions(before, after)) {
     throw new ApiError(409, 'MATCH_SETUP_LOCKED');
   }
-  requireValidNinesLinks(after, round);
+  requireValidNinesLinks(before, after, round);
   for (const groupNumber of affected) {
     const peers = after.filter((game) => (game.kind === 'dots' || game.kind === 'wolf' || game.kind === 'churchy')
       && game.groupNumber === groupNumber);
@@ -120,11 +110,8 @@ export function validateInternalGameChanges(
     for (const game of peers) {
       if (game.kind !== 'dots') continue;
       const linked = game.mode === 'linked' ? after.find((entry) => entry.id === game.linkedGameId) : undefined;
-      // Dots linked to Nines is checked separately: three golfers who each play alone.
-      if (game.mode === 'linked' && linked?.kind === 'nines') {
-        if (!linkedNinesGame(game, after, round.groups)) throw new ApiError(400, 'INVALID_DOTS_LINK');
-        continue;
-      }
+      // Dots linked to Nines is checked by requireValidNinesLinks: three golfers who each play alone.
+      if (game.mode === 'linked' && linked?.kind === 'nines') continue;
       if (game.mode === 'linked' && (linked?.kind !== 'wolf' || linked.version !== 2
         || linked.groupNumber !== game.groupNumber || linked.playerIds.length !== game.playerIds.length
         || !linked.playerIds.every((id) => game.playerIds.includes(id))
