@@ -185,6 +185,7 @@ function validateRoundScores(value: unknown, lean = false): value is RoundScores
     || Object.keys(value.gameInputContext).length !== 2 || !isVersionId(value.gameInputContext.courseVersionId)
     || !positiveInteger(value.gameInputContext.teeProfileId))) return false;
   if (isRecord(value) && (value.dotsManualSweep !== undefined && value.dotsManualSweep !== true
+    || value.ninesLinkedDots !== undefined && value.ninesLinkedDots !== true
     || value.wolfOrderVersion !== undefined && value.wolfOrderVersion !== 1
     || value.wolfHighLowSweep !== undefined && value.wolfHighLowSweep !== true
     || value.sweepRulesVersion !== undefined && value.sweepRulesVersion !== 2)) return false;

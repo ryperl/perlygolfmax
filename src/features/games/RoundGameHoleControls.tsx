@@ -6,7 +6,9 @@ import type { WolfHoleRecord } from '../../domain/wolf';
 import { wolfForHole, wolfOrder } from '../../domain/wolf';
 import { NassauHoleControls } from '../nassau';
 import { WolfHoleControls } from '../wolf';
-import type { DotsHoleRecord } from '../../domain/dots';
+import type { DotsGameDefinition, DotsHoleRecord } from '../../domain/dots';
+import type { DotHoleContext } from '../../domain/dot-context';
+import { linkedNinesGame, ninesDotsContexts } from '../../domain/linked-dots';
 import { dotsRotationContext } from '../../domain/dots';
 import { DotsEntryButton, DotsHoleControls, DotsRotationControls, DotsHighLowPreview } from '../dots';
 import { groupStartingHole } from '../../domain/round-navigation';
@@ -29,6 +31,21 @@ export interface RoundGameHoleControlsProps {
   readonly onWolfChange: (records: readonly WolfHoleRecord[]) => void;
   readonly onSpecialDotsChange?: (records: readonly DotsHoleRecord[]) => void;
   readonly onChurchyChange?: (record: ChurchySpecialsV3) => void;
+}
+
+/** Sides for linked Dots on one hole: Nines golfers each play alone; Wolf sides come from saved Wolf results. */
+function linkedDotsContext(round: RoundScores, game: DotsGameDefinition,
+  holeNumber: number): DotHoleContext | undefined {
+  const nines = linkedNinesGame(game, round.games?.configuration.games ?? [], round.groups);
+  if (nines) return ninesDotsContexts(nines, [holeNumber])[0];
+  return round.games?.results.find((result) => result.gameId === game.linkedGameId)?.wolf?.contexts
+    ?.find((context) => context.number === holeNumber);
+}
+
+/** The base game a linked Dots game points at, named for score-entry text. */
+function linkedBaseLabel(round: RoundScores, game: DotsGameDefinition): string {
+  const base = round.games?.configuration.games.find((entry) => entry.id === game.linkedGameId);
+  return base?.kind === 'nines' ? 'Nines' : 'Wolf';
 }
 
 export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, draft, disabled, onNassauChange, onWolfChange, onSpecialDotsChange, onChurchyChange, playerId, playerScore, playerScores, placement }: RoundGameHoleControlsProps) {
@@ -109,10 +126,13 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
       const rotation = game.mode === 'rotating' ? dotsRotationContext(game, round, staged
         ? [...records.filter((record) => record.number !== holeNumber), staged] : records) : undefined;
       const rotationLocked = records.some((record) => record.rotation !== undefined);
+      const linkedToNines = game.mode === 'linked' && linkedBaseLabel(round, game) === 'Nines';
+      const ninesLinkUnsupported = linkedToNines && round.ninesLinkedDots !== true;
       const individualUnsupported = game.mode === 'individual' && !supportsIndividualDotsPlayerCount(round, game.playerIds.length);
       const dotsLocked = locked || !onSpecialDotsChange || individualUnsupported || !supportsDotsSpecials(round, game.specials)
         || !supportsDotsGameRules(round, game)
-        || game.sweepRule === 'manual-v1' && round.dotsManualSweep !== true;
+        || game.sweepRule === 'manual-v1' && round.dotsManualSweep !== true
+        || ninesLinkUnsupported;
       if (placement === 'before' && game.mode === 'rotating' && rotation) {
         const record = staged ?? saved.dots?.find((record) => record.gameId === game.id && record.number === holeNumber)
           ?? { number: holeNumber, gameId: game.id, gameEtag: etag ?? '', players: [], contests: [] };
@@ -138,8 +158,9 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
           ? playerScore : card.holes.find((hole) => hole.number === holeNumber)?.score) ?? undefined }))}
       saved={saved.dots?.find((record) => record.gameId === game.id && record.number === holeNumber)}
       draft={draft?.dots?.find((record) => record.gameId === game.id && record.number === holeNumber)}
-      context={game.mode === 'linked' ? round.games?.results.find((result) => result.gameId === game.linkedGameId)?.wolf?.contexts
-        ?.find((context) => context.number === holeNumber) : rotation?.contexts.find((context) => context.number === holeNumber)}
+      context={game.mode === 'linked' ? linkedDotsContext(round, game, holeNumber)
+        : rotation?.contexts.find((context) => context.number === holeNumber)}
+      contextLabel={game.mode === 'linked' ? linkedBaseLabel(round, game) : 'Wolf'}
       playerId={playerId} groupOnly={!playerId} rotation={rotation} rotationLocked={rotationLocked}
       showRotation={placement !== 'other'}
       disabled={dotsLocked}
@@ -154,6 +175,7 @@ export function RoundGameHoleControls({ round, groupNumber, holeNumber, saved, d
         {individualUnsupported && <p>Individual Dots edits for this group size are temporarily unavailable in this app version.</p>}
         {!supportsDotsGameRules(round, game) && <p>Rotating Dots edits are temporarily unavailable in this app version.</p>}
         {game.sweepRule === 'manual-v1' && round.dotsManualSweep !== true && <p>Manual Sweep edits are temporarily unavailable in this app version.</p>}
+        {ninesLinkUnsupported && <p>Dots linked to Nines edits are temporarily unavailable in this app version.</p>}
         {controls}
       </Fragment>;
     }

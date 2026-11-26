@@ -354,7 +354,8 @@ export function dotsDefinitionMatchesRound(game: DotsGameDefinition, round: DotR
   return groups.length === 1 && group !== undefined
     && (game.mode === 'individual' ? game.playerIds.length >= 1 && game.playerIds.length <= 4
       && (game.playerIds.length !== 1 || game.stakeMinor === null || game.stakeMinor === 0)
-      : game.playerIds.length === 4) && unique(game.playerIds)
+      : game.mode === 'linked' ? game.playerIds.length === 3 || game.playerIds.length === 4
+        : game.playerIds.length === 4) && unique(game.playerIds)
     && sameMembers(group.playerIds, game.playerIds)
     && game.playerIds.every((id) => round.cards.filter((card) => card.playerId === id).length === 1
       && round.groups.filter((candidate) => candidate.playerIds.includes(id)).length === 1)
@@ -362,6 +363,16 @@ export function dotsDefinitionMatchesRound(game: DotsGameDefinition, round: DotR
     && round.layout.every((hole) => positive(hole.number) && positive(hole.par))
     && (group.startingHole === undefined || round.layout.some((hole) => hole.number === group.startingHole))
     && (game.mode !== 'fixed' || sameMembers(game.partnerIds, game.playerIds));
+}
+
+/**
+ * Linked Dots takes its sides from the base game: two pairs from Wolf, or, for Nines, one side per
+ * golfer (three golfers, each alone).
+ */
+function isLinkedSideShape(sides: readonly (readonly string[])[], playerCount: number): boolean {
+  const twoPairs = sides.length === 2 && sides.every((side) => side.length >= 1);
+  const everyoneAlone = playerCount === 3 && sides.length === 3 && sides.every((side) => side.length === 1);
+  return twoPairs || everyoneAlone;
 }
 
 function contextFor(game: DotsGameDefinition, number: number, contexts: readonly DotHoleContext[]): DotHoleContext {
@@ -378,7 +389,7 @@ function contextFor(game: DotsGameDefinition, number: number, contexts: readonly
     if (found.status !== 'ready') return found;
     const members = found.sides.flat();
     if (!sameMembers(members, game.playerIds)
-      || found.sides.length !== 2 || found.sides.some((side) => side.length < 1)
+      || !isLinkedSideShape(found.sides, game.playerIds.length)
       || ![1, 2, 3].includes(found.multiplier)
       || [found.highWinnerIds, found.lowWinnerIds].some((ids) => ids !== undefined && ids.length > 0
         && !found.sides.some((side) => sameMembers(side, ids)))) {

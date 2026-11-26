@@ -62,7 +62,7 @@ describe('event service composition', () => {
     if (!services.leaderboard) throw new Error('Configured production services must include overall results.');
     await services.leaderboard.load(fictionalEvent.id, signal);
     expect(token).toHaveBeenCalledTimes(5);
-    expect(send.mock.calls[4]?.[0]).toBe(`https://fictional.example.test/api/events/${fictionalEvent.id}/leaderboard?murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1&churchyNames=1&sweepRules=2&dotCoexistence=2&gameHandicaps=1&gameCalculations=2&wolfOrders=1&dotsHighLow=2&dotsRules=3&nines=1`);
+    expect(send.mock.calls[4]?.[0]).toBe(`https://fictional.example.test/api/events/${fictionalEvent.id}/leaderboard?murphy=score-v1&paree=score-v1&stringRules=2&dotsCalls=score-v1&categorySweeps=1&churchyNames=1&sweepRules=2&dotCoexistence=2&gameHandicaps=1&gameCalculations=2&wolfOrders=1&dotsHighLow=2&dotsRules=3&nines=2`);
     for (const [, request] of send.mock.calls) {
       expect(new Headers(request?.headers).get('Authorization')).toBe('Bearer fictional-token');
       expect(request).toMatchObject({ credentials: 'omit', cache: 'no-store', signal });

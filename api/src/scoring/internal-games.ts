@@ -5,8 +5,10 @@ import type { Scorecard } from '../../../src/domain/scoring.js';
 import type { DotRoundInput } from '../../../src/domain/dot-context.js';
 import { dotsDefinitionMatchesRound } from '../../../src/contracts/dots.js';
 import { ApiError } from '../errors.js';
-import { isPublicInternalGameDefinition, preservesProtectedGameDefinitions } from '../../../src/domain/internal-game-management.js';
+import { isPublicInternalGameDefinition, preservesProtectedGameDefinitions, savedGameKindChangeAllowed }
+  from '../../../src/domain/internal-game-management.js';
 import { hasConflictingSweep } from '../../../src/domain/internal-games.js';
+import { linkedNinesGame } from '../../../src/domain/linked-dots.js';
 
 export function isPublicInternalGame(game: RoundGameDefinition): boolean {
   return isPublicInternalGameDefinition(game);
@@ -21,6 +23,28 @@ export function dotRound(round: RoundSnapshot, cards: readonly Scorecard[]): Dot
 export function definitionCards(round: RoundSnapshot): readonly Scorecard[] {
   return round.players.map((player) => ({ playerId: player.playerId, displayName: player.displayName,
     holes: [], etag: null, updatedAt: null }));
+}
+
+/**
+ * A Dots game linked to Nines must be a valid link when this save creates or changes the Dots game, or
+ * when its target only now became a Nines game. A pair left stale by a later group change stays saved
+ * (its results are unavailable) so unrelated edits still work, and it can be repaired one game at a
+ * time: Nines first, then the Dots game.
+ */
+function requireValidNinesLinks(before: readonly RoundGameDefinition[], after: readonly RoundGameDefinition[],
+  round: RoundSnapshot): void {
+  for (const game of after) {
+    if (game.kind !== 'dots' || game.mode !== 'linked') continue;
+    const linked = after.find((entry) => entry.id === game.linkedGameId);
+    if (linked?.kind !== 'nines') continue;
+    const previousDots = before.find((entry) => entry.id === game.id);
+    // sameGameDefinitions ignores sweepRule, and dropping manual-v1 would turn Sweep automatic.
+    const dotsUnchanged = previousDots?.kind === 'dots' && sameGameDefinitions([previousDots], [game])
+      && previousDots.sweepRule === game.sweepRule;
+    const wasNines = before.find((entry) => entry.id === linked.id)?.kind === 'nines';
+    if (dotsUnchanged && wasNines) continue;
+    if (!linkedNinesGame(game, after, round.groups)) throw new ApiError(400, 'INVALID_DOTS_LINK');
+  }
 }
 
 export function validateInternalGameChanges(
@@ -54,6 +78,9 @@ export function validateInternalGameChanges(
       if (round.scoringStarted) throw new ApiError(409, 'MATCH_SETUP_LOCKED');
     }
     if (previous && sameGameDefinitions([previous], [game])) continue;
+    if (previous && !savedGameKindChangeAllowed(previous.kind ?? 'stableford', game.kind ?? 'stableford')) {
+      throw new ApiError(400, 'INTERNAL_GAME_REQUIRES_NEW_GAME');
+    }
     if (game.kind === 'dots' || game.kind === 'wolf' || game.kind === 'churchy') {
       if (previous && previous.kind !== game.kind) throw new ApiError(400, 'INTERNAL_GAME_REQUIRES_NEW_GAME');
       affected.add(game.groupNumber);
@@ -72,6 +99,7 @@ export function validateInternalGameChanges(
   if (publicOnly && round.scoringStarted && !sameGameDefinitions(before, after)) {
     throw new ApiError(409, 'MATCH_SETUP_LOCKED');
   }
+  requireValidNinesLinks(before, after, round);
   for (const groupNumber of affected) {
     const peers = after.filter((game) => (game.kind === 'dots' || game.kind === 'wolf' || game.kind === 'churchy')
       && game.groupNumber === groupNumber);
@@ -84,6 +112,8 @@ export function validateInternalGameChanges(
     for (const game of peers) {
       if (game.kind !== 'dots') continue;
       const linked = game.mode === 'linked' ? after.find((entry) => entry.id === game.linkedGameId) : undefined;
+      // Dots linked to Nines is checked by requireValidNinesLinks: three golfers who each play alone.
+      if (game.mode === 'linked' && linked?.kind === 'nines') continue;
       if (game.mode === 'linked' && (linked?.kind !== 'wolf' || linked.version !== 2
         || linked.groupNumber !== game.groupNumber || linked.playerIds.length !== game.playerIds.length
         || !linked.playerIds.every((id) => game.playerIds.includes(id))

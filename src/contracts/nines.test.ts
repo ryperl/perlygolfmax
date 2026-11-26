@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { isRoundGameDefinition } from './games.js';
 import { isNinesDefinition, isNinesResult } from './nines.js';
-import { containsNinesGame, withoutNinesGameKind } from './nines-negotiation.js';
+import { containsNinesGame, containsNinesLinkedDots, withoutNinesGameKind } from './nines-negotiation.js';
 import { calculateGameResults } from '../domain/stableford.js';
 import { strokeGameFixture, strokeGameId } from '../domain/stroke-games.test-support.js';
 import type { NinesGameDefinition } from '../domain/nines.js';
@@ -77,6 +77,20 @@ describe('Nines negotiation helpers', () => {
     expect(containsNinesGame({ round: { games: { configuration: { games: [game] } } } })).toBe(true);
     expect(containsNinesGame([{ results: [result] }])).toBe(true);
     expect(containsNinesGame({ games: [{ kind: 'wolf' }, { kind: 'dots' }], note: 'nines' })).toBe(false);
+  });
+
+  it('finds Dots linked to Nines by its linked game ID, whatever its golfer count', () => {
+    const { game, ids } = fixture();
+    const fourIds = [...ids, strokeGameId(9)];
+    const linkedTo = (linkedGameId: string, playerIds: readonly string[]) =>
+      ({ kind: 'dots', mode: 'linked', linkedGameId, playerIds });
+    // A stale four-golfer link to a Nines game still counts, so older clients are refused.
+    expect(containsNinesLinkedDots({ games: [game, linkedTo(game.id, fourIds)] })).toBe(true);
+    expect(containsNinesLinkedDots({ games: [game, linkedTo(game.id, ids)] })).toBe(true);
+    // Dots linked to a Wolf game beside an unrelated Nines game is not a Nines link.
+    const wolfId = strokeGameId(1501);
+    expect(containsNinesLinkedDots({ games: [game, { kind: 'wolf', id: wolfId }, linkedTo(wolfId, fourIds)] }))
+      .toBe(false);
   });
 
   it('hides nines from advertised game kinds for older clients, keeping every other kind', () => {

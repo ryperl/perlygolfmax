@@ -395,7 +395,24 @@ export function ninesDraftProblem(draft: GameDraft, playerIds: readonly string[]
  * Explains why `buildGame` rejects a Dots draft, in the order a scorer would fix it.
  * Returns null when no specific reason is known; callers then keep their general guidance.
  */
-export function dotsDraftProblem(draft: GameDraft, playerIds: readonly string[]): string | null {
+/** Why a Dots draft linked to Nines cannot save, or null. Nines golfers each play alone, so no partner specials. */
+function ninesLinkProblem(draft: GameDraft): string | null {
+  const specials = draft.dotsSpecials ?? [];
+  if (specials.some((special) => special.kind === 'assassin')) {
+    return 'Assassin needs partners, and Nines golfers each play alone. Remove Assassin.';
+  }
+  if (specials.some((special) => special.kind === 'sweep') && draft.dotsSweepRule !== 'manual-v1') {
+    return 'Automatic Sweep needs Wolf High/Low. Use manual Sweep, or remove it.';
+  }
+  return null;
+}
+
+/**
+ * Why a Dots draft cannot save, or null. `games` are the round's other games, used to tell
+ * whether a linked draft points at Wolf or Nines.
+ */
+export function dotsDraftProblem(draft: GameDraft, playerIds: readonly string[],
+  games: readonly RoundGameDefinition[] = []): string | null {
   if (draft.kind !== 'dots') return null;
   const name = draft.name.trim();
   if (!name) return 'Enter a game name.';
@@ -406,7 +423,15 @@ export function dotsDraftProblem(draft: GameDraft, playerIds: readonly string[])
   if (members.some((id) => !playerIds.includes(id)) || new Set(members).size !== members.length) {
     return 'This playing group no longer matches the round. Choose the saved playing group again.';
   }
-  if (mode !== 'individual' && members.length !== 4) return 'Partner and rotating Dots need a saved foursome. Choose Individual for smaller groups.';
+  const linkedTarget = mode === 'linked' ? games.find((game) => game.id === draft.linkedGameId) : undefined;
+  const ninesTrio = mode === 'linked' && members.length === ninesPlayerCount;
+  if (mode !== 'individual' && members.length !== 4 && !ninesTrio) {
+    return 'Partner and rotating Dots need a saved foursome. Choose Individual for smaller groups.';
+  }
+  if (linkedTarget?.kind === 'nines' || ninesTrio) {
+    const problem = ninesLinkProblem(draft);
+    if (problem) return problem;
+  }
   if (draft.dotsVersion === 1 && mode === 'rotating' || (draft.dotsVersion === 2 || draft.dotsVersion === 3) && mode !== 'rotating') {
     return 'Saved Dots rules cannot change mode. Keep the saved mode, or create a separate Dots game before scoring.';
   }
@@ -424,7 +449,7 @@ export function dotsDraftProblem(draft: GameDraft, playerIds: readonly string[])
   if (draft.dotsHighLow && mode === 'rotating' && draft.dotsVersion !== 3 && (draft.dotsRotationHoles ?? 3) !== 3) {
     return 'Under these saved rules, Net High/Low is available only for Modified Sixes (three-hole partners).';
   }
-  if (mode === 'linked') return draft.linkedGameId ? null : 'Choose the earned Wolf game to link.';
+  if (mode === 'linked') return draft.linkedGameId ? null : 'Choose the Wolf or Nines game to link.';
   const stake = draft.stake?.trim() ?? '';
   const rate = stake ? parseMoney(stake) : null;
   if (stake && rate === null) return 'Enter the USD rate as dollars and cents, like 1 or .50, or leave it blank for points only.';

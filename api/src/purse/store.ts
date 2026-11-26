@@ -1,5 +1,5 @@
 import type { TableClient } from '@azure/data-tables';
-import { clientSupportsNines, requireNinesSupport } from '../nines-negotiation.js';
+import { clientSupportsAllNinesRules, requireNinesSupport } from '../nines-negotiation.js';
 import type { AccountIdentity } from '../../../src/domain/events.js';
 import type { PublicScoreIdentity } from '../../../src/domain/public-access.js';
 import type { PursePlan, PurseTieResolution } from '../../../src/domain/purse.js';
@@ -110,7 +110,7 @@ export class TablePurseStore {
     requireDotsRulesV3InValue(body, dotsRulesV3);
     requireDotsHighLowInValue(body, dotsHighLow);
     if (!dotsCalls || !stringRules || !categorySweeps || !churchyNames || !sweepRules || !gameHandicaps || !gameCalculations || !wolfOrders || !dotsHighLow || !dotsRulesV3
-      || !clientSupportsNines()) {
+      || !clientSupportsAllNinesRules()) {
       const state = await this.source(identity, eventId, chargeRead);
       for (const round of state.roundScores) {
         requireDotsRulesV3(round.games?.configuration.games ?? [], dotsRulesV3);

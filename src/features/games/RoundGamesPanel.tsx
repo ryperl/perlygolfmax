@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { ninesGroupMatches } from '../../domain/nines';
+import { ninesGroupMatches, ninesPlayerCount } from '../../domain/nines';
+import { linkedNinesGame } from '../../domain/linked-dots';
+import type { DotsGameDefinition } from '../../domain/dots';
+import type { InternalGameSettlement } from '../../domain/dot-settlement';
 import { needsUpdatedGameCalculations } from '../../contracts/game-calculations';
 import { EventChangedError } from '../../client/events';
 import type { DotPresetStore } from '../../client/dot-presets';
@@ -46,6 +49,28 @@ interface Editor {
   readonly latest: RoundScores | null;
   readonly roster: RoundScores['cards'];
   readonly context: RoundScores;
+}
+
+/** Dots needs its whole saved group: 1–4 alone, a foursome with partners, or a Nines trio when linked. */
+function dotsGroupSizeAllowed(game: DotsGameDefinition, groupSize: number): boolean {
+  if (game.mode === 'individual') return groupSize >= 1 && groupSize <= 4;
+  if (game.mode === 'linked' && groupSize === ninesPlayerCount) return true;
+  return groupSize === 4;
+}
+
+/** A valid link from this Dots game to an earned Wolf (version 2) game in the same foursome. */
+function linksToEarnedWolf(game: DotsGameDefinition, peers: readonly RoundGameDefinition[]): boolean {
+  return peers.some((peer) => peer.kind === 'wolf' && peer.version === 2 && peer.id === game.linkedGameId
+    && peer.groupNumber === game.groupNumber && peer.playerIds.every((id) => game.playerIds.includes(id)));
+}
+
+/** Labels for the two sources of a combined settlement, named after its base game. */
+function settlementSourceLabels(settlement: InternalGameSettlement,
+  games: readonly RoundGameDefinition[]): readonly [string, string] {
+  if (settlement.gameIds.length !== 2) return ['Base', 'Specials'];
+  const base = games.find((game) => game.id === settlement.gameIds[0]);
+  if (base?.kind === 'nines') return ['Nines', 'Dots'];
+  return ['Wolf', 'Dots'];
 }
 
 function createEditor(round: RoundScores, game?: RoundGameDefinition, defaultGroupNumber?: number): Editor {
@@ -226,10 +251,10 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
       const ids = game.kind === 'nassau' || game.kind === 'match-play' ? game.sides.flatMap((side) => side.playerIds) : game.playerIds;
       if (!group || ids.some((id) => !group.playerIds.includes(id))
         || game.kind === 'wolf' && group.playerIds.length !== 4
-        || game.kind === 'dots' && (ids.length !== group.playerIds.length
-          || (game.mode === 'individual' ? group.playerIds.length < 1 || group.playerIds.length > 4 : group.playerIds.length !== 4))
+        || game.kind === 'dots' && (ids.length !== group.playerIds.length || !dotsGroupSizeAllowed(game, group.playerIds.length))
         || game.kind === 'nassau' && (editingRound.layout.length !== 18 || editingRound.layout.some((hole) => hole.number < 1 || hole.number > 18))) {
-        setMessage('Choose participants from one saved playing group. Individual Dots supports 1–4 players; partner modes and Wolf require four. Nassau requires 18 holes.');
+        setMessage('Choose participants from one saved playing group. Individual Dots supports 1–4 players; partner modes '
+          + 'and Wolf require four; Dots linked to Nines uses its three. Nassau requires 18 holes.');
         return;
       }
     }
@@ -245,10 +270,15 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
         setMessage('Choose one internal base game per playing group. Churchie cannot accompany Wolf or Dots; Ball Drop remains separate.');
         return;
       }
-      if (game.kind === 'dots' && game.mode === 'linked' && !peers.some((peer) => peer.kind === 'wolf'
-        && peer.version === 2 && peer.id === game.linkedGameId && peer.groupNumber === game.groupNumber
-        && peer.playerIds.every((id) => game.playerIds.includes(id)))) {
-        setMessage('Link Dots to an earned Wolf game in this saved foursome, or choose standalone individual or fixed partners.');
+      const linkedNines = game.kind === 'dots' ? linkedNinesGame(game, [...peers, game], editingRound.groups) : undefined;
+      if (game.kind === 'dots' && game.mode === 'linked' && !linksToEarnedWolf(game, peers) && !linkedNines) {
+        const problem = dotsDraftProblem(editor.draft, editor.roster.map((card) => card.playerId), editor.base);
+        setMessage(problem ?? 'Link Dots to an earned Wolf game in this saved foursome or to the Nines game in this '
+          + 'group of three, or choose standalone individual or fixed partners.');
+        return;
+      }
+      if (linkedNines && (round.ninesLinkedDots !== true || editingRound.ninesLinkedDots !== true)) {
+        setMessage('Linking Dots to Nines is temporarily unavailable in this app version. Your draft is retained.');
         return;
       }
     }
@@ -256,7 +286,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
     if (!intended) {
       setMessage(editor.draft.kind === 'wolf' || editor.draft.kind === 'nassau' || editor.draft.kind === 'match-play'
         ? 'Check the game name, saved playing group, distinct participants and order. Enter USD dollars and cents, or choose No planned money.'
-        : editor.draft.kind === 'dots' ? (!game && dotsDraftProblem(editor.draft, editor.roster.map((card) => card.playerId)))
+        : editor.draft.kind === 'dots' ? (!game && dotsDraftProblem(editor.draft, editor.roster.map((card) => card.playerId), editor.base))
           || 'Choose a saved playing group, compatible mode and enabled specials with positive whole units. Solo play is stats-only; otherwise use a valid optional USD rate with at most two decimal places.'
         : editor.draft.kind === 'churchy'
         ? 'Choose a complete saved foursome, order all four golfers, and enter USD dollars and cents per dot (zero or more). Choose one Churchie game per group.'
@@ -361,7 +391,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
       {archived && <p>This trip is archived. Game settings are read-only.</p>}
       {games.length === 0 && <p>No games configured for this round.</p>}
       {round.internalSettlements?.map((settlement) => <InternalSettlement key={`${String(settlement.groupNumber)}:${settlement.gameIds.join(':')}`}
-        settlement={settlement} sourceLabels={settlement.gameIds.length === 2 ? ['Wolf', 'Dots'] : ['Base', 'Specials']}
+        settlement={settlement} sourceLabels={settlementSourceLabels(settlement, games)}
         unit={games.some((entry) => entry.kind === 'nines' && settlement.gameIds.includes(entry.id)) ? 'points' : 'dots'}
         provisional={settlement.gameIds.some((id) => !round.games?.results.find((entry) => entry.gameId === id)
           ?.players.every((player) => player.status === 'complete'))}
@@ -425,6 +455,7 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
           churchyCustomNamesSupported={round.churchyCustomNames === true && editingRound.churchyCustomNames === true}
           holeNumbers={editingRound.layout.map((hole) => hole.number)}
           gameHandicapsSupported={round.gameHandicapRules === 1 && editingRound.gameHandicapRules === 1}
+          ninesLinkedDotsSupported={round.ninesLinkedDots === true && editingRound.ninesLinkedDots === true}
           setupLocked={round.setupLocked || editingRound.setupLocked}
           allowChurchyCreation={!editor.base.some((game) => game.id === editor.draft.id)}
           saveDisabled={editor.conflict || unsupportedSweep || unsupportedWolfOrder || unsupportedDotsRules} cancelDisabled={working} retry={editor.attempt !== null}

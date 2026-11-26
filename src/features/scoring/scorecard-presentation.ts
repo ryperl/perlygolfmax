@@ -10,6 +10,8 @@ import { gameHandicap } from '../../domain/game-handicaps';
 import type { PlayerCourseHandicap } from '../../domain/scoring';
 import type { RoundGroup } from '../../domain/setup';
 import type { WolfGameDefinition } from '../../domain/wolf';
+import type { NinesGameDefinition } from '../../domain/nines';
+import { linkedNinesGame } from '../../domain/linked-dots';
 
 export function scorecardHandicapStrokes(
   handicap: number | null | undefined, layout: readonly CourseHole[], enabled: boolean | undefined,
@@ -43,14 +45,15 @@ export function cardTotalText(card: Scorecard, layout: readonly CourseHole[]): s
 export interface ScorecardGame {
   readonly definition: RoundGameDefinition;
   readonly result: RoundGameResult | undefined;
-  readonly linkedWolf?: {
-    readonly definition: WolfGameDefinition;
+  /** The Wolf or Nines game a linked Dots game takes its sides, handicaps and money from. */
+  readonly linkedBase?: {
+    readonly definition: WolfGameDefinition | NinesGameDefinition;
     readonly result: RoundGameResult | undefined;
   };
 }
 
 export function scorecardUsesStrokesOff(game: ScorecardGame | undefined): boolean {
-  const definition = game?.linkedWolf?.definition ?? game?.definition;
+  const definition = game?.linkedBase?.definition ?? game?.definition;
   if (definition?.kind === 'dots') return definition.highLow?.handicapRule === 'group-low-v1';
   return definition !== undefined && definition.basis === 'net'
     && (definition.handicapRule === 'group-low-v1'
@@ -63,7 +66,7 @@ export function scorecardStrokeHandicap(
 ): { readonly value: number | null | undefined; readonly basis: 'CH' | 'SO' } {
   const course = { value: courseHandicaps?.find((entry) => entry.playerId === playerId)?.courseHandicap, basis: 'CH' as const };
   if (!scorecardUsesStrokesOff(game)) return course;
-  const source = game?.linkedWolf ?? game;
+  const source = game?.linkedBase ?? game;
   if (!source) return course;
   const definition = source.definition;
   if ('groupNumber' in definition && !groups.some((group) => group.number === definition.groupNumber
@@ -88,14 +91,17 @@ export function scorecardGame(round: RoundScores, gameId?: string | null, player
   if (!definition) return undefined;
   const linked = definition.kind === 'dots' && definition.mode === 'linked'
     ? round.games?.configuration.games.find((game) => game.id === definition.linkedGameId) : undefined;
-  const compatible = linked?.kind === 'wolf' && definition.kind === 'dots'
+  const compatibleWolf = linked?.kind === 'wolf' && definition.kind === 'dots'
     && linked.groupNumber === definition.groupNumber && linked.playerIds.length === definition.playerIds.length
     && linked.playerIds.every((id) => definition.playerIds.includes(id))
     && round.games?.configuration.games.filter((game) => game.kind === 'dots' && game.mode === 'linked'
       && game.linkedGameId === linked.id).length === 1;
+  const linkedNines = definition.kind === 'dots'
+    ? linkedNinesGame(definition, round.games?.configuration.games ?? [], round.groups) : undefined;
+  const base = compatibleWolf ? linked : linkedNines;
   return { definition, result: round.games?.results.find((result) => result.gameId === definition.id),
-    ...(compatible ? { linkedWolf: { definition: linked,
-      result: round.games.results.find((result) => result.gameId === linked.id) } } : {}) };
+    ...(base ? { linkedBase: { definition: base,
+      result: round.games?.results.find((result) => result.gameId === base.id) } } : {}) };
 }
 
 export function pointsTotalText(value: number | null, complete: boolean): string {

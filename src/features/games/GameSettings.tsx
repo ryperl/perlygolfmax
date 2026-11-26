@@ -2,6 +2,7 @@ import type { FormEvent } from 'react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { maximumPointsRows, teamSize } from '../../domain/games';
 import type { RoundGameKind } from '../../domain/games';
+import { roundGameKinds } from '../../domain/games';
 import type { GameDraft } from './game-draft';
 import { addBand, buildGame, defaultGameGroup, resetTeamAssignments, setFormat, setGameKind, setNassauVariant, setPreset, teamDraftFeedback, upgradeChurchyDraft } from './game-draft';
 import type { RoundGroup } from '../../domain/setup';
@@ -14,6 +15,18 @@ import type { PlayerCourseHandicap } from '../../domain/scoring';
 import { dotsSpecialCatalog } from '../../domain/dots';
 import { ChurcieOrderControls } from '../churchy';
 import { NinesSettings } from './NinesSettings';
+import { savedGameKindChangeAllowed } from '../../domain/internal-game-management';
+
+type DraftKind = NonNullable<GameDraft['kind']>;
+
+/** Why some game types are greyed out for a saved game, or null when every type is open. */
+function kindChangeHint(savedKind: DraftKind | undefined): string | null {
+  if (savedKind === undefined) return null;
+  if (savedKind === 'dots' || savedKind === 'wolf' || savedKind === 'churchy') {
+    return 'To play Nines, Wolf, Dots or Churchie instead, add a separate game.';
+  }
+  return 'To play Wolf, Dots or Churchie instead, add a separate game.';
+}
 
 interface GameSettingsProps {
   readonly draft: GameDraft;
@@ -50,6 +63,8 @@ interface GameSettingsProps {
   readonly presetStore?: DotPresetStore | undefined;
   readonly existing?: boolean;
   readonly gameHandicapsSupported?: boolean;
+  /** The API accepts Dots linked to Nines (`ninesLinkedDots` on the round). */
+  readonly ninesLinkedDotsSupported?: boolean;
   /** Save feedback, shown beside the Save button so it is seen where the scorer acted. */
   readonly notice?: string;
 }
@@ -72,7 +87,7 @@ export function GameSettings({
   churchyCustomNamesSupported = false, holeNumbers = [], defaultGroupNumber,
   wolfHighLowSweepSupported = false, wolfOrderSupported = false, dotsManualSweepSupported = false, dotsHighLowSupported = false,
   dotsV3Supported = false, courseHandicaps = [],
-  gameHandicapsSupported = false, notice = '',
+  gameHandicapsSupported = false, ninesLinkedDotsSupported = false, notice = '',
 }: GameSettingsProps) {
   const noticeRef = useRef<HTMLParagraphElement>(null);
   useEffect(() => {
@@ -113,6 +128,11 @@ export function GameSettings({
     event.preventDefault();
     onSave();
   }
+  // A saved game keeps some kinds for good (the API refuses the change), so those types stay closed.
+  const savedKind: DraftKind | undefined = existing
+    ? games.find((game) => game.id === draft.id)?.kind ?? 'stableford' : undefined;
+  const kindClosed = (kind: DraftKind) => savedKind !== undefined && !savedGameKindChangeAllowed(savedKind, kind);
+  const kindHint = kindChangeHint(savedKind);
   return (
     <form className="game-settings" onSubmit={submit} noValidate aria-label="Game settings">
       <fieldset disabled={disabled || matchLocked || draft.kind === 'churchy'
@@ -121,6 +141,8 @@ export function GameSettings({
         <label>Game type<select value={draft.kind ?? 'stableford'}
           disabled={draft.kind === 'churchy' || existing && (internalOnly || draft.kind === 'match-play' || draft.kind === 'wolf' && draft.wolfVersion !== 2)} onChange={(event) => {
           const kind = event.target.value;
+          const nextKind = roundGameKinds.find((entry) => entry === kind);
+          if (nextKind && kindClosed(nextKind)) return;
           if ((!internalOnly && (kind === 'stableford' || kind === 'ball-drop' || kind === 'skins'))
             || (kind === 'wolf' && (existing || wolfV2Supported)
               || !internalOnly && (kind === 'stroke-play' || kind === 'nassau' || kind === 'nines'
@@ -136,11 +158,13 @@ export function GameSettings({
           <option value="stroke-play" disabled={!supportedGameKinds?.includes('stroke-play')}>Stroke Play</option>
           <option value="nassau" disabled={setupLocked || !supportedGameKinds?.includes('nassau')}>Nassau · Match play</option>
           <option value="match-play" disabled={setupLocked || existing && draft.kind !== 'match-play' || !supportedGameKinds?.includes('match-play')}>Match Play · With presses</option>
-          <option value="nines" disabled={setupLocked || !supportedGameKinds?.includes('nines')}>Nines · 9 points, 3 golfers</option></>}
-          <option value="wolf" disabled={setupLocked || !supportedGameKinds?.includes('wolf') || !existing && !wolfV2Supported}>Wolf / PIG · Earned dots</option>
-          <option value="dots" disabled={setupLocked || !supportedGameKinds?.includes('dots')}>Dots · Separate specials</option>
+          <option value="nines" disabled={setupLocked || !supportedGameKinds?.includes('nines') || kindClosed('nines')}>Nines · 9 points, 3 golfers</option></>}
+          <option value="wolf" disabled={setupLocked || !supportedGameKinds?.includes('wolf') || !existing && !wolfV2Supported
+            || kindClosed('wolf')}>Wolf / PIG · Earned dots</option>
+          <option value="dots" disabled={setupLocked || !supportedGameKinds?.includes('dots') || kindClosed('dots')}>Dots · Separate specials</option>
           {churchyEnabled && (draft.kind === 'churchy' || churchyV3Supported && allowChurchyCreation && !churchyLocked) && <option value="churchy">Churchie</option>}
         </select></label>
+        {kindHint && <small>{kindHint}</small>}
         <label>Game name
           <input value={draft.name} disabled={draft.kind === 'churchy' && (churchyLocked || !churchyCustomNamesSupported)} maxLength={100} onChange={(event) => {
             onChange({ ...draft, name: event.target.value, preserveName: true });
@@ -175,7 +199,8 @@ export function GameSettings({
           <small id={startHint}>Front remains holes 1–9, Back remains 10–18; each bet follows actual played order.</small>
         </div>}
         {draft.kind === 'dots' && <DotsPlayingGroupSelect draft={draft} groups={groups}
-          individualPlayerCounts={dotsIndividualPlayerCounts} onChange={(patch) => { onChange({ ...draft, ...patch }); }} />}
+          individualPlayerCounts={dotsIndividualPlayerCounts} ninesLinkSupported={ninesLinkedDotsSupported}
+          onChange={(patch) => { onChange({ ...draft, ...patch }); }} />}
         {draft.kind === 'churchy' && <label>Churchie playing group<select value={draft.churchyGroup ?? ''} disabled={churchyLocked} onChange={(event) => {
           const group = groups.find((entry) => entry.number === Number(event.target.value));
           if (group?.playerIds.length === 4) onChange({ ...draft, churchyGroup: group.number, churchyPlayers: group.playerIds });
@@ -325,7 +350,9 @@ export function GameSettings({
           individualPlayerCounts={dotsIndividualPlayerCounts}
           {...(dotsSpecialKinds ? { supportedKinds: dotsSpecialKinds } : {})}
           {...(presetStore ? { presetStore } : {})}
-          wolves={games.filter((game) => game.kind === 'wolf')} onChange={(patch) => { onChange({ ...draft, ...patch }); }} />}
+          wolves={games.filter((game) => game.kind === 'wolf')}
+          nines={games.filter((game) => game.kind === 'nines')} ninesLinkSupported={ninesLinkedDotsSupported}
+          onChange={(patch) => { onChange({ ...draft, ...patch }); }} />}
         {draft.kind === 'churchy' && <section aria-label="Churchie setup">
           {draft.churchyGroup && <h3>Group {draft.churchyGroup} · Churchie</h3>}
           {draft.churchyVersion === 3 && <>

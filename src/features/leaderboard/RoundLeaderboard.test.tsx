@@ -12,6 +12,7 @@ import { calculateInternalSettlements } from '../../domain/internal-games';
 import { wolfForHole } from '../../domain/wolf';
 import type { WolfGameDefinition } from '../../domain/wolf';
 import type { DotsGameDefinition } from '../../domain/dots';
+import { ninesLinkedRound } from '../../domain/nines-linked.test-support';
 
 function linkedRound() {
   const f = matchGamesFixture();
@@ -61,6 +62,19 @@ describe('round leaderboard', () => {
     expect(within(screen.getByRole('list', { name: 'Standings' })).getAllByLabelText('Tied position 1')).toHaveLength(4);
     await user.selectOptions(choice, `combined:${wolf.id}:${dots.id}`);
     expect(screen.getByRole('list', { name: 'Combined standings' })).toBeVisible();
+  });
+
+  it('offers combined Nines + Dots standings in points, ranked by both sources', () => {
+    const { round, nines, dots } = ninesLinkedRound();
+    render(<RoundLeaderboard round={round} busy={false} onManageGames={vi.fn()} />);
+    expect(screen.getByLabelText('Leaderboard game')).toHaveValue(`combined:${nines.id}:${dots.id}`);
+    expect(screen.getByRole('option', { name: 'Fictional Nines + Fictional Dots · Group 1 · Combined' })).toBeInTheDocument();
+    const rows = [...screen.getByRole('list', { name: 'Combined standings' }).children];
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toHaveTextContent('Fictional golfer 1');
+    expect(rows[0]).toHaveTextContent('56 points');
+    expect(rows[0]).toHaveTextContent('Nines 54 + Dots 2');
+    expect(rows[0]).toHaveTextContent('Nines 18/18 · Dots 18/18');
   });
 
   it('keeps an event-wide game as the default and does not fabricate a combined view after its link disappears', async () => {

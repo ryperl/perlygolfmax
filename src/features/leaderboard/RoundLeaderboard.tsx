@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import type { GamePlayerResult, GameTeamResult } from '../../domain/games';
+import type { GamePlayerResult, GameTeamResult, RoundGameDefinition } from '../../domain/games';
+import type { InternalGameSettlement } from '../../domain/dot-settlement';
+import type { RoundGroup } from '../../domain/setup';
+import { linkedNinesGame } from '../../domain/linked-dots';
 import { gameResultDirection, gameResultTotal, gameResultUnit, isTeamGameDefinition, visibleGames } from '../../domain/games';
 import { ChurchyResults } from '../churchy';
 import { NassauResults } from '../nassau';
@@ -37,6 +40,53 @@ function PlayerStanding({ player, position, tied = false, members, unit }: {
   </li>;
 }
 
+interface CombinedStanding {
+  readonly id: string;
+  readonly settlement: InternalGameSettlement;
+  readonly names: readonly string[];
+  readonly label: string;
+  /** What the base game is called in source and progress labels: Wolf or Nines. */
+  readonly baseLabel: 'Wolf' | 'Nines';
+  readonly unit: 'dots' | 'points';
+}
+
+/** True when this settlement is an earned Wolf game plus the one Dots game linked to it. */
+function isWolfDotsSettlement(settlement: InternalGameSettlement, base: RoundGameDefinition | undefined,
+  dots: RoundGameDefinition | undefined): boolean {
+  if (base?.kind !== 'wolf' || base.version !== 2 || dots?.kind !== 'dots' || dots.mode !== 'linked') return false;
+  return dots.linkedGameId === base.id && dots.groupNumber === base.groupNumber
+    && settlement.groupNumber === base.groupNumber && settlement.players.length === base.playerIds.length
+    && settlement.players.every((player) => base.playerIds.includes(player.playerId));
+}
+
+/** True when this settlement is a Nines game plus the valid Dots game linked to it. */
+function isNinesDotsSettlement(settlement: InternalGameSettlement, base: RoundGameDefinition | undefined,
+  dots: RoundGameDefinition | undefined, allGames: readonly RoundGameDefinition[],
+  groups: readonly RoundGroup[]): boolean {
+  if (base?.kind !== 'nines' || dots?.kind !== 'dots') return false;
+  return linkedNinesGame(dots, allGames, groups)?.id === base.id && settlement.groupNumber === base.groupNumber
+    && settlement.players.length === base.playerIds.length
+    && settlement.players.every((player) => base.playerIds.includes(player.playerId));
+}
+
+/** Base game + linked Dots settlements, offered as their own combined leaderboard choice. */
+function combinedStandings(round: RoundScores, games: readonly RoundGameDefinition[]): readonly CombinedStanding[] {
+  const allGames = round.games?.configuration.games ?? [];
+  return (round.internalSettlements ?? []).flatMap((settlement) => {
+    if (settlement.gameIds.length !== 2) return [];
+    const base = games.find((entry) => entry.id === settlement.gameIds[0]);
+    const dots = games.find((entry) => entry.id === settlement.gameIds[1]);
+    if (!base || !dots) return [];
+    let baseLabel: CombinedStanding['baseLabel'];
+    if (isWolfDotsSettlement(settlement, base, dots)) baseLabel = 'Wolf';
+    else if (isNinesDotsSettlement(settlement, base, dots, allGames, round.groups)) baseLabel = 'Nines';
+    else return [];
+    return [{ id: `combined:${base.id}:${dots.id}`, settlement, names: [base.name, dots.name], baseLabel,
+      unit: baseLabel === 'Nines' ? 'points' : 'dots',
+      label: `${base.name} + ${dots.name} · Group ${String(settlement.groupNumber)} · Combined` }];
+  });
+}
+
 export function RoundLeaderboard({ round, busy, onManageGames }: {
   readonly round: RoundScores;
   readonly busy: boolean;
@@ -47,17 +97,7 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
   const [pageIndex, setPageIndex] = useState(0);
   const games = visibleGames(round.games?.configuration.games ?? [], round.churchyEnabled);
   const canManage = round.eventStatus === 'active' && canManageRoundGames(round);
-  const combinations = (round.internalSettlements ?? []).flatMap((settlement) => {
-    if (settlement.gameIds.length !== 2) return [];
-    const wolf = games.find((entry) => entry.id === settlement.gameIds[0]);
-    const dots = games.find((entry) => entry.id === settlement.gameIds[1]);
-    if (wolf?.kind !== 'wolf' || wolf.version !== 2 || dots?.kind !== 'dots' || dots.mode !== 'linked'
-      || dots.linkedGameId !== wolf.id || dots.groupNumber !== wolf.groupNumber || settlement.groupNumber !== wolf.groupNumber
-      || settlement.players.length !== wolf.playerIds.length
-      || !settlement.players.every((player) => wolf.playerIds.includes(player.playerId))) return [];
-    return [{ id: `combined:${wolf.id}:${dots.id}`, settlement, names: [wolf.name, dots.name],
-      label: `${wolf.name} + ${dots.name} · Group ${String(settlement.groupNumber)} · Combined` }];
-  });
+  const combinations = combinedStandings(round, games);
   const fallback = combinations.find((entry) => games[0] && entry.settlement.gameIds.includes(games[0].id))?.id ?? games[0]?.id;
   const selection = gameId !== null && (games.some((entry) => entry.id === gameId) || combinations.some((entry) => entry.id === gameId))
     ? gameId : fallback;
@@ -106,13 +146,14 @@ export function RoundLeaderboard({ round, busy, onManageGames }: {
         {games.map((entry) => <option key={entry.id} value={entry.id}>{gameDisplayName(entry)}{
           combinations.some((combined) => combined.settlement.gameIds.includes(entry.id)) ? ' only' : ''} · {gameScoringLabel(entry)}</option>)}
       </select></label>
-      {combined ? <InternalSettlement settlement={combined.settlement} gameNames={combined.names} ranked sourceLabels={['Wolf', 'Dots']}
+      {combined ? <InternalSettlement settlement={combined.settlement} gameNames={combined.names} ranked
+        sourceLabels={[combined.baseLabel, 'Dots']} unit={combined.unit}
         provisional={combined.settlement.gameIds.some((id) => !round.games?.results.find((entry) => entry.gameId === id)
           ?.players.every((player) => player.status === 'complete'))}
         progress={combined.settlement.players.map((player) => ({ playerId: player.playerId,
           label: combined.settlement.gameIds.map((id, index) => {
             const result = round.games?.results.find((entry) => entry.gameId === id)?.players.find((entry) => entry.playerId === player.playerId);
-            return `${index === 0 ? 'Wolf' : 'Dots'} ${String(result?.holesScored ?? '—')}/${String(result?.totalHoles ?? '—')}`;
+            return `${index === 0 ? combined.baseLabel : 'Dots'} ${String(result?.holesScored ?? '—')}/${String(result?.totalHoles ?? '—')}`;
           }).join(' · '),
         }))} />
         : game && <>

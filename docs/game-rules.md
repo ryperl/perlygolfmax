@@ -42,8 +42,18 @@ captured CH, with personal tees. Missing net inputs are unavailable, never
 scratch. An optional stake per point settles once for the group with
 `(3 x points - total points) x stake`; blank plays for points only. Nines locks
 with the other money games after the first saved score, and stays unavailable
-if the saved group no longer holds the same three golfers. Linking Dots to Nines
-is not part of version 1.
+if the saved group no longer holds the same three golfers.
+
+A Dots game may link to the group's Nines game, the same way Dots links to Wolf
+version 2. Dots keeps its own specials and unit values; Nines points are the
+base. The two settle once, together, at the Nines stake per point:
+`(3 x (Nines points + Dots) - total) x stake`. Linked Dots has no stake of its
+own. Every golfer is their own side on every hole, so specials follow
+individual Dots rules: no Assassin and no automatic High/Low Sweep (manual
+Sweep and Category Sweep still work), each special pays only its earner, and a
+Walk or Pickup awards both opponents. Only one Dots game may link to a Nines
+game; a missing, duplicated or changed link makes the combined settlement
+unavailable rather than settling either game alone.
 
 New version-3 Modified Sixes and Sixes may explicitly enable net High/Low
 alongside gross specials. Partners change every three or six played holes.
@@ -191,10 +201,13 @@ calculations. Unaffected legacy projections retain their supported capability
 versions; affected old reads, writes and staged publications fail with 426
 before mutation. Original saved rules, scores, captures and audits are retained.
 
-Nines negotiates `nines=1` on every request that also sends `dotsRules=3`.
-The API advertises the `nines` game kind only to those clients. Older clients
-reading or writing a round that contains Nines receive 426 before any change;
-rounds without Nines read exactly as before.
+Nines negotiates `nines=1` or `nines=2` on every request that also sends
+`dotsRules=3`. The API advertises the `nines` game kind only to those clients.
+Older clients reading or writing a round that contains Nines receive 426 before
+any change; rounds without Nines read exactly as before. `nines=2` adds Dots
+linked to Nines, advertised as `ninesLinkedDots: true` on round scores. A
+`nines=1` client still reads plain Nines but receives 426 for any round with
+Dots linked to Nines.
 
 First-tee Wolf order separately negotiates `wolfOrders=1`, with advertised
 `wolfOrderVersion: 1`. Affected old reads and score, game, correction and purse

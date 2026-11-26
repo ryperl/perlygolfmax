@@ -12,6 +12,20 @@ const options = (overrides: Partial<DotsModeChangeOptions> = {}): DotsModeChange
 });
 
 describe('dotsModeChange', () => {
+  it('lets a group of three choose linked only when it can link to Nines', () => {
+    const smallGroup = options({ smallGroup: true });
+    expect(dotsModeChange({}, 'linked', smallGroup)).toBeNull();
+    expect(dotsModeChange({}, 'linked', { ...smallGroup, ninesLink: true })).toMatchObject({ dotsMode: 'linked' });
+    expect(dotsModeChange({}, 'fixed', { ...smallGroup, ninesLink: true })).toBeNull();
+  });
+
+  it('keeps only individual-compatible specials when linking to Nines', () => {
+    const draft = { dotsSpecials: [{ kind: 'birdie', units: 1 }, { kind: 'assassin', units: 1 }] } as const;
+    const compatible: DotsModeChangeOptions['compatible'] = (kind, mode) => kind !== 'assassin' || mode !== 'individual';
+    const patch = dotsModeChange(draft, 'linked', options({ smallGroup: true, ninesLink: true, compatible }));
+    expect(patch?.dotsSpecials).toEqual([{ kind: 'birdie', units: 1 }]);
+  });
+
   it('starts new rotating games on version 3 with tee-flip order when supported', () => {
     expect(dotsModeChange({}, 'rotating-6', options())).toEqual({ dotsMode: 'rotating', dotsRotationHoles: 6,
       dotsVersion: 3, dotsOrderMode: 'tee-flip', dotsSpecials: [] });

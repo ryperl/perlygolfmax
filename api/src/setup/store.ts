@@ -1,5 +1,5 @@
 import type { TableClient, TransactionAction } from '@azure/data-tables';
-import { clientSupportsNines, requireNinesSupport } from '../nines-negotiation.js';
+import { clientSupportsAllNinesRules, requireNinesSupport } from '../nines-negotiation.js';
 import { randomUUID } from 'node:crypto';
 import type { AccountIdentity, EventSummary } from '../../../src/domain/events.js';
 import type { ScoreActor } from '../../../src/domain/test-access.js';
@@ -364,7 +364,7 @@ export class TableWorkspaceStore {
     if (access.event.quickRound === true && access.event.quickRoundReady !== true) {
       throw new ApiError(403, 'PUBLIC_EVENT_NOT_AVAILABLE');
     }
-    if (!wolfOrders || !dotsHighLow || !dotsRulesV3 || !clientSupportsNines()) {
+    if (!wolfOrders || !dotsHighLow || !dotsRulesV3 || !clientSupportsAllNinesRules()) {
       const currentWorkspace = await this.load(access.summary, false, chargeRound);
       for (const round of currentWorkspace.rounds.filter((round) => round.scoringStarted
         && round.players.some((player) => player.playerId === playerId))) {
@@ -667,7 +667,7 @@ export class TableWorkspaceStore {
     const access = await this.ownerAccess(identity, eventId);
     if (access.summary.status !== 'active') throw new ApiError(409, 'EVENT_ARCHIVED');
     requireManager(identity, this.allowed);
-    if (!wolfOrders || !dotsHighLow || !dotsRulesV3 || !clientSupportsNines()) {
+    if (!wolfOrders || !dotsHighLow || !dotsRulesV3 || !clientSupportsAllNinesRules()) {
       const games = await readGameConfiguration(this.table, eventId, roundId, configuredGameRounds(access.event.gameRoundIds));
       requireDotsRulesV3(games?.games ?? [], dotsRulesV3);
       requireNinesSupport(games?.games ?? []);
@@ -726,7 +726,7 @@ export class TableWorkspaceStore {
    * Browsers that understand Nines skip this, so it costs them no reads.
    */
   async requireNinesClientForEvent(eventId: string): Promise<void> {
-    if (clientSupportsNines()) return;
+    if (clientSupportsAllNinesRules()) return;
     const event = await optionalRow(this.table, eventId, 'event');
     const roundIds = configuredGameRounds(event?.gameRoundIds);
     for (const roundId of roundIds) {
