@@ -307,6 +307,20 @@ describe('separate Dots hole declarations', () => {
       expect(lastRecord()?.players).toEqual(saved.players);
     });
 
+    it('restores the whole saved record, including an older game revision, after a tick and untick', () => {
+      const f = dotsFixture();
+      const playerId = f.ids[0] ?? '';
+      // Saved before another game was edited, so its revision is older than the current one.
+      const saved: DotsHoleRecord = { number: 1, gameId: f.game.id, gameEtag: 'fictional-older-revision', contests: [],
+        players: [{ playerId, counts: { sandy: 1 }, calls: [] }] };
+      const { name, Editor, lastRecord } = golferEditor(saved);
+      render(<Editor />);
+      fireEvent.click(screen.getByRole('checkbox', { name: `Dime for ${name}` }));
+      expect(lastRecord()?.gameEtag).toBe('fictional');
+      fireEvent.click(screen.getByRole('checkbox', { name: `Dime for ${name}` }));
+      expect(lastRecord()).toEqual(saved);
+    });
+
     it('keeps an emptied golfer whose saved claims are being cleared', () => {
       const f = dotsFixture();
       const playerId = f.ids[0] ?? '';

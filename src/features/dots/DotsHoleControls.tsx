@@ -2,6 +2,7 @@ import { dotsCoexistenceWriteIssues, dotsSpecialCatalog, isEmptyDotsDeclaration,
 import type { DotsContest, DotsGameDefinition, DotsHoleRecord, DotsPlayerDeclaration, DotsRotationContext, DotsSpecialKind } from '../../domain/dots';
 import type { DotHoleContext } from '../../domain/dot-context';
 import type { HoleScore } from '../../domain/scoring';
+import { sameDotsRecords } from '../../domain/game-declarations';
 import { DotsPlayerControls } from './DotsPlayerControls';
 import { DotsRotationControls } from './DotsRotationControls';
 import { coexistenceMessage } from './coexistence-message';
@@ -50,6 +51,16 @@ function playersAfterEdit(players: readonly DotsPlayerDeclaration[], edited: Dot
   if (saved && sameDotsPlayerDeclaration(edited, saved)) return replacePlayer(players, saved);
   if (!saved && isEmptyDotsDeclaration(edited)) return others;
   return replacePlayer(players, edited);
+}
+
+/**
+ * Returns the saved record when an edit leaves its contents as saved. Edits stamp the current game revision,
+ * so without this a record saved under an older revision would still look changed and send a new receipt.
+ */
+function savedIfUnchanged(next: DotsHoleRecord, saved: DotsHoleRecord | undefined): DotsHoleRecord {
+  if (!saved) return next;
+  const sameContents = sameDotsRecords([{ ...next, gameEtag: saved.gameEtag }], [saved]);
+  return sameContents ? saved : next;
 }
 
 function replacePlayer(players: readonly DotsPlayerDeclaration[],
@@ -104,11 +115,15 @@ export function DotsHoleControls({ game, holeNumber, par, playerPars, etag, save
   const clearable = hasSelections(record);
   if (groupOnly && !selectedPlayerId && (game.mode !== 'rotating' || !showRotation) && game.mode !== 'linked'
     && eligibleContests.length === 0 && !clearable && !hasSelections(saved)) return null;
+  // Edits that end where the saved record started restore it exactly, so the hole stays unchanged.
+  function emit(next: DotsHoleRecord) {
+    onChange(savedIfUnchanged(next, saved));
+  }
   function changePlayer(player: DotsPlayerDeclaration) {
-    onChange({ ...record, gameEtag: etag, players: playersAfterEdit(record.players, player, saved?.players ?? []) });
+    emit({ ...record, gameEtag: etag, players: playersAfterEdit(record.players, player, saved?.players ?? []) });
   }
   function changeContest(contest: DotsContest) {
-    onChange({ ...record, gameEtag: etag, contests: [...record.contests.filter((entry) => entry.kind !== contest.kind), contest] });
+    emit({ ...record, gameEtag: etag, contests: [...record.contests.filter((entry) => entry.kind !== contest.kind), contest] });
   }
   function contestIssues(playerId: string, contest: DotsContest) {
     if (!coexistenceRules) return [];
@@ -153,7 +168,7 @@ export function DotsHoleControls({ game, holeNumber, par, playerPars, etag, save
         onChange={(event) => {
           if (event.target.value === 'none') changeContest({ kind, status: 'no-qualifier' });
           else if (game.playerIds.includes(event.target.value)) changeContest({ kind, status: 'awarded', winnerId: event.target.value });
-          else onChange({ ...record, gameEtag: etag, contests: record.contests.filter((entry) => entry.kind !== kind) });
+          else emit({ ...record, gameEtag: etag, contests: record.contests.filter((entry) => entry.kind !== kind) });
         }}><option value="">Decision pending</option><option value="none">No qualifier · Carry category</option>
           {game.playerIds.map((id) => <option key={id} value={id} disabled={contest?.winnerId !== id
             && contestIssues(id, { kind, status: 'awarded', winnerId: id }).length > 0}>{name(id)}</option>)}</select></label>
