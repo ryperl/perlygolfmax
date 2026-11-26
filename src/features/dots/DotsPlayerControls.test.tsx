@@ -53,7 +53,7 @@ describe('quick per-golfer Dots choices', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('same golfer on this hole');
     fireEvent.click(screen.getByLabelText('Pully for Fictional golfer'));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(changed.mock.lastCall?.[0].counts).toEqual({ chippy: 1, pully: 0 });
+    expect(changed.mock.lastCall?.[0].counts).toEqual({ chippy: 1 });
   });
 
   it('disables score-qualified additions on bogey/pickup but keeps saved claims editable and Gorilla valid on a personal par five', () => {
@@ -151,7 +151,7 @@ describe('quick per-golfer Dots choices', () => {
     await user.click(screen.getByRole('button', { name: 'Decrease Sandy for Fictional golfer' }));
     await user.click(screen.getByRole('button', { name: 'Decrease Sandy for Fictional golfer' }));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(changed).toHaveBeenLastCalledWith({ playerId: 'a', counts: { sandy: 0, dime: 0 }, calls });
+    expect(changed).toHaveBeenLastCalledWith({ playerId: 'a', counts: {}, calls });
     expect(screen.getByRole('combobox', { name: 'Murphy press stage 1 · Fictional golfer' })).toHaveValue('2');
   });
 
@@ -179,7 +179,7 @@ describe('quick per-golfer Dots choices', () => {
       game={{ ...game, specials: [{ kind: 'dime', units: 1 }, { kind: 'super-dime', units: 1 }] }}
       declaration={{ playerId: 'a', counts: { 'super-dime': 1 }, calls: [] }} />);
     await user.click(screen.getByRole('checkbox', { name: 'Sticky for Fictional golfer' }));
-    expect(onChange).toHaveBeenLastCalledWith({ playerId: 'a', counts: { 'super-dime': 0, dime: 1 }, calls: [] });
+    expect(onChange).toHaveBeenLastCalledWith({ playerId: 'a', counts: { dime: 1 }, calls: [] });
   });
 
   it('keeps common choices and the Sandy counter visible while optional count editing stays collapsed', async () => {
@@ -204,5 +204,21 @@ describe('quick per-golfer Dots choices', () => {
     await user.click(screen.getByText('Details / edit counts', { selector: 'summary' }));
     expect(count).not.toBeVisible();
     expect(screen.getByLabelText('Sandy count · Fictional golfer')).toHaveValue(1);
+  });
+
+  it('removes a count key when its field is cleared to blank', () => {
+    const onChange = vi.fn<(value: DotsPlayerDeclaration) => void>();
+    render(<DotsPlayerControls game={game} declaration={{ playerId: 'a', counts: { sandy: 2, hogan: 1 }, calls: [] }}
+      saved={undefined} name="Fictional golfer" par={4} onChange={onChange} />);
+    fireEvent.change(screen.getByLabelText('Sandy count · Fictional golfer'), { target: { value: '' } });
+    expect(onChange).toHaveBeenLastCalledWith({ playerId: 'a', counts: { hogan: 1 }, calls: [] });
+  });
+
+  it('removes a count key when a checkbox is unticked', () => {
+    const onChange = vi.fn<(value: DotsPlayerDeclaration) => void>();
+    render(<DotsPlayerControls game={game} declaration={{ playerId: 'a', counts: { hogan: 1 }, calls: [] }}
+      saved={undefined} name="Fictional golfer" par={4} onChange={onChange} />);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Hogan for Fictional golfer' }));
+    expect(onChange).toHaveBeenLastCalledWith({ playerId: 'a', counts: {}, calls: [] });
   });
 });

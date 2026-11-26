@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { calculateDots, dotsAutomaticWriteConflicts, dotsCoexistenceWriteConflicts, dotsCoexistenceWriteIssues, dotsDeclarationIssues, dotsDeclarationWriteIssues, dotsDefinitionMatchesRound, dotsSpecialCatalog, dotsRecordsMatchGame } from './dots.js';
+import { calculateDots, dotsAutomaticWriteConflicts, dotsCoexistenceWriteConflicts, dotsCoexistenceWriteIssues, dotsDeclarationIssues, dotsDeclarationWriteIssues, dotsDefinitionMatchesRound, dotsSpecialCatalog, dotsRecordsMatchGame,
+  isEmptyDotsDeclaration, isEmptyDotsRecord, sameDotsPlayerDeclaration, withoutZeroCounts } from './dots.js';
 import type { DotsContest, DotsGameDefinition, DotsHoleRecord, DotsPlayerDeclaration, DotsSpecialKind } from './dots.js';
 import type { DotHoleContext, DotRoundInput } from './dot-context.js';
 import type { HoleScore } from './scoring.js';
@@ -961,5 +962,32 @@ describe('contests, carry, King and derived partner specials', () => {
     expect({ game, round, records }).toEqual(before);
     const two = fixture([4, 4], ['sandy']);
     expect(calculateDots(two.game, two.round, [...records, record(2, [declaration('A', { sandy: 1 })])]).status).toBe('unavailable');
+  });
+});
+
+describe('zero counts mean not claimed', () => {
+  it('compares a zero count as equal to no key at all', () => {
+    expect(sameDotsPlayerDeclaration(declaration('A', { hogan: 0 }), declaration('A'))).toBe(true);
+    expect(sameDotsPlayerDeclaration(declaration('A', { hogan: 0, seve: 1 }), declaration('A', { seve: 1 }))).toBe(true);
+    expect(sameDotsPlayerDeclaration(declaration('A', { hogan: 1 }), declaration('A'))).toBe(false);
+  });
+
+  it('drops zero counts but keeps invalid ones so entry can flag them', () => {
+    expect(withoutZeroCounts(declaration('A', { hogan: 0, seve: 1, sandy: -1 })).counts).toEqual({ seve: 1, sandy: -1 });
+  });
+
+  it('treats a golfer or record with only zero counts as empty', () => {
+    expect(isEmptyDotsDeclaration(declaration('A', { hogan: 0 }))).toBe(true);
+    expect(isEmptyDotsDeclaration(declaration('A', {}, [{ id: 'call-a', kind: 'paree', result: 'pending' }]))).toBe(false);
+    expect(isEmptyDotsRecord(record())).toBe(true);
+    expect(isEmptyDotsRecord(record(1, [declaration('A')]))).toBe(false);
+  });
+
+  it('scores and validates a saved record holding zero counts exactly like one without them', () => {
+    const f = fixture([4], ['hogan', 'seve']);
+    const withZero = [record(1, [declaration('A', { hogan: 0, seve: 1 })])];
+    const withoutZero = [record(1, [declaration('A', { seve: 1 })])];
+    expect(totals(calculateDots(f.game, f.round, withZero))).toEqual(totals(calculateDots(f.game, f.round, withoutZero)));
+    expect(dotsRecordsMatchGame(withZero, f.game, f.round)).toBe(true);
   });
 });

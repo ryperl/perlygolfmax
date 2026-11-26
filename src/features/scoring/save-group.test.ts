@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { fictionalChange, fictionalRoundScores, scoreResult } from '../../client/scoring.test-support';
 import { fictionalId } from '../../client/catalog.test-support';
 import type { RoundScores } from '../../domain/scoring';
-import { cardFor, editedDraft, entryKey } from './entry-state';
+import { cardFor, editedDraft, entryKey, savedHole } from './entry-state';
+import { scoreEntryText } from '../../contracts/scoring';
 import type { HoleDraft } from './entry-state';
 import { planGroup, saveGroupEntries } from './save-group';
 import { deferred, memoryScores } from './scoring.test-support';
@@ -516,5 +517,35 @@ describe('serialized group save protocol', () => {
       text: 'X7', status: 'conflict', acknowledged: { after: { kind: 'picked-up', reportedStrokes: 7 } },
     });
     expect(test.drafts.get(entryKey(fictionalId(1), 1))?.attempt).toBeUndefined();
+  });
+
+  it('does not send an empty Dots record left by ticking and unticking a special on a hole with nothing saved', () => {
+    const f = dotsFixture();
+    const anchor = f.ids[0];
+    if (!anchor) throw new Error('Missing fictional anchor');
+    const empty: DotsHoleRecord = { number: 1, gameId: f.game.id, gameEtag: 'fictional-game-revision', players: [], contests: [] };
+    const card = cardFor(f.round, anchor);
+    const unchangedText = scoreEntryText(savedHole(card, 1));
+    const drafts = new Map<string, HoleDraft>([[entryKey(anchor, 1),
+      { ...editedDraft(unchangedText, card, undefined, false), dots: [empty] }]]);
+    const plan = planGroup(f.round, [anchor], 1, drafts);
+    expect(plan.writes).toEqual([]);
+    expect(plan.unchanged).toEqual([entryKey(anchor, 1)]);
+  });
+
+  it('still sends an emptied Dots record that clears saved claims', () => {
+    const f = dotsFixture();
+    const anchor = f.ids[0];
+    if (!anchor) throw new Error('Missing fictional anchor');
+    const saved: DotsHoleRecord = { number: 1, gameId: f.game.id, gameEtag: 'fictional-game-revision',
+      players: [{ playerId: anchor, counts: { sandy: 1 }, calls: [] }], contests: [] };
+    const round: RoundScores = { ...f.round, cards: f.round.cards.map((card) => card.playerId === anchor
+      ? { ...card, holes: card.holes.map((hole) => hole.number === 1 ? { ...hole, score: { ...hole.score, dots: [saved] } } : hole) }
+      : card) };
+    const card = cardFor(round, anchor);
+    const cleared: DotsHoleRecord = { ...saved, players: [] };
+    const drafts = new Map<string, HoleDraft>([[entryKey(anchor, 1),
+      { ...editedDraft(scoreEntryText(savedHole(card, 1)), card, undefined, false), dots: [cleared] }]]);
+    expect(planGroup(round, [anchor], 1, drafts).writes[0]?.score.dots).toEqual([cleared]);
   });
 });

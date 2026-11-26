@@ -10,7 +10,9 @@ import { isHoleScore } from '../../contracts/scoring';
 import { validChurchyCounts } from '../churchy';
 import { churchySpecialsMatchGame, churchyV3Records, sameChurchySpecials } from '../../domain/churchy';
 import { dotsAutomaticWriteConflicts, dotsCoexistenceWriteConflicts, dotsDeclarationWriteIssues } from '../../domain/dots';
-import type { DotsPlayerDeclaration } from '../../domain/dots';
+import { isEmptyDotsRecord } from '../../domain/dots';
+import type { DotsHoleRecord, DotsPlayerDeclaration } from '../../domain/dots';
+import type { ChurchySpecials } from '../../domain/churchy';
 import { dotsRecordsFor } from '../../domain/game-declarations';
 import type { DotRoundInput } from '../../domain/dot-context';
 
@@ -22,6 +24,20 @@ function changedDeclarationConflicts(players: readonly DotsPlayerDeclaration[], 
   });
   return players.some((player) => canonical(player) !== canonical(previous.find((entry) => entry.playerId === player.playerId))
     && dotsDeclarationWriteIssues(player).conflicts.length > 0);
+}
+
+/**
+ * Ticking and unticking a special on a hole with nothing saved leaves an empty Dots or Churchie record.
+ * It claims nothing, so it is not sent and does not make the hole count as changed.
+ */
+function emptyAndUnsaved(record: DotsHoleRecord, saved: HoleScore): boolean {
+  const savedRecord = saved.dots?.find((entry) => entry.gameId === record.gameId && entry.number === record.number);
+  return savedRecord === undefined && isEmptyDotsRecord(record);
+}
+
+function unlessEmptyAndUnsaved(churchy: ChurchySpecials | undefined, saved: HoleScore): ChurchySpecials | undefined {
+  if (churchy?.version !== 3 || saved.churchy !== undefined) return churchy;
+  return isEmptyDotsRecord(churchy) ? undefined : churchy;
 }
 
 export interface GroupWrite {
@@ -47,9 +63,11 @@ export function planGroup(round: RoundScores, playerIds: readonly string[], hole
     const card = cardFor(round, playerId);
     const saved = savedHole(card, holeNumber);
     const draft = drafts.get(entryKey(playerId, holeNumber));
+    const draftChurchy = unlessEmptyAndUnsaved(draft?.churchy, saved);
+    const draftDots = draft?.dots?.filter((record) => !emptyAndUnsaved(record, saved));
     if (draft?.churchyCounts && !validChurchyCounts(draft.churchyCounts)) { invalid.push(playerId); continue; }
-    if (draft?.churchy && !sameChurchySpecials(draft.churchy, saved.churchy)) {
-      const specials = draft.churchy;
+    if (draftChurchy && !sameChurchySpecials(draftChurchy, saved.churchy)) {
+      const specials = draftChurchy;
       const game = round.games?.configuration.games.find((game) => game.kind === 'churchy' && game.id === specials.gameId);
       if (round.churchyEnabled !== true || game?.kind !== 'churchy'
         || game.version !== 1 && !round.churchyRulesVersions?.includes(game.version)
@@ -58,7 +76,7 @@ export function planGroup(round: RoundScores, playerIds: readonly string[], hole
           saved.churchy?.version === 3 && saved.churchy.gameId === specials.gameId
             && saved.churchy.number === specials.number ? saved.churchy.players : undefined)) { invalid.push(playerId); continue; }
     }
-    if (draft?.dots?.some((record) => {
+    if (draftDots?.some((record) => {
       const game = round.games?.configuration.games.find((game) => game.kind === 'dots' && game.id === record.gameId);
       if (game?.kind !== 'dots' || !supportsDotsGameRules(round, game)
         || !supportsDotsSpecials(round, game.specials)
@@ -66,8 +84,8 @@ export function planGroup(round: RoundScores, playerIds: readonly string[], hole
       const previous = saved.dots?.find((entry) => entry.gameId === record.gameId && entry.number === record.number);
       return changedDeclarationConflicts(record.players, previous?.players);
     })) { invalid.push(playerId); continue; }
-    const entry = draft ? entryScore(draft.text, draft.churchy ?? saved.churchy, draft.kp !== undefined ? draft.kp : saved.kp,
-      draft.nassau, draft.wolf, draft.dots) : saved;
+    const entry = draft ? entryScore(draft.text, draftChurchy ?? saved.churchy, draft.kp !== undefined ? draft.kp : saved.kp,
+      draft.nassau, draft.wolf, draftDots) : saved;
     if (!entry || !isHoleScore(entry)) { invalid.push(playerId); continue; }
     const score = preserveScoreExtras(entry, saved);
     if (round.dotsCallTargets !== true && score.dots?.some((record) => record.players.some((player) =>

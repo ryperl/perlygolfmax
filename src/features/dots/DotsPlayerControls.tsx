@@ -1,4 +1,6 @@
-import { dotsCallResult, dotsDeclarationWriteIssues, dotsCoexistenceWriteIssues, dotsManualKindsFor, dotsSpecialCatalog } from '../../domain/dots';
+import {
+  dotsCallResult, dotsDeclarationWriteIssues, dotsCoexistenceWriteIssues, dotsManualKindsFor, dotsSpecialCatalog, withoutZeroCounts,
+} from '../../domain/dots';
 import type { DotsCall, DotsContest, DotsGameDefinition, DotsPlayerDeclaration, DotsSpecialKind } from '../../domain/dots';
 import type { HoleScore } from '../../domain/scoring';
 import { CalledSpecialControls } from './CalledSpecialControls';
@@ -45,7 +47,8 @@ export function DotsPlayerControls({ game, declaration, saved, name, par, onChan
     // Only replace unsaved alternatives. Acknowledged declarations need explicit review.
     if (count > 0 && kind === 'super-dime' && (declaration.counts.dime ?? 0) > 0 && !(saved?.counts.dime)) counts.dime = 0;
     if (count > 0 && kind === 'dime' && (declaration.counts['super-dime'] ?? 0) > 0 && !(saved?.counts['super-dime'])) counts['super-dime'] = 0;
-    onChange({ ...declaration, counts });
+    // A cleared special is not claimed, so it leaves no zero-count key in the saved declaration.
+    onChange(withoutZeroCounts({ ...declaration, counts }));
   }
   const manual = dotsSpecialCatalog.filter((special) => enabled(special.kind) && dotsManualKindsFor(game).includes(special.kind)
     && (special.kind !== 'gorilla' || par === 5 || active(special.kind)));
