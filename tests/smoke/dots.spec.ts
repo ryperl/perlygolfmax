@@ -44,6 +44,41 @@ async function openGameStandings(page: Page, name: string) {
   })) await summary.click();
 }
 
+test('Dots description distinguishes entered and calculated awards without changing the game', async ({ page }, testInfo) => {
+  const fixture = await openDotsFixture(page, testInfo, 'setup-v3');
+  try {
+    await page.setViewportSize({ width: 320, height: 900 });
+    await page.getByRole('button', { name: 'Games', exact: true }).click();
+    await page.getByRole('button', { name: 'Add game', exact: true }).click();
+    const editor = page.getByRole('form', { name: 'Game settings', exact: true });
+    await editor.getByRole('combobox', { name: 'Dots playing group', exact: true }).selectOption('1');
+    await editor.getByRole('combobox', { name: 'Dots mode', exact: true }).selectOption('rotating-3');
+    await editor.getByText('Choose special dots (0)', { exact: true }).click();
+    for (const name of ['Long Drive', 'Blue Plate', 'Birdie · Automatic', 'Manual Sweep']) {
+      await editor.getByRole('checkbox', { name, exact: true }).check();
+    }
+    const summary = editor.getByText('How Dots works', { exact: true });
+    const help = editor.getByRole('region', { name: 'Dots game description', exact: true });
+    await expect(help).toBeHidden();
+    await summary.focus();
+    await summary.press('Enter');
+    await expect(help).toBeVisible();
+    await expect(summary).toBeFocused();
+    await expect(help).toContainText('Manual Sweep: A separate agreed bonus');
+    await expect(help).toContainText('Birdie: Exactly one under personal gross par');
+    await expect(help).toContainText('one extra dot for that golfer and each current teammate');
+    await expect(help).toContainText('Carried dots and second qualifiers do not increase this bonus');
+    await expect(help).toContainText('SO changes net comparisons, not Birdie or String');
+    await expect(help.getByRole('button')).toHaveCount(0);
+    await narrowControls(page, editor);
+    await summary.press('Enter');
+    await expect(help).toBeHidden();
+    expect(fixture.counters().configurations).toHaveLength(0);
+    expect(fixture.counters().writes).toBe(0);
+    expect(fixture.counters().pageErrors).toEqual([]);
+  } finally { await fixture.close(); }
+});
+
 for (const size of [3, 6] as const) {
   test(`updated ${String(size)}-hole Dots setup explains team method, SO and separate sweeps before saving`, async ({ page }, testInfo) => {
     const fixture = await openDotsFixture(page, testInfo, 'setup-v3');

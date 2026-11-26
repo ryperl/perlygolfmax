@@ -403,9 +403,11 @@ function RoundGamesController({ round, busy, onDirtyChange, onSave, onRefresh, p
         {round.internalSettlements?.some((settlement) => settlement.gameIds.includes(game.id)) ? <details>
           <summary>{gameDisplayName(game)} · Game standings</summary>
           <GameResults game={game} result={round.games?.results.find((result) => result.gameId === game.id)}
-            holeNumbers={round.layout.map((hole) => hole.number)} players={round.cards} />
+            holeNumbers={round.layout.map((hole) => hole.number)} players={round.cards}
+            stringRulesVersion={round.stringRulesVersion} dotsCategorySweepsVersion={round.dotsCategorySweepsVersion} />
         </details> : <GameResults game={game} result={round.games?.results.find((result) => result.gameId === game.id)}
-          holeNumbers={round.layout.map((hole) => hole.number)} players={round.cards} />}
+          holeNumbers={round.layout.map((hole) => hole.number)} players={round.cards}
+          stringRulesVersion={round.stringRulesVersion} dotsCategorySweepsVersion={round.dotsCategorySweepsVersion} />}
         {canManage && (canManageAllRoundGames(round) || canManageGame(round, game)) && <button type="button"
           disabled={disabled || editor !== null || !supportsRoundGame(round, game.kind ?? 'stableford') || !canManageGame(round, game)}
           onClick={() => { open(game); }}>Edit {gameDisplayName(game)}{game.kind === 'churchy'

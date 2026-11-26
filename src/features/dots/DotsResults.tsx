@@ -2,6 +2,8 @@ import type { DotSpecialReview, DotsGameDefinition, DotsResults as Results } fro
 import { dotsSpecialCatalog } from '../../domain/dots';
 import type { DotsHighLowResults } from '../../domain/dots-high-low';
 import type { GamePlayerResult } from '../../domain/games';
+import { ninesPlayerCount } from '../../domain/nines';
+import { DotsGameDescription } from './DotsGameDescription';
 
 export function DotSpecialReviewNotice({ reviews, players }: {
   readonly reviews: readonly DotSpecialReview[] | undefined;
@@ -18,10 +20,22 @@ export function DotSpecialReviewNotice({ reviews, players }: {
   </div>;
 }
 
-export function DotsResults({ game, result, highLow, players }: {
+// Results do not receive the round's other games. Linked Wolf needs four golfers,
+// so a linked three-golfer Dots game can only be linked to Nines.
+function isLinkedToNines(game: DotsGameDefinition): boolean {
+  return game.mode === 'linked' && game.playerIds.length === ninesPlayerCount;
+}
+
+/**
+ * Saved results for one Dots game. The rule markers come from the round response; an absent marker means
+ * the round was scored with the legacy rule, matching how the contract decodes it.
+ */
+export function DotsResults({ game, result, highLow, players, stringRulesVersion, dotsCategorySweepsVersion }: {
   readonly game: DotsGameDefinition; readonly result: Results | undefined;
   readonly highLow?: DotsHighLowResults | undefined;
   readonly players?: readonly GamePlayerResult[] | undefined;
+  readonly stringRulesVersion?: 1 | 2 | undefined;
+  readonly dotsCategorySweepsVersion?: 0 | 1 | undefined;
 }) {
   const name = (id: string) => result?.players.find((player) => player.playerId === id)?.displayName ?? 'Golfer unavailable';
   const label = (kind: string) => dotsSpecialCatalog.find((special) => special.kind === kind)?.label ?? 'Special';
@@ -34,6 +48,9 @@ export function DotsResults({ game, result, highLow, players }: {
   return <section className="game-results dots-results" aria-label={`${game.name} results`}>
     <h3>{game.name}</h3><p>{game.mode === 'individual' ? game.playerIds.length === 1 ? 'Solo stats only' : 'Individual' : game.mode === 'fixed' ? 'Fixed partners'
       : game.mode === 'rotating' ? game.rotationHoles === 3 ? 'Modified Sixes · 3-hole partners' : 'Sixes · 6-hole partners' : 'Linked sides'}</p>
+    <DotsGameDescription specials={game.specials} mode={game.mode} manualSweep={game.sweepRule === 'manual-v1'}
+      highLowVersion={game.highLow?.version} linkedToNines={isLinkedToNines(game)}
+      legacyString={stringRulesVersion !== 2} categorySweeps={dotsCategorySweepsVersion === 1} />
     {!result ? <p>Saved Dots results unavailable. Refresh to retry.</p> : <>
       {game.mode === 'fixed' && <p className="game-hint">{game.partnerIds.slice(0, 2).map(name).join(' + ')}
         {' vs '}{game.partnerIds.slice(2).map(name).join(' + ')} · Same partners all round</p>}

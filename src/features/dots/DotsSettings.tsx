@@ -10,6 +10,7 @@ import type { PlayerCourseHandicap } from '../../domain/scoring';
 import { dotsSpecialCatalog } from '../../domain/dots';
 import { formatMoney, parseMoney } from '../../domain/money';
 import { DotSpecialsSettings } from './DotSpecialsSettings';
+import { DotsGameDescription } from './DotsGameDescription';
 import { dotSpecialModeCompatible } from './dot-preset-options';
 import { dotsModeChange } from './dots-mode-change';
 import './dots-settings.css';
@@ -70,6 +71,13 @@ function linkedRateText(wolf: WolfGameDefinition | undefined, nines: NinesGameDe
   }
   const rate = wolf?.stakeMinor == null ? 'No money configured' : `${formatMoney(wolf.stakeMinor, 'USD')} per dot difference`;
   return `Wolf sides and multiplier · Shared rate: ${rate}`;
+}
+
+/** The High/Low rules the draft would save: rotating version 3 games use High/Low version 2. */
+function describedHighLowVersion(draft: DotsSetupDraft): 1 | 2 | undefined {
+  if (draft.dotsMode !== 'rotating' || !draft.dotsHighLow) return undefined;
+  if (draft.dotsVersion === 3) return 2;
+  return 1;
 }
 
 export function DotsSettings({ draft, groups, players, wolves, nines = [], ninesLinkSupported = false, onChange,
@@ -228,6 +236,8 @@ export function DotsSettings({ draft, groups, players, wolves, nines = [], nines
     {!manualSweepSupported && <small>Manual Sweep is temporarily unavailable in this app version.</small>}
     <h4>{mode === 'rotating' ? '4. Special dots' : 'Special dots'}</h4>
     <small>Qualifying scores are gross. Automatic dots are calculated from saved scores and selections.</small>
+    <DotsGameDescription specials={specials} mode={mode} manualSweep={manualSweep}
+      highLowVersion={describedHighLowVersion(draft)} linkedToNines={linkedToNines} />
     <details open={!updated}><summary>Choose special dots ({specials.length})</summary>
     <DotSpecialsSettings specials={specials} mode={specialsMode} manualSweep={manualSweep}
       {...(supportedKinds === undefined ? {} : { supportedKinds })}

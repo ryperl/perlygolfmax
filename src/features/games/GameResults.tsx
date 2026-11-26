@@ -18,11 +18,14 @@ function handicap(value: number): string {
   return value < 0 ? `+${String(Math.abs(value))}` : String(value);
 }
 
-export function GameResults({ game, result, holeNumbers, players }: {
+export function GameResults({ game, result, holeNumbers, players, stringRulesVersion, dotsCategorySweepsVersion }: {
   readonly game: RoundGameDefinition;
   readonly result: RoundGameResult | undefined;
   readonly holeNumbers: readonly number[];
   readonly players?: readonly { readonly playerId: string; readonly displayName: string }[];
+  /** The round's saved rule markers, so Dots help matches the saved totals. */
+  readonly stringRulesVersion?: 1 | 2 | undefined;
+  readonly dotsCategorySweepsVersion?: 0 | 1 | undefined;
 }) {
   const [nine, setNine] = useState<'front' | 'back'>('front');
   const [query, setQuery] = useState('');
@@ -56,7 +59,10 @@ export function GameResults({ game, result, holeNumbers, players }: {
   if (game.kind === 'churchy') return <ChurchyResults game={game} result={result} />;
   if (game.kind === 'nassau' || game.kind === 'match-play') return <NassauResults game={game} result={result?.nassau} {...(players ? { players } : {})} />;
   if (game.kind === 'wolf') return <WolfResults game={game} result={result?.wolf} />;
-  if (game.kind === 'dots') return <DotsResults game={game} result={result?.dots} highLow={result?.dotsHighLow} players={result?.players} />;
+  if (game.kind === 'dots') {
+    return <DotsResults game={game} result={result?.dots} highLow={result?.dotsHighLow} players={result?.players}
+      stringRulesVersion={stringRulesVersion} dotsCategorySweepsVersion={dotsCategorySweepsVersion} />;
+  }
   return (
     <section className="game-results" aria-label={`${game.name} results`}>
       <h3>{game.name}</h3>

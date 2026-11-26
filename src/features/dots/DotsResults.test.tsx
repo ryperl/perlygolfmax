@@ -7,6 +7,59 @@ import { InternalSettlement } from './InternalSettlement';
 import { dotsFixture } from './dots.test-support';
 
 describe('saved Dots awards and one internal settlement', () => {
+  it('explains saved game selections even when results are unavailable, without claiming new rules', () => {
+    const f = dotsFixture();
+    const game: DotsGameDefinition = { ...f.game, version: 2, mode: 'rotating', rotationHoles: 3,
+      highLow: { version: 1, handicapRule: 'group-low-v1' },
+      specials: [{ kind: 'long-drive', units: 1 }, { kind: 'blue-plate', units: 1 }] };
+    render(<DotsResults game={game} result={undefined} stringRulesVersion={2} dotsCategorySweepsVersion={1} />);
+    expect(screen.getByText('How Dots works').closest('details')).not.toHaveAttribute('open');
+    fireEvent.click(screen.getByText('How Dots works'));
+    const help = screen.getByRole('region', { name: 'Dots game description' });
+    expect(help).toHaveTextContent('Automatic Category Sweep:');
+    expect(help).toHaveTextContent('This saved High/Low version has no automatic High/Low Sweep');
+    expect(help).not.toHaveTextContent('High 1 + Low 1 + Sweep 1 = 3 each');
+    expect(screen.getByText('Saved Dots results unavailable. Refresh to retry.')).toBeVisible();
+  });
+
+  it('describes legacy String and no Category Sweep when the round response carries no rule markers', () => {
+    const f = dotsFixture();
+    const game: DotsGameDefinition = { ...f.game, specials: [{ kind: 'string', units: 1 },
+      { kind: 'birdy-string', units: 1 }, { kind: 'long-drive', units: 1 }, { kind: 'blue-plate', units: 1 }] };
+    render(<DotsResults game={game} result={undefined} />);
+    fireEvent.click(screen.getByText('How Dots works'));
+    const help = screen.getByRole('region', { name: 'Dots game description' });
+    expect(help).toHaveTextContent('personal gross exact par');
+    expect(help).toHaveTextContent('alongside String rather than replacing String');
+    expect(help).not.toHaveTextContent('Birdie String replaces String');
+    expect(help).not.toHaveTextContent('Automatic Category Sweep:');
+  });
+
+  it('describes current String and Category Sweep when the round carries both rule markers', () => {
+    const f = dotsFixture();
+    const game: DotsGameDefinition = { ...f.game, specials: [{ kind: 'string', units: 1 },
+      { kind: 'long-drive', units: 1 }, { kind: 'blue-plate', units: 1 }] };
+    render(<DotsResults game={game} result={undefined} stringRulesVersion={2} dotsCategorySweepsVersion={1} />);
+    fireEvent.click(screen.getByText('How Dots works'));
+    const help = screen.getByRole('region', { name: 'Dots game description' });
+    expect(help).toHaveTextContent('Birdie String replaces String');
+    expect(help).not.toHaveTextContent('personal gross exact par');
+    expect(help).toHaveTextContent('Automatic Category Sweep:');
+  });
+
+  it('describes a linked three-golfer game as Nines Dots, not as a teammate game', () => {
+    const f = dotsFixture();
+    // Linked Wolf needs four golfers, so three linked golfers can only be a Nines link.
+    const game: DotsGameDefinition = { id: f.game.id, name: f.game.name, kind: 'dots', version: 1,
+      groupNumber: 1, playerIds: f.game.playerIds.slice(0, 3), mode: 'linked', linkedGameId: 'fictional-nines',
+      specials: [] };
+    render(<DotsResults game={game} result={undefined} />);
+    fireEvent.click(screen.getByText('How Dots works'));
+    const help = screen.getByRole('region', { name: 'Dots game description' });
+    expect(help).toHaveTextContent('Each golfer plays alone');
+    expect(help).not.toHaveTextContent('credits each current teammate');
+  });
+
   it('keeps transmitted High/Low, special and combined totals distinct and never calls pending base results complete', () => {
     const f = dotsFixture();
     const game: DotsGameDefinition = { ...f.game, version: 2, mode: 'rotating', rotationHoles: 3,
