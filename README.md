@@ -1738,7 +1738,9 @@ checks, strict type checking, lint, named unit/component suites, production
 build, and Chromium desktop/mobile plus iPhone WebKit smoke tests. Pushing a
 branch without a pull request runs no checks; use **Run workflow** on the CI
 workflow for that. Merges to the TEST and production branches run the same CI
-as the gate of their deployment workflows. CI has
+as the gate of their deployment workflows. A pull request or TEST merge that
+changes only Markdown skips CI and the TEST deployment; the separate Docs
+workflow lints Markdown on every pull request that touches it. CI has
 read-only repository permissions and uses no production secrets. It uses ordinary
 `pull_request`, not privileged `pull_request_target`.
 

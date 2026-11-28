@@ -1,0 +1,32 @@
+name: Docs
+
+# Lints Markdown on any pull request that changes it. Docs-only pull requests
+# skip the full CI workflow, so this is the check they get.
+on:
+  pull_request:
+    paths:
+      - '**/*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - name: Verify public package sources
+        run: npm run check:lockfile
+      - run: npm ci
+      - run: npm run lint:docs

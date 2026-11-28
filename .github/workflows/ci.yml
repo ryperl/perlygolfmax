@@ -4,9 +4,13 @@ name: CI
 # push and its pull request have different refs and so never cancel each other
 # (two full runs per change). Merges are gated by the deploy workflows, which
 # call this one; use "Run workflow" for a branch that has no pull request yet.
+# A pull request that changes only Markdown skips this workflow; docs.yml lints
+# those files instead. Any other changed file still runs every check here.
 on:
   workflow_call:
   pull_request:
+    paths-ignore:
+      - '**/*.md'
   workflow_dispatch:
 
 permissions:
