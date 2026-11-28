@@ -1,8 +1,12 @@
 name: Test deployment
 
+# A merge that changes only Markdown does not redeploy: nothing served or run
+# is built from those files, and the next code merge deploys everything.
 on:
   push:
     branches: [ryperl-microsoft-perly-golf-foundation]
+    paths-ignore:
+      - '**/*.md'
   workflow_dispatch:
 
 permissions:
