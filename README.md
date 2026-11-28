@@ -1669,6 +1669,9 @@ docs/             Architecture, security, provisioning and recovery boundaries
 infra/            Test-only Bicep, parameter template and compiled-ARM checks
 ```
 
+The [architecture overview](docs/architecture.md) maps these layers, the API,
+storage and a score save end to end.
+
 Dependencies flow from `app` into feature public exports and demo fixtures,
 and from features/fixtures into `domain`. Presentation receives typed data through
 props rather than importing demo data. Stateful catalog/setup controllers own
